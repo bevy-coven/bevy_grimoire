@@ -1131,6 +1131,10 @@ impl Action {
             Action::CycleGrid => Some("view_cycle_grid"),
             // **The journal is a panel, and which panel is up is view state** (E-002, #129).
             Action::ShowErrors => Some("view_toggle_journal"),
+            // **The composition picker's cursor is view state** (E-002, #129 slice 22): `P` gives the arrows to the picker
+            // and Shift+up and Shift+down walk it, through the operations an agent calls.
+            Action::PickComposition => Some("composition_picker_toggle"),
+            Action::CompositionPrev | Action::CompositionNext => Some("composition_picker_walk"),
             // **The tool keys** (E-002, #129): `B`, `Shift+B` and the run chord arm a tool through `tool_arm`.
             // **`Remove` and `NoteTool` arm a tool, so they name the arming operation** (E-002,
             // #129). They named `placement_remove` and `note_add`: a write neither key makes — its

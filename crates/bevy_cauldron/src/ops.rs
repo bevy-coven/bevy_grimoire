@@ -2767,6 +2767,170 @@ pub mod sight {
     }
 }
 
+/// **The composition picker's cursor and its hold on the arrows, as operations** (E-002, #129 slice 22):
+/// `composition_picker_walk` (the picker's Shift+up and Shift+down) and `composition_picker_toggle` (`P`).
+///
+/// **View state**, like the grid rung: which row the cursor is on and whether the arrows walk the picker rather than
+/// the palette are what a person is looking through, not what the project keeps. They travel in `Ctx::view`
+/// (`picker_selected`, `picker_active`), so the keys and an agent's call decide what "walk" means in one place: it
+/// **clamps at the ends**, where the key used to carry that rule alone. Arming what the cursor is on is already
+/// `composition_arm`.
+pub mod composition_picker {
+    use super::*;
+    use serde_json::json;
+
+    fn need_view<'a>(ctx: &'a Ctx, what: &str) -> Result<&'a crate::ops_view::View, Refusal> {
+        ctx.view.as_ref().ok_or_else(|| {
+            Refusal::new(format!(
+                "no view is in hand, so there is no picker to {what}. An editor front end carries one in `Ctx::view`."
+            ))
+        })
+    }
+
+    /// **Move the picker's cursor one row**, clamped to the project's compositions.
+    pub mod composition_picker_walk {
+        use super::*;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `"prev"` or `"next"`.
+            pub by: String,
+        }
+
+        /// The two directions an agent names, beside the schema so the parse and the schema cannot disagree.
+        pub const DIRECTIONS: &[&str] = &["prev", "next"];
+
+        pub struct CompositionPickerWalk;
+
+        impl CompositionPickerWalk {
+            /// Where the cursor lands, and what is there: the walk's own rule, one copy for plan and commit.
+            fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(usize, String), Refusal> {
+                let p: Params = serde_json::from_value(params.clone())
+                    .map_err(|e| Refusal::new(format!("these are not a walk: {e}. The only field is `by`, `prev` or `next`.")))?;
+                let by: i64 = match p.by.as_str() {
+                    "prev" => -1,
+                    "next" => 1,
+                    other => return Err(Refusal::new(format!("`{other}` is not a direction; say one of {}", DIRECTIONS.join(", ")))),
+                };
+                let view = need_view(ctx, "walk")?;
+                let compositions = &ctx
+                    .project
+                    .as_ref()
+                    .ok_or_else(|| Refusal::new("no project is open, so there are no compositions to walk."))?
+                    .compositions
+                    .compositions;
+                let Some(last) = compositions.len().checked_sub(1) else {
+                    return Err(Refusal::new("the project has no compositions, so there is nothing to walk."));
+                };
+                // **Clamped, where it once wrapped**: an author holding an arrow at the end of a list stops there.
+                let to = (view.picker_selected as i64 + by).clamp(0, last as i64) as usize;
+                Ok((to, compositions[to].id.clone()))
+            }
+        }
+
+        impl Operation for CompositionPickerWalk {
+            fn name(&self) -> &'static str {
+                "composition_picker_walk"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["by"],
+                    "properties": {
+                        "by": {"type": "string", "enum": DIRECTIONS, "description": "Which way to move the composition picker's cursor one row. It stops at the ends of the list. `composition_arm` arms what it is on."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let (to, id) = Self::landing(ctx, params)?;
+                Ok(json!({ "to": to, "composition": id }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let (to, id) = Self::landing(ctx, params)?;
+                let Some(view) = ctx.view.as_mut() else {
+                    return Err(Refusal::new("no view is in hand, so there is no picker to walk."));
+                };
+                view.picker_selected = to;
+                Ok(Outcome {
+                    summary: format!("the picker's cursor is on `{id}`"),
+                    affected: 0,
+                    saved: false,
+                    inverse: None,
+                    after: Some(json!({ "selected": to, "composition": id })),
+                })
+            }
+        }
+    }
+
+    /// **Give the arrows to the picker, or give them back to the palette.**
+    pub mod composition_picker_toggle {
+        use super::*;
+
+        #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {}
+
+        pub struct CompositionPickerToggle;
+
+        impl Operation for CompositionPickerToggle {
+            fn name(&self) -> &'static str {
+                "composition_picker_toggle"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({"type": "object", "additionalProperties": false, "properties": {}})
+            }
+            fn plan(&self, ctx: &Ctx, _params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let view = need_view(ctx, "toggle")?;
+                Ok(json!({ "now": if view.picker_active { "palette" } else { "picker" } }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                self.plan(ctx, params)?;
+                let Some(view) = ctx.view.as_mut() else {
+                    return Err(Refusal::new("no view is in hand, so there is no picker to toggle."));
+                };
+                view.picker_active = !view.picker_active;
+                Ok(Outcome {
+                    summary: if view.picker_active {
+                        "Shift+up and Shift+down walk the compositions — Enter arms one".to_owned()
+                    } else {
+                        "the arrows walk the palette".to_owned()
+                    },
+                    affected: 0,
+                    saved: false,
+                    inverse: None,
+                    after: Some(json!({ "arrows": if view.picker_active { "picker" } else { "palette" } })),
+                })
+            }
+        }
+    }
+}
+
 pub mod view_cycle_grid {
     use super::*;
     use serde_json::json;
@@ -5073,6 +5237,8 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(sight::placement_set_hidden::PlacementSetHidden),
         Box::new(sight::layer_set_visible::LayerSetVisible),
         Box::new(sight::placement_set_locked::PlacementSetLocked),
+        Box::new(composition_picker::composition_picker_walk::CompositionPickerWalk),
+        Box::new(composition_picker::composition_picker_toggle::CompositionPickerToggle),
         Box::new(tool_arm::ToolArm),
         Box::new(snip_arm::SnipArm),
         Box::new(map_create::MapCreate),
@@ -5332,6 +5498,10 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     ("placement_set_hidden", "\"placement_set_hidden\""),
     ("layer_set_visible", "\"layer_set_visible\""),
     ("placement_set_locked", "\"placement_set_locked\""),
+    // **The composition picker's keys** (E-002, #129 slice 22): `P` dispatches `composition_picker_toggle` and Shift+up
+    // and Shift+down dispatch `composition_picker_walk`, through `compose::picker`'s `act` and `walk`.
+    ("composition_picker_toggle", "\"composition_picker_toggle\""),
+    ("composition_picker_walk", "\"composition_picker_walk\""),
     // **The clone and run keys**, which dispatch `tool_arm` through `arm_tool` (E-002, #129). Two keys,
     // one rule: press to arm, press again to return to `Tool::Place`.
     ("tool_arm", "\"tool_arm\""),

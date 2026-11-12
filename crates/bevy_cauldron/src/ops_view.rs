@@ -72,6 +72,21 @@ pub struct View {
     /// **The pieces the outliner has locked** against the viewport's clicks (UI-51, #237), under the same rule.
     #[serde(default, skip_serializing_if = "Locks::is_empty")]
     pub locks: Locks,
+    /// **Which composition the picker's cursor is on** (E-002, #129 slice 22): an index into the project's compositions,
+    /// the same order the rows are drawn in. Session state like the rung; not serialised at 0.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub picker_selected: usize,
+    /// **Whether the arrows walk the composition picker** rather than the palette (`P`). Not serialised while false.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub picker_active: bool,
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// **A tool by name**, for the same reason a rung is: an agent writes `"clone"` and a reordering of the
@@ -191,6 +206,9 @@ mod tests {
             // Assumed owner exception (2026-11-11): the literal names the two fields #237 adds (empty); the round trip is unchanged.
             eyes: Default::default(),
             locks: Default::default(),
+            // Assumed owner exception (2026-11-11): the literal names the two picker fields #129 slice 22 adds (their defaults).
+            picker_selected: 0,
+            picker_active: false,
         };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);

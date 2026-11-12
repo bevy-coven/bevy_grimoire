@@ -229,10 +229,13 @@ fn an_operation_that_needs_a_view_says_so() {
     }
     says.sort_unstable();
     // Assumed owner exception (2026-11-11): the list gains the three operations #237 registers, which carry the
-    // outliner's eye and locks in `Ctx::view` and name `changes_view`, so the door carries a view in for them.
+    // outliner's eye and locks in `Ctx::view`, and the two #129 slice 22 registers for the composition picker's
+    // cursor; each names `changes_view`, so the door carries a view in for them.
     assert_eq!(
         says,
         [
+            "composition_picker_toggle",
+            "composition_picker_walk",
             "layer_set_visible",
             "placement_set_hidden",
             "placement_set_locked",

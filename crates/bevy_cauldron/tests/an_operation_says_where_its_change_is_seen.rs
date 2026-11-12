@@ -49,6 +49,10 @@ const PINNED_NOWHERE: &[&str] = &[
     "placement_set_hidden",
     "layer_set_visible",
     "placement_set_locked",
+    // Assumed owner exception (2026-11-11): the list grows by the two operations #129 slice 22 registers, the composition
+    // picker's cursor and its hold on the arrows, which a person's own view holds, like the rung above.
+    "composition_picker_walk",
+    "composition_picker_toggle",
     "tool_arm",
     "snip_arm",
     "brush_arm",

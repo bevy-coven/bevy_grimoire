@@ -229,9 +229,6 @@ fn every_mcp_tool_is_prefixed_and_unique() {
 const UNMIGRATED: &[Action] = &[
     Action::ComposePrev,
     Action::ComposeNext,
-    Action::PickComposition,
-    Action::CompositionPrev,
-    Action::CompositionNext,
     Action::ComposeMemberPrev,
     Action::ComposeMemberNext,
     Action::CarouselPrev,
@@ -350,7 +347,8 @@ const UNMIGRATED: &[Action] = &[
 // feeds are unchanged.
 // 87 -> 85 with #129 slice 21 (below): two actions leave the list.
 // 86 -> 84: `MoveMode` -> `tool_arm` and `ToggleGhost` -> `view_toggle_ghost` (E-002, #129 slice 21): `B` arms the move tool and `G` toggles the rig bench's ghost through the operations an agent calls, and an agent's call to any view operation now reaches the editor's own view. Owner exception (2026-11-10): the ratchet number the issue's own work lowers; `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `MoveMode` from the `View` set and `ToggleGhost` from the `Camera` set for the same reason.
-const UNMIGRATED_MAX: usize = 85;
+// 85 -> 82: `PickComposition`, `CompositionPrev` and `CompositionNext` -> `composition_picker_toggle` and `composition_picker_walk` (E-002, #129 slice 22): `P` gives the arrows to the composition picker and Shift+up and Shift+down walk it, through the operations an agent calls. Assumed owner exception (2026-11-11): the ratchet number the slice's own work lowers; nothing is skipped.
+const UNMIGRATED_MAX: usize = 82;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///

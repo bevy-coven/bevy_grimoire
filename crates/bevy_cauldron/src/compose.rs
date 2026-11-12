@@ -2849,21 +2849,50 @@ pub mod picker {
         input: Res<ButtonInput<KeyCode>>,
     ) {
         let by = if crate::keys::just_pressed(&input, *keys, crate::keys::Action::CompositionPrev) {
-            -1
+            "prev"
         } else if crate::keys::just_pressed(&input, *keys, crate::keys::Action::CompositionNext) {
-            1
+            "next"
         } else {
             return;
         };
-        let n = project.compositions.compositions.len();
-        if n == 0 {
-            return;
+        // **The key dispatches the operation an agent calls** (E-002, #129 slice 22), and the rule that the walk clamps
+        // at the ends — *"an author holding an arrow at the end of a list should stop there rather than wrap to the
+        // other end of it"* — lives there once. A refusal (no compositions) leaves the cursor where it was, as the key did.
+        let _ = dispatch(&project, &mut picker, "composition_picker_walk", &serde_json::json!({ "by": by }));
+    }
+
+    /// **Dispatch a picker operation** with the picker's cursor in `Ctx::view`, and write the answer back only when it
+    /// moved (a `ResMut` write marks the picker changed). Returns the operation's sentence, or its refusal.
+    fn dispatch(
+        project: &Project,
+        picker: &mut ResMut<Picker>,
+        operation: &str,
+        params: &serde_json::Value,
+    ) -> Result<String, String> {
+        let mut ctx = crate::ops::Ctx {
+            project: Some(project.clone()),
+            source: crate::ops::Source::Human,
+            session: crate::ops::session_id(),
+            view: Some(crate::ops_view::View {
+                picker_selected: picker.selected,
+                picker_active: picker.active,
+                ..Default::default()
+            }),
+            ..crate::ops::Ctx::default()
+        };
+        let outcome = crate::ops::dispatch(&mut ctx, operation, params);
+        if let Some(view) = ctx.view.take() {
+            if picker.selected != view.picker_selected {
+                picker.selected = view.picker_selected;
+            }
+            if picker.active != view.picker_active {
+                picker.active = view.picker_active;
+            }
         }
-        // **It clamps at the ends, where it used to wrap.** The crate has already argued this twice,
-        // in the two places it made the choice: *"an author holding an arrow at the end of a list
-        // should stop there rather than wrap to the other end of it"*. One editor cannot answer one
-        // keystroke two ways.
-        picker.selected = (picker.selected as i64 + by).clamp(0, n as i64 - 1) as usize;
+        match outcome {
+            Ok(crate::ops::Applied::Done { outcome, .. }) => Ok(outcome.summary),
+            Ok(crate::ops::Applied::Refused(e)) | Err(e) => Err(e.0),
+        }
     }
 
     /// **`P` takes the arrows to the picker**, and `Enter` arms what the cursor is on.
@@ -2876,13 +2905,10 @@ pub mod picker {
         input: Res<ButtonInput<KeyCode>>,
     ) {
         if crate::keys::just_pressed(&input, *keys, crate::keys::Action::PickComposition) {
-            picker.active = !picker.active;
-            let said = if picker.active {
-                "Shift+up and Shift+down walk the compositions — Enter arms one"
-            } else {
-                "the arrows walk the palette"
-            };
-            state.status.note(said.to_owned());
+            match dispatch(&project, &mut picker, "composition_picker_toggle", &serde_json::json!({})) {
+                Ok(said) => state.status.note(said),
+                Err(why) => state.status.problem(why),
+            }
             return;
         }
         if !picker.active {
