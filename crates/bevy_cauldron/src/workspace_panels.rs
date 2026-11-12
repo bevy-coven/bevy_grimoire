@@ -65,7 +65,7 @@ impl Plugin for WorkspacePanelsPlugin {
 /// **One section's column**: the block every section is spawned into, so the rows of one belong to each other. Only a
 /// build with a family crate has a section that asks for it; the terrain section is spawned as its own column.
 #[cfg(any(feature = "bevy_elements", feature = "bevy_lights", feature = "bevy_light_grid", feature = "bevy_siren"))]
-fn block(p: &mut ChildSpawnerCommands) -> EntityCommands<'_> {
+fn block<'a>(p: &'a mut ChildSpawnerCommands) -> EntityCommands<'a> {
     p.spawn(Node {
         flex_direction: FlexDirection::Column,
         row_gap: Val::Px(chrome::GAP_TIGHT),
