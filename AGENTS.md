@@ -147,6 +147,20 @@ A loop is one dumb driver (`tools/loop/wiggum.sh`) running one fresh `omp -p` pe
 
 **Send a heavy compile to the device with room, never to the machine that happens to hold the checkout.** `python3 tools/loop/otel_host_pick.py --pick` reads Home Cloud's OTEL (Prometheus `192.168.1.104:9090`, dashboard `192.168.1.104:3000`) and prints the best ssh destination; it exits non-zero when nothing qualifies rather than suggesting a saturated host. Rank by idle cores, not raw load. See the runbook's load-balancing section.
 
+## Gates and hosts: hunt the time sucks (owner, 2026-11-12)
+
+The owner measured the cost of waiting, not of writing: "we are slowed the hell down by all these gates". The audit of 2026-11-12 (`docs/loop/iterations/2026-11-12-gate-audit.md`) found that 57% of the push gate's time went on runs that failed, the whole suite ran three or four times per cluster, a version bump paid for a 20-minute test run, and a self-made `touch` of every source file forced a full rebuild per gate.
+
+**Look for time sucks all the time, as part of the work, not when asked.** Every pass, worker and manager does this:
+
+- **Measure before you believe.** `<git-dir>/gate.log` (one line per gate step, in seconds), `python3 tools/loop/fleet/timing.py` (where a fleet's hours went), `journalctl --user -u <unit>`. A number you did not measure is `[INFERENCE]`.
+- **A step that repeats work another step already did is a defect.** Ask of every check: what does it catch that the one before it could not? If the answer is nothing, cut it or make it reuse the earlier result (the gate's clean-merge fast path and the version-bump skip are the two examples).
+- **A wait longer than ten minutes, a retry, a kill, a refusal or a rerun is a finding.** Write down what it cost (minutes, whose) and its cause the first time, not the fifth. Eight gate kills in a row happened because each was retried without anyone reading the cause (swap full from a RAM-disk `/tmp`, and a build that rewrote every source file).
+- **Never work around a slow step in your own process and say nothing.** If you skip, batch or reorder to go faster, that is a decision: record it where the next pass reads it. If the fix changes a gate, a hook or a rule, propose it with the measurement and the risk (what the cut stops catching); do not weaken a check silently, and do not cut a check the owner's rules protect.
+- **One owner of each cost.** If a speed-up needs a decision (a protected path, a shared resource, AGENTS.md itself), put the number and the proposal in the report and ask once.
+
+**Host rules on big** (shared, 31 GB, swap-bound): worktrees live in `$HOME/worktrees`, never in `/tmp` (a 16 GB tmpfs whose pages live in swap); the push gate has its own target dir (`~/.cargo-target-gate`) and nothing touches sources to force a rebuild; each fleet cluster builds in `~/.cargo-target-fleet/<cluster>` (15-20 GB; delete it with its worktree: `/home` on big is 97% full and the shared `~/.cargo-target-shared/global` is 1.1 TB, so `predone.sh` refuses to start under 30 GB free); a whole-suite run (`predone.sh`, the gate) takes `/tmp/fleet/big-heavy.lock` exclusively and an ad hoc cargo run takes it shared (`flock -s`); a worker runs the whole suite once per round, after the review. A version-bump commit (manifest and `Cargo.lock` `version = ` lines only) is pushed without a test run; the version policy check still runs.
+
 ## Rules
 
 - `bevy_grimoire_core`, `bevy_grimoire_rng` and `bevy_grimoire_solver` are engine-free. `bevy_grimoire_core/tests/engine_free.rs` fails on any `bevy*` dependency except the exact names in `SIBLING_DEPS`.

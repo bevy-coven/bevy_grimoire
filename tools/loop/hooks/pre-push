@@ -65,6 +65,23 @@ if [ -f "$all" ]; then
   done
 fi
 if [ "$code" = 0 ]; then echo "pre-push gate: docs and media only; backlog and changelog checks passed" >&2; exit 0; fi
+# **A version bump needs no test run** (owner, 2026-11-12). A release is `release: <version>`: a manifest's own `version = "x"` line and
+# the same line in `Cargo.lock`, nothing else (`tools/loop/version.py check`, above, already holds the policy). It changed no code, but
+# the bump forces a rebuild of the whole workspace, so the gate cost ~20 minutes per release commit (two per release) for a result known
+# in advance. Only a diff made of nothing but those lines in Cargo manifests qualifies; a dependency version, a feature, a source file,
+# or any other line in a manifest runs the full gate.
+version_bump_only() {
+  local files f
+  [ "$remote" != "$zero" ] || return 1
+  files=$(git diff --name-only "$remote" "$target") || return 1
+  [ -n "$files" ] || return 1
+  while read -r f; do
+    case "$f" in Cargo.lock | Cargo.toml | crates/*/Cargo.toml) ;; *) return 1 ;; esac
+  done <<<"$files"
+  # Every added or removed line is `version = "..."` flush left (a dependency's inline `version = ` is not flush left).
+  ! git diff -U0 --no-ext-diff "$remote" "$target" | grep -E '^[+-]' | grep -vE '^(\+\+\+|---) ' | grep -qvE '^[+-]version = "[^"]*"$'
+}
+if version_bump_only; then note "version bump only, no tests"; echo "pre-push gate: a version bump (manifest and Cargo.lock version lines only); the version policy check passed, no test run" >&2; exit 0; fi
 passed="$(git rev-parse --git-dir)/gate-passed"
 gated() { [ -f "$passed" ] && grep -qx "$1" "$passed"; }
 clean_merge_of_main() {

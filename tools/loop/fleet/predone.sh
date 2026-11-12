@@ -19,7 +19,16 @@ if [ -z "${FLEET_HEAVY_LOCKED:-}" ] && command -v flock >/dev/null 2>&1; then
   mkdir -p /tmp/fleet
   FLEET_HEAVY_LOCKED=1 exec flock /tmp/fleet/big-heavy.lock bash "$0" "$@"
 fi
-export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$HOME/.cargo-target-shared/global}
+# **A target dir per cluster** (owner, 2026-11-12), the same one the worker iterates in (brief rule 2): worktrees that share one
+# target dir overwrite each other's same-named test binaries (nextest then ran zero tests, or a stale binary), the only cure was
+# touching every source file, which forced a full workspace rebuild (~10 min, 10-12 GB) and cost the incremental cache.
+export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$HOME/.cargo-target-fleet/$cluster}
+# The same build mode as the worker's own iteration (brief rule 2), so the incremental cache is reused, not rebuilt.
+export CARGO_INCREMENTAL=${CARGO_INCREMENTAL:-1}
+export RUSTC_WRAPPER=${RUSTC_WRAPPER-}
+# /home on big is 97% full (2026-11-12) and a target dir is 15-20 GB: refuse to start a build that could fill it.
+free_gb=$(df -Pk "$HOME" | awk 'NR==2 {print int($4/1048576)}')
+[ "$free_gb" -ge "${PREDONE_MIN_FREE_GB:-30}" ] || { echo "predone: only ${free_gb} GB free under $HOME (need ${PREDONE_MIN_FREE_GB:-30}); delete a finished cluster's ~/.cargo-target-fleet/<cluster> and rerun" >&2; exit 1; }
 result=/tmp/fleet/result-$cluster.md
 log=/tmp/fleet/predone-$cluster.log
 sha=$(git rev-parse --short=9 HEAD)
