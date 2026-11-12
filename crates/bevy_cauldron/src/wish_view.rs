@@ -849,10 +849,11 @@ fn keep_this_lesson(
             }
             // **Only content that was already allowed is granted.** A withheld guide the person has
             // not read stays withheld however many lines they keep.
-            if was_allowed && let Err(e) = crate::project_page::grant_in_store(root_res, store.as_deref(), &root, &after) {
-                if let Some(state) = state.as_mut() {
-                    state.status.problem(format!("the lesson was kept, but the guide was not allowed: {e}"));
-                }
+            if was_allowed
+                && let Err(e) = crate::project_page::grant_in_store(root_res, store.as_deref(), &root, &after)
+                && let Some(state) = state.as_mut()
+            {
+                state.status.problem(format!("the lesson was kept, but the guide was not allowed: {e}"));
             }
         }
         Err(e) => {
