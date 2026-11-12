@@ -269,3 +269,29 @@ fn zen_mode_takes_the_bar_away_and_leaving_it_brings_it_back() {
     settle(&mut app);
     assert!(the_bar_is_there(&mut app), "and it is back when Zen mode ends");
 }
+
+/// **The bar is paid by the docks, not by the map**: in the reference window the viewport is as wide with
+/// the bar as without it (`the_frames_regions_fit_the_window` is the floor under this).
+#[test]
+fn the_bar_takes_its_width_from_the_docks_and_the_viewport_keeps_its_own() {
+    let viewport_width = |bar: bool| {
+        let root = fixtures::Fixture::new(&format!("activity_width_{bar}_{}", std::process::id()))
+            .descriptor("site/wall", "alpha")
+            .build("m");
+        let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+        app.world_mut().spawn((
+            Window { resolution: bevy::window::WindowResolution::new(1280, 720), ..default() },
+            bevy::window::PrimaryWindow,
+        ));
+        app.world_mut().resource_mut::<bevy_cauldron::settings::EditorSettings>().show_activity_bar = bar;
+        for _ in 0..16 {
+            app.update();
+        }
+        assert_eq!(the_bar_is_there(&mut app), bar);
+        let viewport = app.world().resource::<bevy_cauldron::chrome::Frame>().viewport;
+        app.world().get::<ComputedNode>(viewport).map(|n| n.size().x).unwrap_or(0.0)
+    };
+    let (with, without) = (viewport_width(true), viewport_width(false));
+    assert!(without > 0.0);
+    assert!((with - without).abs() < 1.0, "the viewport is {with} px with the bar and {without} px without it");
+}

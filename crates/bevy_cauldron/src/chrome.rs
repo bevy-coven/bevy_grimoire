@@ -1280,11 +1280,17 @@ fn fit_docks_to_the_window(
     mut panels: Query<(&PanelWidth, &mut Node, &ComputedNode), Without<ViewportSlot>>,
     owned: Query<(), (With<ShellSplit>, Without<SplitUnsized>)>,
     collapsed: Query<(), (With<ShellSplit>, With<bevy_gooey::SplitSaved>)>,
+    bars: Query<&ComputedNode, With<crate::activity_bar::ActivityBar>>,
 ) {
     let Ok(window) = windows.single() else {
         return;
     };
     let scale = ui_scale.0.max(f32::EPSILON);
+    // **The activity bar (NV-03, #380) is paid by the docks, not by the map**: it stands in the body's row
+    // beside them, so its width comes out of what the two docks may take while the map's share stays what
+    // it was. Measured, because the bar's width is gooey's icon tab and its edge; absent, or not laid out
+    // yet, it is nothing.
+    let bar: f32 = bars.iter().map(|n| n.size().x * n.inverse_scale_factor()).sum();
     // The row's room in `Val::Px` units — the units the constants above are written in. `Window`'s
     // width is already logical, and `UiScale` multiplies every `Val::Px`, so dividing takes the
     // logical width back to the units the panel widths are expressed in.
@@ -1332,6 +1338,8 @@ fn fit_docks_to_the_window(
     // the window once that is more than the floor, and the panels give the difference back.
     let room = room - DIVIDER_W;
     let owed = VIEWPORT_MIN_W.max(VIEWPORT_SHARE * room);
+    // (The map is owed its share of the room *before* the bar comes out, below.)
+    let room = room - bar;
     let squeeze = if room - (sum_pref + sum_overhead) >= owed {
         1.0
     } else {
