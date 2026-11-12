@@ -19,14 +19,31 @@
 //! names it, never a list that quietly says there is nothing.
 
 use bevy::prelude::*;
+use bevy_grimoire_core::map::Map;
 
 use crate::chrome;
-use crate::project::Project;
+use crate::project::{OpenMap, Project};
 use crate::screen::Screen;
 use crate::workspace::Workspace;
 
 /// How often the lists look at their files again, in seconds.
 const READ_SECS: f32 = 0.5;
+
+/// The most characters of a light's settings one row shows before it is cut with an ellipsis. A row is one line of the panel.
+const ROW_CHARS: usize = 72;
+
+/// The family key a placement's light fixture is saved under (`bevy_lights`), the same string `fixture::KEY` holds in a build that has the crate.
+pub const LIGHTS_KEY: &str = "bevy_lights";
+
+/// What the LIGHTS list says when the map has none.
+pub const NO_LIGHTS: &str = "no light fixtures on this map";
+
+/// Where a light is set: not here.
+pub const LIGHTS_HINT: &str = "a light is a placement's bevy_lights settings; set one with family_set on the piece";
+
+/// The LIGHTS section's list, in the World workspace's panel.
+#[derive(Component, Clone, Copy)]
+pub struct LightsList;
 
 /// The crate's sound file under the project's `family/`, the same name `audio_panel::FILE` holds in a build that has the crate.
 pub const SIREN_FILE: &str = "bevy_siren.ron";
@@ -45,8 +62,42 @@ pub struct WorldListsPlugin;
 
 impl Plugin for WorldListsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, refresh_cues.run_if(Workspace::sound_is_open).run_if(in_state(Screen::Editor)));
+        app.add_systems(
+            Update,
+            (refresh_lights.run_if(Workspace::world_is_open), refresh_cues.run_if(Workspace::sound_is_open)).run_if(in_state(Screen::Editor)),
+        );
     }
+}
+
+/// **The fixtures list of the LIGHTS section**: the heading is the caller's (the family crate's section draws its own, with the pool
+/// button), the rows are drawn in every build.
+pub fn spawn_lights_list(p: &mut ChildSpawnerCommands) {
+    p.spawn(bevy_gooey::label(LIGHTS_HINT));
+    p.spawn((LightsList, list_node()));
+}
+
+/// **A map's lights in words**: a row per placement that carries `bevy_lights` settings, `<id>: <settings>`, the settings on one line and cut
+/// at [`ROW_CHARS`]. A build without the crate reads the same value as text: it cannot tell a flicker from a fire, and does not need to.
+pub fn light_rows(map: &Map) -> Vec<String> {
+    let mut rows: Vec<String> = map
+        .placements
+        .iter()
+        .filter_map(|p| p.family.get(LIGHTS_KEY).map(|settings| format!("{}: {}", p.id, one_line(settings))))
+        .collect();
+    if rows.is_empty() {
+        rows.push(NO_LIGHTS.to_owned());
+    }
+    rows
+}
+
+/// A settings value on one line: whitespace collapsed, cut to [`ROW_CHARS`] with an ellipsis.
+fn one_line(text: &str) -> String {
+    let joined = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if joined.chars().count() <= ROW_CHARS {
+        return joined;
+    }
+    let cut: String = joined.chars().take(ROW_CHARS.saturating_sub(1)).collect();
+    format!("{cut}…")
 }
 
 /// **The cues list of the AUDIO section**, drawn in every build under the heading the caller draws.
@@ -136,4 +187,14 @@ fn refresh_cues(
     mut shown: Local<(Option<Vec<String>>, f32)>,
 ) {
     keep(&mut commands, &time, &mut shown, &lists, || Some(cue_rows(project.as_deref()?)));
+}
+
+fn refresh_lights(
+    mut commands: Commands,
+    time: Res<Time>,
+    open: Option<Res<OpenMap>>,
+    lists: Query<(Entity, Has<Children>), With<LightsList>>,
+    mut shown: Local<(Option<Vec<String>>, f32)>,
+) {
+    keep(&mut commands, &time, &mut shown, &lists, || Some(light_rows(&open.as_deref()?.map)));
 }

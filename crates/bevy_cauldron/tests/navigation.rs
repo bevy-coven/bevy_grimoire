@@ -825,7 +825,6 @@ fn target_of(what: &str) -> Target {
 const FILED: &[(&str, &str)] = &[
     ("A map's water", "#393"),
     ("A map's forest", "#394"),
-    ("A map's lights", "#395"),
 ];
 
 // ───────────────────────────── driving the finder ─────────────────────────────

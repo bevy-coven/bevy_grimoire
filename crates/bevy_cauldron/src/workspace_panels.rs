@@ -9,10 +9,10 @@
 //!
 //! # What is here, and what is not
 //!
-//! - **World** — the ground and the sky under the level: `TERRAIN` always, and the family crates' sections when
-//!   the build has them (`ENVIRONMENT` for `bevy_elements`, `LIGHTS` for `bevy_lights`, `LIGHT MAP` for
-//!   `bevy_light_grid`). The same functions draw the same nodes, so every observer and readout they have keeps
-//!   working; only the parent moved.
+//! - **World** — the ground and the sky under the level: `TERRAIN` always, the map's `LIGHTS` fixtures in every build (`world_lists`,
+//!   NV-11, #395), and the family crates' sections when the build has them (`ENVIRONMENT` for `bevy_elements`, the pool's budget under
+//!   `LIGHTS` for `bevy_lights`, `LIGHT MAP` for `bevy_light_grid`). The same functions draw the same nodes, so every observer and
+//!   readout they have keeps working; only the parent moved.
 //! - **Sound** — the audio panel: `AUDIO` with the project's cues listed in every build (`world_lists`, NV-11, #392), and the audition
 //!   controls when the build has `bevy_siren`. A build without that crate says so in a sentence beside the list.
 //! - **Not here: water and forest.** They are operations (`water_place`, `forest_scatter`) with no panel today, so
@@ -95,16 +95,22 @@ fn spawn_world_panel(mut commands: Commands, frame: Res<Frame>) {
             #[cfg(feature = "bevy_elements")]
             block(p).with_children(crate::environment::spawn_section);
 
-            // **Lights (#103):** the pool's budget from where the camera looks.
-            #[cfg(feature = "bevy_lights")]
-            block(p).with_children(crate::ops_pool::spawn_section);
-
             // **Light map (#103):** show or hide `bevy_light_grid`'s field over the open map.
             #[cfg(feature = "bevy_light_grid")]
             block(p).with_children(crate::light_overlay::spawn_section);
 
             // **Terrain (#99):** one line, `<brush> <x> <z> <radius_m> <strength>`.
             crate::editor::spawn_terrain_section(p);
+
+            // **Lights (#103, NV-11 #395):** the fixtures the map carries, in every build; the family crate's section adds the pool's
+            // budget from where the camera looks, and draws the heading itself. After the terrain line, which keeps its place.
+            block(p).with_children(|s| {
+                #[cfg(feature = "bevy_lights")]
+                crate::ops_pool::spawn_section(s);
+                #[cfg(not(feature = "bevy_lights"))]
+                chrome::section(s, "LIGHTS");
+                crate::world_lists::spawn_lights_list(s);
+            });
         });
     });
 }

@@ -15,6 +15,7 @@
 //! must be unique to its test (its name and `std::process::id()`), never a fixed name.
 
 mod a_chord_shows_the_problems_list;
+mod a_maps_lights_are_listed_without_bevy_lights;
 mod a_project_skin_previews_only_in_the_panel;
 mod a_rigs_clip_is_found_by_the_finder;
 mod a_saved_arrangement_is_the_one_the_editor_shows;
