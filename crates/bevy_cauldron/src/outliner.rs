@@ -233,6 +233,12 @@ impl Plugin for OutlinerPlugin {
             Update,
             (rebuild_the_tree, follow_the_viewport, tick_the_menu_row).chain().run_if(in_state(Screen::Editor)),
         );
+        // **The marks follow the map** (UI-51, #237): pruned of pieces that are gone, and the unseen mirrored into the
+        // target lock the piece-verbs carry. Before the tree is rebuilt, so the rows are drawn from the pruned sets.
+        app.add_systems(
+            Update,
+            (prune_the_marks, mirror_the_unseen).chain().before(rebuild_the_tree).run_if(in_state(Screen::Editor)),
+        );
         // **A row's menu** (UI-51, #237): gooey's own `context_menu`, named on the piece rows and taken off the
         // others — never a control built here.
         app.add_systems(OnEnter(Screen::Editor), spawn_row_menu)
@@ -362,6 +368,19 @@ pub const NOTES: &str = "notes";
 /// How much of a note's text a row shows. One line, so the row stays one line tall however long the note is.
 const NOTE_PREVIEW_CHARS: usize = 48;
 
+/// What a row says after its name when its piece is out of the viewport (UI-51, #237).
+pub const HIDDEN_MARK: &str = " (hidden)";
+/// What a row says after its name when its piece is locked against the viewport's clicks.
+pub const LOCKED_MARK: &str = " (locked)";
+
+/// The byte before a hidden piece's id in [`fingerprint`]; none of these three, nor `\x1f`/`\x1e`/`\x1c`/`\x1b`, is a
+/// byte an id or a name carries, so the fields cannot be read into one another.
+const SEP_HIDDEN_PIECE: &[u8] = b"\x18";
+/// The byte before a hidden layer's name in [`fingerprint`].
+const SEP_HIDDEN_LAYER: &[u8] = b"\x17";
+/// The byte before a locked piece's id in [`fingerprint`].
+const SEP_LOCKED_PIECE: &[u8] = b"\x16";
+
 /// **The tree, built from the map, the map's other contents and the search.** Returns the nodes, the piece
 /// behind each key, and the rows drawn under each group.
 ///
@@ -373,25 +392,6 @@ const NOTE_PREVIEW_CHARS: usize = 48;
 /// open, and so does every group while something is searched for.
 #[allow(clippy::type_complexity)]
 pub fn nodes_for(
-    map: &Map,
-    library: &bevy_grimoire_core::library::Library,
-    contents: &Contents,
-    query: &str,
-    group_open: impl Fn(u64) -> Option<bool>,
-) -> (Vec<TreeNode>, HashMap<u64, String>, HashMap<u64, Vec<u64>>) {
-    nodes_marked(map, library, contents, query, (&Eyes::default(), &Locks::default()), group_open)
-}
-
-/// What a row says after its name when its piece is out of the viewport, and when it is locked (UI-51, #237).
-pub const HIDDEN_MARK: &str = " (hidden)";
-/// What a row says after its name when its piece is locked against the viewport's clicks.
-pub const LOCKED_MARK: &str = " (locked)";
-
-/// **[`nodes_for`], with the rows of what is hidden or locked saying so** (UI-51, #237): ` (hidden)` after a piece the
-/// eye has taken out of the viewport, or that stands in a hidden layer, and after the layer's own row; ` (locked)`
-/// after a locked piece. The marks are the row's label and nothing the search reads, so `lamp` still finds a hidden lamp.
-#[allow(clippy::type_complexity)]
-pub fn nodes_marked(
     map: &Map,
     library: &bevy_grimoire_core::library::Library,
     contents: &Contents,
@@ -558,13 +558,13 @@ fn fingerprint(
     // **What the eye and the locks hold**, because the rows say so (` (hidden)`, ` (locked)`): the sets are folded in
     // name order with bytes no id carries between them, so a hide is a different fingerprint.
     for id in marks.0.hidden.iter() {
-        hash = fold(fold(hash, b"\x18"), id.as_bytes());
+        hash = fold(fold(hash, SEP_HIDDEN_PIECE), id.as_bytes());
     }
     for layer in marks.0.layers.iter() {
-        hash = fold(fold(hash, b"\x17"), layer.as_bytes());
+        hash = fold(fold(hash, SEP_HIDDEN_LAYER), layer.as_bytes());
     }
     for id in marks.1.locked.iter() {
-        hash = fold(fold(hash, b"\x16"), id.as_bytes());
+        hash = fold(fold(hash, SEP_LOCKED_PIECE), id.as_bytes());
     }
     for placed in &map.placements {
         hash = fold(hash, b"\x1f");
@@ -733,7 +733,7 @@ fn rebuild_the_tree(
     let contents = contents_of(&open, &project, notes.as_deref());
     let Some(tree) = table.source_mut::<Tree>() else { return };
     let (nodes, rows, children) =
-        nodes_marked(&open.map, &project.library, &contents, &outliner.query, (eyes, locks), |key| tree.is_open(key));
+        nodes_for(&open.map, &project.library, &contents, &outliner.query, (eyes, locks), |key| tree.is_open(key));
     tree.set_nodes(nodes);
     outliner.rows = rows;
     outliner.children = children;
@@ -910,6 +910,65 @@ impl Sight<'_> {
     /// **Whether a click may not move or remove this piece.**
     pub fn locked(&self, id: &str) -> bool {
         self.locks.as_deref().is_some_and(|locks| locks.is_locked(id))
+    }
+}
+
+impl Sight<'_> {
+    /// **Refuse a click that would replace a piece the person has locked or cannot see** (UI-51, #237). `blockers` are
+    /// indices into `map.placements`, what a placement or a box fill would take out of the way. A locked piece is named
+    /// and left; a hidden one is named and left too (taking it would delete what is not drawn, with nothing on screen to
+    /// say so), and the sentence says how to proceed. An operation (`placement_add`) is not asked.
+    pub fn refuse_replacing(
+        &self,
+        library: &bevy_grimoire_core::library::Library,
+        map: &Map,
+        blockers: &[usize],
+    ) -> Result<(), String> {
+        for placed in blockers.iter().filter_map(|i| map.placements.get(*i)) {
+            if self.locked(&placed.id) {
+                return Err(format!("blocked: `{}` is locked — unlock it in the outliner first", placed.id));
+            }
+            if self.unseen(library, placed) {
+                return Err(format!("blocked: `{}` is hidden and in the way — show it in the outliner first", placed.id));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// **The pieces out of the viewport are mirrored into the target lock**, which every piece-verb already carries, so a
+/// key aimed at the cursor (turn, tip, lift, pin, cycle, Edit Tile) does not act on what is not drawn (UI-51, #237).
+/// Written only when the eye, the map or the library moved, and without marking the lock changed.
+fn mirror_the_unseen(
+    eyes: Res<Eyes>,
+    open: Option<Res<OpenMap>>,
+    project: Option<Res<Project>>,
+    lock: Option<ResMut<TargetLock>>,
+) {
+    let (Some(open), Some(project), Some(mut lock)) = (open, project, lock) else { return };
+    if !(eyes.is_changed() || open.is_changed() || project.is_changed()) {
+        return;
+    }
+    let unseen: BTreeSet<String> =
+        open.map.placements.iter().filter(|p| eyes.hides(&project.library, p)).map(|p| p.id.clone()).collect();
+    TargetLock::set_unseen(&mut lock, unseen);
+}
+
+/// **A mark does not outlive its piece** (UI-51, #237): when the map changes, the ids of pieces that are no longer on it
+/// leave the eye and the locks, so an id from a removed piece (or an old map) never marks a different piece that is
+/// later given the same id. Nothing is written when nothing is stale. Taking a removal back does not bring the mark
+/// back: a mark is session view state, not an undo step.
+fn prune_the_marks(open: Option<Res<OpenMap>>, mut eyes: ResMut<Eyes>, mut locks: ResMut<Locks>) {
+    let Some(open) = open else { return };
+    if !open.is_changed() {
+        return;
+    }
+    let on_the_map = |id: &String| open.map.placements.iter().any(|p| &p.id == id);
+    if eyes.hidden.iter().any(|id| !on_the_map(id)) {
+        eyes.hidden.retain(|id| on_the_map(id));
+    }
+    if locks.locked.iter().any(|id| !on_the_map(id)) {
+        locks.locked.retain(|id| on_the_map(id));
     }
 }
 

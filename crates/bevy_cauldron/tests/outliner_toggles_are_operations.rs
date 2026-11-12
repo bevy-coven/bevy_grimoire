@@ -313,3 +313,56 @@ fn a_hidden_piece_is_not_picked_and_the_marks_do_not_outlive_the_map() {
     assert!(app.world().resource::<Eyes>().is_empty(), "a door shows everything");
     assert!(app.world().resource::<Locks>().is_empty(), "and unlocks everything");
 }
+
+/// **What a click would replace is asked of the lock and the eye**: a locked blocker and a hidden one are each refused,
+/// by name, and an unmarked one is not. This is the question `place_one`'s callers (a click, a run-mode click, a drop) and
+/// the box fill ask before they take anything out of the way.
+#[test]
+fn a_click_may_not_replace_a_locked_or_hidden_piece() {
+    use bevy::ecs::system::RunSystemOnce;
+    let mut app = rig("refuse_replacing");
+    apply(&mut app, "placement_set_locked", json!({"id": "on_floor@0", "locked": true}));
+    apply(&mut app, "placement_set_hidden", json!({"id": "on_floor@1", "hidden": true}));
+    let ask = |app: &mut App, blockers: Vec<usize>| {
+        app.world_mut()
+            .run_system_once(move |sight: bevy_cauldron::outliner::Sight, project: Res<Project>, open: Res<OpenMap>| {
+                sight.refuse_replacing(&project.library, &open.map, &blockers)
+            })
+            .expect("the system ran")
+    };
+    let locked = ask(&mut app, vec![0]).expect_err("a locked blocker is refused");
+    assert!(locked.contains("on_floor@0") && locked.contains("locked"), "{locked}");
+    let hidden = ask(&mut app, vec![1]).expect_err("a hidden blocker is refused");
+    assert!(hidden.contains("on_floor@1") && hidden.contains("hidden"), "{hidden}");
+    assert!(ask(&mut app, vec![2]).is_ok(), "an unmarked piece may be replaced");
+    apply(&mut app, "layer_set_visible", json!({"layer": "ceiling", "visible": false}));
+    assert!(ask(&mut app, vec![2]).is_err(), "so is one standing in a hidden layer");
+}
+
+/// **A key aimed at the cursor does not see a hidden piece**: the piece-verbs carry the target lock, which mirrors what
+/// the eye has hidden, so `under_cursor_target` and the note and Edit Tile picks skip it. A hidden layer counts, and the
+/// mirror empties again when the piece is shown.
+#[test]
+fn the_piece_verbs_do_not_see_what_the_eye_has_hidden() {
+    let mut app = rig("verbs_unseen");
+    let unseen = |app: &App, id: &str| app.world().resource::<bevy_cauldron::editor::TargetLock>().is_unseen(id);
+    assert!(!unseen(&app, "on_floor@0"));
+    apply(&mut app, "placement_set_hidden", json!({"id": "on_floor@0", "hidden": true}));
+    assert!(unseen(&app, "on_floor@0"), "a hidden piece is not what a key means");
+    apply(&mut app, "layer_set_visible", json!({"layer": "ceiling", "visible": false}));
+    assert!(unseen(&app, "on_ceiling@2"), "nor is a piece in a hidden layer");
+    apply(&mut app, "placement_set_hidden", json!({"id": "on_floor@0", "hidden": false}));
+    assert!(!unseen(&app, "on_floor@0"), "and showing it again brings it back");
+}
+
+/// **A mark does not outlive its piece**: removing a hidden and locked piece drops its ids from the eye and the locks.
+#[test]
+fn a_removed_pieces_marks_are_pruned() {
+    let mut app = rig("prune");
+    apply(&mut app, "placement_set_hidden", json!({"id": "on_floor@1", "hidden": true}));
+    apply(&mut app, "placement_set_locked", json!({"id": "on_floor@1", "locked": true}));
+    apply(&mut app, "placement_remove", json!({"id": "on_floor@1"}));
+    updates(&mut app, 3);
+    assert!(app.world().resource::<Eyes>().is_empty(), "the eye let go of the removed piece");
+    assert!(app.world().resource::<Locks>().is_empty(), "and so did the lock");
+}

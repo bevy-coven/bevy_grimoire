@@ -1034,7 +1034,12 @@ impl Action {
             | Action::FocusCandidates
             | Action::PrevCandidate
             | Action::NextCandidate
-            | Action::CopyInfo => Change::View,
+            | Action::CopyInfo
+            // **The composition picker's cursor and its hold on the arrows** (E-002, #129 slice 22): view state, and
+            // migrated to `composition_picker_toggle` and `composition_picker_walk`.
+            | Action::PickComposition
+            | Action::CompositionPrev
+            | Action::CompositionNext => Change::View,
 
             // **Held, not pressed.** The effect is the hold: things fade, a pick is live, the overlay is
             // up. An operation whose effect reverses when a key is released is not a value an agent can
