@@ -130,6 +130,13 @@ tab, `Cmd/Ctrl+Shift+T` reopens the last one closed, and `Ctrl+Tab` (with Shift,
   leaving the others alone.
 - The **status bar** left side shows the project, map, workspace and selection count. The right side
   shows the live link, the reload state, background jobs and the problems count.
+- The **activity bar** (NV-03, #380) is a vertical bar at the window's far left with one icon per
+  *registered* workspace, in the registry's order. The sliding selection indicator is on the open workspace,
+  its tooltip gives the workspace's name and shortcut, and a badge says what needs a person: the problems
+  count on Map and Files, the waiting wishes and lessons on Agent. A workspace with no source draws no
+  badge. It is a focus region (F6 cycles to it) and its tabs are gooey's vertical `TabList`, so the arrows move down it. **View ▸ Show activity bar**
+  and Zen mode take it away entirely (it is spawned on demand, never hidden) and the choice is saved in the user's
+  settings. Agent's badge replaces the status band's wishes chip once the Agent workspace is registered.
 
 ## 5. Commands
 

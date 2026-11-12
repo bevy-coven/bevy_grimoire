@@ -124,6 +124,19 @@ pub fn by_id(id: &str) -> Option<Command> {
         .map(command)
 }
 
+/// **The command ids that went away with the doors** (#379), as a saved keymap spells them.
+///
+/// A person's `settings.ron` may still rebind one, and a file is not refused for naming a command that
+/// no longer exists: `settings` reads past these, drops the entry, and binds nothing. Every other
+/// unknown id is still refused, so a typo is caught — only an id that *was* a command is forgiven. An
+/// id joins this list in the commit that removes its action, and never leaves it.
+pub const RETIRED: [&str; 4] = ["view.switch_door", "view.panel_1", "view.panel_2", "view.panel_3"];
+
+/// Whether this id named a command that has since been removed ([`RETIRED`]).
+pub fn is_retired(id: &str) -> bool {
+    RETIRED.contains(&id)
+}
+
 /// A binding's default shortcut. Shift is part of it only where the row requires it; the platform's
 /// own modifier is gooey's `PRIMARY`, so `Cmd+S` on a mac is `Ctrl+S` elsewhere, as [`keys::MOD_KEYS`]
 /// already says.
@@ -221,9 +234,6 @@ fn id_named(id: &str) -> &'static str {
 pub fn identity(action: Action) -> (&'static str, &'static str) {
     match action {
         // ── The frame around every tab ───────────────────────────────────────
-        Action::TabSlot1 => ("view.panel_1", "Open the first panel of this workspace"),
-        Action::TabSlot2 => ("view.panel_2", "Open the second panel of this workspace"),
-        Action::TabSlot3 => ("view.panel_3", "Open the third panel of this workspace"),
         // **`workspace.<id>`, every one of them**, so the chord, the menu, the palette an agent
         // names and the command's own refusal all spell the workspace the same way
         // (`Workspace::id`).
@@ -241,8 +251,6 @@ pub fn identity(action: Action) -> (&'static str, &'static str) {
         Action::Save => ("file.save", "Save"),
         Action::Snip => ("tools.snip", "Snip an area of the editor"),
         Action::MainMenu => ("file.main_menu", "Close project"),
-        // The id stays `view.switch_door`: a keymap file that rebound it must keep reading.
-        Action::SwitchDoor => ("view.switch_door", "Switch to the other workspace"),
         Action::ShowErrors => ("view.show_errors", "Show this session's errors"),
         Action::CopyInfo => ("edit.copy_tab_text", "Copy this tab's text"),
         Action::Cancel => ("edit.cancel", "Back out"),

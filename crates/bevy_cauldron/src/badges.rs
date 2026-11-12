@@ -684,17 +684,13 @@ fn rebuild_badges(
     // is picked, and before that `I`, `M`, `T F G H [ ]`, `Z X V`, `B N O P` and `L …` would otherwise
     // have nowhere to be at all.
     //
-    // **And a verb the door cannot honour is not drawn at all.** The slot keys are `Context::Global`
-    // because the strip is, but the strip's chips come from `Door::tabs()` — so on the Map and Rigs
-    // doors `2` and `3` were badges for panels that do not exist. `Action::fires_on_a_door_of` is the
-    // one place that answers it, and `tiles::tab_shortcuts` derives the same fact from the same
-    // mapping. The door is read off the tab rather than taken as a resource: `Workspace::showing` is
-    // total, and `ShowingFor` already keys on the tab, so the layer rebuilds when the door changes.
-    let panels = crate::workspace::Workspace::showing(tab).panels().len();
+    // **And a verb the editor does not offer is not drawn at all.** The workspace chords are
+    // `Context::Global`, and `Cmd+6` names a workspace that is not built: `Badge::offered` is the one
+    // place that answers it, through `Action::is_offered`.
     let live_badges: Vec<keys::Badge> = keys::badges(tab.context(), stance)
         .into_iter()
         .chain(keys::badges(keys::Context::Global, stance))
-        .filter_map(|b| b.on_a_door_of(panels))
+        .filter_map(|b| b.offered())
         .map(|b| b.rebound(&live.3))
         .map(|mut b| {
             b.home = resolve(b.home, &on_screen);

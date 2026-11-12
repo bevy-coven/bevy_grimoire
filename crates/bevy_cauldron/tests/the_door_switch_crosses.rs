@@ -183,7 +183,8 @@ fn a_crossing_that_cannot_complete_stays_put() {
 #[test]
 fn the_crossing_and_the_menu_are_different_verbs() {
     use bevy_cauldron::keys::{binding, Action};
-    let cross = binding(Action::SwitchDoor);
+    // **The crossing is the Kit workspace's chord now** (`=`, `view.switch_door`, went with #379).
+    let cross = binding(Action::WorkspaceKit);
     let menu = binding(Action::MainMenu);
     assert_ne!(
         cross.action, menu.action,

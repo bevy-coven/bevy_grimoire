@@ -293,6 +293,10 @@ pub struct EditorSettings {
     /// The triangle count is shown at the top right (#302). Off until asked for: it is a number for
     /// someone tuning a scene, and the first thing a newcomer reads at the top of the window.
     pub show_statistics: bool,
+    /// **View ▸ Show activity bar** (NV-03, #380): the vertical strip of workspace icons at the
+    /// window's far left. On by default, because it is the one place the workspaces are all in view;
+    /// off takes it away entirely and the choice is saved.
+    pub show_activity_bar: bool,
     /// The rebound commands of every layer, by command id: what the keymap screen shows against each
     /// command's default chord.
     pub keymap: BTreeMap<String, Shortcut>,
@@ -349,6 +353,7 @@ impl Default for EditorSettings {
             show_grid: true,
             grid_strength: 1.0,
             show_statistics: false,
+            show_activity_bar: true,
             keymap: BTreeMap::new(),
             terminal_text_scale: 1.0,
             terminal_cursor: TerminalCursor::default(),
@@ -394,6 +399,10 @@ pub struct SettingsLayer {
     pub grid_strength: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub show_statistics: Option<bool>,
+    /// **View ▸ Show activity bar** (NV-03, #380). `None` leaves the layer below to decide, so a file
+    /// written before this key existed reads as on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_activity_bar: Option<bool>,
     /// **Rebound commands**: a command's id (`file.save`, `commands::Command::id`) and the chord that
     /// now runs it. A command the file leaves out keeps its default chord (UI-72, #250).
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
@@ -439,6 +448,7 @@ impl Default for SettingsLayer {
             show_grid: None,
             grid_strength: None,
             show_statistics: None,
+            show_activity_bar: None,
             keymap: BTreeMap::new(),
             terminal_text_scale: None,
             terminal_cursor: None,
@@ -462,6 +472,9 @@ impl SettingsLayer {
         if let Some(old) = layer.shell_layout.take() {
             layer.workspace_layout.entry(crate::workspace::Workspace::Map.id().to_owned()).or_insert(old);
         }
+        // **A keymap that rebound a command the workspaces replaced still reads** (#379): the entry
+        // binds nothing now, so it is dropped here and the next save writes the file without it.
+        layer.keymap.retain(|id, _| !crate::commands::is_retired(id));
         let refuse = |field: &str, reason: String| Refusal { kind: KIND, file: file.to_owned(), field: Some(field.to_owned()), reason };
         if layer.version != SETTINGS_VERSION {
             return Err(refuse(
@@ -550,6 +563,7 @@ impl EditorSettings {
             out.show_grid = layer.show_grid.unwrap_or(out.show_grid);
             out.grid_strength = layer.grid_strength.unwrap_or(out.grid_strength);
             out.show_statistics = layer.show_statistics.unwrap_or(out.show_statistics);
+            out.show_activity_bar = layer.show_activity_bar.unwrap_or(out.show_activity_bar);
             // Per command: a later layer's binding replaces the earlier one's for that command alone.
             out.keymap.extend(layer.keymap.iter().map(|(id, chord)| (id.clone(), *chord)));
             out.terminal_text_scale = layer.terminal_text_scale.unwrap_or(out.terminal_text_scale);

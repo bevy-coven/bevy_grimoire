@@ -394,8 +394,8 @@ fn a_named_piece() -> Destination {
 /// **A piece's library entry**, which is the Meshes panel's shelf.
 fn a_pieces_library_entry() -> Destination {
     let mut d = Driver::cold_start("library_entry");
-    d.chord(&[KeyCode::Equal], "press = (cross to the kit)");
-    assert_eq!(d.panel_name(), Mode::Meshes.label(), "the crossing opens the Kit door on its first panel");
+    d.chord(&[primary(), KeyCode::Digit4], "press Cmd/Ctrl+4 (the Kit workspace)");
+    assert_eq!(d.panel_name(), Mode::Meshes.label(), "the Kit workspace opens on its first panel");
     // The pack starts folded, so the piece is behind the pack's own row.
     let pack = d.word_starting("MESHES (");
     d.click(&pack);
@@ -411,9 +411,9 @@ fn a_pieces_library_entry() -> Destination {
 /// **A tile**, opened on the Tiles panel.
 fn a_tile() -> Destination {
     let mut d = Driver::cold_start("tile");
-    d.chord(&[KeyCode::Equal], "press = (cross to the kit)");
-    d.chord(&[KeyCode::Digit2], "press 2 (the Tiles panel)");
-    assert_eq!(d.panel_name(), Mode::Tiles.label(), "the second slot key opens Tiles");
+    d.chord(&[primary(), KeyCode::Digit4], "press Cmd/Ctrl+4 (the Kit workspace)");
+    d.click("TILES");
+    assert_eq!(d.panel_name(), Mode::Tiles.label(), "the strip's second chip opens Tiles");
     // **The tile's own row**, then `Enter`, which is how a row on this page opens
     // ("1 tile(s) — Enter opens one").
     let row = d.word_starting("TILES (");
@@ -429,9 +429,9 @@ fn a_tile() -> Destination {
 /// **A composition**, chosen on the Compose panel.
 fn a_composition() -> Destination {
     let mut d = Driver::cold_start("composition");
-    d.chord(&[KeyCode::Equal], "press = (cross to the kit)");
-    d.chord(&[KeyCode::Digit3], "press 3 (the Compose panel)");
-    assert_eq!(d.panel_name(), Mode::Compose.label(), "the third slot key opens Compose");
+    d.chord(&[primary(), KeyCode::Digit4], "press Cmd/Ctrl+4 (the Kit workspace)");
+    d.click("COMPOSE");
+    assert_eq!(d.panel_name(), Mode::Compose.label(), "the strip's third chip opens Compose");
     // **The second group's own row**, so the click changes the selection rather than confirming it.
     let row = d.word_starting("barrel ");
     d.click(&row);
@@ -441,50 +441,34 @@ fn a_composition() -> Destination {
     Destination { what: "A composition", steps: d.steps, cost: d.cost, reach: Reach::Arrived }
 }
 
-/// **The rig bench**, which the editor only opens from its command line.
+/// **The rig bench**, one chord away: the Animation workspace (`Cmd`/`Ctrl`+`5`, #379).
+///
+/// It was the one row that was unreachable from inside the editor: the crossing key alternated Map and
+/// Kit and the bench opened only from `--door rigs` on the command line. The workspaces made it a
+/// destination like the others.
 fn a_rig() -> Destination {
-    // Measured: the bench exists when it is opened with `--door rigs`…
-    let mut d = Driver::on("rigs", Mode::Anim);
-    assert!(d.showing("RIGS"), "the bench did not draw when the editor was opened on it: {:#?}", d.words());
-    let mut opened = d.steps;
-    opened.insert(0, "`--door rigs` on the command line".to_owned());
-    // …and no sequence of keys inside the editor reaches it: the crossing key alternates Map and Kit.
-    let mut probe = Driver::cold_start("rigs_probe");
-    let mut seen: Vec<&'static str> = Vec::new();
-    for _ in 0..4 {
-        probe.chord(&[KeyCode::Equal], "press = (cross)");
-        seen.push(probe.panel_name());
-    }
-    assert!(
-        !seen.contains(&Mode::Anim.label()),
-        "a crossing reached the rig bench, which this row says it cannot: {seen:?}"
-    );
-    let mut steps = probe.steps;
-    steps.extend(opened);
-    Destination {
-        what: "A rig (the Rigs bench)",
-        steps,
-        cost: probe.cost,
-        reach: Reach::Unreachable(format!(
-            "no key, menu row or command opens the Rigs door from inside the editor: four presses of `=` walk {:?} and never the bench",
-            seen
-        )),
-    }
+    let mut d = Driver::cold_start("rig");
+    d.chord(&[primary(), KeyCode::Digit5], "press Cmd/Ctrl+5 (the Animation workspace)");
+    assert_eq!(d.panel_name(), Mode::Anim.label(), "the Animation workspace opens the rig bench");
+    assert!(d.showing("RIGS"), "the bench did not draw: {:#?}", d.words());
+    Destination { what: "A rig (the Rigs bench)", steps: d.steps, cost: d.cost, reach: Reach::Arrived }
 }
 
 /// **One of a rig's clips**, which is chosen from a list inside the bench.
 fn a_rigs_clip() -> Destination {
-    let mut d = Driver::on("rigs_clip", Mode::Anim);
+    let mut d = Driver::cold_start("rigs_clip");
+    d.chord(&[primary(), KeyCode::Digit5], "press Cmd/Ctrl+5 (the Animation workspace)");
     assert!(d.showing("RIGS"), "the bench is not even drawn: {:#?}", d.words());
     // The list a clip is chosen from, and whether this project has one to choose.
     let rows = d.words().into_iter().filter(|w| w.starts_with("no rigs") || w.contains("rig(s)")).collect::<Vec<_>>();
+    let mut steps = d.steps;
+    steps.push("click a row in the bench's list".to_owned());
     Destination {
         what: "One of a rig's clips",
-        steps: vec!["`--door rigs` on the command line".to_owned(), "click a row in the bench's list".to_owned()],
+        steps,
         cost: d.cost,
         reach: Reach::Unreachable(format!(
-            "the bench is reachable only from the command line (see the row above), and a clip is chosen from a list inside it; \
-             this fixture has no rig, so its list reads {rows:?}"
+            "a clip is chosen from a list inside the bench, which Cmd/Ctrl+5 opens; this fixture has no rig, so its list reads {rows:?}"
         )),
     }
 }
