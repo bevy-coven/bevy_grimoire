@@ -90,6 +90,10 @@ pub enum Context {
     Game,
     /// **The Agent tab** (NV-10, #387): the Familiar's panel. No keys of its own, like [`Context::World`].
     Agent,
+    /// **The Files tab** (GD-11, #373): the file tree and the code editor. It has no key of its own, so only the
+    /// `Global` ones are live there, which is the point of its being a context at all: a Map verb must not
+    /// fire on a tab that is not the Map, and the code editor's own keys are gooey's (it holds `TextEditing`).
+    Files,
     /// A text field is taking raw keys. Overlaps everything, and suppresses everything.
     ///
     /// **A filter box sets this too**, and says so a second way: `Live.2` carries
@@ -102,7 +106,7 @@ impl Context {
     /// **Every context a binding could be judged against**, in one place for the same reason
     /// [`Stance::ALL`] is: the badge tests sweep it, and a seventh context therefore costs one
     /// edit here rather than a hand-written list in each test that silently stops reaching it.
-    pub const ALL: [Context; 11] = [
+    pub const ALL: [Context; 12] = [
         Context::Global,
         Context::Map,
         Context::Meshes,
@@ -113,6 +117,7 @@ impl Context {
         Context::Sound,
         Context::Game,
         Context::Agent,
+        Context::Files,
         Context::Typing,
     ];
 
@@ -134,7 +139,8 @@ impl Context {
             | (World, World)
             | (Sound, Sound)
             | (Game, Game)
-            | (Agent, Agent) => true,
+            | (Agent, Agent)
+            | (Files, Files) => true,
             // **The tabs are never live together**, which is what lets them reuse each other's
             // letters freely: the Tiles tab walks a lattice with `T`/`F`/`G`/`H` and so does Meshes,
             // one tab over. `the_key_space_has_no_collisions` polices that they only do so here.
@@ -1368,6 +1374,9 @@ pub const BINDINGS: &[Binding] = &[
     // Project is not registered, and it is still Project when NV-08 lands — a chord that walked to
     // whatever happened to be built would renumber a person's fingers on every release.
     //
+    // **The chord is spelled `Ctrl+2`, not `Ctrl+Digit2`** (GD-11, #373): the strip's one badge lists every offered workspace chord on one
+    // line, and with Files registered the longer spelling grew the badge until it was drawn over the strip's own "Switch to" mark.
+    //
     // **One `does` for all nine**, so the census collapses them into one badge on the strip, the
     // way the three panel slots once were (`badges` joins neighbours that share a home and a `does`).
     // Nine separate badges on one control would break `no_home_carries_more_than_it_can_show`.
@@ -1376,7 +1385,7 @@ pub const BINDINGS: &[Binding] = &[
         KeyCode::Digit1,
         true,
         Context::Global,
-        "Digit1",
+        "1",
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
@@ -1385,7 +1394,7 @@ pub const BINDINGS: &[Binding] = &[
         KeyCode::Digit2,
         true,
         Context::Global,
-        "Digit2",
+        "2",
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
@@ -1394,7 +1403,7 @@ pub const BINDINGS: &[Binding] = &[
         KeyCode::Digit3,
         true,
         Context::Global,
-        "Digit3",
+        "3",
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
@@ -1403,7 +1412,7 @@ pub const BINDINGS: &[Binding] = &[
         KeyCode::Digit4,
         true,
         Context::Global,
-        "Digit4",
+        "4",
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
@@ -1412,7 +1421,7 @@ pub const BINDINGS: &[Binding] = &[
         KeyCode::Digit5,
         true,
         Context::Global,
-        "Digit5",
+        "5",
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
@@ -1421,7 +1430,7 @@ pub const BINDINGS: &[Binding] = &[
         KeyCode::Digit6,
         true,
         Context::Global,
-        "Digit6",
+        "6",
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
@@ -1430,7 +1439,7 @@ pub const BINDINGS: &[Binding] = &[
         KeyCode::Digit7,
         true,
         Context::Global,
-        "Digit7",
+        "7",
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
@@ -1439,7 +1448,7 @@ pub const BINDINGS: &[Binding] = &[
         KeyCode::Digit8,
         true,
         Context::Global,
-        "Digit8",
+        "8",
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
@@ -1448,7 +1457,7 @@ pub const BINDINGS: &[Binding] = &[
         KeyCode::Digit9,
         true,
         Context::Global,
-        "Digit9",
+        "9",
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),

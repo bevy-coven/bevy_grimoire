@@ -4,6 +4,9 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-12
 
+- **gd-14-agent-file-edit** `c071cc57d` An agent's file_edit lands live in the open file: comments kept, the person's caret untouched, the changed lines tinted *No clip: visible, not yet recorded: fleet worker*
+- **gd-13-project-replace** `c071cc57d` Find and replace across the project: a streaming, cancellable search, a diff preview, and Replace all as one operation with one undo *No clip: visible, not yet recorded: fleet worker*
+- **gd-12-file-editor-navigation** `c071cc57d` The file editor has a minimap, folding by structure, indent guides and find; the fold chords are the editor's own *No clip: visible, not yet recorded: fleet worker*
 - **nv-11-measure-again** `cb21d7f5` NV-11: the navigation measurement again, against the real NV-01 baseline, with each target met or filed *No clip: a measurement; proved by navigation::every_destination_is_measured_and_the_baseline_says_so and the_navigation_baseline_stays_frozen*
 - **nv-10-agent-workspace** `b94516fe5` NV-10: the Agent workspace: the AGENT block, the waiting wishes and lessons, and the agent's last changes with Look *For you: A new Agent workspace shows what the Familiar is doing, what is waiting for you, and its last three changes; Look on a change takes you to the Map and frames the pieces that change touched.* *No clip: visible, not yet recorded: fleet worker*
 - **ui-59-review-fixes** `7f440c897` A library row's thumbnail slot draws nothing over its fill until its portrait exists; the outliner reads a held search without rebuilding; chrome.rs's raw layout is counted (#245, #259) *No clip: visible, not yet recorded: fleet worker*

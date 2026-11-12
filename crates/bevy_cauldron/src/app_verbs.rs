@@ -334,7 +334,7 @@ fn quit_requested(
     if confirm.is_open() {
         return;
     }
-    if open.is_some_and(|open| open.dirty()) {
+    if open.is_some_and(|open| open.dirty()) || crate::files::any_unsaved() {
         state.leaving = true;
         confirm.ask_three(
             Asked::QuitApp,
@@ -357,9 +357,18 @@ fn answer_the_quit_question(
     open: Option<ResMut<OpenMap>>,
     mut state: ResMut<EditorState>,
     mut exit: MessageWriter<AppExit>,
+    mut files: Option<ResMut<crate::files::Files>>,
 ) {
     let Some(choice) = confirm.answer_choice(Asked::QuitApp) else { return };
     state.leaving = false;
+    // **The files' unsaved edits are asked about with the map's** (GD-11, #373): saved with it, or let go with it.
+    if choice == Choice::Yes
+        && let (Some(files), Some(project)) = (files.as_deref_mut(), project.as_deref())
+        && let Err(e) = files.save_all(&project.root)
+    {
+        state.status.problem(format!("NOT SAVED: {e} — staying on this map"));
+        return;
+    }
     match choice {
         Choice::No => state.status.note("staying on this map"),
         Choice::Alt => {
