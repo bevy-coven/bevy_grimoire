@@ -72,6 +72,8 @@ pub enum AppVerb {
     /// **Put the shell back on its default arrangement** (UI-33, #227): Window ▸ Reset layout, undoing
     /// every divider drag and panel move this door has had.
     ResetLayout,
+    /// **Bring the PROBLEMS list on screen** (NV-11, #397): View ▸ Show problems, the row of the `Cmd/Ctrl+Shift+X` chord.
+    ShowProblems,
 }
 
 impl AppVerb {
@@ -92,12 +94,17 @@ impl AppVerb {
             AppVerb::ReportProblem => "Report a problem".to_owned(),
             AppVerb::About => "About Cauldron".to_owned(),
             AppVerb::ResetLayout => "Reset layout".to_owned(),
+            AppVerb::ShowProblems => "Show problems".to_owned(),
         }
     }
 
     /// The chord the row shows at its end, when the verb has one.
     pub fn shortcut(&self) -> Option<Shortcut> {
-        matches!(self, AppVerb::Quit).then_some(QUIT)
+        match self {
+            AppVerb::Quit => Some(QUIT),
+            AppVerb::ShowProblems => Some(crate::problems_view::show_problems_chord()),
+            _ => None,
+        }
     }
 }
 
@@ -177,6 +184,7 @@ pub fn run(world: &mut World, verb: AppVerb) {
             world.write_message(OpenAbout);
         }
         AppVerb::ResetLayout => reset_the_layout(world),
+        AppVerb::ShowProblems => crate::problems_view::ask_for_the_problems(world),
     }
 }
 

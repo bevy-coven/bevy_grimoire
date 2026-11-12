@@ -72,10 +72,26 @@ fn show_the_problems_on_the_chord(
     if !chord.just_pressed(&keys) || focus.owns(&chord) || live.0 == crate::keys::Context::Typing || confirm.is_open() {
         return;
     }
+    ask(&mut revealing, &mut inspector);
+}
+
+/// **Ask the reveal for the problems**: the one request the chord and View ▸ Show problems both make. The inspector's section is cleared first,
+/// so each ask is a change the scroll follows.
+fn ask(revealing: &mut crate::reveal::Revealing, inspector: &mut crate::reveal::InspectorReveal) {
     if inspector.0.is_some() {
         inspector.0 = None;
     }
     revealing.request_by_person("show_problems", &crate::ops::Shown::Settings { section: "problems".to_owned() });
+}
+
+/// **View ▸ Show problems**: the menu row's half of [`show_the_problems_on_the_chord`]. A world without the reveal (no editor open) has
+/// nothing to show, so it asks for nothing.
+pub fn ask_for_the_problems(world: &mut World) {
+    let Some(mut revealing) = world.remove_resource::<crate::reveal::Revealing>() else { return };
+    if let Some(mut inspector) = world.get_resource_mut::<crate::reveal::InspectorReveal>() {
+        ask(&mut revealing, &mut inspector);
+    }
+    world.insert_resource(revealing);
 }
 
 /// **A relation in words**: what it says and which way it fails. `<of> faces <to>`, with ` (hard)` for a relation that must hold
