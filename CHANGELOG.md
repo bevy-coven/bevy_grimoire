@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-12
 
+- **nv-11-cue-list** `b02f5f083` NV-11: the Sound workspace lists the project's cues in every build *For you: The Sound workspace now lists your project's sound cues even in an editor built without the audio crate.* *No clip: visible, not yet recorded: fleet worker*
 - **nv-11-clip-in-finder** `585c68b5b` NV-11: a rig's clip is a row of the Go to anything finder *For you: Press Cmd+P and type a clip's name, such as a rig's gallop, then Enter, to open that rig on the bench with that clip playing alone.* *No clip: visible, not yet recorded: fleet worker*
 - **nv-11-problems-chord** `d06a386b0` NV-11: Cmd/Ctrl+Shift+X shows the problems list, which was six wheel notches down the inspector *For you: Press Cmd+Shift+X (Ctrl+Shift+X off a Mac) to bring the list of problems with your map on screen, wherever you are in the editor.* *No clip: visible, not yet recorded: fleet worker*
 - **nv-11-measure-again** `cb21d7f5` NV-11: the navigation measurement again, against the real NV-01 baseline, with each target met or filed *No clip: a measurement; proved by navigation::every_destination_is_measured_and_the_baseline_says_so and the_navigation_baseline_stays_frozen*
