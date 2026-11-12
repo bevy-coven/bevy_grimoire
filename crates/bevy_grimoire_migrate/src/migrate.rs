@@ -1,6 +1,6 @@
 //! **Moving a project's files from RON to YAML, losslessly** (GD-03, #365).
 //!
-//! A project used to be RON (`kits.yaml`, `maps/town.map.yaml`, `editor.yaml`, …). [`migrate`] turns one
+//! A project used to be RON (`kits.ron`, `maps/town.map.ron`, `editor.ron`, …). [`migrate`] turns one
 //! into YAML, and [`leftover`] is the refusal an open raises when a project has not been converted.
 //!
 //! # Every kind, one command
@@ -18,15 +18,14 @@
 //!   nothing at all** — not that file, not the ones before it. A half-migrated project is the one outcome
 //!   a person cannot repair by hand.
 //! - **Loud.** A RON comment is carried over as a YAML comment above the same key wherever its place
-//!   can be found. One that cannot be placed is listed in the [`Report`], never dropped quietly. A file
-//!   whose kind this crate has no type for — `checks.ron` (the checks crate), `editor.yaml`, `family/*.ron`
-//!   and a kit's `forest/people/scripts/trees` files (the editor) — **stops the whole migration**
-//!   and is named: guessing at a value it cannot read is how a file loses a field.
+//!   can be found — a `//` line, a trailing `//` after a value, and a `/* … */` block, which keeps its
+//!   own lines. One that cannot be placed is listed in the [`Report`], never dropped quietly.
 //!
-//! **A file no kind's pattern names is not walked at all.** `game_data` states no pattern (it is "the
-//! files a game registers in `data.yaml`"), so a game's own tuning files are neither converted nor
-//! refused: they stay RON, untouched, and this module has no opinion about them. Giving them a pattern
-//! belongs to the crate that declares their type, in the slice that moves them.
+//! **A game's own data files are walked too.** `game_data` states no pattern (it is "the files a game
+//! registers in `data.yaml`"), so [`registered_data_files`] reads each registry, converts the `.ron`
+//! files it names by value alongside it, and rewrites the registered path to `.yaml` in the same pass.
+//! A registered file outside the project is refused rather than moved: the migration moves only what it
+//! was pointed at.
 //!
 //! # The old files are moved, not deleted
 //!
@@ -491,43 +490,153 @@ pub fn migrate_as(root: &Path, command: &str) -> Result<Report, Problem> {
     migrate_where(root, command, |_| true)
 }
 
-/// **The game's own data files that the registries in `plan` register**, as plan entries of kind `game_data`.
+/// **Every registry in `root` names the `.ron` files it registers**, whatever spelling the registry itself is in.
 ///
-/// A registry (`<kit>/data.ron`) lists tuning files by a path relative to itself. Each `.ron` one is converted by value with its
-/// registry, so the registry and its files move together; a file that does not exist is skipped (the registry's own load names it),
-/// and one that lies outside the project is refused rather than moved from somewhere this migration was not pointed at.
+/// A registry the cutover has not reached is RON (`<kit>/data.ron`); one it has is YAML (`data.yaml`) and may still name a `.ron`
+/// file, which is what a person half-migrating by hand leaves behind. Both are read, because the question a refusal and a
+/// conversion both ask is "does this registry name a file that is still RON", and a registry's own spelling cannot answer it.
+///
+/// A registry that does not read at all names nothing: its own reader says so, and this is not the place to report it a second
+/// time.
+fn registries(dirs: &[PathBuf]) -> Vec<DataFiles> {
+    let mut out = Vec::new();
+    for dir in dirs {
+        for name in [format!("data.{YAML_EXT}"), format!("data.{RON_EXT}")] {
+            let Ok(text) = std::fs::read_to_string(dir.join(&name)) else { continue };
+            // **The path each entry names is what this is for**, so a registry whose registry-level version is not this
+            // build's is still read for its paths: a version bump must not hide a file that is about to be orphaned.
+            let Ok(files) = bevy_grimoire_core::yaml::from_str::<DataFiles>(&text, &name).or_else(|_| ron::from_str::<DataFiles>(&text)) else {
+                continue;
+            };
+            out.push(files);
+        }
+    }
+    out
+}
+
+/// The folder every registry of a project lives in: `<root>/assets/grimoire` and each kit under it.
+fn registry_dirs(root: &Path) -> Vec<PathBuf> {
+    let grimoire = root.join(GRIMOIRE_DIR);
+    let mut dirs = vec![grimoire.clone()];
+    if let Ok(entries) = std::fs::read_dir(&grimoire) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() && !SKIP_DIRS.contains(&entry.file_name().to_string_lossy().as_ref()) {
+                dirs.push(path);
+            }
+        }
+    }
+    dirs.sort();
+    dirs
+}
+
+/// **The game's own data files that a registry registers and that are still RON**, as plan entries of kind `game_data`.
+///
+/// A registry (`<kit>/data.ron`, or its `data.yaml`) lists tuning files by a path relative to itself. Each `.ron` one is converted
+/// by value with its registry, so the registry and its files move together; a file that does not exist is skipped (the registry's
+/// own load names it), and one that lies outside the project is refused rather than moved from somewhere this migration was not
+/// pointed at.
 #[allow(clippy::result_large_err)]
-fn registered_data_files(root: &Path, plan: &[(PathBuf, String, &'static FileKind)]) -> Result<Vec<(PathBuf, String, &'static FileKind)>, Problem> {
+pub(crate) fn registered_data_files(root: &Path) -> Result<Vec<(PathBuf, String, &'static FileKind)>, Problem> {
     let Some(kind) = KINDS.iter().find(|k| k.id == "game_data") else { return Ok(Vec::new()) };
     let mut out: Vec<(PathBuf, String, &'static FileKind)> = Vec::new();
-    for (path, rel, registry) in plan {
-        if registry.id != "data_registry" {
+    for dir in registry_dirs(root) {
+        for files in registries(std::slice::from_ref(&dir)) {
+            for entry in &files.files {
+                if !entry.path.ends_with(&format!(".{RON_EXT}")) {
+                    continue;
+                }
+                let joined = dir.join(&entry.path);
+                let Some(target) = normalised(&joined).filter(|t| t.starts_with(root)) else {
+                    return Err(outside_problem(&dir, &entry.path));
+                };
+                if !target.is_file() || out.iter().any(|(p, _, _)| *p == target) {
+                    continue;
+                }
+                let shown = target.strip_prefix(root).unwrap_or(&target).to_string_lossy().replace('\\', "/");
+                out.push((target, shown, kind));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// The refusal a registered file outside the project gets, naming the registry and the path it holds.
+fn outside_problem(dir: &Path, path: &str) -> Problem {
+    Problem::with(
+        format!("{} registers `{path}`, which is outside the project, so nothing was migrated", dir.display()),
+        Detail::default()
+            .at(Location::file(dir.display().to_string()))
+            .because("a migration moves only the files inside the project it was pointed at".to_owned())
+            .fix("convert that file by hand and point the registry at the YAML".to_owned())
+            .docs(DOCS),
+    )
+}
+
+/// **`problem`, said about `path`**: the YAML reader names the file it was given, which for a registry's rewrite is the leaf
+/// path it is relative to, not the registry on disk a person has to go and open.
+fn rewrap(problem: Problem, path: &Path) -> Problem {
+    let mut detail = problem.detail();
+    detail.where_ = Some(Location::file(path.display().to_string()));
+    Problem::with(problem.what.clone(), detail)
+}
+
+/// **A registry already written as YAML whose `path:` lines still say `.ron`**, rewritten to name the YAML its files become.
+///
+/// The RON registry converts through its type, which is where its paths are rewritten. A registry the cutover has already
+/// reached is `data.yaml`, and [`plan`] never sees it — nothing about it is RON — so a person's half-migrated project (or a
+/// hand-written registry) would keep naming a file the migration is about to move. This is the same rewrite by the one YAML
+/// surgery every leaf edit goes through, so the registry's comments and layout survive, and the result is read back as
+/// [`DataFiles`] and compared with what was intended before it is written.
+///
+/// Answers `(path on disk, path relative to the root, new text)` for each registry that needed one.
+#[allow(clippy::result_large_err)]
+fn rewritten_registries(root: &Path, command: &str) -> Result<Vec<(PathBuf, String, String)>, Problem> {
+    let mut out = Vec::new();
+    for dir in registry_dirs(root) {
+        let path = dir.join(format!("data.{YAML_EXT}"));
+        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let Ok(before) = bevy_grimoire_core::yaml::from_str::<DataFiles>(&text, &format!("data.{YAML_EXT}")) else { continue };
+        if !before.files.iter().any(|f| f.path.ends_with(&format!(".{RON_EXT}"))) {
             continue;
         }
-        let text = std::fs::read_to_string(path).map_err(|e| io_problem(path, e))?;
-        let Ok(files) = ron::from_str::<DataFiles>(&text) else { continue };
-        let dir = path.parent().unwrap_or(root);
-        for entry in &files.files {
-            if !entry.path.ends_with(&format!(".{RON_EXT}")) {
+        // **Every path is rewritten in the text, not in the value**, so a registry's comments and its `bounds` blocks are the
+        // bytes they were. Each leaf is found by the walk that names it (`files[3].path`), which is what `set_leaf` uses.
+        let mut rewrite = std::borrow::Cow::Borrowed(text.as_str());
+        for (leaf, token) in bevy_grimoire_core::yaml::leaves(&text) {
+            if !leaf.ends_with(".path") || !token.trim_matches('"').ends_with(&format!(".{RON_EXT}")) {
                 continue;
             }
-            let joined = dir.join(&entry.path);
-            let Some(target) = normalised(&joined).filter(|t| t.starts_with(root)) else {
+            let stem = token.trim_matches('"').trim_end_matches(&format!(".{RON_EXT}"));
+            let yaml = format!("{stem}.{YAML_EXT}");
+            let changed = bevy_grimoire_core::yaml_surgery::set(&rewrite, &leaf, bevy_grimoire_core::yaml_surgery::Value::Str(yaml.clone()), None)
+                .map_err(|p| rewrap(p, &path))?;
+            rewrite = std::borrow::Cow::Owned(changed);
+        }
+        // **The rewrite is read back and compared**, the same check every converted file gets: a registry whose paths do not
+        // say what this wrote is refused rather than landing.
+        let after = bevy_grimoire_core::yaml::from_str::<DataFiles>(&rewrite, &format!("data.{YAML_EXT}")).map_err(|p| rewrap(p, &path))?;
+        for (was, now) in before.files.iter().zip(&after.files) {
+            let expected = was.path.strip_suffix(&format!(".{RON_EXT}")).map_or_else(|| was.path.clone(), |stem| format!("{stem}.{YAML_EXT}"));
+            if now.path != expected || now.id != was.id {
                 return Err(Problem::with(
-                    format!("{rel} registers `{}`, which is outside the project, so nothing was migrated", entry.path),
+                    format!("{} would change the registry it names files in, so nothing was migrated", path.display()),
                     Detail::default()
-                        .at(Location::file(rel.clone()))
-                        .because("a migration moves only the files inside the project it was pointed at".to_owned())
-                        .fix("convert that file by hand and point the registry at the YAML".to_owned())
+                        .at(Location::file(path.display().to_string()))
+                        .because(format!("`{}` became `{}` where `{expected}` was meant", was.path, now.path))
+                        .fix(format!("write the registry's `path:` lines as `.{YAML_EXT}` by hand, then run `{command}` again"))
                         .docs(DOCS),
                 ));
-            };
-            if !target.is_file() || out.iter().any(|(p, _, _)| *p == target) {
-                continue;
             }
-            let shown = target.strip_prefix(root).unwrap_or(&target).to_string_lossy().replace('\\', "/");
-            out.push((target, shown, kind));
         }
+        if after.files.len() != before.files.len() {
+            return Err(Problem::with(
+                format!("{} lost an entry when its paths were rewritten, so nothing was migrated", path.display()),
+                Detail::default().at(Location::file(path.display().to_string())).because(format!("{} entries became {}", before.files.len(), after.files.len())).docs(DOCS),
+            ));
+        }
+        let rel = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().replace('\\', "/");
+        out.push((path, rel, rewrite.into_owned()));
     }
     Ok(out)
 }
@@ -557,7 +666,7 @@ fn migrate_where(
     wants: impl Fn(&FileKind) -> bool,
 ) -> Result<Report, Problem> {
     let mut plan: Vec<_> = plan(root)?.into_iter().filter(|(_, _, kind)| wants(kind)).collect();
-    plan.extend(registered_data_files(root, &plan)?);
+    plan.extend(registered_data_files(root)?);
     let mut converted = Vec::new();
     let mut pending: Vec<(PathBuf, String, PathBuf)> = Vec::new();
     let mut unplaced = Vec::new();
@@ -592,6 +701,9 @@ fn migrate_where(
         converted.push(done);
     }
 
+    // **A registry already in YAML is rewritten too**, for the `.ron` paths it still names: a project half migrated by hand
+    // would otherwise convert its tuning files and leave the registry pointing at names that are no longer there.
+    let rewritten = rewritten_registries(root, command)?;
     // **Nothing is written until every file has converted.** Past this line a conversion that failed is
     // impossible, so the writes cannot leave a project half in one spelling.
     let mut written: Vec<&PathBuf> = Vec::new();
@@ -610,6 +722,15 @@ fn migrate_where(
         }
         written.push(target);
     }
+    for (path, _, text) in &rewritten {
+        // The registry keeps its name: it is replaced, not created, and its text was read back and compared above.
+        if let Err(problem) = bevy_grimoire_core::atomic_file::write(path, text).map_err(|e| io_problem(path, e)) {
+            for done in written {
+                let _ = std::fs::remove_file(done);
+            }
+            return Err(problem);
+        }
+    }
     let archive = root.join(ARCHIVE_DIR);
     for (path, _, _) in &pending {
         let rel = path.strip_prefix(root).unwrap_or(path);
@@ -626,6 +747,12 @@ fn migrate_where(
         let bytes = std::fs::read(path).map_err(|e| io_problem(path, e))?;
         bevy_grimoire_core::atomic_file::write_new(&into, bytes).map_err(|e| io_problem(&into, e))?;
         std::fs::remove_file(path).map_err(|e| io_problem(path, e))?;
+    }
+    // **A rewritten registry is reported among the converted files**: it changed, and a report that left it out would make a
+    // person diff the project to find out what the command did. It is not archived — it was YAML already, so there is no
+    // original to keep — which is what `rom` being empty says.
+    for (path, rel, _) in &rewritten {
+        converted.push(Converted { rom: String::new(), yaml: rel.clone(), kind: "data_registry", comments_carried: 0, unplaced: Vec::new(), text: std::fs::read_to_string(path).unwrap_or_default() });
     }
     Ok(Report { converted, unplaced, archived_at: ARCHIVE_DIR.to_owned() })
 }
@@ -1078,7 +1205,12 @@ pub fn written_as_yaml(rel: &str, text: &str, command: &str) -> Result<(String, 
 /// project, and the open that follows says why with its own words.
 #[allow(clippy::result_large_err)]
 pub fn leftover(root: &Path, command: &str) -> Result<Option<Problem>, Problem> {
-    let plan = plan(root)?;
+    let mut plan = plan(root)?;
+    // **A game's own data files are not under a kind's pattern**, so the walk does not see them: `game_data` is "what a
+    // registry names". They are added here, or a project whose `data.yaml` still names `mob.ron` opens and the first
+    // `data_set` on that file fails in the editor instead of the open naming the command.
+    plan.extend(registered_data_files(root)?);
+    plan.sort_by(|a, b| a.1.cmp(&b.1));
     // **Every kind refuses an open**: nothing reads RON any more, so a `.ron` file a kind names is a file no reader will take.
     let Some((_, rel, _)) = plan.first() else { return Ok(None) };
     let rel = rel.clone();

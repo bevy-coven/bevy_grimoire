@@ -4,10 +4,6 @@
 //! `errors` for the ones that would not convert. It exists so `tools/migrate/re-pin-fixtures.py` can move a
 //! whole file's fixtures in one pass, using `migrate::written_as_yaml` rather than a text substitution.
 //!
-//! **`--moved-kinds` answers the kinds whose reader already parses YAML** (`migrate::READS_YAML`), one per
-//! line, and reads no stdin. The re-pin script asks for it rather than carrying a copy of a list that moves
-//! every commit of the cutover.
-//!
 //! Not a product path: nothing in the editor or the game calls it.
 
 use serde::Deserialize;

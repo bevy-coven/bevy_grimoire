@@ -19,15 +19,14 @@ named on stderr — never guessed at.
 **A literal that does not convert is reported and nothing is rewritten**, so a file is never left with half
 its fixtures moved.
 
-**Only the kinds whose reader has already moved are converted.** The cutover moves one kind at a time, and a
-fixture is only wrong once *its* kind's reader parses YAML: rewriting a `kits` literal today would put YAML
-where the RON reader still expects RON, which is a broken test rather than a migrated one. The list comes
-from the library (`migrate::READS_YAML`, printed by `--moved-kinds`) rather than a second copy here, so this
-script cannot disagree with the build about which kinds have moved.
+**Every kind's reader parses YAML now** (GD-03, #365): the cutover is complete, so a RON literal at a
+project-file path is a fixture this build refuses, of any kind. There is no list of "moved kinds" to consult
+and none to drift — one used to be printed by `--moved-kinds` from `migrate::READS_YAML`, and both went with
+the cutover.
 
 **A fixture this script cannot see is named.** It reads Rust string literals near a `Type::parse`, and that
 misses one written through a helper — `fs::write(root.join("agent.yaml"), "(version: 9)")` names no type at
-all. So every `fs::write` whose path ends `<kind>.yaml` for a moved kind, with a text that does not read as
+all. So every `fs::write` whose path ends `<kind>.yaml` for a kind this script knows, with a text that does not read as
 YAML, is reported. The two rules differ in what they can do: a literal is converted, and a `fs::write` is
 only ever named, because its text is a `format!` expression as often as a literal.
 """
@@ -152,30 +151,13 @@ def kind_near(source, start, end):
     return None
 
 
-def moved_kinds():
-    """**The kinds whose reader parses YAML already**, asked of the library itself.
-
-    A copy of the list here would be a second place to move a kind, and the two disagreeing is how a
-    fixture gets YAML rewritten under a RON reader. `--moved-kinds` prints it from `migrate::READS_YAML`.
-    """
-    done = subprocess.run(
-        ["cargo", "run", "-q", "-p", "bevy_grimoire_core", "--example", "fixtures_to_yaml", "--", "--moved-kinds"],
-        capture_output=True,
-        text=True,
-    )
-    if done.returncode != 0:
-        print(done.stderr.strip(), file=sys.stderr)
-        raise SystemExit(done.returncode)
-    return set(done.stdout.split())
-
-
 # **A `fs::write` whose target is one of these names**, so a fixture the literal scan cannot see is at least
 # named rather than silently missed. The path is any expression ending in the name.
 WRITE = re.compile(r'fs::write\([^,]*?(?P<name>\w[\w.]*\.yaml)"\s*,\s*(?P<text>r?#*"[^"]*"#*)', re.S)
 
 
-def named_writes(source, moved):
-    """**Every `fs::write` of a moved kind's `.yaml` file whose text is not YAML**, as `(line, name)`.
+def named_writes(source):
+    """**Every `fs::write` of a known kind's `.yaml` file whose text is not YAML**, as `(line, name)`.
 
     This is the blind spot of [`kind_near`], measured: `send_starts_the_notes_agent.rs` wrote `agent.yaml`
     with the RON text `"(version: 9)"`, which names no type anywhere, so the literal scan left it alone and
@@ -188,7 +170,7 @@ def named_writes(source, moved):
         # **The kind a written path names**, read from its last path segment with the extension off.
         stem = name.rsplit("/", 1)[-1].removesuffix(".yaml")
         kind = KIND_OF_STEM.get(stem)
-        if kind is None or kind not in moved:
+        if kind is None:
             continue
         text = literal_text(match.group("text"))
         # A YAML mapping opens a line with `key:`; RON opens with `(`. That is the whole question for a
@@ -200,18 +182,14 @@ def named_writes(source, moved):
 
 
 def main(argv):
-    if len(argv) >= 2 and argv[1] == "--moved-kinds":
-        print("\n".join(sorted(moved_kinds())))
-        return 0
     if len(argv) < 2:
         print(__doc__, file=sys.stderr)
         return 2
-    moved = moved_kinds()
     jobs, sites = [], []
     for path in argv[1:]:
         with open(path) as handle:
             source = handle.read()
-        for line, name in named_writes(source, moved):
+        for line, name in named_writes(source):
             print(f"{path}:{line}: `{name}` is written with RON text, which names no type and so was not converted; fix it by hand", file=sys.stderr)
         for match in LITERAL.finditer(source):
             text = literal_text(match.group(0))
@@ -222,18 +200,13 @@ def main(argv):
             if kind is None:
                 print(f"{path}: a RON literal at byte {match.start()} names no type; left alone", file=sys.stderr)
                 continue
-            if kind not in moved:
-                # **A kind whose reader still parses RON**: its fixture is correct as it stands, and
-                # rewriting it now would break the test rather than migrate it.
-                print(f"{path}: a `{kind}` literal at byte {match.start()} is left alone; that kind's reader has not moved yet", file=sys.stderr)
-                continue
             jobs.append({"id": len(jobs), "kind": FILE_OF_KIND[kind], "text": text})
             sites.append((path, match.start(), match.end(), kind))
     if not jobs:
         print("nothing to convert", file=sys.stderr)
         return 0
     done = subprocess.run(
-        ["cargo", "run", "-q", "-p", "bevy_grimoire_core", "--example", "fixtures_to_yaml"],
+        ["cargo", "run", "-q", "-p", "bevy_grimoire_migrate", "--example", "fixtures_to_yaml"],
         input=json.dumps(jobs),
         capture_output=True,
         text=True,
