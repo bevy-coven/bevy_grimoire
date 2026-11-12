@@ -558,6 +558,9 @@ fn draw_agent_guide(parent: &mut bevy::ecs::relationship::RelatedSpawnerCommands
     ));
 }
 
+/// A button row, what it was last built for and what it holds now.
+type ButtonRow = (Entity, Option<&'static ButtonsFor>, Option<&'static Children>);
+
 /// **Fill the Agent guide's button row from what the section holds now**: Reload and Keep mine in a
 /// conflict, otherwise Save and Revert, with Allow and Trust beside them while the guide is waiting for
 /// the person. Allow is offered only while there is no unsaved edit.
@@ -565,7 +568,7 @@ fn draw_agent_guide(parent: &mut bevy::ecs::relationship::RelatedSpawnerCommands
 /// **This row alone is rebuilt when the state moves** — not the page body. The first key typed flips
 /// whether there is an edit, and a rebuild of the body at that moment replaced the area under the typist,
 /// so the field lost the keyboard after one character.
-fn fill_the_guide_buttons(mut commands: Commands, page: Option<Res<ProjectPage>>, rows: Query<(Entity, Option<&ButtonsFor>, Option<&Children>), With<AgentGuideButtons>>) {
+fn fill_the_guide_buttons(mut commands: Commands, page: Option<Res<ProjectPage>>, rows: Query<ButtonRow, With<AgentGuideButtons>>) {
     let Some(page) = page else { return };
     let now = ButtonsFor { state: page.guide.view.state, conflict: page.guide.conflict, editing: page.guide.editing.is_some() };
     let ButtonsFor { state, conflict, editing } = now;
