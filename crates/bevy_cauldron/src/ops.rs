@@ -5070,7 +5070,7 @@ pub mod rig_adopt_measured {
     }
 
     fn manifest(project: &Project) -> PathBuf {
-        project.root.join("assets/grimoire/rigs.ron")
+        project.root.join(crate::anim_tab::RIGS_FILE)
     }
 
     /// **FNV-1a of the manifest text**: stable across runs, because an undo compares it with what the log

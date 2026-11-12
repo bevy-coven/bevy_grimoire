@@ -532,7 +532,7 @@ pub fn clip_name(rig: &bevy_grimoire_core::rigs::Rig, slot: usize) -> Option<Str
 /// **Every rig's every clip**, from `assets/grimoire/rigs.ron`: a project with no manifest, or one that does not read, has none (the
 /// bench says which on its own page).
 fn collect_the_clips(project: &Project) -> Vec<Entry> {
-    let Ok(text) = std::fs::read_to_string(project.root.join("assets/grimoire/rigs.ron")) else { return Vec::new() };
+    let Ok(text) = std::fs::read_to_string(project.root.join(crate::anim_tab::RIGS_FILE)) else { return Vec::new() };
     let Ok(rigs) = bevy_grimoire_core::rigs::Rigs::parse(&text) else { return Vec::new() };
     let mut out = Vec::new();
     for (name, rig) in &rigs.rigs {
