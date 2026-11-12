@@ -14,6 +14,15 @@ use crate::migrate::{RON_EXT, YAML_EXT, convert_value};
 /// **The folder beside a user's file the RON originals are moved into.**
 pub const USER_ARCHIVE_DIR: &str = "migrated-ron";
 
+/// **How a file failed to upgrade**, because the two are different answers to a person.
+#[derive(Debug)]
+enum Unconverted {
+    /// It did not convert, so nothing was written and this build reads no settings from it.
+    Refused(String),
+    /// **It did convert** — the YAML is written and is read — and only the original's move aside failed.
+    WrittenBut(String),
+}
+
 /// **Convert each `<dir>/<stem>.ron` that has no `<dir>/<stem>.yaml`**, and say what happened to each one.
 ///
 /// `command` is only what a refusal names. Returns one sentence per file touched (converted, or refused and why); nothing for a
@@ -33,27 +42,30 @@ pub fn upgrade_user_files(dirs_and_stems: &[(PathBuf, &str)], command: &str) -> 
         }
         match upgrade_one(&ron, &yaml, dir, command) {
             Ok(archived) => notices.push(format!("{shown} was converted to {} (the original is at {})", yaml.display(), archived.display())),
-            // **The refusal already says what landed**: [`upgrade_one`] answers the file it wrote when the conversion succeeded and
-            // only the move aside failed, and the parse failure when nothing was written. Saying "this build ignores it" over a
-            // file that *was* converted told a person their settings were lost when they were read from the YAML beside them.
-            Err(why) => notices.push(format!("{shown} was not fully converted: {why}")),
+            // **The two failures are not the same sentence.** A file that did not convert wrote nothing, so this build has no
+            // settings from it and "could not be converted" is exactly true. A file that *did* convert but whose original could not
+            // be moved aside is the opposite: the YAML is there and is read, so saying it could not be converted would tell a person
+            // their keymap was lost when it was not.
+            Err(Unconverted::Refused(why)) => notices.push(format!("{shown} could not be converted, so this build ignores it: {why}")),
+            Err(Unconverted::WrittenBut(why)) => notices.push(format!("{shown} was converted to {}, but {why}", yaml.display())),
         }
     }
     notices
 }
 
-fn upgrade_one(ron: &Path, yaml: &Path, dir: &Path, command: &str) -> Result<PathBuf, String> {
-    let text = std::fs::read_to_string(ron).map_err(|e| e.to_string())?;
-    let done = convert_value(&text, &ron.display().to_string(), command).map_err(|p| p.line())?;
-    bevy_grimoire_core::atomic_file::write_new(yaml, &done.text).map_err(|e| format!("{}: {e}", yaml.display()))?;
+fn upgrade_one(ron: &Path, yaml: &Path, dir: &Path, command: &str) -> Result<PathBuf, Unconverted> {
+    let text = std::fs::read_to_string(ron).map_err(|e| Unconverted::Refused(e.to_string()))?;
+    let done = convert_value(&text, &ron.display().to_string(), command).map_err(|p| Unconverted::Refused(p.line()))?;
+    bevy_grimoire_core::atomic_file::write_new(yaml, &done.text).map_err(|e| Unconverted::Refused(format!("{}: {e}", yaml.display())))?;
     let name = ron.file_name().map(PathBuf::from).unwrap_or_default();
     let into = dir.join(USER_ARCHIVE_DIR).join(name);
     let moved = std::fs::create_dir_all(dir.join(USER_ARCHIVE_DIR))
         .and_then(|()| bevy_grimoire_core::atomic_file::write_cache(&into, text.as_bytes()))
         .and_then(|()| std::fs::remove_file(ron));
     if let Err(e) = moved {
-        // The YAML is written and the original is still there: say so rather than leave a person guessing which one is read.
-        return Err(format!("the YAML was written at {}, but the original could not be moved aside: {e}", yaml.display()));
+        // **The YAML is written and is what this build reads**; only the archiving of the original failed. That is its own answer,
+        // because the person's settings are here.
+        return Err(Unconverted::WrittenBut(format!("the original could not be moved aside: {e}. The original is still at {}", ron.display())));
     }
     Ok(into)
 }
