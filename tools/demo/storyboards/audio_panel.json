@@ -31,15 +31,15 @@
     {
       "at": 2.4,
       "write": {
-        "path": "family/bevy_siren.ron",
+        "path": "family/bevy_siren.yaml",
         "text": "(buses: {\"sfx\": 0.0, \"music\": -4.0}, cues: {\"door_open\": (bus: \"sfx\", gain: -1.0)})\n"
       },
-      "caption": "person: saves family/bevy_siren.ron with two buses and a cue"
+      "caption": "person: saves family/bevy_siren.yaml with two buses and a cue"
     },
     {
       "at": 5.0,
       "write": {
-        "path": "family/bevy_siren.ron",
+        "path": "family/bevy_siren.yaml",
         "text": "(buses: {\"sfx\": -3.0, \"music\": -9.0}, cues: {\"door_open\": (bus: \"sfx\", gain: -1.0)})\n"
       },
       "caption": "person: saves it again, quieter"

@@ -39,7 +39,7 @@
   },
   {
    "write": {
-    "path": "assets/grimoire/maps/bedroom.relations.ron",
+    "path": "assets/grimoire/maps/bedroom.relations.yaml",
     "text": "(version: 1, relations: [(of: \"sofa\", kind: Faces(\"bed\")), (of: \"armchair\", kind: Near(to: \"coffee_table\", within: 0.2)), (of: \"lamp\", kind: Near(to: \"plant\", within: 2.0))])"
    },
    "at": 0.1

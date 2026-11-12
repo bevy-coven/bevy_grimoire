@@ -38,7 +38,7 @@
   },
   {
    "at": 0.2,
-   "caption": "Meshes shelf, no standards.ron: the pane shows the piece's size, no standards row"
+   "caption": "Meshes shelf, no standards.yaml: the pane shows the piece's size, no standards row"
   },
   {
    "at": 0.6,
@@ -64,15 +64,15 @@
   {
    "at": 4.0,
    "write": {
-    "path": "assets/grimoire/standards.ron",
+    "path": "assets/grimoire/standards.yaml",
     "text": "(version: 1, rules: [\n    (name: \"ceiling\", dim: Height, max: Some(2.5)),\n    (name: \"wall module\", dim: Width, multiple_of: Some(0.5)),\n])\n"
    },
-   "caption": "standards.ron saved: ceiling max 2.5 m, width a multiple of 0.5 m; the pane names both breaches"
+   "caption": "standards.yaml saved: ceiling max 2.5 m, width a multiple of 0.5 m; the pane names both breaches"
   },
   {
    "at": 8.0,
    "write": {
-    "path": "assets/grimoire/standards.ron",
+    "path": "assets/grimoire/standards.yaml",
     "text": "(version: 1, rules: [\n    (name: \"ceiling\", dim: Height),\n])\n"
    },
    "caption": "a rule with no bound: the file's problem is named, the editor keeps what it had"
@@ -80,7 +80,7 @@
   {
    "at": 12.0,
    "write": {
-    "path": "assets/grimoire/standards.ron",
+    "path": "assets/grimoire/standards.yaml",
     "text": "(version: 1, rules: [\n    (name: \"ceiling\", dim: Height, max: Some(3.0)),\n    (name: \"wall module\", dim: Width, multiple_of: Some(0.5)),\n])\n"
    },
    "caption": "fixed, ceiling raised to 3.0 m: one breach left, without reselecting the piece"

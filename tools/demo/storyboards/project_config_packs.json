@@ -13,7 +13,7 @@
     {"at": 4.6, "cursor": [826, 496]},
     {"at": 5.0, "click": [826, 496], "caption": "person: leaves the characters pack out of the kit"},
     {"at": 6.6, "cursor": [826, 460]},
-    {"at": 7.0, "click": [826, 460], "caption": "and the barrels pack: project.ron is rewritten, its prose kept, one log line each"},
+    {"at": 7.0, "click": [826, 460], "caption": "and the barrels pack: project.yaml is rewritten, its prose kept, one log line each"},
     {"at": 8.6, "caption": "a switch is the operation Shift+R and an agent's apply dispatch"}
   ]
 }

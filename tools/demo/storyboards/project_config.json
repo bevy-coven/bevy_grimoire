@@ -12,6 +12,6 @@
     {"at": 3.0, "click": [640, 571], "caption": "person: Project configuration"},
     {"at": 4.6, "cursor": [826, 288]},
     {"at": 5.0, "click": [826, 288], "caption": "person: switches bevy_gooey on"},
-    {"at": 6.6, "caption": "family.ron is written atomically, and its reload verdict reads applied"}
+    {"at": 6.6, "caption": "family.yaml is written atomically, and its reload verdict reads applied"}
   ]
 }

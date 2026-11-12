@@ -18,15 +18,15 @@
     {
       "at": 1.8,
       "write": {
-        "path": "family/bevy_gooey.ron",
+        "path": "family/bevy_gooey.yaml",
         "text": "(surface: Srgba((red: 0.16, green: 0.30, blue: 0.42, alpha: 1.0)))\n"
       },
-      "caption": "person: saves family/bevy_gooey.ron with a blue panel surface"
+      "caption": "person: saves family/bevy_gooey.yaml with a blue panel surface"
     },
     {
       "at": 5.2,
       "write": {
-        "path": "family/bevy_gooey.ron",
+        "path": "family/bevy_gooey.yaml",
         "text": "(surface: Srgba((red: 0.12, green: 0.38, blue: 0.22, alpha: 1.0)))\n"
       },
       "caption": "person: saves it again, green"

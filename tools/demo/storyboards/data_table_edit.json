@@ -39,15 +39,15 @@
   },
   {
    "write": {
-    "path": "assets/grimoire/furniture/mob.ron",
+    "path": "assets/grimoire/furniture/mob.yaml",
     "text": "// tuning\n(mob: (speed: 1.50, name: \"orc\", hp: 7), fast: false)\n"
    },
    "at": 0.1
   },
   {
    "write": {
-    "path": "assets/grimoire/furniture/data.ron",
-    "text": "(version: 1, files: [(id: \"tuning/mob\", path: \"mob.ron\", bounds: {\"mob.speed\": (min: 0.0, max: 9.0)})])"
+    "path": "assets/grimoire/furniture/data.yaml",
+    "text": "(version: 1, files: [(id: \"tuning/mob\", path: \"mob.yaml\", bounds: {\"mob.speed\": (min: 0.0, max: 9.0)})])"
    },
    "at": 0.15000000000000002
   },

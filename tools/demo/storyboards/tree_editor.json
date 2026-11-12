@@ -6,7 +6,7 @@
  "setup": [
   {"mcp": "grimoire_frame_view", "args": {"target": {"rect": [-9, -9, 9, 9]}}},
   {"mcp": "grimoire_apply_operation", "args": {"operation": "tree_edit", "parameters": {"name": "elm", "preset": "oak"}}},
-  {"mcp": "grimoire_apply_operation", "args": {"operation": "forest_scatter", "parameters": {"map": "grove", "place": {"species": "trees/elm.tree.ron", "at": [0.0, 0.0], "age_years": 25.0, "seed": 7}}}}
+  {"mcp": "grimoire_apply_operation", "args": {"operation": "forest_scatter", "parameters": {"map": "grove", "place": {"species": "trees/elm.tree.yaml", "at": [0.0, 0.0], "age_years": 25.0, "seed": 7}}}}
  ],
  "chunks": [
   {"seconds": 6},
@@ -14,13 +14,13 @@
  ],
  "steps": [
   {"at": 0.0, "cursor": [640, 420]},
-  {"at": 0.1, "caption": "one oak placed from trees/elm.tree.ron, a copy of bevy_flora's oak preset"},
+  {"at": 0.1, "caption": "one oak placed from trees/elm.tree.yaml, a copy of bevy_flora's oak preset"},
   {"at": 0.4, "wheel": {"y": -4, "n": 3, "at": [220, 450]}},
   {"at": 1.3, "cursor": [150, 246]},
   {"at": 1.5, "click": [150, 246]},
   {"at": 1.7, "caption": "person: the Terrain line, tree <name> [preset] [field=value]"},
   {"at": 1.9, "type": "tree elm trunk.radius=1.2"},
-  {"at": 4.2, "key": "Enter", "caption": "Enter: tree_edit writes elm.tree.ron, the oak regrows"},
+  {"at": 4.2, "key": "Enter", "caption": "Enter: tree_edit writes elm.tree.yaml, the oak regrows"},
   {"at": 6.8, "key": "KeyZ", "mods": ["SuperLeft"], "caption": "Cmd+Z: one undo per edit, the trunk is back"}
  ]
 }
