@@ -159,7 +159,7 @@ impl Report {
     }
 }
 
-/// **The path a project file is written at now**, from the path it had: `kits.yaml` → `kits.yaml`.
+/// **The path a project file is written at now**, from the path it had: `kits.ron` → `kits.yaml`.
 /// `None` for a path that does not end in [`RON_EXT`], which is not a project file this converts.
 pub fn yaml_path(rom: &Path) -> Option<PathBuf> {
     let name = rom.file_name()?.to_str()?;
@@ -594,11 +594,21 @@ fn migrate_where(
 
     // **Nothing is written until every file has converted.** Past this line a conversion that failed is
     // impossible, so the writes cannot leave a project half in one spelling.
+    let mut written: Vec<&PathBuf> = Vec::new();
     for (_, yaml_text, target) in &pending {
-        if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| io_problem(parent, e))?;
+        let step = match target.parent() {
+            Some(parent) => std::fs::create_dir_all(parent).map_err(|e| io_problem(parent, e)),
+            None => Ok(()),
         }
-        bevy_grimoire_core::atomic_file::write_new(target, yaml_text).map_err(|e| io_problem(target, e))?;
+        .and_then(|()| bevy_grimoire_core::atomic_file::write_new(target, yaml_text).map_err(|e| io_problem(target, e)));
+        if let Err(problem) = step {
+            // **A write that fails midway takes back the YAML already written**, so a rerun is not refused with "already exists".
+            for done in written {
+                let _ = std::fs::remove_file(done);
+            }
+            return Err(problem);
+        }
+        written.push(target);
     }
     let archive = root.join(ARCHIVE_DIR);
     for (path, _, _) in &pending {
@@ -1019,7 +1029,7 @@ pub fn reads_as_ron(text: &str) -> bool {
 /// **One project file's text, as YAML, from the RON it was written in** — the conversion [`migrate`] runs,
 /// for one file a caller already holds in memory.
 ///
-/// Answers the text and the name it would be written at (`kits.yaml` → `kits.yaml`), or a refusal naming
+/// Answers the text and the name it would be written at (`kits.ron` → `kits.yaml`), or a refusal naming
 /// the file. This exists for the two callers that are not a folder walk: the frozen fixtures a release
 /// wrote (`tests/old_data.rs`), which are checked as the type reads them *today*, and a game's own data
 /// file, whose type lives above this crate and which is therefore refused by name rather than guessed at.

@@ -69,7 +69,6 @@ pub fn is_command_file(rel: &str) -> bool {
     let name = rel.rsplit('/').next().unwrap_or(rel);
     bevy_grimoire_core::trust::COMMAND_FILES.contains(&name)
         || rel == bevy_grimoire_core::agent_guide::PROJECT_PATH
-        || matches!(name, "agent.yaml" | "play.yaml")
 }
 
 /// The sentence a read-only file's tab says, so nobody wonders why the keys do nothing.

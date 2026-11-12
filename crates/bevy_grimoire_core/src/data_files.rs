@@ -140,7 +140,7 @@ pub fn leaves(text: &str) -> Result<Vec<(String, String)>, String> {
                 serde_json::Value::Number(_) => "a number",
                 serde_json::Value::String(_) => "a string",
                 serde_json::Value::Array(_) => "a list",
-                serde_json::Value::Object(_) => unreachable!(),
+                serde_json::Value::Object(_) => "a mapping",
             }
         ));
     }
