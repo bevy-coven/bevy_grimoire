@@ -568,6 +568,9 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // process-global and its record names the project's root, so a switch keeps it and another project's game is
     // never shown (`game_view::watch_the_game` starts again when the root differs).
     ("bevy_cauldron::game_view::GameView", Ownership::Project),
+    // **`Session`: a Look is carried out on the Map after the switch it asked for**, and a switch resets every workspace's own state
+    // (NV-10, #387, `agent_view::PendingLook`).
+    ("bevy_cauldron::agent_view::PendingLook", Ownership::Session),
     ("bevy_cauldron::project_assets::ProjectRoot", Ownership::Session),
     // The editor's face is installed over the default font id once and lives as long as the app does (`harness::install_font_in`).
     ("bevy_cauldron::harness::EditorFont", Ownership::Session),

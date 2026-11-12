@@ -59,17 +59,17 @@ pub fn last_exit(root: &std::path::Path) -> Option<Exit> {
     with_exits(|t| t.get(root).copied())
 }
 
-/// **The most bytes the game's log file holds.** A game that prints for an hour must not fill a disk: past this the file is
-/// cut back to nothing and the run goes on, with one line saying so.
+/// **The most bytes the game's log file holds.** A game that prints for an hour must not fill a disk: the editor cuts the file
+/// back to a line saying so once it is past this ([`enforce_log_cap`]), and the run goes on.
 pub const LOG_CAP_BYTES: u64 = 1024 * 1024;
 
 /// The line written where the log was cut.
-const LOG_CUT: &[u8] = b"[the game's log passed its size cap and was cut here]\n";
+pub const LOG_CUT: &[u8] = b"[the game's log passed its size cap and was cut here]\n";
 
 /// **Where the game's output goes**: one file per project in a directory of the user's own in the temporary directory, named by a
 /// hash of the root, so the log of a project is never inside it (a project is a folder a person shares), two projects never share
-/// one and another user's files are never followed into. `play` truncates it, so it holds the last run only; `play_stop` and
-/// closing the project remove it ([`remove_log`]).
+/// one and another user cannot plant a link in the directory. `play` truncates it, so it holds the last run only; `play_stop`, closing
+/// the project (when no game runs) and quitting the editor remove it ([`remove_log`]).
 pub fn log_path(root: &std::path::Path) -> PathBuf {
     const BASIS: u64 = 0xcbf2_9ce4_8422_2325;
     const PRIME: u64 = 0x0100_0000_01b3;
@@ -83,19 +83,28 @@ pub fn log_path(root: &std::path::Path) -> PathBuf {
     std::env::temp_dir().join(format!("grimoire-game-logs-{user}")).join(format!("{hash:016x}.log"))
 }
 
-/// **Open the game's log for a new run**, or say why not. The directory is made private to the user (mode 700 where there are modes).
-fn open_log(root: &std::path::Path) -> Result<std::fs::File, String> {
-    let path = log_path(root);
+/// **Open the game's log at `path` for a new run**, or say why not. The directory is made private to the user (mode 700 where there
+/// are modes). The file is created empty and **reopened for append**, so the game's own writes land at the end however the editor
+/// cuts the file back.
+pub fn open_log_at(path: &std::path::Path) -> Result<std::fs::File, String> {
     let cannot = |e: std::io::Error| format!("could not open the game's log file {}: {e}", path.display());
     if let Some(dir) = path.parent() {
+        // **Only a directory made here is made private**: a log under an existing directory leaves that directory's mode alone.
+        let existed = dir.exists();
         std::fs::create_dir_all(dir).map_err(cannot)?;
         #[cfg(unix)]
-        std::fs::set_permissions(dir, std::os::unix::fs::PermissionsExt::from_mode(0o700)).map_err(cannot)?;
+        if !existed {
+            std::fs::set_permissions(dir, std::os::unix::fs::PermissionsExt::from_mode(0o700)).map_err(cannot)?;
+        }
+        #[cfg(not(unix))]
+        let _ = existed;
     }
-    std::fs::OpenOptions::new().create(true).write(true).truncate(true).open(&path).map_err(cannot)
+    std::fs::File::create(path).map_err(cannot)?;
+    std::fs::OpenOptions::new().append(true).open(path).map_err(cannot)
 }
 
-/// **Remove the game's log** — when the game is stopped and when the project closes. A file that is not there is already removed.
+/// **Remove the game's log** — when the game is stopped, when the project closes and when the editor quits. A file that is not
+/// there is already removed. A game still running keeps writing to the removed file, which costs it nothing.
 pub fn remove_log(root: &std::path::Path) {
     let path = log_path(root);
     if let Err(e) = std::fs::remove_file(&path)
@@ -105,37 +114,24 @@ pub fn remove_log(root: &std::path::Path) {
     }
 }
 
-/// **Copy one of the game's pipes into the log**, cutting the file back past [`LOG_CAP_BYTES`].
-fn pump(mut from: impl std::io::Read, log: std::sync::Arc<Mutex<(std::fs::File, u64)>>) {
-    use std::io::{Seek, SeekFrom, Write};
-    let mut buffer = [0_u8; 8192];
-    loop {
-        let read = match from.read(&mut buffer) {
-            Ok(0) => return,
-            Ok(n) => n,
-            Err(e) => {
-                bevy::log::warn!("the game's output could not be read: {e}");
-                return;
-            }
-        };
-        let mut guard = log.lock().unwrap_or_else(|e| e.into_inner());
-        let (file, written) = &mut *guard;
-        let wrote = (|| {
-            if *written + read as u64 > LOG_CAP_BYTES {
-                file.set_len(0)?;
-                file.seek(SeekFrom::Start(0))?;
-                file.write_all(LOG_CUT)?;
-                *written = LOG_CUT.len() as u64;
-            }
-            file.write_all(&buffer[..read])?;
-            *written += read as u64;
-            Ok::<(), std::io::Error>(())
-        })();
-        if let Err(e) = wrote {
-            bevy::log::warn!("the game's log could not be written: {e}");
-            return;
-        }
+/// **Cut the log at `path` back to [`LOG_CUT`]** when it is past [`LOG_CAP_BYTES`]. Answers whether it cut. The game holds the file
+/// open for append, so what it writes next lands after the line.
+pub fn enforce_log_cap_at(path: &std::path::Path) -> Result<bool, String> {
+    use std::io::Write;
+    let cannot = |e: std::io::Error| format!("{}: {e}", path.display());
+    let length = std::fs::metadata(path).map_err(cannot)?.len();
+    if length <= LOG_CAP_BYTES {
+        return Ok(false);
     }
+    let mut file = std::fs::OpenOptions::new().write(true).open(path).map_err(cannot)?;
+    file.set_len(0).map_err(cannot)?;
+    file.write_all(LOG_CUT).map_err(cannot)?;
+    Ok(true)
+}
+
+/// **[`enforce_log_cap_at`] for a project's log.**
+pub fn enforce_log_cap(root: &std::path::Path) -> Result<bool, String> {
+    enforce_log_cap_at(&log_path(root))
 }
 
 /// The pid of the game this editor started for `root`, if it is still running. A game that has ended has its
@@ -270,20 +266,16 @@ impl Operation for Play {
         // **Its own process group**, so `play_stop` can end what the launcher started as well as the launcher.
         #[cfg(unix)]
         std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
-        // **Its output goes to the project's game log** ([`log_path`]), which the Game workspace reads: a game started from a
-        // window has no terminal, and what it printed before it died is what says why. **A log that cannot be opened refuses
-        // Play**, with the reason, rather than starting a game whose output is lost.
-        let log = std::sync::Arc::new(Mutex::new((open_log(&root).map_err(|why| Refusal::new(format!("{why}. Nothing was started.")))?, 0_u64)));
-        cmd.stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
+        // **Its output goes straight into the project's game log** ([`log_path`]), which the Game workspace reads: a game started
+        // from a window has no terminal, and what it printed before it died is what says why. **A log that cannot be opened refuses
+        // Play**, with the reason, rather than starting a game whose output is lost. **Not a pipe through the editor**: the game
+        // writes to the file itself, so it never gets a broken pipe when the editor quits (the file is bounded by the editor
+        // while it runs, [`enforce_log_cap`]).
+        let file = open_log_at(&log_path(&root)).map_err(|why| Refusal::new(format!("{why}. Nothing was started.")))?;
+        let again = file.try_clone().map_err(|e| Refusal::new(format!("could not open the game's log for its errors: {e}. Nothing was started.")))?;
+        cmd.stdout(std::process::Stdio::from(file)).stderr(std::process::Stdio::from(again));
         #[allow(clippy::zombie_processes)]
-        let mut child = cmd.spawn().map_err(|e| Refusal::new(format!("could not start `{}`: {e}. Nothing is running.", argv[0])))?;
-        if let Some(out) = child.stdout.take() {
-            let log = std::sync::Arc::clone(&log);
-            std::thread::spawn(move || pump(out, log));
-        }
-        if let Some(err) = child.stderr.take() {
-            std::thread::spawn(move || pump(err, log));
-        }
+        let child = cmd.spawn().map_err(|e| Refusal::new(format!("could not start `{}`: {e}. Nothing is running.", argv[0])))?;
         let pid = child.id();
         with_exits(|e| e.remove(&root));
         with_table(|t| t.insert(root.clone(), child));
@@ -384,24 +376,32 @@ pub fn spawn_section(s: &mut bevy::prelude::ChildSpawnerCommands) {
 mod tests {
     use super::*;
 
-    /// **The game's log is bounded**: a pipe that carries more than [`LOG_CAP_BYTES`] leaves a file under it, cut with the line that
-    /// says so, and the last bytes written are the pipe's last.
+    /// **The game's log is bounded**: a file past [`LOG_CAP_BYTES`] is cut back to the line that says so, and what the game appends
+    /// next lands after it.
     #[test]
-    fn a_log_past_its_cap_is_cut_back_and_keeps_the_newest_output() {
+    fn a_log_past_its_cap_is_cut_back_and_the_game_keeps_appending() {
         let path = std::env::temp_dir().join(format!("grimoire-log-cap-{}.log", std::process::id()));
-        let file = std::fs::OpenOptions::new().create(true).write(true).truncate(true).open(&path).unwrap_or_else(|e| panic!("{e}"));
-        let log = std::sync::Arc::new(Mutex::new((file, 0_u64)));
-        let chunk = vec![b'x'; 1000];
-        let mut input = Vec::new();
-        for _ in 0..(LOG_CAP_BYTES / 1000 + 50) {
-            input.extend_from_slice(&chunk);
-        }
-        input.extend_from_slice(b"last line\n");
-        pump(std::io::Cursor::new(input), log);
+        let mut game = open_log_at(&path).unwrap_or_else(|e| panic!("{e}"));
+        std::io::Write::write_all(&mut game, &vec![b'x'; usize::try_from(LOG_CAP_BYTES).unwrap_or(0) + 10]).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(enforce_log_cap_at(&path), Ok(true), "a log past the cap is cut");
+        std::io::Write::write_all(&mut game, b"last line\n").unwrap_or_else(|e| panic!("{e}"));
         let text = std::fs::read(&path).unwrap_or_else(|e| panic!("{e}"));
         let _ = std::fs::remove_file(&path);
-        assert!((text.len() as u64) <= LOG_CAP_BYTES, "the log holds {} bytes, over its cap of {LOG_CAP_BYTES}", text.len());
+        let again = enforce_log_cap_at(&path);
         assert!(text.starts_with(LOG_CUT), "a cut log says where it was cut");
-        assert!(text.ends_with(b"last line\n"), "the newest output is kept");
+        assert!(text.ends_with(b"last line\n"), "what the game writes after the cut is kept, after the line");
+        assert_eq!(text.len(), LOG_CUT.len() + 10, "nothing of the old output is left");
+        assert!(again.is_err(), "a log that is gone says so rather than pretending to be bounded");
+    }
+
+    /// **A log that cannot be opened is a refusal with its reason**: here the directory it would live in is a file.
+    #[test]
+    fn a_log_that_cannot_be_opened_says_why() {
+        let blocker = std::env::temp_dir().join(format!("grimoire-log-blocker-{}", std::process::id()));
+        std::fs::write(&blocker, b"in the way").unwrap_or_else(|e| panic!("{e}"));
+        let opened = open_log_at(&blocker.join("game.log"));
+        let _ = std::fs::remove_file(&blocker);
+        let why = opened.err().unwrap_or_else(|| panic!("a log under a file opened"));
+        assert!(why.contains("could not open the game's log file"), "{why}");
     }
 }

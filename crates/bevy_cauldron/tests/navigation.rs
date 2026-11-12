@@ -44,7 +44,7 @@ use bevy::ui::{ComputedNode, ScrollPosition, UiGlobalTransform};
 
 use bevy_cauldron::build::Build;
 use bevy_cauldron::compose::ComposeState;
-use bevy_cauldron::goto::{GotoIndex, Kind};
+use bevy_cauldron::workspace::Workspace;
 use bevy_cauldron::project::OpenMap;
 use bevy_cauldron::screen::Screen;
 use bevy_cauldron::selection::Selection;
@@ -789,21 +789,21 @@ fn baseline() -> Vec<(String, Was)> {
 enum Target {
     /// One key press, no pointer.
     OnePress,
-    /// `Cmd+P`, its name, `Enter`: met when the finder's index holds an entry of that kind for the fixture's thing.
-    Finder(Kind),
+    /// `Cmd+P`, its name, `Enter`: met when the finder is *driven* with the thing's name and arrives at its page.
+    Finder,
 }
 
 /// Which target a destination is held to.
 fn target_of(what: &str) -> Target {
     match what {
-        "A named map" => Target::Finder(Kind::Map),
-        "A named piece on the open map" => Target::Finder(Kind::Placement),
-        "A piece's library entry" => Target::Finder(Kind::Piece),
-        "A tile" => Target::Finder(Kind::Tile),
-        "A composition" => Target::Finder(Kind::Composition),
-        "One of a rig's clips" => Target::Finder(Kind::Rig),
-        "A game data file" => Target::Finder(Kind::Data),
-        "The notes" => Target::Finder(Kind::Note),
+        "A named map"
+        | "A named piece on the open map"
+        | "A piece's library entry"
+        | "A tile"
+        | "A composition"
+        | "One of a rig's clips"
+        | "A game data file"
+        | "The notes" => Target::Finder,
         _ => Target::OnePress,
     }
 }
@@ -811,34 +811,189 @@ fn target_of(what: &str) -> Target {
 /// **The issues filed for a missed target**, by destination (NV-11, #388): a missed target is its own issue, naming the destination and
 /// the route. A miss with no entry here fails the test, so a target cannot be missed quietly.
 const FILED: &[(&str, &str)] = &[
-    ("A tile", "#390"),
     ("One of a rig's clips", "#391"),
     ("A sound cue", "#392"),
     ("A map's water", "#393"),
     ("A map's forest", "#394"),
     ("A map's lights", "#395"),
-    ("A game data file", "#396"),
     ("The problems list", "#397"),
-    ("The notes", "#398"),
 ];
 
-/// **How many entries the everything-finder holds of each kind**, on the fixture project.
-fn finder_counts() -> Vec<(Kind, usize)> {
-    let d = Driver::cold_start("finder");
-    let index = d.app.world().resource::<GotoIndex>();
-    [Kind::Map, Kind::Placement, Kind::Piece, Kind::Tile, Kind::Composition, Kind::Rig, Kind::Data, Kind::Note]
-        .into_iter()
-        .map(|kind| (kind, index.of_kind(kind).count()))
-        .collect()
+// ───────────────────────────── driving the finder ─────────────────────────────
+
+/// Where the bed stands in the finder fixture's 64 m map, far from where the camera is put, so a finder that did nothing cannot pass.
+const BED_AT: (f32, f32) = (28.0, -28.0);
+/// How near the camera's focus must come to the bed for the finder to have framed it, in metres.
+const FRAMED_WITHIN_M: f32 = 6.0;
+/// The registered data file the finder fixture holds, and its id.
+const DATA_REGISTRY: &str = "(version: 1, files: [(id: \"tuning\", path: \"mob.ron\", bounds: {\"mob.speed\": (min: 0.0, max: 9.0)})])";
+const DATA_FILE: &str = "// tuning\n(mob: (speed: 1.50, name: \"orc\", hp: 7), fast: false)\n";
+
+/// **What typing into the finder asks for, per destination**: the thing's own name as a person types it.
+const FINDER_ASKS: [(&str, &str); 7] = [
+    ("A named map", "meadow"),
+    ("A named piece on the open map", "bed@3"),
+    ("A piece's library entry", "stool"),
+    ("A tile", "tiling"),
+    ("A composition", "stack"),
+    ("A game data file", "tuning"),
+    ("The notes", "mind"),
+];
+
+/// **The editor for the finder rows**: the same kind of project as the other rows' (pieces, a placed piece, a composition) with what
+/// the finder indexes beyond them — a lattice, a registered data file and a note — added, and a window so keys reach the finder's field.
+fn finder_editor(tag: &str) -> App {
+    let root = fixtures::Fixture::new(&format!("nav_finder_{tag}_{}", std::process::id()))
+        .descriptor("stool", "alpha")
+        .descriptor("bed", "alpha")
+        .place_as("bed@3", "bed", BED_AT)
+        .authored_lattice("tiling", "alpha", "wall", 2)
+        .bounded_composition("stack", (1.0, 1.0, 1.0), &[("body", "stool", (0.0, 0.0))])
+        .side(64.0)
+        .build("meadow");
+    // **Where the project reads its registry from** is its authoring kit's directory, which the project says.
+    let dir = bevy_cauldron::project::Project::open(&root, None).unwrap_or_else(|e| panic!("{e}")).grimoire_dir;
+    std::fs::write(dir.join("mob.ron"), DATA_FILE).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(dir.join("data.ron"), DATA_REGISTRY).unwrap_or_else(|e| panic!("{e}"));
+    let mut app = bevy_cauldron::harness::build_headless(&root, "meadow", None).unwrap_or_else(|e| panic!("{e}"));
+    app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(1.0 / 60.0)));
+    app.world_mut().spawn((Window::default(), bevy::window::PrimaryWindow));
+    for _ in 0..WARM_UP_FRAMES {
+        app.update();
+    }
+    // **A note**, left the way an agent or a person leaves one: through the registry's operation.
+    let mut ctx = bevy_cauldron::ops::Ctx {
+        project: app.world().get_resource::<bevy_cauldron::project::Project>().cloned(),
+        open: app.world().get_resource::<OpenMap>().cloned(),
+        session: "nav".to_owned(),
+        ..bevy_cauldron::ops::Ctx::default()
+    };
+    let note = bevy_cauldron::ops::dispatch(&mut ctx, "note_add", &serde_json::json!({"cells": [0, 0, 0, 0], "text": "mind the gap"}));
+    assert!(matches!(note, Ok(bevy_cauldron::ops::Applied::Done { .. })), "the finder fixture could not leave its note");
+    for _ in 0..40 {
+        app.update();
+    }
+    app
 }
 
-/// **Is the target met?** `Ok` or the measured reason it is not.
-fn target_met(row: &Destination, finder: &[(Kind, usize)]) -> Result<(), String> {
+/// One key event to the primary window, as the finder's own tests send it.
+fn finder_key(app: &mut App, code: KeyCode, logical: bevy::input::keyboard::Key, text: Option<&str>, state: ButtonState) {
+    let window = app.world_mut().query_filtered::<Entity, With<bevy::window::PrimaryWindow>>().single(app.world()).expect("one primary window");
+    app.world_mut().write_message(KeyboardInput { key_code: code, logical_key: logical, state, text: text.map(Into::into), repeat: false, window });
+}
+
+/// The key a typed character is made with on a US keyboard, and whether Shift is held for it.
+fn finder_key_for(c: char) -> (KeyCode, bool) {
+    const LETTERS: [KeyCode; 26] = [
+        KeyCode::KeyA, KeyCode::KeyB, KeyCode::KeyC, KeyCode::KeyD, KeyCode::KeyE, KeyCode::KeyF, KeyCode::KeyG, KeyCode::KeyH, KeyCode::KeyI,
+        KeyCode::KeyJ, KeyCode::KeyK, KeyCode::KeyL, KeyCode::KeyM, KeyCode::KeyN, KeyCode::KeyO, KeyCode::KeyP, KeyCode::KeyQ, KeyCode::KeyR,
+        KeyCode::KeyS, KeyCode::KeyT, KeyCode::KeyU, KeyCode::KeyV, KeyCode::KeyW, KeyCode::KeyX, KeyCode::KeyY, KeyCode::KeyZ,
+    ];
+    match c {
+        'a'..='z' => (LETTERS[usize::from(c as u8 - b'a')], false),
+        '@' => (KeyCode::Digit2, true),
+        '3' => (KeyCode::Digit3, false),
+        other => panic!("the finder driver has no key for `{other}`"),
+    }
+}
+
+/// **Drive the finder for one destination**: `Cmd+P`, the name typed, `Enter`. Costs one press for the chord, one per character and one
+/// for `Enter`; arrives when the page the destination is on is the one showing.
+fn drive_the_finder(what: &'static str, query: &'static str) -> Result<Cost, String> {
+    use bevy::input::keyboard::{Key, NativeKey};
+    let mut app = finder_editor(what.split_whitespace().last().unwrap_or("row"));
+    for _ in 0..40 {
+        app.update();
+    }
+    if what == "A named piece on the open map" {
+        let mut rig = app.world_mut().resource_mut::<bevy_cauldron::view::Rig>();
+        rig.focus = Vec3::new(-BED_AT.0, 0.0, -BED_AT.1);
+        rig.height = 8.0;
+        for _ in 0..40 {
+            app.update();
+        }
+    }
+    let settle = |app: &mut App| {
+        for _ in 0..40 {
+            app.update();
+        }
+    };
+    for state in [ButtonState::Pressed, ButtonState::Released] {
+        for key in [primary(), KeyCode::KeyP] {
+            finder_key(&mut app, key, Key::Unidentified(NativeKey::Unidentified), None, state);
+        }
+        app.update();
+    }
+    settle(&mut app);
+    let opened = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<bevy_gooey::CommandPalette>>().iter(world).next().is_some()
+    };
+    if !opened {
+        return Err("Cmd+P did not open the finder".to_owned());
+    }
+    for c in query.chars() {
+        let (code, shift) = finder_key_for(c);
+        let s = c.to_string();
+        for state in [ButtonState::Pressed, ButtonState::Released] {
+            if shift {
+                finder_key(&mut app, KeyCode::ShiftLeft, Key::Unidentified(NativeKey::Unidentified), None, state);
+            }
+            finder_key(&mut app, code, Key::Character(s.as_str().into()), (state == ButtonState::Pressed).then_some(s.as_str()), state);
+            app.update();
+        }
+    }
+    settle(&mut app);
+    for state in [ButtonState::Pressed, ButtonState::Released] {
+        finder_key(&mut app, KeyCode::Enter, Key::Enter, None, state);
+        app.update();
+    }
+    settle(&mut app);
+    let still_open = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<bevy_gooey::CommandPalette>>().iter(world).next().is_some()
+    };
+    if still_open {
+        return Err(format!("Enter did not choose a row for `{query}`: the finder is still open"));
+    }
+    let workspace = *app.world().resource::<Workspace>();
+    let mode = app.world().get_resource::<Mode>().map(|m| m.label());
+    let selected = app.world().resource::<ImportState>().selected_library_id.clone();
+    let arrived = match what {
+        "A named map" => (workspace == Workspace::Map && app.world().resource::<OpenMap>().map.name == "meadow").then_some(()),
+        "A named piece on the open map" => {
+            let focus = app.world().resource::<bevy_cauldron::view::Rig>().focus;
+            (workspace == Workspace::Map && Vec2::new(focus.x - BED_AT.0, focus.z - BED_AT.1).length() < FRAMED_WITHIN_M).then_some(())
+        }
+        "A piece's library entry" => (workspace == Workspace::Kit && selected.as_deref() == Some("stool")).then_some(()),
+        "A tile" => (workspace == Workspace::Kit && selected.as_deref() == Some("tiling")).then_some(()),
+        "A composition" => (workspace == Workspace::Kit && mode == Some(Mode::Compose.label())).then_some(()),
+        "A game data file" | "The notes" => (workspace == Workspace::Map).then_some(()),
+        other => return Err(format!("no arrival is defined for `{other}`")),
+    };
+    match arrived {
+        Some(()) => Ok(Cost { presses: 2 + query.chars().count() as u32, pointer: 0 }),
+        None => Err(format!("`{query}` chosen in the finder landed on the {} workspace, not on {what}'s page", workspace.title())),
+    }
+}
+
+/// **Every named-thing destination, asked of the finder**, and what became of it.
+fn finder_runs() -> Vec<(&'static str, Result<Cost, String>)> {
+    let mut runs: Vec<(&'static str, Result<Cost, String>)> = FINDER_ASKS.iter().map(|(what, query)| (*what, drive_the_finder(what, query))).collect();
+    runs.push((
+        "One of a rig's clips",
+        Err("the finder indexes rigs and not their clips: a clip has no page of its own, so Cmd+P cannot name one".to_owned()),
+    ));
+    runs
+}
+
+/// **Is the target met?** `Ok` with the measured route, or the measured reason it is not.
+fn target_met(row: &Destination, finder: &[(&'static str, Result<Cost, String>)]) -> Result<String, String> {
     match target_of(row.what) {
         Target::OnePress => {
             let arrived = matches!(row.reach, Reach::Arrived);
             if arrived && row.cost.presses <= 1 && row.cost.pointer == 0 {
-                Ok(())
+                Ok(format!("{} press(es)", row.cost.presses))
             } else {
                 Err(format!(
                     "{} press(es) and {} pointer action(s) against one press{}",
@@ -848,18 +1003,16 @@ fn target_met(row: &Destination, finder: &[(Kind, usize)]) -> Result<(), String>
                 ))
             }
         }
-        Target::Finder(kind) => {
-            if finder.iter().any(|(k, n)| *k == kind && *n > 0) {
-                Ok(())
-            } else {
-                Err(format!("the finder's index holds no {kind:?} entry for this fixture, so Cmd+P, its name, Enter does not reach it"))
-            }
-        }
+        Target::Finder => match finder.iter().find(|(what, _)| *what == row.what) {
+            Some((_, Ok(cost))) => Ok(format!("driven: Cmd+P, the name, Enter, {} presses", cost.presses)),
+            Some((_, Err(why))) => Err(format!("driving the finder failed: {why}")),
+            None => Err("the finder was not driven for it".to_owned()),
+        },
     }
 }
 
 /// **The document, rendered from the rows, the frozen baseline's rows and the targets.** No clock, no paths, so two runs produce one text.
-fn render(rows: &[Destination], was: &[(String, Was)], finder: &[(Kind, usize)]) -> String {
+fn render(rows: &[Destination], was: &[(String, Was)], finder: &[(&'static str, Result<Cost, String>)]) -> String {
     let mut out = String::from(
         "# Getting around, as it is now\n\
          \n\
@@ -882,8 +1035,9 @@ fn render(rows: &[Destination], was: &[(String, Was)], finder: &[(Kind, usize)])
          ## What a later change is held to\n\
          \n\
          - Any workspace in **1 press**: a destination of the workspace kind is *met* when it arrives in at most one press and no pointer action.\n\
-         - Any named thing in at most **Cmd+P, its name and Enter** — one press, some typing, one press: *met* when the finder's index holds an\n\
-         \x20 entry of that kind for the fixture's thing (the finder's own tests, `goto`, hold that a chosen row arrives).\n\
+         - Any named thing in at most **Cmd+P, its name and Enter** — one press, some typing, one press: *met* when the finder is **driven** with the\n\
+         \x20 thing's name (`Cmd+P`, the characters, `Enter`) on a project that holds one — a piece, a placed piece, a lattice, a composition, a registered\n\
+         \x20 data file and a note — and arrives at its page. The cost shown is that route's presses.\n\
          - Back to where you were in **1 press**: held by `back_and_forward_across_workspaces`, not a row here.\n\
          - **Never worse than the baseline**: a destination that arrived then still arrives, and costs no more keys and pointer actions together.\n\
          \n\
@@ -905,7 +1059,7 @@ fn render(rows: &[Destination], was: &[(String, Was)], finder: &[(Kind, usize)])
             .find(|(name, _)| name == row.what)
             .map_or_else(|| "not in the baseline".to_owned(), |(_, w)| format!("{}, {}, {}", w.keys, w.pointer, if w.arrives { "yes" } else { "no" }));
         let target = match target_met(row, finder) {
-            Ok(()) => "met".to_owned(),
+            Ok(route) => format!("met — {route}"),
             Err(why) => {
                 let issue = FILED.iter().find(|(what, _)| *what == row.what).map_or("no issue filed", |(_, issue)| *issue);
                 format!("**missed** — {why} ({issue})")
@@ -972,7 +1126,7 @@ fn every_destination_is_measured_and_the_baseline_says_so() {
         }
     }
     // **Every missed target has its issue.**
-    let finder = finder_counts();
+    let finder = finder_runs();
     let unfiled: Vec<String> = rows
         .iter()
         .filter(|row| target_met(row, &finder).is_err() && !FILED.iter().any(|(what, _)| *what == row.what))
@@ -1010,6 +1164,26 @@ fn every_destination_is_measured_and_the_baseline_says_so() {
         "{} is out of date with the editor. Regenerate it with {REGENERATE}=1 and commit both.\n{difference}",
         path.display()
     );
+}
+
+/// **The issues filed for missed targets and the committed document agree** (NV-11, #388): every `#N` in [`FILED`] is cited on its own row of
+/// `docs/ui/navigation.md` as a missed target, no row cites an issue that is not in the list, and no missed row is without one. Offline: the
+/// list is a constant, and the document is the one the measurement wrote.
+#[test]
+fn every_filed_issue_is_cited_by_its_row_and_no_miss_is_unfiled() {
+    let path = baseline_path();
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let rows: Vec<&str> = text.lines().filter(|l| l.starts_with("| ") && l.contains("**missed**")).collect();
+    for (what, issue) in FILED {
+        let row = rows.iter().find(|r| r.starts_with(&format!("| {what} |")));
+        let row = row.unwrap_or_else(|| panic!("`{what}` is filed as {issue} but its row in the document is not a missed target"));
+        assert!(row.contains(&format!("({issue})")), "`{what}`'s row does not cite {issue}: {row}");
+    }
+    for row in &rows {
+        assert!(!row.contains("no issue filed"), "a missed target has no issue filed: {row}");
+        let name = row.trim_start_matches("| ").split(" | ").next().unwrap_or_default();
+        assert!(FILED.iter().any(|(what, _)| *what == name), "`{name}` is a missed target and is not in FILED");
+    }
 }
 
 // ───────────────────────────── helpers ─────────────────────────────

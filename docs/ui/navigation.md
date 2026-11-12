@@ -19,8 +19,9 @@ did, in order.
 ## What a later change is held to
 
 - Any workspace in **1 press**: a destination of the workspace kind is *met* when it arrives in at most one press and no pointer action.
-- Any named thing in at most **Cmd+P, its name and Enter** — one press, some typing, one press: *met* when the finder's index holds an
-  entry of that kind for the fixture's thing (the finder's own tests, `goto`, hold that a chosen row arrives).
+- Any named thing in at most **Cmd+P, its name and Enter** — one press, some typing, one press: *met* when the finder is **driven** with the
+  thing's name (`Cmd+P`, the characters, `Enter`) on a project that holds one — a piece, a placed piece, a lattice, a composition, a registered
+  data file and a note — and arrives at its page. The cost shown is that route's presses.
 - Back to where you were in **1 press**: held by `back_and_forward_across_workspaces`, not a row here.
 - **Never worse than the baseline**: a destination that arrived then still arrives, and costs no more keys and pointer actions together.
 
@@ -31,26 +32,26 @@ the test fails for a miss with none.
 
 | Destination | Route | Keys | Pointer | Arrives | Baseline (keys, pointer, arrives) | Target |
 |---|---|---|---|---|---|---|
-| The open map | the editor starts on it | 0 | 0 | yes | 0, 0, yes | met |
-| A named map | Cmd+O (close project), click `m` | 1 | 1 | yes | 1, 1, yes | met |
-| A named piece on the open map | click `View`, click `Show outliner`, click `alpha/floor@0 · alpha/floor` | 0 | 3 | yes | 0, 3, yes | met |
-| A piece's library entry | press Cmd/Ctrl+4 (the Kit workspace), click `MESHES (2)`, click `alpha/floor` | 1 | 2 | yes | 1, 2, yes | met |
-| A tile | press Cmd/Ctrl+4 (the Kit workspace), click `TILES`, click `TILES (2)`, click `crate`, press Enter (open it) | 2 | 3 | yes | 2, 3, yes | **missed** — the finder's index holds no Tile entry for this fixture, so Cmd+P, its name, Enter does not reach it (#390) |
-| A composition | press Cmd/Ctrl+4 (the Kit workspace), click `COMPOSE`, click `barrel  —  1 member(s), bounded 1.0x1.0x1.0` | 1 | 2 | yes | 1, 2, yes | met |
-| A rig (the Rigs bench) | press Cmd/Ctrl+5 (the Animation workspace) | 1 | 0 | yes | 1, 0, yes | met |
-| One of a rig's clips | press Cmd/Ctrl+5 (the Animation workspace), click a row in the bench's list | 1 | 0 | **no** — a clip is chosen from a list inside the bench, which Cmd/Ctrl+5 opens; this fixture has no rig, so its list reads ["no rigs in this project yet"] | 1, 0, no | **missed** — the finder's index holds no Rig entry for this fixture, so Cmd+P, its name, Enter does not reach it (#391) |
+| The open map | the editor starts on it | 0 | 0 | yes | 0, 0, yes | met — 0 press(es) |
+| A named map | Cmd+O (close project), click `m` | 1 | 1 | yes | 1, 1, yes | met — driven: Cmd+P, the name, Enter, 8 presses |
+| A named piece on the open map | click `View`, click `Show outliner`, click `alpha/floor@0 · alpha/floor` | 0 | 3 | yes | 0, 3, yes | met — driven: Cmd+P, the name, Enter, 7 presses |
+| A piece's library entry | press Cmd/Ctrl+4 (the Kit workspace), click `MESHES (2)`, click `alpha/floor` | 1 | 2 | yes | 1, 2, yes | met — driven: Cmd+P, the name, Enter, 7 presses |
+| A tile | press Cmd/Ctrl+4 (the Kit workspace), click `TILES`, click `TILES (2)`, click `crate`, press Enter (open it) | 2 | 3 | yes | 3, 2, yes | met — driven: Cmd+P, the name, Enter, 8 presses |
+| A composition | press Cmd/Ctrl+4 (the Kit workspace), click `COMPOSE`, click `barrel  —  1 member(s), bounded 1.0x1.0x1.0` | 1 | 2 | yes | 2, 1, yes | met — driven: Cmd+P, the name, Enter, 7 presses |
+| A rig (the Rigs bench) | press Cmd/Ctrl+5 (the Animation workspace) | 1 | 0 | yes | 4, 0, no | met — 1 press(es) |
+| One of a rig's clips | press Cmd/Ctrl+5 (the Animation workspace), click a row in the bench's list | 1 | 0 | **no** — a clip is chosen from a list inside the bench, which Cmd/Ctrl+5 opens; this fixture has no rig, so its list reads ["no rigs in this project yet"] | 0, 0, no | **missed** — driving the finder failed: the finder indexes rigs and not their clips: a clip has no page of its own, so Cmd+P cannot name one (#391) |
 | A sound cue | press Cmd/Ctrl+6 (the Sound workspace) | 1 | 0 | **no** — the Sound workspace opens by one chord, but the AUDIO panel is behind the off-by-default `bevy_siren` feature: this build draws a sentence saying so, and no cue | 0, 60, no | **missed** — 1 press(es) and 0 pointer action(s) against one press, and it does not arrive (#392) |
-| A map's terrain | press Cmd/Ctrl+3 (the World workspace) | 1 | 0 | yes | 0, 5, yes | met |
+| A map's terrain | press Cmd/Ctrl+3 (the World workspace) | 1 | 0 | yes | 0, 5, yes | met — 1 press(es) |
 | A map's water | press Cmd/Ctrl+3 (the World workspace) | 1 | 0 | **no** — water is an operation (`water_place`) written through the World workspace's terrain line; it has no panel of its own, so nothing draws a map's water to walk to | 0, 60, no | **missed** — 1 press(es) and 0 pointer action(s) against one press, and it does not arrive (#393) |
 | A map's forest | press Cmd/Ctrl+3 (the World workspace) | 1 | 0 | **no** — forest is an operation (`forest_scatter`) written through the World workspace's terrain line; it has no panel of its own, so there is nothing to walk to | 0, 60, no | **missed** — 1 press(es) and 0 pointer action(s) against one press, and it does not arrive (#394) |
 | A map's lights | press Cmd/Ctrl+3 (the World workspace) | 1 | 0 | **no** — the LIGHTS block is in the World workspace but behind the off-by-default `bevy_lights` feature, and nothing else draws a pool | 0, 60, no | **missed** — 1 press(es) and 0 pointer action(s) against one press, and it does not arrive (#395) |
-| A game data file | wheel down to `DATA` | 0 | 4 | yes | 0, 5, yes | **missed** — the finder's index holds no Data entry for this fixture, so Cmd+P, its name, Enter does not reach it (#396) |
+| A game data file | wheel down to `DATA` | 0 | 4 | yes | 0, 5, yes | met — driven: Cmd+P, the name, Enter, 8 presses |
 | The problems list | wheel down to `PROBLEMS` | 0 | 6 | yes | 0, 8, yes | **missed** — 0 press(es) and 6 pointer action(s) against one press (#397) |
-| The notes | wheel down to `NOTES` | 0 | 5 | yes | 0, 7, yes | **missed** — the finder's index holds no Note entry for this fixture, so Cmd+P, its name, Enter does not reach it (#398) |
-| The history | it is drawn beside UNDO and REDO, on screen at a cold start (1 line, 1 drawn) | 0 | 0 | yes | 0, 0, yes | met |
-| The AGENT block | press Cmd/Ctrl+9 (the Agent workspace) | 1 | 0 | yes | 0, 2, yes | met |
-| The settings | Cmd+, | 1 | 0 | yes | 1, 0, yes | met |
-| The running game's log | press Cmd/Ctrl+8 (the Game workspace) | 1 | 0 | yes | 1, 0, no | met |
+| The notes | wheel down to `NOTES` | 0 | 5 | yes | 0, 7, yes | met — driven: Cmd+P, the name, Enter, 6 presses |
+| The history | it is drawn beside UNDO and REDO, on screen at a cold start (1 line, 1 drawn) | 0 | 0 | yes | 0, 0, yes | met — 0 press(es) |
+| The AGENT block | press Cmd/Ctrl+9 (the Agent workspace) | 1 | 0 | yes | 0, 2, yes | met — 1 press(es) |
+| The settings | Cmd+, | 1 | 0 | yes | 1, 0, yes | met — 1 press(es) |
+| The running game's log | press Cmd/Ctrl+8 (the Game workspace) | 1 | 0 | yes | 1, 0, no | met — 1 press(es) |
 
 ## What the numbers say
 

@@ -50,6 +50,8 @@ pub const LOG_LINES: usize = 40;
 pub const CRASH_LOG_LINES: usize = 8;
 /// Seconds between looks at the log file's length.
 pub const LOG_POLL_S: f32 = 0.25;
+/// Seconds between checks that the game's log is still under its cap.
+pub const LOG_CAP_CHECK_S: f32 = 1.0;
 /// Seconds between reads of the game's state over BRP.
 pub const STATE_POLL_S: f32 = 1.0;
 /// Milliseconds a BRP read waits for the game before it is called unanswered.
@@ -136,6 +138,7 @@ pub struct GameView {
     pub(crate) in_flight: Arc<AtomicBool>,
     pub(crate) since_log: f32,
     pub(crate) since_state: f32,
+    pub(crate) since_cap: f32,
 }
 
 impl GameView {
@@ -335,8 +338,11 @@ impl Plugin for GameViewPlugin {
         app.init_resource::<GameView>()
             // **Watching runs in every workspace**: a crash while a person is on the Map is the one they most need to hear of.
             .add_systems(Update, (watch_the_game, report_the_window).run_if(in_state(Screen::Editor)))
-            // **Closing the project removes its game log** (not a switch of workspace, which keeps the game and its log).
+            // **Closing the project removes its game log** when no game runs (not a switch of workspace, which keeps the game and
+            // its log), and **quitting the editor removes it** whatever runs: the game writes to the file itself, so it is not
+            // hurt by the file going.
             .add_systems(OnExit(Screen::Editor), remove_the_log.before(crate::screen::close_the_door))
+            .add_systems(Last, remove_the_log_on_quit.run_if(on_message::<AppExit>))
             .add_systems(
                 Update,
                 (read_the_log, poll_the_game, draw_the_game)
@@ -355,6 +361,7 @@ impl Plugin for GameViewPlugin {
 pub fn watch_the_game(
     project: Option<Res<Project>>,
     build: Option<Res<crate::build_view::BuildState>>,
+    time: Res<Time>,
     mut view: ResMut<GameView>,
 ) {
     let Some(project) = project else { return };
@@ -377,6 +384,18 @@ pub fn watch_the_game(
     if view.exit != exit {
         view.exit = exit;
     }
+    // **The log is bounded while the game runs**: checked once a second, the cut is the editor's.
+    if pid.is_some() {
+        view.since_cap += time.delta_secs();
+        if view.since_cap >= LOG_CAP_CHECK_S {
+            view.since_cap = 0.0;
+            if let Err(why) = ops_play::enforce_log_cap(&root)
+                && view.log_error.as_deref() != Some(why.as_str())
+            {
+                view.log_error = Some(why);
+            }
+        }
+    }
     if let Some(build) = build {
         if build.running.is_some() {
             if !view.build_errors.is_empty() || !view.build_said.is_empty() {
@@ -394,11 +413,22 @@ pub fn watch_the_game(
     }
 }
 
-/// **Closing the project removes the game's log file.** A switch of workspace is not a close ([`crate::screen::Crossing`]).
+/// **Closing the project removes the game's log file** — when no game runs: a game that runs on keeps its log until it ends or the
+/// editor quits. A switch of workspace is not a close ([`crate::screen::Crossing`]).
 fn remove_the_log(project: Option<Res<Project>>, crossing: Option<Res<crate::screen::Crossing>>) {
     if crossing.is_some() {
         return;
     }
+    if let Some(project) = project
+        && ops_play::running_pid(&project.root).is_none()
+    {
+        ops_play::remove_log(&project.root);
+    }
+}
+
+/// **Quitting removes the log**, so a normal quit leaves nothing in the temporary directory. The game writes to the file itself, so it
+/// is not hurt by the file going.
+fn remove_the_log_on_quit(project: Option<Res<Project>>) {
     if let Some(project) = project {
         ops_play::remove_log(&project.root);
     }
@@ -602,14 +632,18 @@ fn draw_the_game(
     }
     put(&mut targets.status, status);
     put(&mut targets.log, view.log_text());
+    let answering = view.snapshot.answered;
     let frame_part = match (view.snapshot.frame_ms, &view.snapshot.frame_error) {
         (Some(ms), _) => format!("Frame time {ms:.1} ms"),
         (None, Some(why)) => format!("Frame time unavailable: {why}"),
+        (None, None) if view.pid.is_some() && !answering => {
+            format!("Frame time unavailable: the game is not answering over BRP ({})", view.snapshot.error.as_deref().unwrap_or("no answer yet"))
+        }
         (None, None) => "Frame time appears while the game runs".to_owned(),
     };
     let memory_part = match (view.snapshot.rss_mb, &view.snapshot.memory_error) {
         (Some(mb), _) => format!("memory {mb:.0} MB"),
-        (None, Some(why)) => format!("memory unavailable on this platform: {why}"),
+        (None, Some(why)) => format!("memory unavailable: {why}"),
         (None, None) => "memory appears while the game runs".to_owned(),
     };
     put(&mut targets.frame, format!("{frame_part} · {memory_part}"));
@@ -726,5 +760,26 @@ pub fn bring_to_front(pid: u32) -> Result<(), String> {
         Ok(out) if out.status.success() => Ok(()),
         Ok(out) => Err(format!("`{program}` could not show the game's window: {}", String::from_utf8_lossy(&out.stderr).trim())),
         Err(e) => Err(format!("could not run `{program}` to show the game's window: {e}. Install it, or click the game's own window")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **Show window's answer reaches the status line**: the thread's error, with the tool's own words, is a problem; a success is a note.
+    #[test]
+    fn the_window_threads_answer_is_said_on_the_status_line() {
+        let mut app = App::new();
+        app.init_resource::<GameView>().init_resource::<crate::editor::EditorState>().add_systems(Update, report_the_window);
+        *app.world().resource::<GameView>().window.lock().unwrap_or_else(std::sync::PoisonError::into_inner) =
+            Some(Err("could not run `xdotool`: not found".to_owned()));
+        app.update();
+        let problems: Vec<String> = app.world().resource::<crate::editor::EditorState>().status.problems().iter().map(|p| p.text.clone()).collect();
+        assert!(problems.iter().any(|p| p.contains("xdotool")), "the thread's error is on the status line: {problems:?}");
+        *app.world().resource::<GameView>().window.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Ok(()));
+        app.update();
+        let note = app.world().resource::<crate::editor::EditorState>().status.note_text().to_owned();
+        assert!(note.contains("window"), "a success is said: {note:?}");
     }
 }

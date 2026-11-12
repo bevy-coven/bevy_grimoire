@@ -4,8 +4,8 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-12
 
-- **nv-11-measure-again** `b94516fe5` NV-11: the navigation measurement again, against the frozen NV-01 baseline, with each target met or filed *No clip: a measurement; proved by navigation::every_destination_is_measured_and_the_baseline_says_so and the_navigation_baseline_stays_frozen*
-- **nv-10-agent-workspace** `b94516fe5` NV-10: the Agent workspace: the AGENT block, the waiting wishes and lessons, and the agent's last changes with Look *For you: A new Agent workspace shows what the Familiar is doing, what is waiting for you, and its last changes, with a button to look at them on the map.* *No clip: visible, not yet recorded: fleet worker*
+- **nv-11-measure-again** `cb21d7f5` NV-11: the navigation measurement again, against the real NV-01 baseline, with each target met or filed *No clip: a measurement; proved by navigation::every_destination_is_measured_and_the_baseline_says_so and the_navigation_baseline_stays_frozen*
+- **nv-10-agent-workspace** `b94516fe5` NV-10: the Agent workspace: the AGENT block, the waiting wishes and lessons, and the agent's last changes with Look *For you: A new Agent workspace shows what the Familiar is doing, what is waiting for you, and its last three changes; Look on a change takes you to the Map and frames the pieces that change touched.* *No clip: visible, not yet recorded: fleet worker*
 
 ## 2026-11-11
 
