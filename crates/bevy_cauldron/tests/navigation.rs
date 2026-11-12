@@ -823,7 +823,6 @@ fn target_of(what: &str) -> Target {
 /// **The issues filed for a missed target**, by destination (NV-11, #388): a missed target is its own issue, naming the destination and
 /// the route. A miss with no entry here fails the test, so a target cannot be missed quietly.
 const FILED: &[(&str, &str)] = &[
-    ("One of a rig's clips", "#391"),
     ("A sound cue", "#392"),
     ("A map's water", "#393"),
     ("A map's forest", "#394"),
@@ -839,9 +838,16 @@ const FRAMED_WITHIN_M: f32 = 6.0;
 /// The registered data file the finder fixture holds, and its id.
 const DATA_REGISTRY: &str = "(version: 1, files: [(id: \"tuning\", path: \"mob.ron\", bounds: {\"mob.speed\": (min: 0.0, max: 9.0)})])";
 const DATA_FILE: &str = "// tuning\n(mob: (speed: 1.50, name: \"orc\", hp: 7), fast: false)\n";
+/// **The rig the finder fixture holds, and the clip a person asks for** (NV-11, #391): a clip is a slot of the rig's manifest entry, and the
+/// finder names it by the slot's note. The clip is slot 1, so a finder that landed on the rig alone, or on its first slot, is caught.
+const RIGS: &str = "(version: 3, rigs: { \"hound\": (mesh: \"characters/hound.glb\", scale: 1.0, slots: [\
+    (clip: 0, playback: Free(speed: 1.0), note: Some(\"idle\")), \
+    (clip: 1, playback: Free(speed: 1.0), note: Some(\"gallop\"))])})";
+const CLIP_RIG: &str = "hound";
+const CLIP_SLOT: usize = 1;
 
 /// **What typing into the finder asks for, per destination**: the thing's own name as a person types it.
-const FINDER_ASKS: [(&str, &str); 7] = [
+const FINDER_ASKS: [(&str, &str); 8] = [
     ("A named map", "meadow"),
     ("A named piece on the open map", "bed@3"),
     ("A piece's library entry", "stool"),
@@ -849,6 +855,7 @@ const FINDER_ASKS: [(&str, &str); 7] = [
     ("A composition", "stack"),
     ("A game data file", "tuning"),
     ("The notes", "mind"),
+    ("One of a rig's clips", "gallop"),
 ];
 
 /// **The editor for the finder rows**: the same kind of project as the other rows' (pieces, a placed piece, a composition) with what
@@ -866,6 +873,8 @@ fn finder_editor(tag: &str) -> App {
     let dir = bevy_cauldron::project::Project::open(&root, None).unwrap_or_else(|e| panic!("{e}")).grimoire_dir;
     std::fs::write(dir.join("mob.ron"), DATA_FILE).unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(dir.join("data.ron"), DATA_REGISTRY).unwrap_or_else(|e| panic!("{e}"));
+    // **A rig with two clips** (NV-11, #391), in the manifest the bench and the finder both read.
+    std::fs::write(root.join("assets/grimoire/rigs.ron"), RIGS).unwrap_or_else(|e| panic!("{e}"));
     let mut app = bevy_cauldron::harness::build_headless(&root, "meadow", None).unwrap_or_else(|e| panic!("{e}"));
     app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(1.0 / 60.0)));
     app.world_mut().spawn((Window::default(), bevy::window::PrimaryWindow));
@@ -980,6 +989,12 @@ fn drive_the_finder(what: &'static str, query: &'static str) -> Result<Cost, Str
         "A tile" => (workspace == Workspace::Kit && selected.as_deref() == Some("tiling")).then_some(()),
         "A composition" => (workspace == Workspace::Kit && mode == Some(Mode::Compose.label())).then_some(()),
         "A game data file" | "The notes" => (workspace == Workspace::Map).then_some(()),
+        "One of a rig's clips" => {
+            let bench = app.world().resource::<bevy_cauldron::anim_tab::BenchState>();
+            let on_the_rig = bench.names().get(bench.selected).is_some_and(|name| *name == CLIP_RIG);
+            let soloed = app.world().resource::<bevy_cauldron::anim_stage::BenchScrub>().solo == Some(CLIP_SLOT);
+            (workspace == Workspace::Animation && on_the_rig && soloed).then_some(())
+        }
         other => return Err(format!("no arrival is defined for `{other}`")),
     };
     match arrived {
@@ -990,11 +1005,7 @@ fn drive_the_finder(what: &'static str, query: &'static str) -> Result<Cost, Str
 
 /// **Every named-thing destination, asked of the finder**, and what became of it.
 fn finder_runs() -> Vec<(&'static str, Result<Cost, String>)> {
-    let mut runs: Vec<(&'static str, Result<Cost, String>)> = FINDER_ASKS.iter().map(|(what, query)| (*what, drive_the_finder(what, query))).collect();
-    runs.push((
-        "One of a rig's clips",
-        Err("the finder indexes rigs and not their clips: a clip has no page of its own, so Cmd+P cannot name one".to_owned()),
-    ));
+    let runs: Vec<(&'static str, Result<Cost, String>)> = FINDER_ASKS.iter().map(|(what, query)| (*what, drive_the_finder(what, query))).collect();
     runs
 }
 

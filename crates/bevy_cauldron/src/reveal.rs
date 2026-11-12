@@ -101,6 +101,8 @@ pub enum Select {
     Group(String),
     /// A rig on the bench.
     Rig(String),
+    /// **A rig's clip** (NV-11, #391): the rig selected on the bench with its slot `slot` soloed on the stage.
+    Clip { rig: String, slot: usize },
     /// A registered data file: its first leaf's row in the DATA table.
     DataFile(String),
     /// A note on the Notes list.
@@ -154,6 +156,11 @@ pub fn page_of(shown: &Shown, project: Option<&Project>) -> Result<Page, String>
             workspace: Workspace::Animation,
             tab: Mode::Anim,
             select: Select::Rig(id.clone()),
+        },
+        Shown::Clip { rig, slot } => Page::Workspace {
+            workspace: Workspace::Animation,
+            tab: Mode::Anim,
+            select: Select::Clip { rig: rig.clone(), slot: *slot },
         },
         Shown::Note { id } => Page::Workspace {
             workspace: Workspace::Map,
@@ -642,6 +649,9 @@ struct Table<'w, 's> {
             &'static mut ScrollPosition,
         ),
     >,
+    /// **The bench's stage and what it plays**, which a clip reveal waits on and writes (NV-11, #391).
+    staged: Query<'w, 's, &'static crate::anim_stage::BenchStageOf, With<crate::anim_stage::BenchStage>>,
+    scrub: Option<ResMut<'w, crate::anim_stage::BenchScrub>>,
 }
 
 /// **Write the page's selection**, and answer whether the row it names was there.
@@ -710,6 +720,29 @@ fn apply_selection(
                     None => found = false,
                 },
                 None => found = false,
+            }
+        }
+        Select::Clip { rig, slot } => {
+            // **The rig first, then the stage, then the slot.** Selecting the rig makes the bench stage its mesh, and a fresh stage starts
+            // from the default mix (`anim_stage::drive_bench_stage`): a solo written before the stage is the rig's would be reset by it.
+            // So the slot is soloed on the frame the stage is the selected rig's, and until then the page is not found.
+            found = false;
+            if let Some(bench) = bench {
+                let at = bench.names().iter().position(|n| *n == rig);
+                let rig_def = bench.rigs.as_ref().and_then(|rigs| rigs.get(rig));
+                let has_slot = rig_def.is_some_and(|def| *slot < def.slots.len());
+                let mesh = rig_def.map(|def| def.mesh.clone());
+                if let (Some(at), true, Some(mesh)) = (at, has_slot, mesh) {
+                    bench.selected = at;
+                    bench.view = crate::anim_tab::View::One;
+                    if tables.staged.iter().any(|stage| stage.is_of(&mesh))
+                        && let Some(scrub) = tables.scrub.as_mut()
+                    {
+                        scrub.solo = Some(*slot);
+                        scrub.mixed.clear();
+                        found = true;
+                    }
+                }
             }
         }
         Select::DataFile(file) => {
