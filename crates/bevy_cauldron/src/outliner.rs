@@ -678,6 +678,7 @@ fn first_words(text: &str, chars: usize) -> String {
 }
 
 /// **The tree is rebuilt when the map or the search moved**, and the groups a person closed stay closed.
+#[allow(clippy::too_many_arguments)]
 fn rebuild_the_tree(
     open: Option<Res<OpenMap>>,
     project: Option<Res<Project>>,

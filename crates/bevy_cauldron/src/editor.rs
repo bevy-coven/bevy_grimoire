@@ -15637,6 +15637,7 @@ fn hide_carried(
     // would take turns undoing each other.
     eyes: Option<Res<crate::outliner::Eyes>>,
     project: Option<Res<Project>>,
+    mut in_a_hidden_layer: Local<std::collections::HashSet<String>>,
     mut placed: Query<(&Placement, &mut Visibility)>,
     mut instances: Query<(&StampInstance, &mut Visibility), Without<Placement>>,
 ) {
@@ -15674,19 +15675,20 @@ fn hide_carried(
         Some(Held::Stamp(_)) | None => Vec::new(),
     };
 
-    // **The pieces standing in a hidden layer** (UI-51, #237), found only when a layer is hidden: the rule that says
-    // which layer a piece is in is `outliner::layer_of`, which reads the library, so a settled frame with nothing
-    // hidden does no lookup at all.
-    let in_a_hidden_layer: std::collections::HashSet<&str> = match (eyes.as_deref(), project.as_deref()) {
-        (Some(eyes), Some(project)) if eyes.has_hidden_layers() => open
-            .map
-            .placements
-            .iter()
-            .filter(|p| eyes.hides(&project.library, p))
-            .map(|p| p.id.as_str())
-            .collect(),
-        _ => std::collections::HashSet::new(),
-    };
+    // **The pieces standing in a hidden layer** (UI-51, #237), kept between frames and found again only when the eye, the
+    // map or the library moved: the rule that says which layer a piece is in is `outliner::layer_of`, which reads the
+    // library, so a settled frame does no lookup at all, hidden layer or not.
+    let moved = eyes.as_ref().is_some_and(|e| e.is_changed())
+        || open.is_changed()
+        || project.as_ref().is_some_and(|p| p.is_changed());
+    if moved {
+        in_a_hidden_layer.clear();
+        if let (Some(eyes), Some(project)) = (eyes.as_deref(), project.as_deref())
+            && eyes.has_hidden_layers()
+        {
+            in_a_hidden_layer.extend(open.map.placements.iter().filter(|p| eyes.hides(&project.library, p)).map(|p| p.id.clone()));
+        }
+    }
     for (marker, mut vis) in &mut placed {
         let behind_the_eye = eyes.as_ref().is_some_and(|eyes| eyes.is_hidden(&marker.0)) || in_a_hidden_layer.contains(marker.0.as_str());
         let want = if carried.contains(&marker.0) || behind_the_eye {
