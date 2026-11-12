@@ -159,6 +159,8 @@ impl WishOpenRows {
 pub enum RowKind {
     /// A wish: the one tool that would have helped, filed as an issue on [`WISH_REPO`].
     Wish,
+    /// A lesson: one line for the project's guide, which the person keeps or discards (#351).
+    Lesson,
 }
 
 impl RowKind {
@@ -166,9 +168,15 @@ impl RowKind {
     pub fn label(self) -> &'static str {
         match self {
             RowKind::Wish => "WISH",
+            RowKind::Lesson => "LESSON",
         }
     }
 }
+
+/// **A row of the AGENT block's list, whatever kind it is**: what the rebuild despawns, so a row of
+/// either kind is taken out before the list is made again.
+#[derive(Component)]
+pub struct RowOf;
 
 /// **One row of the AGENT block's shared list.**
 #[derive(Component, Clone, Debug, PartialEq, Eq)]
@@ -214,6 +222,30 @@ pub struct WishOpen;
 #[derive(Component)]
 pub struct WishDiscard;
 
+// ── a lesson's row (AG-06, #351) ─────────────────────────────────────────────────────────────────
+
+/// **A lesson row's one-line title**: whose it is and the line it would add.
+#[derive(Component)]
+pub struct LessonTitle;
+
+/// One `NAME  words` line of a lesson row: `LESSON` or `WHY`.
+#[derive(Component)]
+pub struct LessonField {
+    pub name: &'static str,
+}
+
+/// **The row's Keep button**: the person's own act, and the only thing that appends the line.
+#[derive(Component)]
+pub struct LessonKeep;
+
+/// The row's Discard button.
+#[derive(Component)]
+pub struct LessonDiscard;
+
+/// The row's answer, when one was already given: `kept` or `discarded`.
+#[derive(Component)]
+pub struct LessonAnswered(pub crate::present::LessonState);
+
 /// The row's clickable header, which unfolds it.
 #[derive(Component)]
 pub struct WishUnfold;
@@ -237,16 +269,20 @@ pub struct WishRows;
 
 // ── the block's list ────────────────────────────────────────────────────────────────────────────
 
-/// **Everything a row shows, in one value** — which is what decides whether the rows are rebuilt.
+/// **Everything the list shows, in one value** — which is what decides whether the rows are rebuilt.
 ///
 /// A fixed set of pre-spawned rows could not follow this: a body and its fields exist only while the
 /// row is unfolded, and the two buttons leave when the person answers, so the set of nodes a row is
-/// made of changes with the wish.
+/// made of changes with the wish. **Both kinds are here**, because a rebuild has to know about every
+/// row in the list: a wish arriving or a lesson being answered must not leave the other kind half
+/// rebuilt.
 #[derive(Component, Clone, PartialEq, Eq)]
-struct RowsShown(Vec<RowShown>);
+struct RowsShown {
+    wishes: Vec<RowShown>,
+    lessons: Vec<LessonShown>,
+}
 
-/// **One row's own state**, as the list is rebuilt by it. A `Vec` of these is what `RowsShown` compares,
-/// so a frame that changes nothing rebuilds nothing.
+/// **One wish row's own state**, as the list is rebuilt by it.
 ///
 /// **The client is part of it** (#354's review): a row spawned before `grimoire/agent_hello` said who
 /// was talking reads `an agent`, and the row has to be rebuilt when the name arrives — otherwise the
@@ -260,10 +296,22 @@ struct RowShown {
     client: Option<(String, String)>,
 }
 
+/// **One lesson row's own state**, as [`RowsShown`] compares it. A lesson's row is shorter than a
+/// wish's — one line and its reason — so what decides the rebuild is smaller too. **Whether it is
+/// unfolded is part of it**: the reason and the two answers exist only in the unfolded body, so a
+/// row whose fold changed is a different subtree.
+#[derive(Clone, PartialEq, Eq)]
+struct LessonShown {
+    id: String,
+    unfolded: bool,
+    state: crate::present::LessonState,
+    note: Option<String>,
+}
+
 impl RowsShown {
-    fn of(wishes: &Wishes, open: &WishOpenRows, client: Option<&crate::present::ClientName>) -> RowsShown {
-        RowsShown(
-            wishes
+    fn of(wishes: &Wishes, lessons: &crate::present::Lessons, open: &WishOpenRows, client: Option<&crate::present::ClientName>) -> RowsShown {
+        RowsShown {
+            wishes: wishes
                 .queued
                 .iter()
                 .map(|q| RowShown {
@@ -277,7 +325,17 @@ impl RowsShown {
                     client: client.map(|c| (c.name.clone(), c.version.clone())),
                 })
                 .collect(),
-        )
+            lessons: lessons
+                .queued
+                .iter()
+                .map(|q| LessonShown {
+                    id: q.lesson.id.clone(),
+                    unfolded: open.is_open(&q.lesson.id),
+                    state: q.state,
+                    note: q.note.clone(),
+                })
+                .collect(),
+        }
     }
 }
 
@@ -320,14 +378,20 @@ fn follow_the_search_lines(wishes: Option<Res<Wishes>>, mut lines: Query<(&mut T
 fn follow_the_rows(
     mut commands: Commands,
     wishes: Option<Res<Wishes>>,
+    lessons: Option<Res<crate::present::Lessons>>,
     open: Option<Res<WishOpenRows>>,
     client: Option<Res<crate::present::AgentClient>>,
     lists: Query<(Entity, Option<&RowsShown>), With<WishRows>>,
-    rows: Query<Entity, With<WishRow>>,
+    rows: Query<Entity, With<RowOf>>,
 ) {
     let (Some(wishes), Some(open)) = (wishes, open) else { return };
+    // **A build with no lesson queue still lists the wishes**: the queue is a resource the editor
+    // adds, and a harness that did not is a build where no lesson can be proposed, not one where the
+    // block is empty.
+    let empty = crate::present::Lessons::default();
+    let lessons = lessons.as_deref().unwrap_or(&empty);
     let client = client.as_deref().and_then(|c| c.0.as_ref());
-    let now = RowsShown::of(&wishes, &open, client);
+    let now = RowsShown::of(&wishes, lessons, &open, client);
     for (list, built) in &lists {
         if built.is_some_and(|built| *built == now) {
             continue;
@@ -338,6 +402,9 @@ fn follow_the_rows(
         commands.entity(list).insert(now.clone()).with_children(|list| {
             for queued in &wishes.queued {
                 spawn_a_row(list, queued, &open, client);
+            }
+            for queued in &lessons.queued {
+                spawn_a_lesson_row(list, queued, &open);
             }
         });
     }
@@ -355,6 +422,7 @@ fn spawn_a_row(
     let unfolded = open.is_open(&id);
     let answered = queued.state;
     list.spawn((
+        RowOf,
         WishRow { id: id.clone(), kind: RowKind::Wish },
         WishOf(id.clone()),
         Name::new(format!("wish {}", queued.wish.id)),
@@ -476,6 +544,158 @@ fn spawn_a_row(
     });
 }
 
+/// **A lesson's row**: on one line, whose it is and the line it would add; unfoldable to its reason
+/// and the two answers (AG-06, #351).
+///
+/// **It reuses the list's own shapes** — `RowOf`, `WishOf`, `WishUnfold`, `WishTitle`, `WishField`,
+/// `WishBody` — so the block's fold, its row title and its fields are one implementation for both
+/// kinds. Only the kind's word, the answer's own names and the two buttons are a lesson's.
+fn spawn_a_lesson_row(list: &mut ChildSpawnerCommands, queued: &crate::present::QueuedLesson, open: &WishOpenRows) {
+    let id = queued.lesson.id.clone();
+    let answered = queued.state;
+    let unfolded = open.is_open(&id);
+    list.spawn((
+        RowOf,
+        WishRow { id: id.clone(), kind: RowKind::Lesson },
+        WishOf(id.clone()),
+        Name::new(format!("lesson {}", queued.lesson.id)),
+        Node {
+            flex_direction: FlexDirection::Column,
+            width: Val::Percent(100.0),
+            flex_shrink: 0.0,
+            row_gap: Val::Px(crate::chrome::GAP_TIGHT),
+            ..default()
+        },
+    ))
+    .with_children(|row| {
+        row.spawn((
+            WishUnfold,
+            WishOf(id.clone()),
+            // CHROME-OK: the row is a fold, not a chip or a list row: its own header is the whole unfold target and wears no rest/hover/selected states of its own.
+            bevy::ui_widgets::Button,
+            Hovered::default(),
+            Node {
+                flex_direction: FlexDirection::Column,
+                width: Val::Percent(100.0),
+                flex_shrink: 0.0,
+                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
+                ..default()
+            },
+        ))
+        .observe(unfold_this_row)
+        .with_children(|header| {
+            header
+                .spawn(Node {
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    column_gap: Val::Px(crate::chrome::GAP_TIGHT),
+                    flex_shrink: 0.0,
+                    ..default()
+                })
+                .with_children(|line| {
+                    line.spawn((
+                        Text::new(RowKind::Lesson.label()),
+                        TextColor(crate::chrome::ink().dim),
+                        crate::chrome::typed(crate::chrome::text::LABEL),
+                    ));
+                    line.spawn((
+                        LessonTitle,
+                        WishOf(id.clone()),
+                        Text::new(lesson_title(queued)),
+                        TextColor(crate::chrome::ink().text),
+                        crate::chrome::typed(crate::chrome::text::BODY),
+                        Node { flex_grow: 1.0, min_width: Val::Px(0.0), ..default() },
+                        TextLayout::new(Justify::Left, LineBreak::WordBoundary),
+                    ));
+                });
+            if answered != crate::present::LessonState::Waiting {
+                header.spawn((
+                    LessonAnswered(answered),
+                    WishOf(id.clone()),
+                    Text::new(lesson_answer_says(answered)),
+                    TextColor(crate::chrome::ink().dim),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
+                ));
+            }
+        });
+        // **The body is there only while the row is unfolded**, as a wish's is: the reason and the two
+        // answers are one press away, and the block stays a list of one-line rows until a person asks
+        // for more.
+        if !unfolded {
+            return;
+        }
+        row.spawn((
+            WishBody,
+            WishOf(id.clone()),
+            Node { flex_direction: FlexDirection::Column, flex_shrink: 0.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+        ))
+        .with_children(|body| {
+            lesson_line_of(body, "WHY", &id, &queued.lesson.why);
+            if let Some(note) = &queued.note {
+                body.spawn((
+                    Text::new(note.clone()),
+                    TextColor(crate::chrome::ink().danger),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
+                    Node { flex_shrink: 0.0, ..default() },
+                    TextLayout::new(Justify::Left, LineBreak::WordBoundary),
+                ));
+            }
+            if queued.state != crate::present::LessonState::Waiting {
+                return;
+            }
+            body.spawn(Node {
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(crate::chrome::GAP_TIGHT),
+                flex_shrink: 0.0,
+                ..default()
+            })
+            .with_children(|answers| {
+                crate::chrome::button(answers, (LessonKeep, WishOf(id.clone())), "Keep", crate::chrome::Severity::Plain)
+                    .observe(keep_this_lesson);
+                crate::chrome::button(answers, (LessonDiscard, WishOf(id.clone())), "Discard", crate::chrome::Severity::Plain)
+                    .observe(discard_this_lesson);
+            });
+        });
+    });
+}
+
+/// **A lesson row's one-line title**: whose it is and the line it would add. The line is the whole of
+/// what a person decides by, so it is the title, not the reason.
+pub fn lesson_title(queued: &crate::present::QueuedLesson) -> String {
+    let who = if queued.lesson.client.trim().is_empty() { "an agent".to_owned() } else { queued.lesson.client.trim().to_owned() };
+    format!("{who}: {}", queued.lesson.lesson.trim())
+}
+
+/// The words a lesson's answer is written in, so the row and the file's own line agree about what the
+/// person did.
+pub fn lesson_answer_says(state: crate::present::LessonState) -> String {
+    match state {
+        crate::present::LessonState::Waiting => String::new(),
+        crate::present::LessonState::Kept => "you kept it, so the next agent reads it".to_owned(),
+        crate::present::LessonState::Discarded => "you discarded it".to_owned(),
+    }
+}
+
+/// One `NAME  words` line of a lesson row, its own name on it so a test can ask for it.
+fn lesson_line_of(parent: &mut ChildSpawnerCommands, name: &'static str, id: &str, words: &str) {
+    parent
+        .spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::FlexStart, flex_shrink: 0.0, ..default() })
+        .with_children(|line| {
+            crate::chrome::row_label(line, crate::editor::READOUT_LABEL_W, name);
+            line.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() })
+                .with_children(|col| {
+                    col.spawn((
+                        Text::new(words.to_owned()),
+                        TextColor(crate::chrome::ink().text),
+                        crate::chrome::typed(crate::chrome::text::BODY),
+                        LessonField { name },
+                        WishOf(id.to_owned()),
+                        TextLayout::new(Justify::Left, LineBreak::WordBoundary),
+                    ));
+                });
+        });
+}
+
 /// One `NAME  words` line of a row, carrying the field's own name so a test can ask for it.
 fn line_of(parent: &mut ChildSpawnerCommands, name: &'static str, id: &str, words: &str) {
     parent
@@ -565,6 +785,104 @@ fn discard_this_wish(
     let title = queued.wish.title();
     if let Some(state) = state.as_mut() {
         state.status.note(format!("discarded {title}"));
+    }
+}
+
+// ── a lesson's two answers (AG-06, #351) ────────────────────────────────────────────────────────
+
+/// **Keep**: the person's own act, and the only thing that appends a lesson to the guide.
+///
+/// **The editor writes the file, once, here.** The line is built by
+/// [`bevy_grimoire_core::lesson::Lesson::line`] and put under `LESSONS_HEADING` by
+/// [`bevy_grimoire_core::lesson::append`], so both are the core's rules and this is only the write.
+///
+/// **The grant follows what was already allowed.** If the guide was allowed before the append — by
+/// its exact content or by project trust — the new content is allowed too, because the person chose
+/// the one line that changed. **If it was withheld, it stays withheld**: keeping one line must not
+/// allow text the person never reviewed, which is the rule AG-03 exists for.
+///
+/// **A failed write is not an answer.** The lesson stays waiting and the row says why, because a
+/// lesson marked kept whose line is not in the file is a claim about a file that is wrong.
+fn keep_this_lesson(
+    activate: On<Activate>,
+    buttons: Query<&WishOf, With<LessonKeep>>,
+    mut lessons: Option<ResMut<crate::present::Lessons>>,
+    mut state: Option<ResMut<crate::editor::EditorState>>,
+    store_root: Option<Res<crate::trusted::StoreRoot>>,
+) {
+    let Ok(button) = buttons.get(activate.entity) else { return };
+    let id = button.0.clone();
+    let Some(lessons) = lessons.as_mut() else { return };
+    let Some(queued) = lessons.queued.iter_mut().find(|q| q.lesson.id == id) else { return };
+    if queued.state != crate::present::LessonState::Waiting {
+        return;
+    }
+    let root = queued.root.clone();
+    let guide = crate::agent_guide::project_file(&root);
+    let store = state.as_deref().and_then(|s| s.trust.file.clone());
+    let root_res = store_root.as_deref();
+    // **What the guide allowed before the append decides whether the new text is allowed**: read the
+    // file as it is now, and the store's answer for that content.
+    let before = match crate::project_page::guide_on_disk(&guide) {
+        Ok(text) => text,
+        Err(e) => {
+            queued.note = Some(format!("{} could not be read: {e}. Nothing was written.", guide.display()));
+            if let Some(state) = state.as_mut() {
+                state.status.problem(queued.note.clone().unwrap_or_default());
+            }
+            return;
+        }
+    };
+    let was_allowed = crate::project_page::guide_is_allowed(root_res, store.as_deref(), &root, &before);
+    let line = queued.lesson.line(&crate::labels::date_today());
+    let after = bevy_grimoire_core::lesson::append(&before, &line);
+    match bevy_grimoire_core::atomic_file::write(&guide, &after) {
+        Ok(()) => {
+            queued.state = crate::present::LessonState::Kept;
+            queued.note = None;
+            if let Some(state) = state.as_mut() {
+                state.status.note(if was_allowed {
+                    "kept the lesson, and allowed the guide it is in"
+                } else {
+                    "kept the lesson; the guide is still waiting to be allowed"
+                });
+            }
+            // **Only content that was already allowed is granted.** A withheld guide the person has
+            // not read stays withheld however many lines they keep.
+            if was_allowed
+                && let Err(e) = crate::project_page::grant_in_store(root_res, store.as_deref(), &root, &after)
+                && let Some(state) = state.as_mut()
+            {
+                state.status.problem(format!("the lesson was kept, but the guide was not allowed: {e}"));
+            }
+        }
+        Err(e) => {
+            queued.note = Some(format!("the lesson was not written: {e}"));
+            if let Some(state) = state.as_mut() {
+                state.status.problem(queued.note.clone().unwrap_or_default());
+            }
+        }
+    }
+}
+
+/// **Discard**: the lesson is dropped, and the file is not touched.
+fn discard_this_lesson(
+    activate: On<Activate>,
+    buttons: Query<&WishOf, With<LessonDiscard>>,
+    mut lessons: Option<ResMut<crate::present::Lessons>>,
+    mut state: Option<ResMut<crate::editor::EditorState>>,
+) {
+    let Ok(button) = buttons.get(activate.entity) else { return };
+    let Some(lessons) = lessons.as_mut() else { return };
+    let id = button.0.clone();
+    let Some(queued) = lessons.queued.iter_mut().find(|q| q.lesson.id == id) else { return };
+    if queued.state != crate::present::LessonState::Waiting {
+        return;
+    }
+    queued.state = crate::present::LessonState::Discarded;
+    let title = queued.lesson.lesson.clone();
+    if let Some(state) = state.as_mut() {
+        state.status.note(format!("discarded `{title}`"));
     }
 }
 
@@ -715,13 +1033,16 @@ pub fn chip_says(waiting: usize) -> String {
 /// on screen), and the count otherwise.
 fn follow_the_chip(
     wishes: Option<Res<Wishes>>,
+    lessons: Option<Res<crate::present::Lessons>>,
     blocks: Query<(), With<crate::familiar::Familiar>>,
     mut chips: Query<(&mut Node, &mut ChipShown), With<WishChip>>,
     mut texts: Query<&mut Text, With<WishChipText>>,
 ) {
     let Some(wishes) = wishes else { return };
     let hiding = blocks.is_empty();
-    let said = if hiding { chip_says(wishes.waiting()) } else { String::new() };
+    // **Wishes and lessons are one count**: both are rows in the block, and both wait for the person.
+    let waiting = wishes.waiting() + lessons.as_deref().map_or(0, crate::present::Lessons::waiting);
+    let said = if hiding { chip_says(waiting) } else { String::new() };
     for (mut node, mut shown) in &mut chips {
         let display = if said.is_empty() { Display::None } else { Display::Flex };
         if node.display != display {
@@ -745,13 +1066,18 @@ fn open_the_block_on_click(
     chips: Query<(), With<WishChip>>,
     rows: Query<Entity, With<crate::familiar::FamiliarItem>>,
     wishes: Option<Res<Wishes>>,
+    lessons: Option<Res<crate::present::Lessons>>,
     mut open: Option<ResMut<WishOpenRows>>,
     mut commands: Commands,
 ) {
     if !chips.contains(click.entity) {
         return;
     }
-    let Some(first) = wishes.as_deref().and_then(Wishes::first_waiting) else { return };
+    let first = wishes
+        .as_deref()
+        .and_then(Wishes::first_waiting)
+        .or_else(|| lessons.as_deref().and_then(crate::present::Lessons::first_waiting));
+    let Some(first) = first else { return };
     let first = first.to_owned();
     if let Some(open) = open.as_mut() {
         open.open(&first);

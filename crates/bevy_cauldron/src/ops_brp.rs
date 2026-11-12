@@ -190,6 +190,21 @@ impl AfterRef {
     }
 }
 
+/// **The parameters of `grimoire/lesson`** (AG-06, #351).
+///
+/// A lesson is one line for the project's guide, learned from the task just handed back. **The call
+/// queues it and writes nothing**: only a person's Keep appends the line.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LessonParams {
+    /// **The hand-back the lesson follows**: a presentation's id, or a resolved note's.
+    pub after: AfterRef,
+    /// The one line the guide gains.
+    pub lesson: String,
+    /// Why it is worth the line.
+    pub why: String,
+}
+
 /// **The parameters of `grimoire/operation_preview`.**
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -850,6 +865,8 @@ fn editor_state(
     presenting: Option<Res<crate::present::Presenting>>,
     // **The agent's wishes this session** (#353): what it found hard, waiting to be read.
     wishes: Option<Res<crate::present::Wishes>>,
+    // **The lessons it proposed this session** (AG-06, #351), waiting to be kept or discarded.
+    lessons: Option<Res<crate::present::Lessons>>,
     // **Which screen the editor is on, which nothing else here says (E-078).** The map, the door and
     // the mode all read the same on the menu as in the editor — `Door` and `Mode` are `init_resource`d
     // at build and a loaded `OpenMap` is a resource either way — so before this, an agent could not
@@ -1087,6 +1104,11 @@ fn editor_state(
         // here. The MCP server holds no wish state: this is the record, and the editor is where a
         // hand-back and its wish are both known.
         "wishes": wishes.as_deref().map(|w| w.state_json()).unwrap_or(Value::Null),
+        // **The lessons the agent proposed this session** (AG-06, #351): `[{id, after, state}]`,
+        // oldest first. `kept` means the line is in the guide — the editor wrote it — and
+        // `discarded` that the person dropped it. Like a wish, a lesson is held here and not by the
+        // MCP server, because it cites a hand-back and hand-backs live in the editor.
+        "lessons": lessons.as_deref().map(|l| l.state_json()).unwrap_or(Value::Null),
         "frame": frame_json(diagnostics.as_deref(), busy.as_deref()),
         // **The game's verdict on the last reload** (S3.5): null, "pending", or {ok, message, at_unix_ms}.
         "game": game.as_deref().map_or(Value::Null, |g| g.state_json(open.as_ref().map(|o| o.map_path.as_path()))),
@@ -3079,6 +3101,26 @@ impl Plugin for OpsBridgePlugin {
             })),
             editor_wish,
         );
+        app.add_debug_command(
+            DebugCommandInfo::new(
+                "grimoire/lesson",
+                "One line for the project's guide, learned from the task just handed back: the \
+                 hand-back it follows, the lesson and why. Queued in the editor and read from \
+                 grimoire/state's lessons; a person keeps or discards it in the AGENT block, and \
+                 only Keep writes the line. One lesson per hand-back, refused at the door and \
+                 never trimmed; a project with no guide is refused with the reason.",
+            )
+            .params(
+                "after: {\"presentation\": \"present-1\"} or {\"note\": \"n3\"}; lesson, one line \
+                     under the limit its schema states; why, also one line, under its own.",
+            )
+            .example(json!({
+                "after": {"presentation": "present-1"},
+                "lesson": "Measure the walls before placing a door: a door placed blind overlapped one.",
+                "why": "the overlap was found by rendering, three calls after the placement",
+            })),
+            editor_lesson,
+        );
     }
 }
 
@@ -3358,6 +3400,112 @@ fn editor_wish(
         "after": p.after.recorded_id(),
         "state": "waiting",
         "queued": wishes.queued.len(),
+    }))
+}
+
+/// **`grimoire/lesson` — one line for the project's guide, learned from the task** (AG-06, #351).
+///
+/// **Refused at the door, never trimmed**: an empty field, one past its limit, or a newline is a
+/// refusal naming the field and the limit. **The call writes nothing.** It queues the proposal where a
+/// person reads it and answers Keep or Discard; only Keep appends the line to the guide, which is why
+/// an agent cannot instruct itself.
+///
+/// **One lesson per hand-back**, asked with the record's own key — the same rule the wishes keep, and
+/// for the same reason: a hand-back carries one reflection.
+#[allow(clippy::too_many_arguments)]
+fn editor_lesson(
+    In(p): In<LessonParams>,
+    project: Option<Res<crate::project::Project>>,
+    open: Option<Res<crate::project::OpenMap>>,
+    handbacks: Option<Res<crate::present::HandBacks>>,
+    mut lessons: Option<ResMut<crate::present::Lessons>>,
+    client: Option<Res<crate::present::AgentClient>>,
+    mut activity: Option<ResMut<crate::familiar::AgentActivity>>,
+    time: Option<Res<Time<Real>>>,
+) -> Result<Value, String> {
+    if let (Some(activity), Some(time)) = (activity.as_mut(), time) {
+        activity.hear("lesson", time.elapsed_secs_f64());
+    }
+    let Some(lessons) = lessons.as_mut() else {
+        return Err("this editor keeps no lesson queue, so a lesson would be lost".to_owned());
+    };
+    // **The fields first**, so an agent that sent a paragraph is told that rather than that its
+    // hand-back is unknown.
+    let mut lesson = bevy_grimoire_core::lesson::Lesson {
+        after: p.after.recorded_id(),
+        lesson: p.lesson,
+        why: p.why,
+        ..bevy_grimoire_core::lesson::Lesson::default()
+    };
+    lesson.validate()?;
+    let Some(project) = project.as_deref() else {
+        return Err("no project is open, so there is no hand-back record to cite and no guide to keep a lesson in".to_owned());
+    };
+    let root = project.root.as_path();
+    let (kind, cited) = match &p.after {
+        AfterRef::Presentation(id) => (
+            crate::present::HandBackKind::Presentation,
+            handbacks.as_ref().and_then(|h| h.cited(crate::present::HandBackKind::Presentation, id, root, None).cloned()),
+        ),
+        AfterRef::Note(id) => {
+            let map = open.as_deref().map(|open| open.map_path.as_path());
+            (
+                crate::present::HandBackKind::Note,
+                handbacks
+                    .as_ref()
+                    .and_then(|h| h.cited(crate::present::HandBackKind::Note, id, root, map).cloned()),
+            )
+        }
+    };
+    let Some(cited) = cited else {
+        if let AfterRef::Presentation(id) | AfterRef::Note(id) = &p.after
+            && handbacks.as_ref().is_some_and(|h| h.elsewhere(kind, id, root).is_some())
+        {
+            return Err(format!(
+                "`{id}` was handed back in another project. A lesson follows a hand-back of the \
+                 project it is about, and the line lands in that project's guide."
+            ));
+        }
+        return Err(match &p.after {
+            AfterRef::Presentation(id) => format!(
+                "`{id}` was never handed back in this editor session. A presentation hands \
+                 back, and a lesson cites the one it follows."
+            ),
+            AfterRef::Note(id) => format!(
+                "`{id}` is not a note this editor session handed back. A note resolved in an \
+                 earlier session, or on another map, is not a hand-back anyone watched here, and \
+                 a lesson cites the hand-back it follows."
+            ),
+        });
+    };
+    if lessons.has_lesson_for(&cited.key) {
+        return Err(format!(
+            "`{}` already has a lesson, and a hand-back carries one. Read the queued ones in \
+             grimoire_state.lessons.",
+            lesson.after
+        ));
+    }
+    // **Who is talking**, so the line carries a name the agent did not type.
+    lesson.client = client
+        .as_deref()
+        .and_then(|c| c.0.as_ref())
+        .map(|c| format!("{} {}", c.name, c.version))
+        .unwrap_or_default();
+    // **A project with no guide has nowhere to keep one**, and the person is the only one who can
+    // make the file: saying so is what tells the agent to ask them rather than to retry.
+    let guide = crate::agent_guide::project_file(root);
+    if !guide.exists() {
+        return Err(
+            "this project has no agent guide; ask the person to create one on the project page".to_owned(),
+        );
+    }
+    let id = lessons.take(lesson.clone(), cited.key.clone(), root.to_path_buf());
+    Ok(json!({
+        "id": id,
+        "after": lesson.after,
+        "state": "waiting",
+        "line": lesson.line(&crate::labels::date_today()),
+        "queued": lessons.queued.len(),
     }))
 }
 
