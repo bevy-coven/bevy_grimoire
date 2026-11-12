@@ -15,9 +15,9 @@
 //!   readout they have keeps working; only the parent moved.
 //! - **Sound** — the audio panel: `AUDIO` with the project's cues listed in every build (`world_lists`, NV-11, #392), and the audition
 //!   controls when the build has `bevy_siren`. A build without that crate says so in a sentence beside the list.
-//! - **Not here: water and forest.** They are operations (`water_place`, `forest_scatter`) with no panel today, so
-//!   there is nothing of theirs to move; `light_view.rs` and `forest_view.rs` are the viewport's drawing of lights and
-//!   forests, not panels. That is recorded on the issue rather than papered over with an empty heading.
+//! - **Water and forest are read here and written on the terrain line** (NV-11, #393, #394): `WATER` and `FOREST` list what the map's
+//!   plan and forest files hold. They are operations (`water_place`, `forest_scatter`) and a second way to place them would be a second
+//!   path to one operation; what the World workspace adds is the thing the line never showed, which is what the map holds now.
 //!
 //! # Spawned on demand
 //!
@@ -104,6 +104,9 @@ fn spawn_world_panel(mut commands: Commands, frame: Res<Frame>) {
 
             // **Water (NV-11, #393):** what the map's water plan holds. Placed on the terrain line above.
             block(p).with_children(crate::world_lists::spawn_water_section);
+
+            // **Forest (NV-11, #394):** what the map's forest holds. Planted on the terrain line above.
+            block(p).with_children(crate::world_lists::spawn_forest_section);
 
             // **Lights (#103, NV-11 #395):** the fixtures the map carries, in every build; the family crate's section adds the pool's
             // budget from where the camera looks, and draws the heading itself. After the terrain line, which keeps its place.

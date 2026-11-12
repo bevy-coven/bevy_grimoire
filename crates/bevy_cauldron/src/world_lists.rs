@@ -23,6 +23,7 @@ use bevy_grimoire_core::map::Map;
 use bevy_grimoire_core::water::WaterPlan;
 
 use crate::chrome;
+use crate::ops_forest::Forest;
 use crate::project::{OpenMap, Project};
 use crate::screen::Screen;
 use crate::workspace::Workspace;
@@ -33,12 +34,23 @@ const READ_SECS: f32 = 0.5;
 /// What the WATER list says when the map has none.
 pub const NO_WATER: &str = "no water placed";
 
-/// How the terrain line places water: what the WATER heading tells a person who wants to add some.
-pub const WATER_HINT: &str = "place it on the TERRAIN line: water spring|sink <x> <z> <rate_m3_s> <radius_m>, water lake <x> <z> <radius_m> <level_m>, water clear";
+/// How the terrain line places water, in a line: the heading's one-line note. The line's own refusal spells the whole syntax, and a note that
+/// wrapped over three lines pushed the headings below it off the panel's first screen.
+pub const WATER_HINT: &str = "set on the TERRAIN line: water ...";
 
 /// The WATER section's list, in the World workspace's panel.
 #[derive(Component, Clone, Copy)]
 pub struct WaterList;
+
+/// What the FOREST list says when the map has none.
+pub const NO_TREES: &str = "no trees planted";
+
+/// How the terrain line plants a forest, in a line (see [`WATER_HINT`]).
+pub const FOREST_HINT: &str = "set on the TERRAIN line: forest ...";
+
+/// The FOREST section's list, in the World workspace's panel.
+#[derive(Component, Clone, Copy)]
+pub struct ForestList;
 
 /// The most characters of a light's settings one row shows before it is cut with an ellipsis. A row is one line of the panel.
 const ROW_CHARS: usize = 72;
@@ -50,7 +62,7 @@ pub const LIGHTS_KEY: &str = "bevy_lights";
 pub const NO_LIGHTS: &str = "no light fixtures on this map";
 
 /// Where a light is set: not here.
-pub const LIGHTS_HINT: &str = "a light is a placement's bevy_lights settings; set one with family_set on the piece";
+pub const LIGHTS_HINT: &str = "set per piece with family_set";
 
 /// The LIGHTS section's list, in the World workspace's panel.
 #[derive(Component, Clone, Copy)]
@@ -75,7 +87,12 @@ impl Plugin for WorldListsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (refresh_water.run_if(Workspace::world_is_open), refresh_lights.run_if(Workspace::world_is_open), refresh_cues.run_if(Workspace::sound_is_open))
+            (
+                refresh_water.run_if(Workspace::world_is_open),
+                refresh_forest.run_if(Workspace::world_is_open),
+                refresh_lights.run_if(Workspace::world_is_open),
+                refresh_cues.run_if(Workspace::sound_is_open),
+            )
                 .run_if(in_state(Screen::Editor)),
         );
     }
@@ -86,6 +103,13 @@ pub fn spawn_water_section(p: &mut ChildSpawnerCommands) {
     chrome::section(p, "WATER");
     p.spawn(bevy_gooey::label(WATER_HINT));
     p.spawn((WaterList, list_node()));
+}
+
+/// **The FOREST section**: a heading, how to plant one, and what the map's forest holds.
+pub fn spawn_forest_section(p: &mut ChildSpawnerCommands) {
+    chrome::section(p, "FOREST");
+    p.spawn(bevy_gooey::label(FOREST_HINT));
+    p.spawn((ForestList, list_node()));
 }
 
 /// **What reading a map's file found**: none, the value, or why it did not read.
@@ -122,6 +146,20 @@ pub fn water_rows(plan: &WaterPlan) -> Vec<String> {
     if rows.is_empty() {
         rows.push(NO_WATER.to_owned());
     }
+    rows
+}
+
+/// **The forest in words**: how many trees, then a row per species with its count, in alphabetical order.
+pub fn forest_rows(forest: &Forest) -> Vec<String> {
+    if forest.trees.is_empty() {
+        return vec![NO_TREES.to_owned()];
+    }
+    let mut counts: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for tree in &forest.trees {
+        *counts.entry(tree.species.as_str()).or_default() += 1;
+    }
+    let mut rows = vec![format!("{} tree(s)", forest.trees.len())];
+    rows.extend(counts.into_iter().map(|(species, n)| format!("{species}: {n}")));
     rows
 }
 
@@ -265,11 +303,31 @@ fn refresh_water(
 ) {
     keep(&mut commands, &time, &mut shown, &lists, || {
         let (project, open) = (project.as_deref()?, open.as_deref()?);
-        let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.ron")?;
-        let path = project.grimoire_dir.join("water").join(format!("{name}.ron"));
-        Some(match read_file::<WaterPlan>(&path, &format!("water/{name}.ron")) {
+        let path = crate::ops_water::plan_path_of(project, open)?;
+        let shown_as = format!("water/{}", path.file_name()?.to_string_lossy());
+        Some(match read_file::<WaterPlan>(&path, &shown_as) {
             Read::Value(plan) => water_rows(&plan),
             Read::Absent => vec![NO_WATER.to_owned()],
+            Read::Broken(why) => vec![why],
+        })
+    });
+}
+
+fn refresh_forest(
+    mut commands: Commands,
+    time: Res<Time>,
+    project: Option<Res<Project>>,
+    open: Option<Res<OpenMap>>,
+    lists: Query<(Entity, Has<Children>), With<ForestList>>,
+    mut shown: Local<(Option<Vec<String>>, f32)>,
+) {
+    keep(&mut commands, &time, &mut shown, &lists, || {
+        let (project, open) = (project.as_deref()?, open.as_deref()?);
+        let name = &open.map.name;
+        let path = project.grimoire_dir.join("forest").join(format!("{name}.ron"));
+        Some(match read_file::<Forest>(&path, &format!("forest/{name}.ron")) {
+            Read::Value(forest) => forest_rows(&forest),
+            Read::Absent => vec![NO_TREES.to_owned()],
             Read::Broken(why) => vec![why],
         })
     });

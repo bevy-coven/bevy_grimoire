@@ -39,11 +39,11 @@ the test fails for a miss with none.
 | A tile | press Cmd/Ctrl+4 (the Kit workspace), click `TILES`, click `TILES (2)`, click `crate`, press Enter (open it) | 2 | 3 | yes | 3, 2, yes | met — driven: Cmd+P, the name, Enter, 8 presses |
 | A composition | press Cmd/Ctrl+4 (the Kit workspace), click `COMPOSE`, click `barrel  —  1 member(s), bounded 1.0x1.0x1.0` | 1 | 2 | yes | 2, 1, yes | met — driven: Cmd+P, the name, Enter, 7 presses |
 | A rig (the Rigs bench) | press Cmd/Ctrl+5 (the Animation workspace) | 1 | 0 | yes | 4, 0, no | met — 1 press(es) |
-| One of a rig's clips | press Cmd/Ctrl+5 (the Animation workspace), click a row in the bench's list | 1 | 0 | **no** — a clip is chosen from a list inside the bench, which Cmd/Ctrl+5 opens; this fixture has no rig, so its list reads ["no rigs in this project yet"] | 0, 0, no | met — driven: Cmd+P, the name, Enter, 8 presses |
+| One of a rig's clips | press Cmd/Ctrl+5 (the Animation workspace), click a row in the bench's list | 1 | 0 | **no** — by hand a clip is chosen on the stage chips of a rig the bench has selected, which Cmd/Ctrl+5 opens; this fixture has no rig, so the bench's list reads ["no rigs in this project yet"] and there is no chip to click (the finder route in the Target column is measured on a project that has a rig) | 0, 0, no | met — driven: Cmd+P, the name, Enter, 8 presses |
 | A sound cue | press Cmd/Ctrl+6 (the Sound workspace) | 1 | 0 | yes | 0, 60, no | met — 1 press(es) |
 | A map's terrain | press Cmd/Ctrl+3 (the World workspace) | 1 | 0 | yes | 0, 5, yes | met — 1 press(es) |
 | A map's water | press Cmd/Ctrl+3 (the World workspace) | 1 | 0 | yes | 0, 60, no | met — 1 press(es) |
-| A map's forest | press Cmd/Ctrl+3 (the World workspace) | 1 | 0 | **no** — forest is an operation (`forest_scatter`) written through the World workspace's terrain line; it has no panel of its own, so there is nothing to walk to | 0, 60, no | **missed** — 1 press(es) and 0 pointer action(s) against one press, and it does not arrive (#394) |
+| A map's forest | press Cmd/Ctrl+3 (the World workspace) | 1 | 0 | yes | 0, 60, no | met — 1 press(es) |
 | A map's lights | press Cmd/Ctrl+3 (the World workspace) | 1 | 0 | yes | 0, 60, no | met — 1 press(es) |
 | A game data file | wheel down to `DATA` | 0 | 4 | yes | 0, 5, yes | met — driven: Cmd+P, the name, Enter, 8 presses |
 | The problems list | press Cmd/Ctrl+Shift+X (show the problems) | 1 | 0 | yes | 0, 8, yes | met — 1 press(es) |
@@ -55,4 +55,4 @@ the test fails for a miss with none.
 
 ## What the numbers say
 
-2 of 20 destinations cannot be reached at all. Of the 18 that can, 2 are where the editor already starts, 9 are reached by keys alone, and 7 need the pointer. The inspector moves only by the wheel, so scrolling to a heading costs between 4 and 5 notches. Set against that, a workspace model asks for any workspace in one press, any named thing in at most `Cmd+P`, its name and `Enter`, and one press back: 1 of these 18 cost more than one press and 7 of them need the pointer.
+1 of 20 destinations cannot be reached at all. Of the 19 that can, 2 are where the editor already starts, 10 are reached by keys alone, and 7 need the pointer. The inspector moves only by the wheel, so scrolling to a heading costs between 4 and 5 notches. Set against that, a workspace model asks for any workspace in one press, any named thing in at most `Cmd+P`, its name and `Enter`, and one press back: 1 of these 19 cost more than one press and 7 of them need the pointer.

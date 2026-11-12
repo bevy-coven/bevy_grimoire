@@ -64,17 +64,27 @@ fn path_of(ctx: &Ctx, map: &str) -> Result<std::path::PathBuf, Refusal> {
     if map.is_empty() || map.contains(['/', '\\', '.']) {
         return Err(Refusal::new(format!("`{map}` is not a map name. Nothing was written.")));
     }
-    Ok(project.grimoire_dir.join("water").join(format!("{map}.ron")))
+    Ok(plan_path(project, map))
 }
 
 fn read(ctx: &Ctx, map: &str) -> Option<String> {
     std::fs::read_to_string(path_of(ctx, map).ok()?).ok()
 }
 
+/// **The water plan file of the map called `name`**: `<grimoire_dir>/water/<name>.ron`. The one place the path is built.
+pub fn plan_path(project: &crate::project::Project, name: &str) -> std::path::PathBuf {
+    project.grimoire_dir.join("water").join(format!("{name}.ron"))
+}
+
+/// **The water plan file of the open map**, named after the map's own file (`<name>.map.ron`).
+pub fn plan_path_of(project: &crate::project::Project, open: &crate::project::OpenMap) -> Option<std::path::PathBuf> {
+    let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.ron")?;
+    Some(plan_path(project, name))
+}
+
 /// **The saved water plan of the open map**, or `None` when it has none.
 pub fn plan_of(project: &crate::project::Project, open: &crate::project::OpenMap) -> Option<WaterPlan> {
-    let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.ron")?;
-    ron::from_str(&std::fs::read_to_string(project.grimoire_dir.join("water").join(format!("{name}.ron"))).ok()?).ok()
+    ron::from_str(&std::fs::read_to_string(plan_path_of(project, open)?).ok()?).ok()
 }
 
 /// **Place a spring, a sink or a lake, or clear the map's water.**

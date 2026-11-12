@@ -471,7 +471,7 @@ fn a_rigs_clip() -> Destination {
         steps,
         cost: d.cost,
         reach: Reach::Unreachable(format!(
-            "a clip is chosen from a list inside the bench, which Cmd/Ctrl+5 opens; this fixture has no rig, so its list reads {rows:?}"
+            "by hand a clip is chosen on the stage chips of a rig the bench has selected, which Cmd/Ctrl+5 opens; this fixture has no rig, so the bench's list reads {rows:?} and there is no chip to click (the finder route in the Target column is measured on a project that has a rig)"
         )),
     }
 }
@@ -823,7 +823,6 @@ fn target_of(what: &str) -> Target {
 /// **The issues filed for a missed target**, by destination (NV-11, #388): a missed target is its own issue, naming the destination and
 /// the route. A miss with no entry here fails the test, so a target cannot be missed quietly.
 const FILED: &[(&str, &str)] = &[
-    ("A map's forest", "#394"),
 ];
 
 // ───────────────────────────── driving the finder ─────────────────────────────
