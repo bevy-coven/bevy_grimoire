@@ -592,6 +592,9 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::session::Session", Ownership::Project),
     // **The files open in the Files workspace** (GD-11, #373): a project's own text, with what a person typed and has not
     // saved yet, so a switch to the Map and back keeps it. Dropped with the project (`files::keep_the_open_files`).
+    // **`Session`: where the pointer last was** (NV-07, #384) is a fact about the window, not about this door — a door change does
+    // not move the mouse, and the first pointer event after one sets it again.
+    ("bevy_cauldron::files::PointerAt", Ownership::Session),
     ("bevy_cauldron::files::Files", Ownership::Project),
     // Derived from the kit's meshes: a different kit means different thumbnails.
     ("bevy_cauldron::thumbs::Thumbnails", Ownership::Project),

@@ -387,5 +387,11 @@ fn a_pieces_used_by_in_the_kit_lists_the_maps_that_place_it() {
     app.world_mut().resource_mut::<Revealing>().request_by_person("test", &Shown::Piece { id: "bed".to_owned() });
     settle(&mut app);
     assert_eq!(*app.world().resource::<Workspace>(), Workspace::Kit, "a piece is shown on the Kit workspace");
-    assert!(drawn(&mut app, "placed in m"), "the Kit's piece pane says which maps place it; on screen: {:?}", on_screen(&mut app));
+    // **On the detail's id row**, as a suffix of the sentence a person already reads there: the pane's controls are placed by a
+    // packer with no give-up arm, so the maps that hold the piece ride that line rather than a row of their own.
+    let shown = on_screen(&mut app);
+    assert!(
+        shown.iter().any(|line| line.starts_with("id  bed") && line.contains("placed in m")),
+        "the Kit's piece pane says which maps place it; on screen: {shown:?}"
+    );
 }
