@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-12
+
+- **gd-11-file-editor** `414939f94` The Files workspace: a file tree and a code editor with schema colours, errors as you type, completion and hover, and a save that never overwrites a change from outside *No clip: visible, not yet recorded: fleet worker*
+
 ## 2026-11-11
 
 - **picker-operations** `e03ea6120` The composition picker's P and Shift+up/down keys are operations an agent calls too (composition_picker_toggle, composition_picker_walk) *No clip: an operation behind existing keys, no new picture; proved by composition_picker_is_an_operation*
