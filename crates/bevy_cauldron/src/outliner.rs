@@ -429,6 +429,7 @@ struct Built {
     nested: bool,
 }
 
+#[allow(clippy::type_complexity)]
 fn build_nodes(
     map: &Map,
     library: &Library,
