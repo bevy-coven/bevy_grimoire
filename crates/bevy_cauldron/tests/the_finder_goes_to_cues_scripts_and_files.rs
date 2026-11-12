@@ -39,11 +39,12 @@ cues:
 ";
 
 /// The same file after an agent adds a cue.
-const MORE_CUES: &str = "\\ncues:
+const MORE_CUES: &str = "\
+cues:
   cues:
   - name: door.creak
   - name: wind.loop
-  - name: bell.ring
+  - name: bell.toll
 ";
 
 fn editor(tag: &str) -> (App, std::path::PathBuf) {

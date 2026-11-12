@@ -356,7 +356,7 @@ fn open_file_on_a_placement_lands_in_files_at_its_line() {
     assert_eq!(*app.world().resource::<Workspace>(), Workspace::Files, "Open file leaves the Map for the Files workspace");
     assert_eq!(files::active_file(app.world().resource::<Session>()).as_deref(), Some(map_rel.as_str()), "on the map's own file");
     let text = std::fs::read_to_string(root.join(&map_rel)).unwrap_or_else(|e| panic!("{e}"));
-    let want = text.lines().position(|l| l.contains("\"bed@0\"")).expect("the map's file writes the placement's id");
+    let want = text.lines().position(|l| (l.contains("id: bed@0") || l.contains("\"bed@0\""))).expect("the map's file writes the placement's id");
     assert_eq!(caret_line(&mut app), want, "the caret is on the line that writes the placement (0-based), not at the top");
 }
 
@@ -380,7 +380,7 @@ fn open_piece_file_lands_in_the_library_at_the_piece() {
     assert_eq!(*app.world().resource::<Workspace>(), Workspace::Files);
     assert_eq!(files::active_file(app.world().resource::<Session>()).as_deref(), Some(piece_rel.as_str()), "on the library's file");
     let text = std::fs::read_to_string(root.join(&piece_rel)).unwrap_or_else(|e| panic!("{e}"));
-    let want = text.lines().position(|l| l.contains("\"bed\"")).expect("the library writes the piece's id");
+    let want = text.lines().position(|l| (l.contains("id: bed") || l.contains("\"bed\""))).expect("the library writes the piece's id");
     assert_eq!(caret_line(&mut app), want, "the caret is on the piece's own entry");
 }
 
