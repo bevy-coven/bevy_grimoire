@@ -173,13 +173,20 @@ pub fn yaml_path(rom: &Path) -> Option<PathBuf> {
     Some(rom.with_file_name(format!("{stem}.{YAML_EXT}")))
 }
 
+/// **One file a migration has work for**: its path on disk, its path relative to the project root with `/`, and the kind it is.
+pub type Planned = (PathBuf, String, &'static FileKind);
+
+/// **What a plan answers**: the files, and the folders the walk could not list (as `folder (why)`), because a folder that cannot be
+/// read is reported rather than fatal — an unmigrated project's whole worth is that it still opens.
+pub type PlanList = (Vec<Planned>, Vec<String>);
+
 /// **Every RON file under `root` that a [`FileKind`] names**, as `(path on disk, path relative to the
 /// root with `/`, the kind)`. Sorted, so a report and a refusal are the same on every run.
 ///
 /// A `.ron` file no kind names (a game's own `oplog` neighbour, a stray note) is not a project file and
 /// is left alone: this walks what the registry states, not every file that happens to be RON.
 #[allow(clippy::result_large_err)]
-pub fn plan(root: &Path) -> Result<Vec<(PathBuf, String, &'static FileKind)>, Problem> {
+pub fn plan(root: &Path) -> Result<Vec<Planned>, Problem> {
     plan_and_unread(root).map(|(planned, _)| planned)
 }
 
@@ -188,7 +195,7 @@ pub fn plan(root: &Path) -> Result<Vec<(PathBuf, String, &'static FileKind)>, Pr
 /// A library does not print: the migration's own report is where a person looks, so the folders that could not be listed travel
 /// with the answer and [`migrate_as`] puts them in it. [`plan`] is this without them, for a caller that only wants the files.
 #[allow(clippy::result_large_err)]
-pub fn plan_and_unread(root: &Path) -> Result<(Vec<(PathBuf, String, &'static FileKind)>, Vec<String>), Problem> {
+pub fn plan_and_unread(root: &Path) -> Result<PlanList, Problem> {
     let mut out = Vec::new();
     let mut skipped = Vec::new();
     walk(root, root, &mut out, &mut Vec::new(), &mut skipped)?;
@@ -214,7 +221,7 @@ pub fn plan_and_unread(root: &Path) -> Result<(Vec<(PathBuf, String, &'static Fi
 /// (`bevy_cauldron::loading::migrate_offer`) decides on it: a project refused only because a `data.yaml` names `mob.ron` is a
 /// project the command has work for, and listing `plan` alone made that refusal offer nothing.
 #[allow(clippy::result_large_err)]
-pub fn plan_all(root: &Path) -> Result<(Vec<(PathBuf, String, &'static FileKind)>, Vec<String>), Problem> {
+pub fn plan_all(root: &Path) -> Result<PlanList, Problem> {
     let (mut planned, unread) = plan_and_unread(root)?;
     planned.extend(registered_data_files(root)?);
     planned.sort_by(|a, b| a.1.cmp(&b.1));
@@ -572,9 +579,9 @@ fn registry_dirs(root: &Path) -> Vec<PathBuf> {
 /// own load names it), and one that lies outside the project is refused rather than moved from somewhere this migration was not
 /// pointed at.
 #[allow(clippy::result_large_err)]
-pub(crate) fn registered_data_files(root: &Path) -> Result<Vec<(PathBuf, String, &'static FileKind)>, Problem> {
+pub(crate) fn registered_data_files(root: &Path) -> Result<Vec<Planned>, Problem> {
     let Some(kind) = KINDS.iter().find(|k| k.id == "game_data") else { return Ok(Vec::new()) };
-    let mut out: Vec<(PathBuf, String, &'static FileKind)> = Vec::new();
+    let mut out: Vec<Planned> = Vec::new();
     for dir in registry_dirs(root) {
         for files in registries(std::slice::from_ref(&dir)) {
             for entry in &files.files {
@@ -1136,7 +1143,7 @@ fn trailing_comment(line: &str) -> Option<(&str, &str)> {
             let code = line[..i].trim_end();
             let rest = &line[i + 2..];
             let body = rest.strip_suffix("*/").unwrap_or(rest).trim();
-            return (!code.is_empty()).then(|| (code, body));
+            return (!code.is_empty()).then_some((code, body));
         }
     }
     None
