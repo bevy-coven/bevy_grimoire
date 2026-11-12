@@ -543,6 +543,8 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // map it is on, so the one-wish rule cannot read two hand-backs as one.
     ("bevy_cauldron::present::HandBacks", Ownership::Session),
     ("bevy_cauldron::present::Wishes", Ownership::Session),
+    // A lesson cites a hand-back, so it lives as long as the hand-backs do (#351).
+    ("bevy_cauldron::present::Lessons", Ownership::Session),
     ("bevy_cauldron::ui_budget::UiFrame", Ownership::Session),
     ("bevy_cauldron::ui_budget::GooeySpan", Ownership::Session),
     // **`Session`**: whether this run opens no addresses (it records them instead) is the run's own fact, true for as long as the app runs.

@@ -62,6 +62,16 @@ The server speaks the Model Context Protocol over **stdio**, and reaches the run
 
 **A wish is not a tool you already wished for in this session.** If you asked for it once, it is already queued and a second row is noise the person has to read and reject. Wish for a different tool, or make no wish.
 
+**Then propose a lesson, if the task taught one.** A wish is about what the editor lacked; a lesson is about what the *work* taught, and it goes into this project's own guide so the next agent reads it before touching anything. Call `grimoire_lesson` with `after` (the same hand-back the wish cites), `lesson` — the one line the guide would gain, 280 characters at most and **with no newline, because a lesson is one line** — and `why`, also one line, under the same limit.
+
+```text
+{"after": {"presentation": "present-1"}, "lesson": "Measure the walls before placing a door: a door placed blind overlapped one.", "why": "the overlap was found by rendering, three calls after the placement"}
+```
+
+**Only the person writes the guide.** Your call queues the line as a row in the AGENT block; **Keep** appends it to `.dark_factory/AGENTS.md` under `## Lessons`, and **Discard** drops it. `grimoire_lesson` returns at once with the line it would add, and `grimoire_state.lessons` reports `waiting`, `kept` or `discarded` — do not poll for the answer. **A project with no guide is refused**, and the person creates one on the project page; say so in your hand-back rather than retrying.
+
+**One lesson per hand-back, and a lesson is optional.** A second lesson citing the same hand-back is refused, as is a newline or a line past its limit — nothing is trimmed. If the task taught nothing the next agent needs, propose none: a filler line in someone's guide is worse than a gap.
+
 **Wish and move on.** `grimoire_wish` returns as soon as the wish is queued — it does not wait for a person to read it, because they may be away and your turn may be the last one. Do not poll `grimoire_state` for its answer, and do not repeat the wish because nothing happened yet. **If nothing was hard, make no wish at all**: an empty wish costs the person a row to read and reject, and it teaches them that the queue is not worth reading.
 
 ## Working a note
@@ -110,6 +120,16 @@ Put a result in front of the person: a title, a one-paragraph summary, what they
 ### `grimoire_wish`
 
 After a grimoire_present hand-back (or a note you resolved), name the one tool that would most have helped with that task: after, the hand-back it follows ({presentation: "present-1"} or {note: "n3"}); task, what the task was; hardship, what cost steps; tool, the single tool, named and described in one sentence, inside the limit its schema states; example_call, a call to it as you would like to write it, inside its own. The editor queues the wish and the editor adds the context it already has — the hand-back's title, the operations the task applied, its version and your client's name and version — so do not restate those. It returns at once with the wish's id and "waiting"; read grimoire_state's wishes for what became of it. One wish per hand-back: a second one citing the same hand-back, or one citing an id this editor never handed back, is refused with the reason. An empty field, or one past its limit, is refused naming the field — a wish is never trimmed. It writes nothing outside the editor's own queue.
+
+| annotation | value |
+|---|---|
+| `readOnlyHint` | false |
+| `destructiveHint` | false |
+| `idempotentHint` | false |
+
+### `grimoire_lesson`
+
+After a grimoire_present hand-back (or a note you resolved), propose one line for this project's agent guide: what the task taught that the next agent should know. Fields: after, the hand-back it follows ({presentation: "present-1"} or {note: "n3"}); lesson, the one line the guide would gain, inside the limit its schema states and with no newline; why, why it is worth the line, also one line, inside its own. The editor queues the proposal in the AGENT block and the person keeps or discards it; only their Keep writes the line to .dark_factory/AGENTS.md, so this call writes nothing. It returns at once with the lesson's id, the line it would add, and "waiting"; read grimoire_state's lessons for what became of it. One lesson per hand-back: a second citing the same hand-back, or one citing an id this editor never handed back, is refused with the reason, as is a newline, an empty field or one past its limit — a lesson is never trimmed. A project with no agent guide is refused, and the person creates one on the project page. A lesson is optional: one worth keeping beats one per task.
 
 | annotation | value |
 |---|---|

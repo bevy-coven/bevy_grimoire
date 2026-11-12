@@ -28,6 +28,7 @@
 //! | `grimoire_decide` | ask a named check or typed questions about pictures and facts; a probability for every answer |
 //! | `grimoire_present` | put a result in front of the person and take their Keep or Undo all |
 //! | `grimoire_wish` | after the hand-back, name the one tool that would most have helped |
+//! | `grimoire_lesson` | after the hand-back, propose one line for the project's guide |
 //! | `grimoire_schema` | one kind of project file's JSON Schema, generated from the type the reader reads |
 //! | `grimoire_list_pieces` | the library's pieces, a page at a time, with their label provenance |
 //! | `grimoire_list_snips` | the snips the person took, newest first, with the newest picture |
@@ -40,7 +41,7 @@
 //! | `grimoire_open_project` | open a project folder in the running editor, from any screen including the Projects home |
 //! | `grimoire_self_test` | the power-on self test an agent runs when Cauldron's terminal starts it |
 //!
-//! **Twenty-five tools, and the set is small on purpose.** An agent's context is spent on the tools it
+//! **Twenty-six tools, and the set is small on purpose.** An agent's context is spent on the tools it
 //! is offered, and a catalogue of ninety-six verbs is a catalogue of ninety-six things to choose
 //! badly from. **The operation tools are a discovery surface**: the first names what exists, and
 //! the others preview, run and take back what it names. Later iterations add one tool per
@@ -483,6 +484,21 @@ pub struct AfterParam {
     /// A note's id, as the agent resolved it.
     #[serde(default)]
     pub note: Option<String>,
+}
+
+/// **The parameters of `grimoire_lesson`** (AG-06, #351). One line for the project's guide, learned
+/// from the task just handed back.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LessonParams {
+    /// **The hand-back this lesson follows**: a presentation's id (`present-1`) or a note the agent
+    /// resolved (`n3`). **One lesson per hand-back**, so a second citing the same one is refused.
+    pub after: AfterParam,
+    /// **The one line the guide gains**, within
+    /// [`bevy_grimoire_core::lesson::LESSON_MAX_CHARS`] and with no newline: a lesson is one line.
+    pub lesson: String,
+    /// Why it is worth the line, within [`bevy_grimoire_core::lesson::WHY_MAX_CHARS`].
+    pub why: String,
 }
 
 /// **The parameters of `grimoire_list_pieces`.** Every filter is optional and they combine.
@@ -1119,6 +1135,77 @@ impl Grimoire {
             "hardship": p.hardship,
             "tool": p.tool,
             "example_call": p.example_call,
+        })).await
+        {
+            Ok(v) => Ok(CallToolResult::structured(v)),
+            Err(e) => Ok(refusal(&e)),
+        }
+    }
+
+    /// **`grimoire_lesson` — one line for the project's guide, learned from the task** (AG-06, #351).
+    ///
+    /// **After the hand-back, like a wish, and about the work rather than the tools.** A wish names
+    /// what the editor lacked; a lesson names what the *task* taught — the thing the next agent in
+    /// this project should know. It lands in the project's own guide, under its Lessons heading,
+    /// which is the file an agent is already given.
+    ///
+    /// **Queued in the editor and answered at once.** The call writes nothing: a proposal waits as a
+    /// row in the AGENT block, and only a person's **Keep** appends the line. What became of it is
+    /// read from `grimoire_state.lessons`, because a call that blocked on a person would deadlock
+    /// with the editor's frame.
+    ///
+    /// **One lesson per hand-back.** A second citing the same presentation or note is refused, and so
+    /// is one citing an id this editor never handed back.
+    #[tool(
+        name = "grimoire_lesson",
+        description = "After a grimoire_present hand-back (or a note you resolved), propose one line \
+                       for this project's agent guide: what the task taught that the next agent \
+                       should know. Fields: after, the hand-back it follows ({presentation: \
+                       \"present-1\"} or {note: \"n3\"}); lesson, the one line the guide would \
+                       gain, inside the limit its schema states and with no newline; why, why it is \
+                       worth the line, also one line, inside its own. The editor queues the proposal \
+                       in the AGENT block and the person keeps or discards it; only their Keep \
+                       writes the line to .dark_factory/AGENTS.md, so this call writes nothing. It \
+                       returns at once with the lesson's id, the line it would add, and \"waiting\"; \
+                       read grimoire_state's lessons for what became of it. One lesson per \
+                       hand-back: a second citing the same hand-back, or one citing an id this \
+                       editor never handed back, is refused with the reason, as is a newline, an \
+                       empty field or one past its limit — a lesson is never trimmed. A project \
+                       with no agent guide is refused, and the person creates one on the project \
+                       page. A lesson is optional: one worth keeping beats one per task.",
+        annotations(
+            title = "Propose a lesson for the project's guide",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn lesson(
+        &self,
+        Parameters(p): Parameters<LessonParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        // **Exactly one hand-back is named**, as a wish's is: two is a lesson learned from two tasks
+        // and none is a lesson with no task behind it.
+        let after = match (p.after.presentation, p.after.note) {
+            (Some(id), None) => json!({"presentation": id}),
+            (None, Some(id)) => json!({"note": id}),
+            (Some(_), Some(_)) => {
+                return Ok(refusal(
+                    "a lesson follows one hand-back: pass `presentation` or `note`, not both",
+                ));
+            }
+            (None, None) => {
+                return Ok(refusal(
+                    "a lesson follows a hand-back: pass `presentation` (an id grimoire_present \
+                     returned) or `note` (an id you resolved)",
+                ));
+            }
+        };
+        match self.editor.call("grimoire/lesson", json!({
+            "after": after,
+            "lesson": p.lesson,
+            "why": p.why,
         })).await
         {
             Ok(v) => Ok(CallToolResult::structured(v)),

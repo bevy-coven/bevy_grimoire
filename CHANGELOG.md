@@ -4,6 +4,8 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-11
 
+- **ag-06-lessons** `46de85f8a32d` An agent proposes one line for the project's guide after a hand-back, and the person keeps or discards it in the AGENT block; only Keep writes .dark_factory/AGENTS.md *No clip: visible, not yet recorded: fleet worker*
+- **ag-05-edit-by-label** `8758619867a1` The agent guide on the project page is edited the way a person edits it: the field under its label takes the keystrokes and Save writes and grants what was typed *No clip: visible, not yet recorded: fleet worker*
 - **panels4-show-reload-panel** View > Show reload panel puts the bottom dock up whatever the window's room, and the dock has one writer so ending Zen in a smaller window never flashes it *For you: A new View row, Show reload panel, shows what became of each file you edited, even on a short window where the strip along the bottom stays away on its own.* *No clip: a View row and a layout rule; proved by crates/bevy_cauldron/tests/the_reload_panel_is_a_gooey_dock_panel.rs (view_show_reload_panel_shows_the_dock_in_the_reference_window_and_unticking_hides_it, ending_zen_in_a_window_that_shrank_leaves_the_dock_hidden_at_once)*
 - **nv-06-back-and-forward** `53797d3a` Back and Forward across workspaces and cameras, bounded at 100 places *No clip: visible, not yet recorded: fleet worker*
 - **nv-05-go-to-anything** `53797d3a` Go to anything: one finder over everything a project names, commands with a leading `>` *No clip: visible, not yet recorded: fleet worker*
