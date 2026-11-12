@@ -50,3 +50,53 @@ fn a_file_that_cannot_be_converted_is_named_and_left_where_it_is() {
     assert!(config.join("settings.ron").exists(), "the original stays");
     assert!(!config.join("settings.yaml").exists(), "and nothing half-written is left");
 }
+
+/// **The notice reaches the screen, not only stderr** (GD-03, #365; review M3, restored at a level that runs).
+///
+/// A bundle launch has no terminal, so a sentence written to stderr is one nobody reads — and the person whose keymap was
+/// just carried over should be told rather than discover it. `launcher::say_the_startup_notices` says each notice as a
+/// sticky toast on the Projects home, which is the first screen after an upgrade, and says each one once.
+///
+/// **The app is the editor's own** (`harness::build_headless` + `LauncherPlugin`), because the launcher draws the home's
+/// splash and needs the asset server a `MinimalPlugins` app does not have — which is why a bare-plugin version of this test
+/// panicked in `Assets<Image>` and was removed rather than left red.
+#[test]
+fn the_notice_is_a_toast_on_the_projects_home_and_it_is_said_once() {
+    use bevy::prelude::*;
+    use bevy_cauldron::launcher::{ClipboardOff, LauncherPlugin};
+    use bevy_gooey::{Toast, ToastKind};
+
+    use crate::fixtures::Fixture;
+
+    let config = scratch("notice_config");
+    std::fs::write(config.join("settings.ron"), format!("(version: {SETTINGS_VERSION}, text_scale: Some(1.5))")).unwrap_or_else(|e| panic!("{e}"));
+    let notices = legacy::upgrade_user_files(Some(config), None);
+    assert_eq!(notices.len(), 1, "{notices:?}");
+
+    let home = scratch("notice_home");
+    let root = Fixture::new(&format!("old_users_notice_{}", std::process::id())).descriptor("alpha/floor", "alpha").place("alpha/floor", (1.0, 1.0)).build("m");
+    let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    app.insert_resource(bevy_cauldron::recent::RecentProjects(home.join("recent.yaml")))
+        .insert_resource(ClipboardOff)
+        .insert_resource(legacy::StartupNotices(notices.clone()))
+        .add_plugins(LauncherPlugin);
+    app.finish();
+    app.cleanup();
+    app.world_mut().resource_mut::<NextState<bevy_cauldron::screen::Screen>>().set(bevy_cauldron::screen::Screen::Launcher);
+    for _ in 0..6 {
+        app.update();
+    }
+
+    let mut q = app.world_mut().query::<&Toast>();
+    let said: Vec<(String, ToastKind, bool)> = q.iter(app.world()).map(|t| (t.text().to_owned(), t.kind(), t.is_sticky())).collect();
+    assert_eq!(said.len(), 1, "the conversion is on screen: {said:?}");
+    assert!(said[0].0.contains("settings.ron") && said[0].0.contains("was converted"), "in its own words: {said:?}");
+    assert_eq!(said[0].1, ToastKind::Alert, "an upgrade a person should read is an alert");
+    assert!(said[0].2, "and it stands until dismissed");
+
+    for _ in 0..4 {
+        app.update();
+    }
+    let mut q = app.world_mut().query::<&Toast>();
+    assert_eq!(q.iter(app.world()).count(), 1, "and it is said once, not every frame");
+}

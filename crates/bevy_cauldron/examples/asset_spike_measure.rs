@@ -1,5 +1,5 @@
 //! **Measures #204's spike: how fast, and whether at all, each watcher notices a write to
-//! `standards.ron`.**
+//! `standards.yaml`.**
 //!
 //! ```text
 //! cargo run --release -p bevy_cauldron --features asset_spike --example asset_spike_measure -- [trials] [gap between the three files of a save, ms]

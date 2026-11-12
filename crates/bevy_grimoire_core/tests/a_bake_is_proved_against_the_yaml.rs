@@ -203,3 +203,93 @@ mod erased {
         }
     }
 }
+
+/// **A crafted binary that nests past the reader's depth is refused, not allowed to overflow the stack** (review MUST-FIX 3).
+///
+/// postcard decodes a `Tree` with no bound of its own, and a `List` frame is two bytes, so a ~1 MiB binary nests about half a
+/// million deep: the recursive decode and `into_value` would take the game down with a stack overflow — an abort, which no
+/// `Result` and no hash can stop (`baked_sha256` sits in the same untrusted manifest). The reader refuses past a named depth, as
+/// the RON reader does at its own.
+///
+/// The deep value is written through [`bake::encode`], so the bytes are the ones the bake scheme really produces; what is measured
+/// is the reader, which is the side a crafted manifest reaches.
+#[test]
+fn a_binary_nested_past_the_depth_limit_is_refused_not_overflowed() {
+    // **A list of one, inside a list of one, …**: `DEEP` is far past `bake::MAX_TREE_DEPTH` and past any stack a recursive
+    // walk could use for it.
+    const DEEP: usize = 200_000;
+    let mut value = serde_json::Value::Null;
+    for _ in 0..DEEP {
+        value = serde_json::Value::Array(vec![value]);
+    }
+    let bytes = bake::encode("map", "maps/m.map.yaml", &value).expect_err("the writer refuses a tree past the depth limit, so no bake can make one");
+    assert!(bytes.line().contains(&bake::MAX_TREE_DEPTH.to_string()), "the refusal names the limit: {}", bytes.line());
+
+    // The reader is asked directly too, with a binary the writer would never make: this is what a crafted manifest holds.
+    let refused = bake::decode("maps/m.map.yaml", &hand_built(DEEP)).expect_err("a binary nested past the limit is refused");
+    let said = refused.line();
+    assert!(said.contains("nested"), "the refusal says what is wrong: {said}");
+    assert!(said.contains(&bake::MAX_TREE_DEPTH.to_string()), "and names the limit: {said}");
+}
+
+/// **A binary whose tree is `DEEP` lists deep**, written by hand in the container's own postcard shape: a struct's fields in
+/// order with no tag, and `Tree::List` as variant 6 followed by its length.
+fn hand_built(deep: usize) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(deep * 2 + 64);
+    bytes.extend_from_slice(&bake::BAKE_FORMAT.to_le_bytes());
+    for text in ["map", "maps/m.map.yaml"] {
+        // A postcard string is its byte length as a varint, then the bytes: short ASCII here, so one byte each.
+        bytes.push(u8::try_from(text.len()).unwrap_or(u8::MAX));
+        bytes.extend_from_slice(text.as_bytes());
+    }
+    for _ in 0..deep {
+        bytes.push(6); // `Tree::List`
+        bytes.push(1); // one item
+    }
+    bytes.push(0); // the innermost `Tree::Null`
+    bytes
+}
+
+/// **A manifest cannot point a read outside the bake folder** (review MUST-FIX 4).
+///
+/// `Baked::value` joined `entry.baked` and `Baked::open` joined `entry.file` verbatim, so a manifest holding
+/// `../../../../etc/passwd` — or an absolute path — read any file on the machine, and a matching `baked_sha256` in the same
+/// manifest let it decode. The write side already had `join_inside`; the read side did not use it.
+#[test]
+fn a_manifest_path_that_climbs_out_of_the_bake_is_refused() {
+    let root = copy_of_the_sample("traversal");
+    let out = scratch("traversal_bake");
+    bake::bake(&root, &out).unwrap_or_else(|p| panic!("{}", p.line()));
+    let manifest_path = out.join(MANIFEST_FILE);
+    let original: Manifest = serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap_or_default()).unwrap_or_else(|e| panic!("{e}"));
+    let named = original.files.first().map(|e| e.file.clone()).unwrap_or_else(|| panic!("the sample bakes files"));
+    let real_baked = original.files.first().map(|e| e.baked.clone()).unwrap_or_default();
+
+    for (what, baked, file) in [
+        ("a baked path that climbs out", "../../../../etc/passwd".to_owned(), named.clone()),
+        ("an absolute baked path", "/etc/passwd".to_owned(), named.clone()),
+        ("a source path that climbs out", real_baked.clone(), "../../../../etc/passwd".to_owned()),
+        ("an absolute source path", real_baked.clone(), "/etc/passwd".to_owned()),
+    ] {
+        let mut one = original.clone();
+        if let Some(entry) = one.files.first_mut() {
+            entry.baked = baked;
+            entry.file = file;
+        }
+        std::fs::write(&manifest_path, serde_json::to_string(&one).unwrap_or_default()).unwrap_or_else(|e| panic!("{e}"));
+
+        // **`open` may refuse the entry outright, or `value` may refuse the read**: both are inside the bake, and neither may
+        // reach a file outside it. What is not allowed is a read that succeeds.
+        if let Ok(opened) = Baked::open(&out, &root) {
+            match opened.value(&named) {
+                Ok(value) => panic!("{what}: the bake read a file outside itself: {value:?}"),
+                Err(problem) => {
+                    let said = problem.line();
+                    assert!(said.contains("outside") || said.contains("not in the bake"), "{what}: {said}");
+                }
+            }
+        }
+    }
+    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&out);
+}

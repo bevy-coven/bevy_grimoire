@@ -16,7 +16,7 @@
 //!   the commit that gives its type a `version` (with `#[serde(default)]` so the files already on disk,
 //!   frozen in `tests/old_data/`, keep reading);
 //! - **owned elsewhere**: the file's format is somebody else's to version (an image's own header, a
-//!   game's own RON, a family crate's own settings), and the entry says whose.
+//!   game's own data, a family crate's own settings), and the entry says whose.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -59,7 +59,7 @@ const VERSIONED_ABOVE: &[(&str, &str, &str)] = &[
 /// **Kinds whose format is not the editor's to version**, and whose it is.
 const OWNED_ELSEWHERE: &[(&str, &str)] = &[
     ("reference_images", "an image file: the image format's own header says what it is"),
-    ("game_data", "the game's own RON: the game owns the shape, `data.ron` only lists the files"),
+    ("game_data", "the game's own data: the game owns the shape, `data.yaml` only lists the files"),
     ("family", "one file per family crate, in that crate's own serde type: the crate versions it"),
     ("trees", "a family crate's own species type: the crate versions it"),
     ("schema", "a JSON Schema generated from the type on every write: it is derived, so a version of it is the type's"),

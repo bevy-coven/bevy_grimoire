@@ -205,9 +205,10 @@ pub fn check(kind: &FileKind, file: &str, text: &str) -> Check {
         "library" => run_yaml(text, Library::parse),
         "policy" => run_yaml(text, Policy::parse),
         "rules" => run_yaml(text, |t| {
-            // `Rules::parse` only reads RON. What the editor refuses to open (a version it does not read, a
-            // number no block can use) is `validate_numbers`, so a reload that said `applied` for a file the
-            // project open refuses was telling the author the edit had landed.
+            // **`Rules::parse` reads YAML, and what it cannot refuse by itself is a rule no block can use.** The
+            // editor refuses a version it does not read and a number no block can use; `validate_numbers` is the
+            // second half of that, so a reload that said `applied` for a file the project open refuses was telling
+            // the author the edit had landed.
             let rules = Rules::parse(t)?;
             rules.validate_numbers().map(|()| rules)
         }),

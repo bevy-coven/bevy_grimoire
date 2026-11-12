@@ -596,7 +596,14 @@ fn fault(file: &str, line: usize, at: String, why: String) -> Fault {
 pub fn files(root: &Path) -> Vec<PathBuf> {
     // **A release lists its files from the bake's manifest**, not from a folder it may not ship.
     if bevy_grimoire_core::load::is_baked() {
-        let mut out = bevy_grimoire_core::load::files_of_kind(root, bevy_grimoire_core::bake::ENTITIES_KIND).unwrap_or_default();
+        // **A manifest that will not read is refused, not answered as "the game has no entity files"**: every other baked
+        // failure is loud (#370), and a silent empty set is a game that starts with nothing in it and no reason said anywhere.
+        let mut out = match bevy_grimoire_core::load::files_of_kind(root, bevy_grimoire_core::bake::ENTITIES_KIND) {
+            Ok(files) => files,
+            Err(problem) => {
+                panic!("the bake's entity files could not be listed: {}", problem.line());
+            }
+        };
         out.sort();
         return out;
     }

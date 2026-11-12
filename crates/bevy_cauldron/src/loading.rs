@@ -424,16 +424,18 @@ pub struct ReportRow;
 
 /// **The project a refused screen offers to migrate**, or `None` when there is nothing to offer.
 ///
-/// Only a refusal offers anything, and only a project the migration library has work for: `migrate::plan` is the same walk
-/// `leftover` refuses on, so the button appears for exactly the projects `bevy_cauldron migrate` would convert and never on a
-/// project the migration would have nothing to do with. A project folder that cannot be listed is not offered either — the open
-/// that refused it is where that is said.
+/// Only a refusal offers anything, and only a project the migration library has work for: `migrate::plan_all` is the same list
+/// `leftover` refuses on and `migrate_as` converts, so the button appears for exactly the projects `bevy_cauldron migrate` would
+/// convert and never on a project the migration would have nothing to do with. **`plan_all`, not `plan`**: a project refused only
+/// because its `data.yaml` names `mob.ron` is one the command has work for, and `plan` alone (which walks kind patterns only)
+/// found nothing there and offered no button. A project folder that cannot be listed is not offered either — the open that
+/// refused it is where that is said.
 pub fn migrate_offer(request: Option<&LoadRequest>, refused: bool) -> Option<std::path::PathBuf> {
     if !refused {
         return None;
     }
     let root = crate::args::root_of(&request?.0);
-    bevy_grimoire_migrate::plan(&root).ok().filter(|planned| !planned.is_empty()).map(|_| root)
+    bevy_grimoire_migrate::plan_all(&root).ok().filter(|(planned, _)| !planned.is_empty()).map(|_| root)
 }
 
 /// **Run the migration on `root` and answer the sentences to say**, or the refusal that stopped it.

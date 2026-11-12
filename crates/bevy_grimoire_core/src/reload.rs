@@ -221,7 +221,7 @@ pub const KINDS: &[FileKind] = &[
     kind("destructible_bake", Root, "destructible/<name>.bake.yaml", "a baked fracture", Live, Global,
         "`destructible_set` and `destructible_hit` (only in a build with the carnage feature)",
         "A cache the next hit rebuilds when it is absent or stale (another mesh or other cut settings). A file that does not read at all is refused, naming the file and the field, and is left as it is: remove it to bake afresh."),
-    kind("game_data", Root, "", "the game's own RON", Live, Global, "",
+    kind("game_data", Root, "", "the game's own data", Live, Global, "",
         "Written by `data_set` into files the game owns, and followed by a running game that registers a reader for one (`GrimoireLiveApp::reload_data_file`, in the runtime crate): about a second after the file's last write it is checked against its `data.yaml` entry and handed to the game's own parse, and the game's verdict (`.live/game.yaml`) says `applied`, or `refused` with the file and the leaf and the old value kept. The editor looks at each file `data.yaml` lists when its size or modification time moves and says in `grimoire_state.reloads` whether it still reads: `refused` with the file and the leaf when it does not (a bounded leaf missing, not a number or outside its bounds, or a file cut off), `applied` when it does."),
 ];
 

@@ -76,3 +76,29 @@ fn a_migration_that_refuses_says_why_and_leaves_the_project_alone() {
     assert!(!root.join("assets/grimoire/editor.yaml").exists(), "and nothing was written");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// **A project refused only because a `data.yaml` names a `.ron` file is offered the migration too** (review MUST-FIX 1).
+///
+/// `leftover` refuses on `plan` *and* the files a registry names, and `migrate_as` converts both — but the offer was decided
+/// by `plan` alone. So the one refusal a person most needs the button for (their own registry naming a file they cannot find)
+/// showed the sentence with no button, and the doc saying "exactly the projects `bevy_cauldron migrate` would convert" was
+/// false for it.
+#[test]
+fn a_registry_naming_a_ron_file_is_offered_the_migration() {
+    let root = project("registry_only", false);
+    // **Nothing but a registry names a .ron here**: `editor.yaml` is YAML, so `plan` finds nothing and only the registered file
+    // decides the refusal.
+    std::fs::write(root.join("assets/grimoire/maps/data.yaml"), "version: 1\nfiles:\n- id: tuning\n  path: mob.ron\n  bounds: {}\n")
+        .unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(root.join("assets/grimoire/maps/mob.ron"), "(mob: (speed: 1.5))").unwrap_or_else(|e| panic!("{e}"));
+
+    // The refusal is the registry's file, and nothing else: this is what the open says.
+    let problem = bevy_grimoire_migrate::leftover(&root, "bevy_cauldron migrate /p")
+        .unwrap_or_else(|p| panic!("{}", p.line()))
+        .unwrap_or_else(|| panic!("a registry naming a .ron file refuses the open"));
+    assert!(problem.line().contains("mob.ron"), "{}", problem.line());
+
+    let offered = migrate_offer(Some(&request(&root)), true);
+    assert_eq!(offered.as_deref(), Some(root.as_path()), "and that refusal offers the migration: {problem:?}", problem = problem.line());
+    let _ = std::fs::remove_dir_all(&root);
+}

@@ -290,6 +290,12 @@ fn bake_and_exit(argv: &[String], program: &str) -> AppExit {
         eprintln!("usage: {command}");
         return AppExit::error();
     };
+    // **An unknown flag is refused, never dropped**, as `migrate` refuses one: a run that silently ignored `--check` would write a
+    // bake the flag was written to preview.
+    if let Some(flag) = rest.iter().find(|a| a.starts_with('-') && a.as_str() != "--out") {
+        eprintln!("{program} bake: `{flag}` is not a flag this command takes. usage: {command}");
+        return AppExit::error();
+    }
     match bevy_grimoire_core::bake::bake(std::path::Path::new(root), std::path::Path::new(out)) {
         Ok(report) => {
             println!("baked {} file(s), {} bytes, into {} (manifest: {})", report.files, report.bytes, out, report.manifest.display());

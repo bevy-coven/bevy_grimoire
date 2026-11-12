@@ -28,6 +28,6 @@ pub mod migrate;
 pub mod ron_tree;
 pub mod user_files;
 
-pub use migrate::{ARCHIVE_DIR, COMMAND, Converted, GRIMOIRE_DIR, RON_EXT, Report, Unplaced, YAML_EXT, leftover, migrate as convert_project, migrate_as, convert_value, plan, plan_and_unread, read_ron, reads_as_ron, written_as_yaml, yaml_path};
+pub use migrate::{ARCHIVE_DIR, COMMAND, Converted, GRIMOIRE_DIR, RON_EXT, Report, Unplaced, YAML_EXT, leftover, migrate as convert_project, migrate_as, convert_value, plan, plan_all, plan_and_unread, read_ron, reads_as_ron, written_as_yaml, yaml_path};
 
 pub use user_files::{USER_ARCHIVE_DIR, upgrade_user_files};

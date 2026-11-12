@@ -207,6 +207,20 @@ pub fn plan_and_unread(root: &Path) -> Result<(Vec<(PathBuf, String, &'static Fi
     Ok((planned, unread))
 }
 
+/// **[`plan_and_unread`] plus every `.ron` file a registry names**, sorted — **everything a migration would convert and an open
+/// refuses on**.
+///
+/// This is the one list. `leftover` refuses on it, `migrate_as` converts it, and a caller that offers a person the migration
+/// (`bevy_cauldron::loading::migrate_offer`) decides on it: a project refused only because a `data.yaml` names `mob.ron` is a
+/// project the command has work for, and listing `plan` alone made that refusal offer nothing.
+#[allow(clippy::result_large_err)]
+pub fn plan_all(root: &Path) -> Result<(Vec<(PathBuf, String, &'static FileKind)>, Vec<String>), Problem> {
+    let (mut planned, unread) = plan_and_unread(root)?;
+    planned.extend(registered_data_files(root)?);
+    planned.sort_by(|a, b| a.1.cmp(&b.1));
+    Ok((planned, unread))
+}
+
 /// The kind of a project file named relative to the project root, which is where both bases hang from.
 ///
 /// **A kind matches its old spelling too** (GD-03, #365). The table states a kind's path as it is today
@@ -501,6 +515,16 @@ pub fn migrate_as(root: &Path, command: &str) -> Result<Report, Problem> {
     migrate_where(root, command, |_| true)
 }
 
+/// **`root` as the filesystem spells it**, so every containment test compares like with like.
+///
+/// A caller may hand this the path a person typed — `bevy_cauldron migrate .` is the natural way to run it from inside a
+/// project — and `Path::starts_with` is a plain component comparison: a registered file's canonical path does not start with `.`,
+/// so every file a `data.yaml` names looked "outside the project" and the command refused a project it should have converted.
+/// The root is resolved once, in `migrate_where`, and every path compared against it is resolved the same way.
+fn resolved(root: &Path) -> PathBuf {
+    std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf())
+}
+
 /// **Every registry in `root` names the `.ron` files it registers**, whatever spelling the registry itself is in.
 ///
 /// A registry the cutover has not reached is RON (`<kit>/data.ron`); one it has is YAML (`data.yaml`) and may still name a `.ron`
@@ -558,9 +582,17 @@ pub(crate) fn registered_data_files(root: &Path) -> Result<Vec<(PathBuf, String,
                     continue;
                 }
                 let joined = dir.join(&entry.path);
-                let Some(target) = normalised(&joined).filter(|t| t.starts_with(root)) else {
+                // **`root` is resolved by `migrate_where` and `leftover`**, and so is the target, so `migrate .` and
+                // `migrate /abs/path` decide the same thing.
+                let Some(target) = normalised(&joined).map(|t| resolved(&t)).filter(|t| t.starts_with(root)) else {
                     return Err(outside_problem(&dir, &entry.path));
                 };
+                // **A symlinked file is skipped, not followed**: the walk refuses to leave the project that way, and a
+                // registered path that is a link out of it would convert a file in somebody else's directory and move the link's
+                // original into this project's archive.
+                if std::fs::symlink_metadata(&joined).is_ok_and(|m| m.file_type().is_symlink()) {
+                    continue;
+                }
                 if !target.is_file() || out.iter().any(|(p, _, _)| *p == target) {
                     continue;
                 }
@@ -676,9 +708,12 @@ fn migrate_where(
     command: &str,
     wants: impl Fn(&FileKind) -> bool,
 ) -> Result<Report, Problem> {
-    let (planned, unread) = plan_and_unread(root)?;
-    let mut plan: Vec<_> = planned.into_iter().filter(|(_, _, kind)| wants(kind)).collect();
-    plan.extend(registered_data_files(root)?);
+    // **The root as the filesystem spells it**, so `migrate .` and `migrate /abs/path` decide the same thing, and so a path a
+    // registry names is compared with the project it is really in.
+    let root = resolved(root);
+    let root = root.as_path();
+    let (planned, unread) = plan_all(root)?;
+    let plan: Vec<_> = planned.into_iter().filter(|(_, _, kind)| wants(kind)).collect();
     let mut converted = Vec::new();
     let mut pending: Vec<(PathBuf, String, PathBuf)> = Vec::new();
     let mut unplaced = Vec::new();
@@ -1094,6 +1129,14 @@ fn trailing_comment(line: &str) -> Option<(&str, &str)> {
         } else if *b == b'/' && bytes.get(i + 1) == Some(&b'/') {
             let code = line[..i].trim_end();
             return (!code.is_empty()).then(|| (code, &line[i + 2..]));
+        } else if *b == b'/' && bytes.get(i + 1) == Some(&b'*') {
+            // **A block comment after code** (`scale: 2.0, /* metres */`) is a comment too: it is carried above its field like a
+            // trailing `//`, and one that never closes gives back everything after the `/*` so the migration lists it rather than
+            // dropping it. Before this the `/*` was taken for part of the code and the comment was lost.
+            let code = line[..i].trim_end();
+            let rest = &line[i + 2..];
+            let body = rest.strip_suffix("*/").unwrap_or(rest).trim();
+            return (!code.is_empty()).then(|| (code, body));
         }
     }
     None
@@ -1217,12 +1260,10 @@ pub fn written_as_yaml(rel: &str, text: &str, command: &str) -> Result<(String, 
 /// project, and the open that follows says why with its own words.
 #[allow(clippy::result_large_err)]
 pub fn leftover(root: &Path, command: &str) -> Result<Option<Problem>, Problem> {
-    let mut plan = plan(root)?;
-    // **A game's own data files are not under a kind's pattern**, so the walk does not see them: `game_data` is "what a
-    // registry names". They are added here, or a project whose `data.yaml` still names `mob.ron` opens and the first
-    // `data_set` on that file fails in the editor instead of the open naming the command.
-    plan.extend(registered_data_files(root)?);
-    plan.sort_by(|a, b| a.1.cmp(&b.1));
+    let root = resolved(root);
+    // **The one list**: a kind's own files plus the ones a `data.yaml` names, so a project whose registry holds `mob.ron` refuses
+    // the open naming that file rather than opening and failing later in `data_set`.
+    let plan = plan_all(&root)?.0;
     // **Every kind refuses an open**: nothing reads RON any more, so a `.ron` file a kind names is a file no reader will take.
     let Some((_, rel, _)) = plan.first() else { return Ok(None) };
     let rel = rel.clone();

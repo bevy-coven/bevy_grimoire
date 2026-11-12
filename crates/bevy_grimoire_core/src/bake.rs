@@ -45,9 +45,20 @@ pub const BINARIES_DIR: &str = "files";
 /// **A baked file's extension.**
 pub const BAKED_EXT: &str = "bin";
 
+/// **The digits a baked binary's name is numbered with** (`files/00007.bin`). The sweep of a re-bake removes only names of this
+/// shape, so it can never take a file this scheme did not make.
+pub const INDEX_DIGITS: usize = 5;
+
 /// **The version of the container a binary is written in**, read before anything else in the binary: a build
 /// that reads another one refuses the bake instead of reading it as something it is not.
 pub const BAKE_FORMAT: u32 = 1;
+
+/// **How deep a baked tree may nest.** postcard decodes a [`Tree`] with no bound of its own and a list frame is two bytes, so a
+/// crafted ~1 MiB binary nests half a million deep: the recursive decode and [`Tree::into_value`] would overflow the stack, which
+/// is an abort no `Result` and no hash can stop — `baked_sha256` sits in the same untrusted manifest. This is the reader's limit,
+/// and it is [`bevy_grimoire_migrate`]'s `ron_tree::MAX_DEPTH` value because both read the same shapes with the same recursion.
+/// No project file comes near it: the deepest is a schema's few levels.
+pub const MAX_TREE_DEPTH: usize = 64;
 
 /// **The folder a game's entity files live in**, under the project root. Equal to `bevy_grimoire::entities::ENTITIES_DIR`,
 /// which a test of that crate holds to it.
@@ -72,7 +83,11 @@ const SKIPPED_DIRS: &[&str] = &["target", "node_modules", "baked"];
 
 /// **One thing a YAML file holds, as bytes can carry it.** The shape [`serde_json::Value`] has, as an enum
 /// postcard can write (`Value` itself needs a self-describing format).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+///
+/// **Its reader is depth-bounded** ([`MAX_TREE_DEPTH`]): postcard has no bound of its own and a list frame is two bytes, so a
+/// crafted binary nests half a million deep and a derived deserialiser recurses until the stack is gone — an abort, not an error
+/// a caller can catch. `Serialize` stays derived (the writer is this build's own value, already measured by [`depth_of`]).
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Tree {
     Null,
     Bool(bool),
@@ -82,6 +97,92 @@ pub enum Tree {
     Text(String),
     List(Vec<Tree>),
     Map(Vec<(String, Tree)>),
+}
+
+/// **The depth a reader is at**, as a thread-local rather than a parameter: a `Deserialize` impl has one signature, and threading
+/// a depth through it would mean a second deserialiser for every `Vec` and tuple postcard builds on the way.
+///
+/// It is raised before a child is read and lowered after, so a sibling starts where its parent did, and the innermost reader is the
+/// one that refuses. A thread that dies mid-read would leave it high, which is why the guard is a struct with a `Drop`.
+mod depth {
+    use std::cell::Cell;
+
+    thread_local! {
+        static HERE: Cell<usize> = const { Cell::new(0) };
+    }
+
+    /// The depth the reader is at.
+    pub fn here() -> usize {
+        HERE.with(Cell::get)
+    }
+
+    /// **One level deeper for as long as this lives.** Restored by `Drop`, so a refusal on the way out of a nested read leaves the
+    /// next one at its own level.
+    pub struct Deeper(usize);
+
+    impl Deeper {
+        pub fn enter() -> Deeper {
+            Deeper(HERE.with(|h| {
+                let was = h.get();
+                h.set(was + 1);
+                was
+            }))
+        }
+    }
+
+    impl Drop for Deeper {
+        fn drop(&mut self) {
+            HERE.with(|h| h.set(self.0));
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Tree {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Tree, D::Error> {
+        use serde::de::{Error as _, Visitor};
+
+        /// **The variants, in the order the enum declares them**, which is what postcard writes. A derived deserialiser for this
+        /// enum handed the same slice to `deserialize_enum`; naming them here lets the depth guard sit around every variant.
+        const NAMES: &[&str] = &["Null", "Bool", "Int", "Uint", "Float", "Text", "List", "Map"];
+
+        struct TreeVisitor;
+
+        impl<'de> Visitor<'de> for TreeVisitor {
+            type Value = Tree;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a baked value tree")
+            }
+
+            fn visit_enum<A: serde::de::EnumAccess<'de>>(self, data: A) -> Result<Tree, A::Error> {
+                use serde::de::VariantAccess as _;
+                let (name, variant) = data.variant::<String>()?;
+                let tag = NAMES.iter().position(|n| *n == name);
+                // **Every variant is read through the same depth guard**, so `List` and `Map` are the ones that can nest and the
+                // others cost one counter set and restore.
+                let _deeper = depth::Deeper::enter();
+                if depth::here() > MAX_TREE_DEPTH {
+                    return Err(A::Error::custom(format!("nested more than {MAX_TREE_DEPTH} deep")));
+                }
+                Ok(match tag {
+                    Some(0) => {
+                        variant.unit_variant()?;
+                        Tree::Null
+                    }
+                    Some(1) => Tree::Bool(variant.newtype_variant()?),
+                    Some(2) => Tree::Int(variant.newtype_variant()?),
+                    Some(3) => Tree::Uint(variant.newtype_variant()?),
+                    Some(4) => Tree::Float(variant.newtype_variant()?),
+                    Some(5) => Tree::Text(variant.newtype_variant()?),
+                    Some(6) => Tree::List(variant.newtype_variant()?),
+                    Some(7) => Tree::Map(variant.newtype_variant()?),
+                    _ => return Err(A::Error::custom(format!("`{name}` is not a baked value"))),
+                })
+            }
+        }
+
+        d.deserialize_enum("Tree", NAMES, TreeVisitor)
+    }
 }
 
 impl Tree {
@@ -295,9 +396,43 @@ fn bake_text(kind: &str, rel: &str, text: &str) -> Result<Made, Problem> {
 /// **The bytes of a file's value**, in this build's container.
 #[allow(clippy::result_large_err)]
 pub fn encode(kind: &str, file: &str, value: &Value) -> Result<Vec<u8>, Problem> {
+    // **A value past the reader's depth is refused here**, so this build never writes a binary its own reader would reject and the
+    // refusal names the file rather than arriving as a stack overflow at load time.
+    let depth = depth_of(value);
+    if depth > MAX_TREE_DEPTH {
+        return Err(problem(
+            file,
+            &format!("{file} nests {depth} deep and a baked file holds at most {MAX_TREE_DEPTH}"),
+            "a value this deep is not a project file's shape",
+            "report it: this is a defect in the type, not in the project",
+        ));
+    }
     let binary = Binary { format: BAKE_FORMAT, kind: kind.to_owned(), file: file.to_owned(), tree: Tree::from_value(value) };
     postcard::to_allocvec(&binary)
         .map_err(|e| problem(file, &format!("{file} did not encode"), e.to_string(), "this is a defect in the bake: report it"))
+}
+
+/// **How deep a value nests**, counted without recursing on the value's own stack: a list or a mapping adds one to its deepest
+/// member's depth, and everything else is a leaf.
+///
+/// Iterative, because the thing being measured is exactly the shape that overflows a recursive walk. A cyclic value cannot exist
+/// in `serde_json`, so this terminates.
+fn depth_of(value: &Value) -> usize {
+    let mut deepest = 1;
+    let mut stack: Vec<(&Value, usize)> = vec![(value, 1)];
+    while let Some((value, depth)) = stack.pop() {
+        deepest = deepest.max(depth);
+        if depth > MAX_TREE_DEPTH {
+            // Past the limit there is nothing more to learn, and pushing half a million frames to say so is the fault itself.
+            return depth;
+        }
+        match value {
+            Value::Array(items) => stack.extend(items.iter().map(|v| (v, depth + 1))),
+            Value::Object(map) => stack.extend(map.values().map(|v| (v, depth + 1))),
+            _ => {}
+        }
+    }
+    deepest
 }
 
 /// **Decode a binary into the kind it holds and its value**, refusing one made by another format.
@@ -398,7 +533,7 @@ pub fn bake(root: &Path, out: &Path) -> Result<Report, Problem> {
         let text = String::from_utf8(source.clone())
             .map_err(|e| problem(&rel, &format!("{rel} is not UTF-8"), e.to_string(), "save the file as UTF-8"))?;
         let baked = bake_text(&kind, &rel, &text)?;
-        let name = format!("{BINARIES_DIR}/{index:05}.{BAKED_EXT}");
+        let name = format!("{BINARIES_DIR}/{index:0width$}.{BAKED_EXT}", width = INDEX_DIGITS);
         made.push((
             Entry {
                 file: rel,
@@ -415,11 +550,19 @@ pub fn bake(root: &Path, out: &Path) -> Result<Report, Problem> {
         problem(&path.display().to_string(), &format!("{what} {}", path.display()), e.to_string(), "check that the folder can be written")
     };
     std::fs::create_dir_all(out.join(BINARIES_DIR)).map_err(|e| io("could not make", &out.join(BINARIES_DIR), e))?;
-    // A file of an earlier bake that this one does not have is removed, so the folder is this bake and nothing older.
+    // **A file of an earlier bake that this one does not have is removed**, so the folder is this bake and nothing older.
+    //
+    // Only the names **this scheme produces** — `{n:05}.bin` — are swept. It used to remove every `*.bin` under `files/`, which
+    // is the whole folder's contents: a person's own file beside the bake, or one another tool numbered differently, went with a
+    // re-bake. A name that matches neither this scheme nor the previous manifest's list is not this bake's to delete.
     if let Ok(old) = std::fs::read_dir(out.join(BINARIES_DIR)) {
         for entry in old.filter_map(Result::ok) {
-            if entry.path().extension().is_some_and(|e| e == BAKED_EXT) {
-                std::fs::remove_file(entry.path()).map_err(|e| io("could not remove", &entry.path(), e))?;
+            let path = entry.path();
+            let ours = path.file_stem().and_then(|s| s.to_str()).is_some_and(|stem| {
+                stem.len() == INDEX_DIGITS && stem.bytes().all(|b| b.is_ascii_digit())
+            }) && path.extension().is_some_and(|e| e == BAKED_EXT);
+            if ours {
+                std::fs::remove_file(&path).map_err(|e| io("could not remove", &path, e))?;
             }
         }
     }
@@ -491,6 +634,20 @@ impl Baked {
                 "bake the project again with this build",
             ));
         }
+        // **Every entry stays inside the bake and the project.** A manifest is not trusted: `entry.baked` is joined into the bake
+        // folder and `entry.file` is joined into the project, so `../../../../etc/passwd` or `/etc/passwd` read a file on the
+        // machine — and a matching `baked_sha256` in the same manifest let it decode. The write side always had `join_inside`;
+        // the read side checks the same thing, once, here.
+        for entry in &manifest.files {
+            if join_inside("", &entry.file).as_deref() != Some(entry.file.as_str()) || join_inside(BINARIES_DIR, &entry.baked).is_none() {
+                return Err(problem(
+                    &entry.file,
+                    &format!("{shown} names `{}`, which is outside the bake", entry.file),
+                    format!("its binary is `{}`, and a bake reads only its own folder and the project it was made from", entry.baked),
+                    "bake the project again (`cauldron bake <root> --out <dir>`) and ship that folder",
+                ));
+            }
+        }
         Ok(Baked { dir: dir.to_path_buf(), root: root.to_path_buf(), entries: manifest.files.into_iter().map(|e| (e.file.clone(), e)).collect() })
     }
 
@@ -503,7 +660,20 @@ impl Baked {
     pub fn refuse_if_stale(&self) -> Result<(), Problem> {
         let root = self.root.as_path();
         for (rel, entry) in &self.entries {
-            let Ok(source) = std::fs::read(root.join(rel)) else { continue };
+            // **A source the project no longer has is not "nothing to compare"**: `rm` would otherwise bypass the check the whole
+            // function exists for. A release ships without its YAML and passes on purpose (see the doc above), so this only refuses
+            // when the project *is* there and the file it lists is not — which is a file someone deleted after the bake.
+            let Ok(source) = std::fs::read(root.join(rel)) else {
+                if root.is_dir() {
+                    return Err(problem(
+                        rel,
+                        &format!("{rel} is in the bake and is not in the project"),
+                        "the file the bake was made from was removed, so there is nothing to compare it with",
+                        "restore the file, or bake the project again without it",
+                    ));
+                }
+                continue;
+            };
             if sha256_hex(&source) != entry.source_sha256 {
                 return Err(problem(
                     rel,
@@ -534,7 +704,12 @@ impl Baked {
         let entry = self.entries.get(rel).ok_or_else(|| {
             problem(rel, &format!("{rel} is not in the bake"), "this build loads only baked files", "bake the project again with the file in it")
         })?;
-        let path = self.dir.join(&entry.baked);
+        // **The binary is named relative to the bake's own folder**, and a name that climbs out is refused here as it is in
+        // `open`: this is the read that would touch the filesystem.
+        let inside = join_inside(BINARIES_DIR, &entry.baked).filter(|_| entry.baked.starts_with(BINARIES_DIR)).ok_or_else(|| {
+            problem(rel, &format!("the baked {rel} is named outside the bake"), format!("`{}` climbs out of {BINARIES_DIR}", entry.baked), "bake the project again")
+        })?;
+        let path = self.dir.join(&inside);
         let bytes = std::fs::read(&path).map_err(|e| {
             problem(rel, &format!("the baked {rel} could not be read"), format!("{}: {e}", path.display()), "bake the project again")
         })?;

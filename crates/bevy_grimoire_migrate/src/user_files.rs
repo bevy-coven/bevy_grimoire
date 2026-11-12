@@ -33,7 +33,10 @@ pub fn upgrade_user_files(dirs_and_stems: &[(PathBuf, &str)], command: &str) -> 
         }
         match upgrade_one(&ron, &yaml, dir, command) {
             Ok(archived) => notices.push(format!("{shown} was converted to {} (the original is at {})", yaml.display(), archived.display())),
-            Err(why) => notices.push(format!("{shown} could not be converted, so this build ignores it: {why}")),
+            // **The refusal already says what landed**: [`upgrade_one`] answers the file it wrote when the conversion succeeded and
+            // only the move aside failed, and the parse failure when nothing was written. Saying "this build ignores it" over a
+            // file that *was* converted told a person their settings were lost when they were read from the YAML beside them.
+            Err(why) => notices.push(format!("{shown} was not fully converted: {why}")),
         }
     }
     notices
