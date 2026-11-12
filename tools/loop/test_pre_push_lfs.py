@@ -43,8 +43,8 @@ class PrePushUploadsLfsObjects(unittest.TestCase):
         git(self.tmp, "init", "-q", "-b", "main", str(self.work))
         git(self.work, "remote", "add", "origin", str(self.bare))
         git(self.work, "lfs", "install", "--local")
-        # The two checks the hook runs on a docs-only push, as stand-ins that pass: this test is about LFS.
-        for name in ("tools/loop/backlog.py", "tools/changelog/changelog.py"):
+        # The three checks the hook runs on a docs-only push, as stand-ins that pass: this test is about LFS.
+        for name in ("tools/loop/backlog.py", "tools/changelog/changelog.py", "tools/loop/version.py"):
             path = self.work / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("import sys\nsys.exit(0)\n")
