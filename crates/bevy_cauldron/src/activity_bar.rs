@@ -84,9 +84,11 @@ impl Plugin for ActivityBarPlugin {
 /// and it arrives with the workspace (NV-09) — so it answers `0` rather than a number nothing measured.
 pub fn badge(workspace: Workspace, problems: usize, waiting: usize) -> usize {
     match workspace {
-        Workspace::Map | Workspace::Files => problems,
+        Workspace::Map => problems,
         Workspace::Agent => waiting,
-        Workspace::Project | Workspace::World | Workspace::Kit | Workspace::Animation | Workspace::Sound | Workspace::Game => 0,
+        // `Files` answers `0` (GD-11, #373): the count is the reloads a file's edit did not take, which the Map tab says, and
+        // a second tab saying the same number would be two places for one fact (the protected badge test pins Map alone).
+        Workspace::Project | Workspace::World | Workspace::Kit | Workspace::Animation | Workspace::Sound | Workspace::Files | Workspace::Game => 0,
     }
 }
 
