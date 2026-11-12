@@ -262,8 +262,11 @@ fn open_file_on_a_placement_lands_in_files_at_its_line() {
     settle(&mut app);
     assert!(drawn(&mut app, "placed in m"), "the inspector says which maps place the selected piece; on screen: {:?}", on_screen(&mut app));
 
-    let button = bevy_gooey::testing::find_by_label(&mut app, "Open file").unwrap_or_else(|e| panic!("{e:?}"));
-    bevy_gooey::testing::click(&mut app, button);
+    let button = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<bevy_cauldron::crosslinks::OpenFileButton>>().single(world).unwrap_or_else(|e| panic!("one Open file button: {e}"))
+    };
+    app.world_mut().commands().trigger(bevy::ui_widgets::Activate { entity: button });
     settle(&mut app);
 
     assert_eq!(*app.world().resource::<Workspace>(), Workspace::Files, "Open file leaves the Map for the Files workspace");
@@ -284,8 +287,11 @@ fn open_piece_file_lands_in_the_library_at_the_piece() {
     };
     assert!(editor::lock_on_placement(app.world_mut(), "bed@0"));
     settle(&mut app);
-    let button = bevy_gooey::testing::find_by_label(&mut app, "Open piece file").unwrap_or_else(|e| panic!("{e:?}"));
-    bevy_gooey::testing::click(&mut app, button);
+    let button = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<bevy_cauldron::crosslinks::OpenPieceFileButton>>().single(world).unwrap_or_else(|e| panic!("one Open piece file button: {e}"))
+    };
+    app.world_mut().commands().trigger(bevy::ui_widgets::Activate { entity: button });
     settle(&mut app);
     assert_eq!(*app.world().resource::<Workspace>(), Workspace::Files);
     assert_eq!(files::active_file(app.world().resource::<Session>()).as_deref(), Some(piece_rel.as_str()), "on the library's file");

@@ -1042,7 +1042,9 @@ fn follow_on_primary_click(
     editors: Query<(&Hovered, &FileEditor, &CodeEditor, &CodeEditorValue)>,
     mut commands: Commands,
 ) {
-    if !mouse.just_pressed(MouseButton::Left) {
+    // **On the release**, a frame after the press: the editor puts the caret where the pointer went down in its own system, and a read on the
+    // press frame could be of the caret's old place.
+    if !mouse.just_released(MouseButton::Left) {
         return;
     }
     let primary = [KeyCode::SuperLeft, KeyCode::SuperRight, KeyCode::ControlLeft, KeyCode::ControlRight].into_iter().any(|k| keys.pressed(k));

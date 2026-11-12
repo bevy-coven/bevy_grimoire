@@ -732,7 +732,8 @@ fn draw_the_field_files(
             lines
                 .iter()
                 .filter_map(|line| {
-                    let component = line.split(": ").next()?;
+                    // The state view writes `module::Type: value`; the entity file's key is the type's own name.
+                    let component = line.split(": ").next()?.rsplit("::").next()?;
                     crate::crosslinks::component_line(&project.root, &entity.name, component).map(|(rel, at)| (component.to_owned(), rel, at))
                 })
                 .collect()
