@@ -13,8 +13,8 @@
 //!   the build has them (`ENVIRONMENT` for `bevy_elements`, `LIGHTS` for `bevy_lights`, `LIGHT MAP` for
 //!   `bevy_light_grid`). The same functions draw the same nodes, so every observer and readout they have keeps
 //!   working; only the parent moved.
-//! - **Sound** — the audio panel (`AUDIO`, `bevy_siren`). A build without that crate has no audio panel to show, and
-//!   the workspace says so in a sentence rather than drawing an empty column.
+//! - **Sound** — the audio panel: `AUDIO` with the project's cues listed in every build (`world_lists`, NV-11, #392), and the audition
+//!   controls when the build has `bevy_siren`. A build without that crate says so in a sentence beside the list.
 //! - **Not here: water and forest.** They are operations (`water_place`, `forest_scatter`) with no panel today, so
 //!   there is nothing of theirs to move; `light_view.rs` and `forest_view.rs` are the viewport's drawing of lights and
 //!   forests, not panels. That is recorded on the issue rather than papered over with an empty heading.
@@ -62,9 +62,8 @@ impl Plugin for WorkspacePanelsPlugin {
     }
 }
 
-/// **One section's column**: the block every section is spawned into, so the rows of one belong to each other. Only a
-/// build with a family crate has a section that asks for it; the terrain section is spawned as its own column.
-#[cfg(any(feature = "bevy_elements", feature = "bevy_lights", feature = "bevy_light_grid", feature = "bevy_siren"))]
+/// **One section's column**: the block every section is spawned into, so the rows of one belong to each other. The terrain section is
+/// spawned as its own column.
 fn block<'a>(p: &'a mut ChildSpawnerCommands) -> EntityCommands<'a> {
     p.spawn(Node {
         flex_direction: FlexDirection::Column,
@@ -125,9 +124,17 @@ fn spawn_sound_panel(mut commands: Commands, frame: Res<Frame>) {
     .id();
     commands.entity(root).with_children(|p| {
         chrome::title(p, "INSPECTOR");
-        #[cfg(feature = "bevy_siren")]
-        block(p).with_children(crate::audio_panel::spawn_section);
-        #[cfg(not(feature = "bevy_siren"))]
-        p.spawn(bevy_gooey::label(NO_AUDIO));
+        // **The cues (NV-11, #392):** listed in every build, from the project's `family/bevy_siren.ron`. Auditioning one needs the
+        // crate, so a build without it says so beside the list.
+        block(p).with_children(|s| {
+            #[cfg(feature = "bevy_siren")]
+            crate::audio_panel::spawn_section(s);
+            #[cfg(not(feature = "bevy_siren"))]
+            {
+                chrome::section(s, "AUDIO");
+                s.spawn(bevy_gooey::label(NO_AUDIO));
+            }
+            crate::world_lists::spawn_cue_list(s);
+        });
     });
 }

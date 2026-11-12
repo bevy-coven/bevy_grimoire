@@ -2636,6 +2636,8 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::activity_bar::ActivityBarPlugin);
         // **The World and Sound workspaces' panels** (NV-08, #385): spawned when their workspace is entered.
         app.add_plugins(crate::workspace_panels::WorkspacePanelsPlugin);
+        // **What the map and the project hold, as lists** (NV-11, #392-#395): cues, water, forest and lights, read from their files.
+        app.add_plugins(crate::world_lists::WorldListsPlugin);
         // **The Game workspace** (NV-09, #386): the running game's panel, its log and its state, and the watching of it.
         app.add_plugins(crate::game_view::GameViewPlugin);
         // **The Agent workspace** (NV-10, #387): the Familiar's block and history, in a workspace of their own.
