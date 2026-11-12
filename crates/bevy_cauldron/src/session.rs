@@ -569,6 +569,13 @@ pub fn close_tab(world: &mut World, workspace: Workspace, doc: &Doc) {
     let Some(index) = tabs.position(doc) else {
         return;
     };
+    // **A file with unsaved edits is not closed under the person** (GD-11, #373): the tab is where the text lives.
+    if doc.kind == Kind::File && world.get_resource::<crate::files::Files>().is_some_and(|f| f.is_dirty(&doc.name)) {
+        if let Some(mut state) = world.get_resource_mut::<EditorState>() {
+            state.status.problem(format!("{} has unsaved edits: save it before closing its tab", doc.name));
+        }
+        return;
+    }
     if doc.kind == Kind::Map {
         let live = world.get_resource::<OpenMap>().map(|o| (o.map.name.clone(), o.dirty()));
         if live.as_ref().is_some_and(|(name, _)| *name == doc.name) {

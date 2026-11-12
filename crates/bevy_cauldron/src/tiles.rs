@@ -48,6 +48,8 @@ crate::keys::enumerated! {
         Anim,
         /// Build reusable groups, and see what they present and what has gone stale under them.
         Compose,
+        /// **The project's files and the editor for them** (GD-11, #373): the file tree and a code editor.
+        Files,
     }
     /// **Every panel there is**, in strip order — for the ratchets that have to visit all of them.
     ///
@@ -86,6 +88,7 @@ impl Mode {
             Mode::Tiles => "TILES",
             Mode::Anim => "ANIM",
             Mode::Compose => "COMPOSE",
+            Mode::Files => "FILES",
         }
     }
 
@@ -99,6 +102,7 @@ impl Mode {
             Mode::Tiles => crate::keys::Context::Tiles,
             Mode::Anim => crate::keys::Context::Anim,
             Mode::Compose => crate::keys::Context::Compose,
+            Mode::Files => crate::keys::Context::Files,
         }
     }
 }
@@ -464,7 +468,7 @@ fn stage_camera(
                 crate::compose::carousel_height(&carousel.0).min(crate::view::MAX_ZOOM);
             rig.elevation = crate::view::ISO_ELEVATION;
         }
-        Mode::Map => {
+        Mode::Map | Mode::Files => {
             if let Some(was) = saved.0.take() {
                 rig.focus = was.focus;
                 rig.height = was.height;
@@ -4346,6 +4350,9 @@ fn focus_filter(
             Mode::Map => crate::filter::Pane::Palette,
             Mode::Anim => crate::filter::Pane::Rigs,
             Mode::Compose => crate::filter::Pane::Candidates,
+            // **No list of its own** (GD-11, #373): the Files workspace's tree has no filter box, so the key has
+            // no box to take; the Map's is the nearest honest answer and focusing it is harmless.
+            Mode::Files => crate::filter::Pane::Palette,
         };
         filters.take_focus(pane);
     }
@@ -7737,6 +7744,7 @@ fn apply_mode(
             Mode::Meshes | Mode::Tiles => is_tiles,
             Mode::Anim => is_anim,
             Mode::Compose => is_compose,
+            Mode::Files => false,
         };
         // A panel belonging to no tab is not ours to touch — the tab strip and the cost readout are
         // both unmarked and must stay visible in every mode.

@@ -580,6 +580,9 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // against a booted World in both directions — so a type that only a real launch ever inserts
     // belongs beside the other launch-only resources, not here.
     ("bevy_cauldron::session::Session", Ownership::Project),
+    // **The files open in the Files workspace** (GD-11, #373): a project's own text, with what a person typed and has not
+    // saved yet, so a switch to the Map and back keeps it. Dropped with the project (`files::keep_the_open_files`).
+    ("bevy_cauldron::files::Files", Ownership::Project),
     // Derived from the kit's meshes: a different kit means different thumbnails.
     ("bevy_cauldron::thumbs::Thumbnails", Ownership::Project),
     (

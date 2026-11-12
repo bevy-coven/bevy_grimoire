@@ -2634,6 +2634,8 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::add_meshes::AddMeshesPlugin);
         app.add_plugins(crate::menu_bar::MenuBarPlugin);
         app.add_plugins(crate::activity_bar::ActivityBarPlugin);
+        // **The Files workspace** (GD-11, #373): the file tree and the code editor.
+        app.add_plugins(crate::files::FilesPlugin);
         app.add_plugins(crate::app_verbs::AppVerbsPlugin);
         // **Each panel header's "?"** (UI-91, #257): the guide page that covers what the panel holds.
         app.add_plugins(crate::help::HelpPlugin);

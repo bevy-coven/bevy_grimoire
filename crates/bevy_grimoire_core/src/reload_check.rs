@@ -218,6 +218,92 @@ pub fn check(kind: &FileKind, file: &str, text: &str) -> Check {
     }
 }
 
+/// **How a project file is written**: the format its text is read in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Format {
+    Ron,
+    Yaml,
+}
+
+/// **The kind a project-relative file is, and the format its text is in** (GD-11, #373).
+///
+/// The registry's patterns name the RON paths (`maps/<name>.map.ron`); a project converted by
+/// [`crate::migrate`] holds the same files as `.yaml` (`maps/<name>.map.yaml`), so a `.yaml` path is
+/// looked up by the RON path it replaced. `rel` is spelled with `/` and is relative to the project's root:
+/// a kind based at the game's root matches it as it stands, a kind based at the project's own directory
+/// ([`crate::migrate::GRIMOIRE_DIR`]) matches what follows that directory.
+pub fn kind_of_path(rel: &str) -> Option<(&'static FileKind, Format)> {
+    use crate::reload::{kind_of, Base};
+    let (ron_path, format) = match rel.strip_suffix(".yaml") {
+        Some(stem) => (format!("{stem}.ron"), Format::Yaml),
+        None => (rel.to_owned(), Format::Ron),
+    };
+    if let Some(kind) = kind_of(Base::Root, &ron_path) {
+        return Some((kind, format));
+    }
+    let inside = ron_path.strip_prefix(crate::migrate::GRIMOIRE_DIR)?.strip_prefix('/')?;
+    kind_of(Base::Grimoire, inside).map(|kind| (kind, format))
+}
+
+/// The type's own YAML reader on `text`, and on a refusal the field it is wrong at and why (which carries
+/// the line and the column, as [`crate::yaml::from_str`] words them).
+fn run_yaml<T: DeserializeOwned>(text: &str, file: &str) -> Result<(), (Option<String>, String)> {
+    match crate::yaml::from_str::<T>(text, file) {
+        Ok(_) => Ok(()),
+        Err(problem) => {
+            let field = problem.where_.as_ref().and_then(|at| at.field.clone());
+            let reason = problem.why.clone().unwrap_or_else(|| problem.what.clone());
+            Err((field, reason))
+        }
+    }
+}
+
+/// **Parse `text` as `kind`, read as YAML** (GD-11, #373): the file editor's check of a converted project's
+/// files, through the one reader a load uses ([`crate::yaml::from_str`]), so an unknown key, a key given
+/// twice and a value of the wrong type are refused with the line they stand on. [`Check::Unchecked`] for a
+/// kind this crate has no type for, exactly as [`check`] is.
+pub fn check_yaml(kind: &FileKind, file: &str, text: &str) -> Check {
+    use crate::{
+        composition::Compositions, data_files::DataFiles, destructible::{Bake, Marks}, family::Family,
+        heightfield::Heightfield,
+        kits::Kits, library::Library, map::Map, note_agent::AgentSettings, notes::Notes, plan::Plan,
+        play::PlayConfig, policy::Policy, references::References, relations::Relations,
+        repetition::RepetitionRules, rigs::Rigs, rules::Rules, standards::Standards,
+        vocab::Vocabularies, volume::Volume, water::{WaterField, WaterPlan},
+    };
+    let result = match kind.id {
+        "kits" => run_yaml::<Kits>(text, file),
+        "vocab" => run_yaml::<Vocabularies>(text, file),
+        "library" => run_yaml::<Library>(text, file),
+        "policy" => run_yaml::<Policy>(text, file),
+        "rules" => run_yaml::<Rules>(text, file),
+        "compositions" => run_yaml::<Compositions>(text, file),
+        "standards" => run_yaml::<Standards>(text, file),
+        "repetition" => run_yaml::<RepetitionRules>(text, file),
+        "rigs" => run_yaml::<Rigs>(text, file),
+        "notes" => run_yaml::<Notes>(text, file),
+        "plan" => run_yaml::<Plan>(text, file),
+        "references" => run_yaml::<References>(text, file),
+        "relations" => run_yaml::<Relations>(text, file),
+        "map" => run_yaml::<Map>(text, file),
+        "terrain" => run_yaml::<Heightfield>(text, file),
+        "water_plan" => run_yaml::<WaterPlan>(text, file),
+        "water_field" => run_yaml::<WaterField>(text, file),
+        "volume" => run_yaml::<Volume>(text, file),
+        "data_registry" => run_yaml::<DataFiles>(text, file),
+        "family_list" => run_yaml::<Family>(text, file),
+        "agent" => run_yaml::<AgentSettings>(text, file),
+        "play" => run_yaml::<PlayConfig>(text, file),
+        "destructible_marks" => run_yaml::<Marks>(text, file),
+        "destructible_bake" => run_yaml::<Bake>(text, file),
+        _ => return Check::Unchecked,
+    };
+    match result {
+        Ok(()) => Check::Valid,
+        Err((field, reason)) => Check::Refused(Refusal { kind: kind.id, file: file.to_owned(), field, reason }),
+    }
+}
+
 /// **The kinds [`check`] cannot read**, so a reader knows which refusals it has to find another way.
 pub fn unchecked() -> impl Iterator<Item = &'static FileKind> {
     KINDS.iter().filter(|k| matches!(check(k, "", ""), Check::Unchecked))

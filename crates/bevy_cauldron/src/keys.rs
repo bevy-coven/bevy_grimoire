@@ -79,6 +79,10 @@ pub enum Context {
     /// place — not a limit to route around, since
     /// Liapis names *"too many options"* as a cause of the user fatigue this is all shaped to avoid.
     Tiles,
+    /// **The Files tab** (GD-11, #373): the file tree and the code editor. It has no key of its own, so only the
+    /// `Global` ones are live there, which is the point of its being a context at all: a Map verb must not
+    /// fire on a tab that is not the Map, and the code editor's own keys are gooey's (it holds `TextEditing`).
+    Files,
     /// A text field is taking raw keys. Overlaps everything, and suppresses everything.
     ///
     /// **A filter box sets this too**, and says so a second way: `Live.2` carries
@@ -91,13 +95,14 @@ impl Context {
     /// **Every context a binding could be judged against**, in one place for the same reason
     /// [`Stance::ALL`] is: the badge tests sweep it, and a seventh context therefore costs one
     /// edit here rather than a hand-written list in each test that silently stops reaching it.
-    pub const ALL: [Context; 7] = [
+    pub const ALL: [Context; 8] = [
         Context::Global,
         Context::Map,
         Context::Meshes,
         Context::Anim,
         Context::Compose,
         Context::Tiles,
+        Context::Files,
         Context::Typing,
     ];
 
@@ -111,7 +116,7 @@ impl Context {
             // **A tab overlaps only itself.** Five arms rather than a `self == other` catch-all,
             // because the catch-all would also make a *new* context overlap only itself by default —
             // and the whole point of this table is that adding one costs a decision here.
-            (Map, Map) | (Meshes, Meshes) | (Tiles, Tiles) | (Anim, Anim) | (Compose, Compose) => {
+            (Map, Map) | (Meshes, Meshes) | (Tiles, Tiles) | (Anim, Anim) | (Compose, Compose) | (Files, Files) => {
                 true
             }
             // **The tabs are never live together**, which is what lets them reuse each other's

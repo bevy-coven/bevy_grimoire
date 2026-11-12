@@ -156,10 +156,12 @@ impl Workspace {
             Workspace::Map => &[Mode::Map],
             Workspace::Kit => &[Mode::Meshes, Mode::Tiles, Mode::Compose],
             Workspace::Animation => &[Mode::Anim],
+            // **The project's files** (GD-11, #373): one panel, the file tree and its editor.
+            Workspace::Files => &[Mode::Files],
             // **Nothing yet.** These workspaces hold documents rather than panels (NV-04, NV-07) or
             // a page of their own (NV-08, NV-09, NV-10), and until they are built they show no
             // panel and are not registered.
-            Workspace::Project | Workspace::World | Workspace::Sound | Workspace::Files | Workspace::Game | Workspace::Agent => &[],
+            Workspace::Project | Workspace::World | Workspace::Sound | Workspace::Game | Workspace::Agent => &[],
         }
     }
 
@@ -189,7 +191,7 @@ impl Workspace {
     /// A workspace that is not built is refused rather than shown empty: the vision's *"no
     /// placeholder screens"*.
     pub const fn is_built(self) -> bool {
-        matches!(self, Workspace::Map | Workspace::Kit | Workspace::Animation)
+        matches!(self, Workspace::Map | Workspace::Kit | Workspace::Animation | Workspace::Files)
     }
 
     /// **What this workspace is waiting for**, in the issue series' own words, or `None` when it is
@@ -199,10 +201,10 @@ impl Workspace {
         match self {
             Workspace::Project | Workspace::World => Some("the Project and World workspaces arrive with NV-08 (#385)"),
             Workspace::Sound => Some("the Sound workspace arrives with NV-08 (#385)"),
-            Workspace::Files => Some("the Files workspace arrives with GD-11"),
+            // `Files` is built (GD-11, #373): the file tree and the code editor.
             Workspace::Game => Some("the Game workspace arrives with NV-09 (#386)"),
             Workspace::Agent => Some("the Agent workspace arrives with NV-10 (#387)"),
-            Workspace::Map | Workspace::Kit | Workspace::Animation => None,
+            Workspace::Map | Workspace::Kit | Workspace::Animation | Workspace::Files => None,
         }
     }
 
