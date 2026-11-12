@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-11
 
+- **nv-03-activity-bar** `646559d3` The activity bar: one icon per registered workspace at the window's far left, with badges (#380) *For you: A strip of workspace icons now runs down the left edge of the editor; click one to switch, and View, Show activity bar hides it.* *No clip: visible, not yet recorded: fleet worker*
 - **nav-02-keys** `49bed771` The four view keys (=, 1, 2, 3) are gone and the nine workspace chords are the way: the key budget is raised by exactly five (#379) *For you: The Command (Control) plus 1 to 9 keys move between workspaces; the bare 1, 2, 3 and = keys no longer switch panels, and a keymap you saved that names them still loads.* *No clip: visible, not yet recorded: fleet worker*
 - **ag-06-lessons** `46de85f8a32d` An agent proposes one line for the project's guide after a hand-back, and the person keeps or discards it in the AGENT block; only Keep writes .dark_factory/AGENTS.md *No clip: visible, not yet recorded: fleet worker*
 - **ag-05-edit-by-label** `8758619867a1` The agent guide on the project page is edited the way a person edits it: the field under its label takes the keystrokes and Save writes and grants what was typed *No clip: visible, not yet recorded: fleet worker*
