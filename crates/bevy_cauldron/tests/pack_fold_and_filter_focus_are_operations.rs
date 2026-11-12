@@ -125,6 +125,13 @@ fn space_folds_a_pack_through_the_operation_and_an_agent_folds_it_too() {
 #[test]
 fn space_opens_the_excluded_band_through_the_operation_and_an_agent_closes_it() {
     let mut app = editor("band", Mode::Meshes);
+    // **The band exists only once a pack is left out**: `candidate_list_rows` draws `EXCLUDED` above the packs the
+    // project's policy excludes, and a fixture project excludes none. `pack_set_excluded` is the shelf's own switch.
+    let left_out = apply(&mut app, "pack_set_excluded", json!({"pack": "bbb", "excluded": true}));
+    assert_eq!(left_out["outcome"], "applied", "the fixture's policy can leave a pack out: {left_out}");
+    for _ in 0..4 {
+        app.update();
+    }
     {
         let mut s = app.world_mut().resource_mut::<ImportState>();
         s.excluded_open = false;

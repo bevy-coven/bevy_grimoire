@@ -106,7 +106,11 @@ fn page(app: &App) -> Option<usize> {
 fn the_rig_keys_and_an_agent_walk_one_ring() {
     let mut app = editor("rigs", Mode::Anim);
     let count = app.world().resource::<BenchState>().names().len();
-    assert_eq!(count, 10, "the shipped manifest lists ten rigs");
+    // **Read, never assumed**: the manifest is the project's, and a shipped rig added tomorrow must not fail this file.
+    // Six is the floor the arithmetic below needs: a stride of five has to land somewhere other than the start.
+    assert!(count >= 6, "the shipped manifest lists at least six rigs: {count}");
+    // **The ring**, which every expectation below is written through, so no index is a literal.
+    let ring = |at: usize| at % count;
     assert_eq!(rig(&app), 0);
     tap(&mut app, &[], KeyCode::ArrowDown);
     assert_eq!(rig(&app), 1, "down walks to the next rig");
@@ -119,12 +123,20 @@ fn the_rig_keys_and_an_agent_walk_one_ring() {
     assert_eq!(said["outcome"], "applied", "an agent's call is applied, not refused for want of a view: {said}");
     assert_eq!(rig(&app), 2, "an agent's walk moves the editor's own cursor");
     tap(&mut app, &[KeyCode::ShiftLeft], KeyCode::ArrowDown);
-    assert_eq!(rig(&app), 7, "Shift+down strides five");
+    assert_eq!(rig(&app), ring(2 + 5), "Shift+down strides five");
     apply(&mut app, "rig_walk", json!({"by": "next", "rows": 5}));
-    assert_eq!(rig(&app), 2, "and the list is a ring: five past the seventh is the second");
+    assert_eq!(rig(&app), ring(2 + 5 + 5), "an agent strides by `rows`, five past where the key left it");
     tap(&mut app, &[], KeyCode::ArrowUp);
+    assert_eq!(rig(&app), ring(2 + 5 + 5 - 1), "up walks back one");
     apply(&mut app, "rig_walk", json!({"by": "prev"}));
-    assert_eq!(rig(&app), 0, "up and an agent's `prev` walk back");
+    assert_eq!(rig(&app), ring(2 + 5 + 5 - 2), "and an agent's `prev` walks back the same one");
+    // **The list is a ring**: walking back from the first rig lands on the last, which a clamping list could not do.
+    let mut guard = 0;
+    while rig(&app) != 0 {
+        apply(&mut app, "rig_walk", json!({"by": "prev"}));
+        guard += 1;
+        assert!(guard <= count, "the walk never came back to the first rig in {count} steps");
+    }
     apply(&mut app, "rig_walk", json!({"by": "prev"}));
     assert_eq!(rig(&app), count - 1, "and wrap from the first rig to the last");
     let refused = apply(&mut app, "rig_walk", json!({"by": "sideways"}));

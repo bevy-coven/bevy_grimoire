@@ -666,16 +666,21 @@ struct Gates<'w, 's> {
     /// carried by the same view.
     bench: Option<ResMut<'w, crate::anim_tab::BenchState>>,
     build: Option<ResMut<'w, crate::build::Build>>,
-    /// **The candidate list's folds and the filter boxes' keyboard** (E-002, #129 slice 25): what `pack_fold` and
-    /// `filter_focus` change, carried by the same view.
-    import: Option<ResMut<'w, crate::tiles::ImportState>>,
-    filters: Option<ResMut<'w, crate::filter::Filters>>,
 }
 
 impl Gates<'_, '_> {
     /// **The view an agent's call to a view operation changes**, as the editor holds it now: the tool from
     /// the editor's state, the rest from the resources a person's key reads.
-    fn view_in(&self, state: Option<&crate::editor::EditorState>, project: Option<&crate::project::Project>) -> crate::ops_view::View {
+    /// **The candidate list's folds and the filter box that has the keyboard** (E-002, #129 slice 25) are read from
+    /// the caller's own parameters, not held here: `operation_apply` reads and writes `ImportState` and `Filters`
+    /// itself, and a `SystemParam` holding a `ResMut` of a resource its system also names is bevy's `B0002`.
+    fn view_in(
+        &self,
+        state: Option<&crate::editor::EditorState>,
+        project: Option<&crate::project::Project>,
+        import: Option<&crate::tiles::ImportState>,
+        filters: Option<&crate::filter::Filters>,
+    ) -> crate::ops_view::View {
         crate::ops_view::View {
             tool: state.map(|s| s.tool).unwrap_or_default(),
             rung: self.rung.as_deref().map(|r| r.0).unwrap_or_default(),
@@ -692,8 +697,8 @@ impl Gates<'_, '_> {
             tile_page: self.build.as_deref().zip(project).and_then(|(build, project)| {
                 build.browsing.map(|row| crate::ops_view::TilePage { row, rows: crate::build::page_len(project, build) })
             }),
-            packs: self.import.as_deref().map(|i| i.folds()).unwrap_or_default(),
-            filter_pane: self.filters.as_deref().and_then(|f| f.focus_name()),
+            packs: import.map(|i| i.folds()).unwrap_or_default(),
+            filter_pane: filters.and_then(|f| f.focus_name()),
             ..Default::default()
         }
     }
@@ -701,7 +706,13 @@ impl Gates<'_, '_> {
     /// **Apply the view the operation answered with**, the way each key applies its own answer. Each is
     /// compared first and written only when it moved: writing through a `ResMut` marks it changed, and
     /// every system gated on a change would rebuild for a call that changed nothing.
-    fn apply_view(&mut self, view: crate::ops_view::View, state: Option<&mut crate::editor::EditorState>) {
+    fn apply_view(
+        &mut self,
+        view: crate::ops_view::View,
+        state: Option<&mut crate::editor::EditorState>,
+        import: Option<&mut crate::tiles::ImportState>,
+        filters: Option<&mut crate::filter::Filters>,
+    ) {
         if let Some(state) = state
             && state.tool != view.tool
         {
@@ -764,12 +775,12 @@ impl Gates<'_, '_> {
             build.browsing = Some(page.row);
         }
         // **The candidate list's folds and the filter box that has the keyboard** (E-002, #129 slice 25), written only when they moved.
-        if let Some(import) = self.import.as_deref_mut()
+        if let Some(import) = import
             && !import.folds_are(&view.packs)
         {
             import.set_folds(&view.packs);
         }
-        if let Some(filters) = self.filters.as_deref_mut()
+        if let Some(filters) = filters
             && let Some(pane) = filters.wants_focus(view.filter_pane.as_deref())
         {
             filters.take_focus(pane);
@@ -1876,7 +1887,7 @@ fn operation_apply(
     mut gates: Gates,
     door: Option<Res<crate::workspace::Workspace>>,
     mode: Option<Res<crate::tiles::Mode>>,
-    filters: Option<Res<crate::filter::Filters>>,
+    mut filters: Option<ResMut<crate::filter::Filters>>,
     mut import: Option<ResMut<crate::tiles::ImportState>>,
     menu: Option<Res<crate::project_assets::PointedAt>>,
     mut proposal: Option<ResMut<crate::editor::Proposal>>,
@@ -1986,7 +1997,7 @@ fn operation_apply(
         let read_project = project.as_deref();
         let read_open = open.as_deref();
         let ctx = Ctx {
-        view: op.changes_view().then(|| gates.view_in(state.as_deref(), read_project)), trust_file: None,
+        view: op.changes_view().then(|| gates.view_in(state.as_deref(), read_project, import.as_deref(), filters.as_deref())), trust_file: None,
             root: menu.as_ref().map(|m| m.root.clone()),
             project: read_project.cloned(),
             open: read_open.cloned(),
@@ -2016,7 +2027,7 @@ fn operation_apply(
     let mut ctx = take(&project, &open);
     // **The menu's root, when the menu is up**, so `map_create` has a directory before any door.
     ctx.root = menu.as_ref().map(|m| m.root.clone());
-    ctx.view = op.changes_view().then(|| gates.view_in(state.as_deref(), ctx.project.as_ref()));
+    ctx.view = op.changes_view().then(|| gates.view_in(state.as_deref(), ctx.project.as_ref(), import.as_deref(), filters.as_deref()));
     // **The proposal travels by value**, in and out, because it is not map data.
     ctx.proposal = proposal.as_deref_mut().and_then(|r| r.0.take());
     // **A proposal with no seed named gets the editor's own next one.** This is what makes two
@@ -2043,7 +2054,7 @@ fn operation_apply(
     let carried = ctx.proposal.take();
     // **The view the operation answered with goes back to the editor's own** (E-002, #129), as a key's does.
     if let Some(view) = ctx.view.take() {
-        gates.apply_view(view, state.as_deref_mut());
+        gates.apply_view(view, state.as_deref_mut(), import.as_deref_mut(), filters.as_deref_mut());
     }
     // **A project the operation LOADED is installed here, before the map goes back.** `map_open` can
     // load the project from the menu's root — that is what lets an agent make a map and then work in
