@@ -12,12 +12,12 @@
 //!
 //! # The left panel is the shell split's collapsed pane (UI-R06, #336)
 //!
-//! **Hiding the left panel collapses the shell's gooey split**, the way Enter on its divider does, and showing it restores
+//! **Hiding the left panel collapses the shell's gooey split**, as Enter on its divider does, and showing it restores
 //! it: the panes slide on gooey's spring ([`bevy_gooey::SplitGlide`]) instead of the viewport jumping a pane's width, and the
 //! collapsed pane **peeks** — the pointer resting on the divider floats the pane over the viewport at the width a restore would
-//! give it, with the viewport still (gooey's `SplitPeek`, #69). gooey has no call that collapses a split from code
-//! (`ToggleSplit` is the crate's own), so [`collapse_the_left_pane`] presses Enter on the divider, which is the divider's own,
-//! public input: a [`FocusedInput`] of the key, sent to the divider.
+//! give it, with the viewport still (gooey's `SplitPeek`, #69). **The shell asks for it with gooey's [`CollapseSplit`]**
+//! (G-77, #88), triggered on the split: the one path the divider's own Enter, South button and double press take, so
+//! [`collapse_the_left_pane`] synthesises no key and reaches into nothing of gooey's.
 //!
 //! **Two numbers are the shell's to hold while it is collapsed.** The pane's floor ([`SplitMin::first`], which keeps a dragged
 //! pane wide enough for a panel) is put to nothing so the pane can shut, and given back when a restore has landed; the
@@ -40,11 +40,8 @@
 //! **Session state, not a setting.** A person who left Zen mode on would open the editor to a bare viewport and no menu; the
 //! left panel's state is likewise the session's. Neither is written to the user's file.
 
-use bevy::input::ButtonState;
-use bevy::input::keyboard::{Key, KeyboardInput};
-use bevy::input_focus::FocusedInput;
 use bevy::prelude::*;
-use bevy_gooey::{Modifiers, Role, Shortcut, SplitDivider, SplitFraction, SplitGlide, SplitMin, SplitPeek, SplitSaved};
+use bevy_gooey::{CollapseSplit, Modifiers, Role, Shortcut, SplitDivider, SplitFraction, SplitGlide, SplitMin, SplitPeek, SplitSaved};
 
 use crate::chrome::{BOTTOM_DOCK_H, BottomDock, Frame, FrameSystems, ShellSplit, WORKBENCH_FLOOR_H};
 use crate::confirm::Confirm;
@@ -172,21 +169,11 @@ enum Collapse {
     Giving(f32),
 }
 
-/// **Press Enter on the divider**: the split's own request to collapse its first pane or give it back, which gooey does not
-/// otherwise expose to a game. The key is read from the divider's observer and propagates no further.
-fn press_enter_on(commands: &mut Commands, divider: Entity) {
-    commands.trigger(FocusedInput::new(
-        divider,
-        KeyboardInput {
-            key_code: KeyCode::Enter,
-            logical_key: Key::Enter,
-            state: ButtonState::Pressed,
-            text: None,
-            repeat: false,
-            window: Entity::PLACEHOLDER,
-        },
-        Entity::PLACEHOLDER,
-    ));
+/// **Ask the shell split to collapse its first pane, or give it back**: gooey's [`CollapseSplit`], the one path the divider's
+/// Enter, South button and double press take too, so the slide, the saved fraction, the peek and the one
+/// `ValueChange<f32>` are the same whoever asks. Asking for the state the split is in does nothing.
+fn ask_the_split(commands: &mut Commands, split: Entity, collapsed: bool) {
+    commands.trigger(CollapseSplit { entity: split, collapsed });
 }
 
 /// What the shell reads of its split to collapse it.
@@ -238,7 +225,7 @@ fn collapse_the_left_pane(
                 fraction.0 = at_least;
             }
             min.first = 0.0;
-            press_enter_on(&mut commands, divider);
+            ask_the_split(&mut commands, split, true);
             *state = Collapse::Asking(floor);
         }
         Collapse::Open => {}
@@ -253,7 +240,7 @@ fn collapse_the_left_pane(
         }
         Collapse::Held(floor) => {
             if collapsed && !want {
-                press_enter_on(&mut commands, divider);
+                ask_the_split(&mut commands, split, false);
                 *state = Collapse::Giving(floor);
             } else if !collapsed && !gliding {
                 // Docked by the person: the pane is open and the view says so.
@@ -266,7 +253,7 @@ fn collapse_the_left_pane(
         Collapse::Giving(floor) => {
             if collapsed && want {
                 // Hidden again before it opened: collapse from where it is drawn.
-                press_enter_on(&mut commands, divider);
+                ask_the_split(&mut commands, split, true);
                 *state = Collapse::Asking(floor);
             } else if !collapsed && !gliding {
                 min.first = floor;

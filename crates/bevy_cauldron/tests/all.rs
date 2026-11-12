@@ -393,6 +393,7 @@ mod the_launcher_opens_a_project_by_its_name;
 mod the_picker_says_when_there_is_no_chooser;
 mod the_shortcut_overlay_answers_to_k;
 mod the_shell_can_be_staged_on_every_panel;
+mod the_shell_collapses_through_gooeys_collapse_split;
 mod the_shell_dock_builds_nothing_over_the_viewport;
 mod the_shell_is_a_gooey_dock;
 mod the_theme_reaches_the_editors_own_labels;
