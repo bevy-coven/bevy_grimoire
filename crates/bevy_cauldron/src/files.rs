@@ -1039,10 +1039,10 @@ fn follow_on_primary_click(
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     mut files: ResMut<Files>,
-    // **The pointer's place is the column's**, not the editor's: `Hovered` is the host's (it is the node the picking backend finds under
-    // the pointer), while `FileEditor` and the widget's own components sit on the editor inside it. Asking for all of them on one entity
-    // matched nothing, which is why the click did nothing while F12 on the same value followed it.
-    hosts: Query<&Hovered, With<FilesHost>>,
+    // **No hover test**: `Hovered` is set on the deepest node under the pointer, which inside the editor is the editor's own node, not
+    // the column that holds it — so asking either node whether it is hovered answered no and the click did nothing while F12 on the same
+    // value followed it. The gesture is the modifier, and the reference is read under the caret the press put where the pointer went down;
+    // a Cmd/Ctrl+click anywhere in the Files workspace is the same gesture, and a plain click is still only an edit.
     editors: Query<(&FileEditor, &CodeEditor, &CodeEditorValue)>,
     mut commands: Commands,
 ) {
@@ -1053,9 +1053,6 @@ fn follow_on_primary_click(
     }
     let primary = [KeyCode::SuperLeft, KeyCode::SuperRight, KeyCode::ControlLeft, KeyCode::ControlRight].into_iter().any(|k| keys.pressed(k));
     if !primary {
-        return;
-    }
-    if !hosts.iter().any(Hovered::get) {
         return;
     }
     let found = editors
