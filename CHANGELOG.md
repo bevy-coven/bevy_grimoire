@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-12
 
+- **nv-11-forest-list** `b25d4d5f9` NV-11: the World workspace lists a map's forest *For you: The World workspace now lists how many trees your map has and how many of each kind.* *No clip: visible, not yet recorded: fleet worker*
 - **nv-11-water-list** `345402870` NV-11: the World workspace lists a map's water *For you: The World workspace now lists the springs, sinks and lakes placed on your map.* *No clip: visible, not yet recorded: fleet worker*
 - **nv-11-lights-list** `603092e0e` NV-11: the World workspace lists the map's lights in every build *For you: The World workspace now lists the light fixtures on your map, even in an editor built without the lights crate.* *No clip: visible, not yet recorded: fleet worker*
 - **nv-11-cue-list** `b02f5f083` NV-11: the Sound workspace lists the project's cues in every build *For you: The Sound workspace now lists your project's sound cues even in an editor built without the audio crate.* *No clip: visible, not yet recorded: fleet worker*
