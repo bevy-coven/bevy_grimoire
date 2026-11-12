@@ -23,7 +23,7 @@ use bevy_cauldron::agent_guide::UserGuideFile;
 use bevy_cauldron::familiar::FamiliarItem;
 use bevy_cauldron::harness;
 use bevy_cauldron::present::Lessons;
-use bevy_cauldron::wish_view::{LessonDiscard, LessonKeep, WishUnfold};
+use bevy_cauldron::wish_view::{LessonDiscard, LessonKeep};
 use bevy_grimoire_core::agent_guide::PROJECT_PATH;
 use bevy_grimoire_core::lesson::{LESSON_MAX_CHARS, LESSONS_HEADING};
 use bevy_grimoire_core::trust::{self, TrustStore};
@@ -206,8 +206,14 @@ fn a_kept_lesson_lands_in_the_guide_under_lessons_and_is_served_without_a_questi
 
     let root = app.world().resource::<bevy_cauldron::project::Project>().root.clone();
     let file = std::fs::read_to_string(guide_path(&root)).expect("the guide reads");
-    assert!(file.trim_end().ends_with(&format!("- {line} (")), "the lesson is the guide's last line: {file}");
-    assert!(file.contains(&format!("({}", "")) || file.contains(", an agent)") || file.contains(", "), "the line carries a date and a client: {file}");
+    // **The line is the guide's last, dated and signed**: `- <lesson> (<date>, <client>)`, with the
+    // client `an agent` because none introduced itself at `grimoire/agent_hello` here.
+    let last = file.trim_end().lines().last().expect("the guide has lines");
+    let stamp = last.strip_prefix(&format!("- {line} (")).and_then(|rest| rest.strip_suffix(", an agent)"));
+    assert!(
+        stamp.is_some_and(|date| date.len() == 10 && date.matches('-').count() == 2),
+        "the lesson is the guide's last line, dated and signed: {file}"
+    );
     assert_eq!(lessons(&mut app)[0]["state"], "kept", "the agent reads `kept`");
 
     // **And the next guide is served it**, with no trust question: the content was allowed before,

@@ -297,10 +297,13 @@ struct RowShown {
 }
 
 /// **One lesson row's own state**, as [`RowsShown`] compares it. A lesson's row is shorter than a
-/// wish's — one line and its reason — so what decides the rebuild is smaller too.
+/// wish's — one line and its reason — so what decides the rebuild is smaller too. **Whether it is
+/// unfolded is part of it**: the reason and the two answers exist only in the unfolded body, so a
+/// row whose fold changed is a different subtree.
 #[derive(Clone, PartialEq, Eq)]
 struct LessonShown {
     id: String,
+    unfolded: bool,
     state: crate::present::LessonState,
     note: Option<String>,
 }
@@ -325,7 +328,12 @@ impl RowsShown {
             lessons: lessons
                 .queued
                 .iter()
-                .map(|q| LessonShown { id: q.lesson.id.clone(), state: q.state, note: q.note.clone() })
+                .map(|q| LessonShown {
+                    id: q.lesson.id.clone(),
+                    unfolded: open.is_open(&q.lesson.id),
+                    state: q.state,
+                    note: q.note.clone(),
+                })
                 .collect(),
         }
     }
