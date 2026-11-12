@@ -236,7 +236,7 @@ impl Operation for FilesReplace {
 
     fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
         // The first file the replace would change, with its first changed line.
-        let Ok(p) = ReplaceParams::parse(params) else { return Shown::Nowhere };
+        let Ok(p) = ReplaceParams::parse(params) else { return Shown::File { path: PROJECT_FOLDER.to_owned(), lines: None } };
         let first = match &p.restore {
             Some(restore) => restore.first().map(|r| (r.path.clone(), None)),
             None => Self::planned(ctx, &p).ok().and_then(|(_, plan)| {
@@ -245,10 +245,14 @@ impl Operation for FilesReplace {
         };
         match first {
             Some((path, lines)) => Shown::File { path, lines },
-            None => Shown::Nowhere,
+            None => Shown::File { path: PROJECT_FOLDER.to_owned(), lines: None },
         }
     }
 }
+
+/// **What a replace that has no file to point at names**: the project's own folder, the tree the Files workspace shows. A
+/// replace always has somewhere a person can look (its files), so it never answers `Nowhere`.
+const PROJECT_FOLDER: &str = ".";
 
 // ── file_edit ────────────────────────────────────────────────────────────────
 
@@ -468,7 +472,7 @@ impl Operation for FileEdit {
     }
 
     fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
-        let Ok(p) = EditParams::parse(params) else { return Shown::Nowhere };
+        let Ok(p) = EditParams::parse(params) else { return Shown::File { path: PROJECT_FOLDER.to_owned(), lines: None } };
         let lines = Self::resolve(ctx, &p).ok().and_then(|(_, old, new)| crate::files::changed_lines(&old, &new));
         Shown::File { path: p.path, lines }
     }
