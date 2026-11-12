@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-11
 
+- **picker-operations** `e03ea6120` The composition picker's P and Shift+up/down keys are operations an agent calls too (composition_picker_toggle, composition_picker_walk) *No clip: an operation behind existing keys, no new picture; proved by composition_picker_is_an_operation*
 - **outliner-toggles** `a2f9e5525` The outliner hides, shows and locks pieces and layers through operations an agent calls too, and a click leaves what is hidden or locked alone *No clip: visible, not yet recorded: fleet worker*
 - **panels4-show-reload-panel** View > Show reload panel puts the bottom dock up whatever the window's room, and the dock has one writer so ending Zen in a smaller window never flashes it *For you: A new View row, Show reload panel, shows what became of each file you edited, even on a short window where the strip along the bottom stays away on its own.* *No clip: a View row and a layout rule; proved by crates/bevy_cauldron/tests/the_reload_panel_is_a_gooey_dock_panel.rs (view_show_reload_panel_shows_the_dock_in_the_reference_window_and_unticking_hides_it, ending_zen_in_a_window_that_shrank_leaves_the_dock_hidden_at_once)*
 - **nv-06-back-and-forward** `53797d3a` Back and Forward across workspaces and cameras, bounded at 100 places *No clip: visible, not yet recorded: fleet worker*
