@@ -1374,6 +1374,9 @@ pub const BINDINGS: &[Binding] = &[
     // Project is not registered, and it is still Project when NV-08 lands — a chord that walked to
     // whatever happened to be built would renumber a person's fingers on every release.
     //
+    // **The chord is spelled `Ctrl+2`, not `Ctrl+Digit2`** (GD-11, #373): the strip's one badge lists every offered workspace chord on one
+    // line, and with Files registered the longer spelling grew the badge until it was drawn over the strip's own "Switch to" mark.
+    //
     // **One `does` for all nine**, so the census collapses them into one badge on the strip, the
     // way the three panel slots once were (`badges` joins neighbours that share a home and a `does`).
     // Nine separate badges on one control would break `no_home_carries_more_than_it_can_show`.
@@ -1382,7 +1385,7 @@ pub const BINDINGS: &[Binding] = &[
         KeyCode::Digit1,
         true,
         Context::Global,
-        "Digit1",
+        "1",
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
@@ -1391,7 +1394,7 @@ pub const BINDINGS: &[Binding] = &[
         KeyCode::Digit2,
         true,
         Context::Global,
-        "Digit2",
+        "2",
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
@@ -1400,7 +1403,7 @@ pub const BINDINGS: &[Binding] = &[
         KeyCode::Digit3,
         true,
         Context::Global,
-        "Digit3",
+        "3",
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
@@ -1409,7 +1412,7 @@ pub const BINDINGS: &[Binding] = &[
         KeyCode::Digit4,
         true,
         Context::Global,
-        "Digit4",
+        "4",
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
@@ -1418,7 +1421,7 @@ pub const BINDINGS: &[Binding] = &[
         KeyCode::Digit5,
         true,
         Context::Global,
-        "Digit5",
+        "5",
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
@@ -1427,7 +1430,7 @@ pub const BINDINGS: &[Binding] = &[
         KeyCode::Digit6,
         true,
         Context::Global,
-        "Digit6",
+        "6",
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
@@ -1436,7 +1439,7 @@ pub const BINDINGS: &[Binding] = &[
         KeyCode::Digit7,
         true,
         Context::Global,
-        "Digit7",
+        "7",
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
@@ -1445,7 +1448,7 @@ pub const BINDINGS: &[Binding] = &[
         KeyCode::Digit8,
         true,
         Context::Global,
-        "Digit8",
+        "8",
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
@@ -1454,7 +1457,7 @@ pub const BINDINGS: &[Binding] = &[
         KeyCode::Digit9,
         true,
         Context::Global,
-        "Digit9",
+        "9",
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),

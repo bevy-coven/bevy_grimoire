@@ -4357,7 +4357,11 @@ fn focus_filter(
             // key has no box to take; the Map's is the nearest honest answer and focusing it is harmless.
             Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files => crate::filter::Pane::Palette,
         };
-        filters.take_focus(pane);
+        // **The Files workspace has no filter box at all** (GD-11, #373): the key takes nothing there, rather than focusing a
+        // box of the Map's that is not on screen.
+        if *mode != Mode::Files {
+            filters.take_focus(pane);
+        }
     }
     if crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::FocusTagFilter) {
         filters.take_focus(crate::filter::Pane::Tags);
