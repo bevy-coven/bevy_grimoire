@@ -124,6 +124,12 @@ pub enum Kind {
     Clip,
     /// A registered data file, whose page is the DATA table.
     Data,
+    /// A sound cue of the project's `family/bevy_siren.ron`, on the Sound workspace's list (NV-07, #384).
+    Cue,
+    /// A script: a Rhai file of the project, opened in the Files workspace.
+    Script,
+    /// Any other text file of the project, opened in the Files workspace.
+    File,
     Note,
     Settings,
     Workspace,
@@ -141,6 +147,9 @@ impl Kind {
             Kind::Rig => "rig",
             Kind::Clip => "clip",
             Kind::Data => "data",
+            Kind::Cue => "cue",
+            Kind::Script => "script",
+            Kind::File => "file",
             Kind::Note => "note",
             Kind::Settings => "settings",
             Kind::Workspace => "workspace",
@@ -158,14 +167,27 @@ impl Kind {
             Kind::Rig => "Rig",
             Kind::Clip => "Clip",
             Kind::Data => "Data file",
+            Kind::Cue => "Cue",
+            Kind::Script => "Script",
+            Kind::File => "File",
             Kind::Note => "Note",
             Kind::Settings => "Setting",
             Kind::Workspace => "Workspace",
         }
     }
 
+    /// **What a reference of `kind` names, in a person's words**, for the sentence that says the project does not hold it.
+    pub fn reference_word(kind: &str) -> &'static str {
+        match kind {
+            crate::files_lang::CUE_KIND => "sound cue",
+            "library" => "library piece",
+            "compositions" => "composition",
+            _ => "thing",
+        }
+    }
+
     /// **The order the headings appear in**, which is [`GotoIndex`]'s own order.
-    pub const ALL: [Kind; 11] = [
+    pub const ALL: [Kind; 14] = [
         Kind::Map,
         Kind::Placement,
         Kind::Piece,
@@ -174,6 +196,9 @@ impl Kind {
         Kind::Rig,
         Kind::Clip,
         Kind::Data,
+        Kind::Cue,
+        Kind::Script,
+        Kind::File,
         Kind::Note,
         Kind::Settings,
         Kind::Workspace,
@@ -190,6 +215,12 @@ pub struct GotoIndex {
     /// **What the entries were built from**, so a frame that changed nothing costs a comparison
     /// rather than a second read of the project. See [`Built`].
     built: Option<Built>,
+    /// **The text files the Files tree lists**, and the values in them that name another thing (NV-07, #384): one scan, read by this
+    /// finder's rows and by every `Used by` list, so they cannot disagree.
+    files: Vec<String>,
+    refs: Vec<crate::crosslinks::Named>,
+    /// The project the scan was of and its stamp, so a settled project costs a comparison.
+    scan: Option<(std::path::PathBuf, u64)>,
 }
 
 /// **The facts an index depends on.** Compared, not hashed.
@@ -208,6 +239,8 @@ struct Built {
     /// **The notes' generation**, because the notes file is written by the panel rather than by an
     /// operation and the watcher may not have adopted it on the frame a note appears.
     notes: u64,
+    /// The scan's stamp: a file added, removed or changed, which is how a new cue or a new script reaches the finder.
+    scan: Option<u64>,
 }
 
 impl GotoIndex {
@@ -227,6 +260,33 @@ impl GotoIndex {
     /// **Every entry of one kind**, for a panel that lists what it holds (NV-07's `Used by`).
     pub fn of_kind(&self, kind: Kind) -> impl Iterator<Item = &Entry> {
         self.entries.iter().filter(move |e| e.kind == kind)
+    }
+
+    /// **The entry a reference names**, by the word a schema's `x-dark-factory-ref` carries (`library`, `compositions`, `cue`): the finder's
+    /// own row for it, so a followed reference and a chosen result take the same road. `None` for a thing the project does not hold.
+    pub fn named(&self, kind: &str, name: &str) -> Option<&Entry> {
+        let kinds: &[Kind] = match kind {
+            crate::files_lang::CUE_KIND => &[Kind::Cue],
+            "library" => &[Kind::Piece, Kind::Tile],
+            "compositions" => &[Kind::Composition],
+            _ => return None,
+        };
+        self.entries.iter().find(|e| kinds.contains(&e.kind) && e.key == name)
+    }
+
+    /// **Whether a reference's target is held**, for the kinds this index lists a row for: `None` for any other kind.
+    pub fn holds(&self, kind: &str, name: &str) -> Option<bool> {
+        matches!(kind, crate::files_lang::CUE_KIND | "library" | "compositions").then(|| self.named(kind, name).is_some())
+    }
+
+    /// **Whether the index has been built once** for an open project; a reference is not judged missing before then.
+    pub fn is_built(&self) -> bool {
+        self.built.is_some()
+    }
+
+    /// **Every place that names `(kind, name)`**: file and line, in file order — NV-07's `Used by`.
+    pub fn used_by<'a>(&'a self, kind: &'a str, name: &'a str) -> impl Iterator<Item = &'a crate::crosslinks::Named> {
+        self.refs.iter().filter(move |n| n.kind == kind && n.name == name)
     }
 }
 
@@ -320,6 +380,8 @@ impl Finder {
 }
 
 /// **Read the project into the index**, once per change of the things it depends on.
+// A system's parameters are the facts the index is built from; bundling them would be a second type for "what the project holds".
+#[allow(clippy::too_many_arguments)]
 fn rebuild_the_index(
     mut index: ResMut<GotoIndex>,
     project: Option<Res<Project>>,
@@ -327,31 +389,87 @@ fn rebuild_the_index(
     due: Option<Res<crate::watch::Due>>,
     notes: Option<Res<crate::notes_view::NotesView>>,
     bench: Option<Res<crate::anim_tab::BenchState>>,
+    time: Res<Time<Real>>,
+    mut since: Local<f32>,
 ) {
     let Some(project) = project.as_deref() else {
         if !index.entries.is_empty() {
             index.entries.clear();
         }
         index.built = None;
+        index.scan = None;
         return;
     };
+    // **The project's files are read on a timer, and again at once for a project not yet read**: a file made, removed or changed moves the
+    // stamp, and a stamp that did not move costs the listing and a `stat` per file.
+    *since += time.delta_secs();
+    let read_for = index.scan.as_ref().filter(|(root, _)| *root == project.root).map(|(_, stamp)| *stamp);
+    if read_for.is_none() || *since >= crate::crosslinks::SCAN_POLL_S {
+        *since = 0.0;
+        if let Some(read) = crate::crosslinks::scan(&project.root, read_for) {
+            index.files = read.files;
+            index.refs = read.refs;
+            index.scan = Some((project.root.clone(), read.stamp));
+        }
+    }
     let built = Built {
         project: project.root.clone(),
         map: open.as_deref().map(|o| o.map_path.clone()),
         adopted: due.as_deref().map_or(0, |d| d.adopted),
         pieces: project.library.descriptors.len(),
         notes: notes.as_deref().map_or(0, crate::notes_view::NotesView::generation),
+        scan: index.scan.as_ref().map(|(_, stamp)| *stamp),
     };
     if index.built.as_ref() == Some(&built) && !index.entries.is_empty() {
         return;
     }
-    index.entries.clear();
-    index.entries.extend(collect_the_map(project, open.as_deref()));
-    index.entries.extend(collect_the_library(project));
-    index.entries.extend(collect_the_rest(project, notes.as_deref(), bench.as_deref()));
+    let mut entries = collect_the_map(project, open.as_deref());
+    entries.extend(collect_the_library(project));
+    entries.extend(collect_the_rest(project, notes.as_deref(), bench.as_deref()));
+    entries.extend(collect_the_cues(project));
+    let files = collect_the_files(&index.files, &entries);
+    entries.extend(files);
     // **One order, the index's own**, so a rebuild cannot reorder the list under a person's finger.
-    index.entries.sort_by(|a, b| a.kind.cmp(&b.kind).then_with(|| a.title.cmp(&b.title)));
+    entries.sort_by(|a, b| a.kind.cmp(&b.kind).then_with(|| a.title.cmp(&b.title)));
+    index.entries = entries;
     index.built = Some(built);
+}
+
+/// **Every cue of the project's sound file**: a row per name, on the Sound workspace's list. A file that does not read has none (the list
+/// says why on its own page).
+fn collect_the_cues(project: &Project) -> Vec<Entry> {
+    crate::world_lists::cue_names_of(project)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|name| Entry {
+            kind: Kind::Cue,
+            key: name.clone(),
+            title: name.clone(),
+            lives: "Sound ▸ cues".to_owned(),
+            shown: Shown::Cue { name },
+            opens: None,
+        })
+        .collect()
+}
+
+/// **Every text file the Files tree lists**, scripts under their own heading, except a file a row already names (a registered data file is
+/// on the DATA table). A file's page is the Files workspace, at its top.
+fn collect_the_files(files: &[String], taken: &[Entry]) -> Vec<Entry> {
+    files
+        .iter()
+        .filter(|rel| !taken.iter().any(|e| matches!(&e.shown, Shown::File { path, .. } if path == *rel)))
+        .map(|rel| {
+            let (dir, name) = rel.rsplit_once('/').unwrap_or(("", rel.as_str()));
+            Entry {
+                kind: if crate::files_lang::Lang::of(rel) == crate::files_lang::Lang::Rhai { Kind::Script } else { Kind::File },
+                key: rel.clone(),
+                title: name.to_owned(),
+                lives: if dir.is_empty() { "Files".to_owned() } else { format!("Files ▸ {dir}") },
+                shown: Shown::File { path: rel.clone(), lines: None },
+                opens: None,
+            }
+        })
+        .collect()
 }
 
 /// **The open map itself**, and every placement on it by its id.
@@ -565,20 +683,20 @@ pub fn first_line(text: &str) -> String {
 }
 
 /// **A chosen row opens what it names**: the camera for a place on the map, the page for everything
-/// else, and the workspace for a workspace.
-fn show_the_chosen_row(
-    chosen: On<RunCommand>,
-    index: Res<GotoIndex>,
-    mut state: Option<ResMut<crate::editor::EditorState>>,
-    mut revealing: Option<ResMut<crate::reveal::Revealing>>,
-    mut following: Option<ResMut<crate::follow::Following>>,
-) {
+/// else, the Files workspace for a file, and the workspace for a workspace.
+fn show_the_chosen_row(chosen: On<RunCommand>, index: Res<GotoIndex>, mut commands: Commands) {
     let Some(entry) = index.find(&chosen.id).cloned() else {
         return;
     };
+    commands.queue(move |world: &mut World| show_in_world(world, &entry));
+}
+
+/// **Show one entry: the one way a thing is shown from anywhere** — the finder's choice, a followed reference (NV-07, #384) and anything
+/// that holds an [`Entry`].
+pub fn show_in_world(world: &mut World, entry: &Entry) {
     // **The workspace row is where you are**, so it is asked for as the chord asks for it.
     if let Some(workspace) = entry.opens {
-        if let Some(state) = state.as_mut()
+        if let Some(mut state) = world.get_resource_mut::<crate::editor::EditorState>()
             && state.door_request.is_none()
             && !state.leaving
         {
@@ -591,19 +709,22 @@ fn show_the_chosen_row(
     // two-second wait after Enter would read as the finder being broken. This is `look_now`'s own
     // rule (AF-04, #360) — the follow's "show it now" — applied to the person's navigation, and it is
     // the same call so the two cannot disagree about whether they are being held back.
-    if let Some(following) = following.as_mut() {
+    if let Some(mut following) = world.get_resource_mut::<crate::follow::Following>() {
         following.look_now();
     }
+    // **A project file needs no branch of its own**: `reveal::page_of` answers a `Shown::File` with the Files workspace at
+    // the file and the line, so the reveal below is the one route a finder result, a cross-link and a followed change all
+    // take. A second branch here was two answers to the same question.
     // **Two mechanisms and one decision, exactly as an agent's change takes it**: the camera for a
     // place on the map, the reveal for a page. A second path here would be a second answer to "which
     // page is this thing on", and the two would disagree the first time a panel moved.
     if let Some(request) = crate::follow::request_of(&entry.shown) {
-        if let Some(following) = following.as_mut() {
+        if let Some(mut following) = world.get_resource_mut::<crate::follow::Following>() {
             following.request_named(request, format!("went to `{}`", entry.title));
         }
         return;
     }
-    if let Some(revealing) = revealing.as_mut() {
+    if let Some(mut revealing) = world.get_resource_mut::<crate::reveal::Revealing>() {
         // **The person asked for this page by pressing Enter**, so it is not held back by the idle
         // clock their own key set, and the key that asked does not cancel it.
         revealing.request_by_person("go_to", &entry.shown);

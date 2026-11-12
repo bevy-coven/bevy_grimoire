@@ -159,6 +159,70 @@ pub fn still_there(place: &Place, open: Option<&crate::project::OpenMap>) -> Res
     Ok(())
 }
 
+/// **How a file stop is written** in a place's `selection`: `file:<path relative to the project>:<line, 0-based>` (NV-06, #383). The
+/// field is "the selection, by the id the page names it with"; in the Files workspace a page's selection is the file open in it and
+/// where the caret is, so it needs no field of its own (and a place built by hand, as a test builds one, still has four).
+pub const FILE_STOP: &str = "file:";
+
+/// **How a cue stop is written**: `cue:<name>`, the cue the Sound workspace's list marks.
+pub const CUE_STOP: &str = "cue:";
+
+/// **What a place holds in the two workspaces whose selection is not a placement**: the open file and its line, the marked cue. Read
+/// where a place is recorded ([`Stops::stamp`]) and where one is walked to ([`Stops::gone`]), so the two cannot disagree about what a
+/// stop is.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct Stops<'w, 's> {
+    session: Option<Res<'w, crate::session::Session>>,
+    cue: Option<Res<'w, crate::world_lists::SelectedCue>>,
+    project: Option<Res<'w, crate::project::Project>>,
+    workspace: Option<Res<'w, Workspace>>,
+    editors: Query<'w, 's, &'static bevy_gooey::CodeEditor, With<crate::files::FileEditor>>,
+}
+
+impl Stops<'_, '_> {
+    /// **Write the stop the person is standing on into `place`**, when `place` is where they are now: the Files workspace's open file and
+    /// caret line, the Sound workspace's marked cue. A place in any other workspace keeps its own selection. A place of one of those two
+    /// workspaces that the person has already left holds no stop (the door crossed before it was read), and the placement id `Place::of`
+    /// read for it names nothing there, so it is dropped rather than kept as a selection of the wrong page.
+    pub fn stamp(&self, place: &mut Place) {
+        if self.workspace.as_deref().is_some_and(|w| *w != place.workspace) {
+            if matches!(place.workspace, Workspace::Files | Workspace::Sound) {
+                place.selection = None;
+            }
+            return;
+        }
+        match place.workspace {
+            Workspace::Files => {
+                place.selection = self.session.as_deref().and_then(crate::files::active_file).map(|rel| {
+                    let line = self.editors.iter().next().map_or(0, |e| e.buffer().caret().line);
+                    format!("{FILE_STOP}{rel}:{line}")
+                });
+            }
+            Workspace::Sound => {
+                place.selection = self.cue.as_deref().and_then(|c| c.0.as_ref()).map(|name| format!("{CUE_STOP}{name}"));
+            }
+            _ => {}
+        }
+    }
+
+    /// **Whether the thing a stop names is still there**: a file deleted from the project, a cue taken out of the sound file. `Err` is the
+    /// sentence the walk raises when it skips the place.
+    pub fn gone(&self, place: &Place) -> Result<(), String> {
+        let (Some(stop), Some(project)) = (place.selection.as_deref(), self.project.as_deref()) else { return Ok(()) };
+        if let Some(rest) = stop.strip_prefix(FILE_STOP) {
+            let rel = rest.rsplit_once(':').map_or(rest, |(rel, _)| rel);
+            if !project.root.join(rel).is_file() {
+                return Err(format!("`{rel}` is no longer in the project"));
+            }
+        } else if let Some(name) = stop.strip_prefix(CUE_STOP)
+            && !crate::world_lists::cue_names_of(project).is_ok_and(|names| names.iter().any(|n| n == name))
+        {
+            return Err(format!("the cue `{name}` is no longer in the project's sound file"));
+        }
+        Ok(())
+    }
+}
+
 /// **Which way a walk goes.**
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
@@ -328,11 +392,13 @@ fn note_when_the_workspace_moves(
     selection: Option<Res<crate::selection::Selection>>,
     mut history: ResMut<History>,
     mut was: Local<Option<(Workspace, Mode, Place)>>,
+    stops: Stops,
 ) {
     let (Some(workspace), Some(mode)) = (workspace.as_deref().copied(), mode.as_deref().copied()) else {
         return;
     };
-    let here: Place = Place::of(Some(&workspace), Some(&mode), rig.as_deref(), selection.as_deref());
+    let mut here: Place = Place::of(Some(&workspace), Some(&mode), rig.as_deref(), selection.as_deref());
+    stops.stamp(&mut here);
     // **Last frame's place is the one to push**, not this frame's: a workspace switch resets `Rig`
     // (`screen::door_state!` names it), so a place read on the frame the switch lands carries the
     // default camera rather than the one the person was looking through. The copy taken before the
@@ -363,6 +429,7 @@ fn settle_the_place(
     mut rig: Option<ResMut<crate::view::Rig>>,
     mut framing: Option<ResMut<crate::editor::MapFraming>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
+    mut cue: Option<ResMut<crate::world_lists::SelectedCue>>,
     mut commands: Commands,
 ) {
     let Some((place, asked)) = history.pending.clone() else { return };
@@ -408,11 +475,27 @@ fn settle_the_place(
     // **The selection is the Map's** (a placement id), so it is restored where the Map is edited, and
     // by the editor's one lock: the selection follows it a frame later, so the two cannot disagree.
     if place.workspace.edits_the_map()
-        && let Some(id) = place.selection
+        && let Some(id) = place.selection.clone()
     {
         commands.queue(move |world: &mut World| {
             crate::editor::lock_on_placement(world, &id);
         });
+    }
+    // **The stop, once the door has landed**: the file the person was reading, at the line they were on, and the cue the list marked. Both
+    // are the workspace's own state, and a switch resets the workspace's panels, so they are written after it (as the camera is).
+    if let Some(stop) = place.selection.as_deref() {
+        if place.workspace == Workspace::Files
+            && let Some(rest) = stop.strip_prefix(FILE_STOP)
+        {
+            let (rel, line) = rest.rsplit_once(':').map_or((rest, 0), |(rel, line)| (rel, line.parse().unwrap_or(0)));
+            let rel = rel.to_owned();
+            commands.queue(move |world: &mut World| crate::crosslinks::open_in_files(world, &rel, Some(line)));
+        } else if place.workspace == Workspace::Sound
+            && let Some(name) = stop.strip_prefix(CUE_STOP)
+            && let Some(cue) = cue.as_mut()
+        {
+            cue.0 = Some(name.to_owned());
+        }
     }
     history.pending = None;
 }
@@ -426,14 +509,17 @@ fn push_the_places_being_left(
     mut history: ResMut<History>,
     mut revealing: Option<ResMut<crate::reveal::Revealing>>,
     mut following: Option<ResMut<crate::follow::Following>>,
+    stops: Stops,
 ) {
     if let Some(revealing) = revealing.as_mut() {
-        for place in revealing.take_leaving() {
+        for mut place in revealing.take_leaving() {
+            stops.stamp(&mut place);
             history.push(place);
         }
     }
     if let Some(following) = following.as_mut() {
-        for place in following.take_leaving() {
+        for mut place in following.take_leaving() {
+            stops.stamp(&mut place);
             history.push(place);
         }
     }
@@ -484,6 +570,7 @@ fn walk_on_the_chords(
     workspace: Option<Res<Workspace>>,
     mode: Option<Res<Mode>>,
     selection: Option<Res<crate::selection::Selection>>,
+    stops: Stops,
 ) {
     let modifier = [KeyCode::SuperLeft, KeyCode::SuperRight, KeyCode::ControlLeft, KeyCode::ControlRight]
         .into_iter()
@@ -512,15 +599,16 @@ fn walk_on_the_chords(
     // **The place being left is the present**, recorded by the walk itself so a Back from a page no
     // reveal ever pushed still has somewhere to return to — the editor that opened on the Map and was
     // walked away from by a workspace key.
-    let now = Place::of(
+    let mut now = Place::of(
         workspace.as_deref(),
         mode.as_deref(),
         rig.as_deref(),
         selection.as_deref(),
     );
+    stops.stamp(&mut now);
     let direction = if back { Direction::Back } else { Direction::Forward };
     // **A place whose thing is gone is skipped, with a notice** — and the walk carries on.
-    let walked = history.walk(direction, now, |place| go(place, open.as_deref()));
+    let walked = history.walk(direction, now, |place| go(place, open.as_deref()).and_then(|()| stops.gone(place)));
     if let Some(state) = state.as_mut() {
         for why in &walked.skipped {
             state.status.problem(format!("cannot go {}: {why}. The place is skipped.", direction.word()));

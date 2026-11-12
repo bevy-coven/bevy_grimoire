@@ -9735,7 +9735,16 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     format!("id  {}_", bevy_grimoire_core::naming::to_snake_case(&raw.raw)),
                     crate::chrome::ink().accent,
                 ),
-                None => (format!("id  {}", d.id), crate::chrome::ink().text),
+                // **What places it, on the id's own line** (NV-07, #384): the maps that hold this piece, from the project's
+                // one reader of `maps/` (`Project::maps_that_place`), so this sentence and the check that refuses a removal
+                // cannot disagree. It is a suffix rather than a section of its own because the detail's controls are placed
+                // by a packer with no give-up arm: a row added here is a row the badges can be packed through
+                // (`headless::no_badge_cluster_draws_through_another`), and `used_by_line` is built to be read in the middle
+                // of a sentence's line rather than as a heading's text.
+                None => (
+                    format!("id  {}   ·   {}", d.id, crate::crosslinks::used_by_line(&project, &d.id).unwrap_or_else(|why| why)),
+                    crate::chrome::ink().text,
+                ),
             };
             // **The headline.** It is the thing being named, so it is the only 13 px line in the
             // block — hierarchy by size, so the eye lands here first without reading anything.
@@ -9747,7 +9756,8 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 // The line `I` types into, so that is where its badge goes.
                 crate::chrome::Control(crate::keys::ControlId::IdField),
             ));
-
+            // **Used by** (NV-07, #384): the maps that place this piece, from the project's one reader of `maps/`
+            // (`Project::maps_that_place`), so the sentence and the check that refuses a removal cannot disagree.
             // **The description.** `Descriptor::note` is free text and nothing could write it before,
             // so every description in the shipped libraries is whatever a generator left there. The id
             // says what a piece *is* and the tags say what it *offers*; neither can carry "the one

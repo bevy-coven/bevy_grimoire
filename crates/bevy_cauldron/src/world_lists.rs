@@ -81,17 +81,31 @@ pub const CUES_HINT: &str = "cues live in family/bevy_siren.ron";
 #[derive(Component, Clone, Copy)]
 pub struct CueList;
 
+/// **The cue the list marks as selected** (NV-07, #384): the one a reference followed to, or a finder result chose. `Session`: it is
+/// where the person is looking, and the Sound workspace's frame being rebuilt does not change what they chose. A cue the project no
+/// longer holds is simply not marked.
+#[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]
+pub struct SelectedCue(pub Option<String>);
+
+/// **What the selected cue's row is marked with**, so a person reads which one is chosen.
+pub const CUE_MARK: &str = "▸ ";
+
+/// **The files that name the selected cue** (NV-07, #384), under the cue list.
+#[derive(Component, Clone, Copy)]
+pub struct CueUses;
+
 pub struct WorldListsPlugin;
 
 impl Plugin for WorldListsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
+        app.init_resource::<SelectedCue>().add_systems(
             Update,
             (
                 refresh_water.run_if(Workspace::world_is_open),
                 refresh_forest.run_if(Workspace::world_is_open),
                 refresh_lights.run_if(Workspace::world_is_open),
                 refresh_cues.run_if(Workspace::sound_is_open),
+                refresh_cue_uses.run_if(Workspace::sound_is_open),
             )
                 .run_if(in_state(Screen::Editor)),
         );
@@ -198,6 +212,7 @@ fn one_line(text: &str) -> String {
 pub fn spawn_cue_list(p: &mut ChildSpawnerCommands) {
     p.spawn(bevy_gooey::label(CUES_HINT));
     p.spawn((CueList, list_node()));
+    p.spawn((CueUses, list_node()));
 }
 
 /// A list's column.
@@ -227,19 +242,38 @@ pub fn cue_names(text: &str) -> Result<Vec<String>, String> {
         .collect())
 }
 
-/// **The sound cues of a project in words**: a row per cue, or the line that says there are none. A file that does not read is its own row.
-pub fn cue_rows(project: &Project) -> Vec<String> {
+/// **The cue names of a project's sound file**: none when the project has no file, and why when the file does not read.
+pub fn cue_names_of(project: &Project) -> Result<Vec<String>, String> {
     let file = bevy_grimoire_core::family::settings_dir(&project.root).join(SIREN_FILE);
-    let text = match std::fs::read_to_string(&file) {
-        Ok(text) => text,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return vec![NO_CUES.to_owned()],
-        Err(e) => return vec![format!("family/{SIREN_FILE} cannot be read: {e}")],
-    };
-    match cue_names(&text) {
+    match std::fs::read_to_string(&file) {
+        Ok(text) => cue_names(&text),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(e) => Err(format!("family/{SIREN_FILE} cannot be read: {e}")),
+    }
+}
+
+/// **The sound cues of a project in words**: a row per cue (the selected one marked with [`CUE_MARK`]), or the line that says there
+/// are none. A file that does not read is its own row.
+pub fn cue_rows(project: &Project, selected: Option<&str>) -> Vec<String> {
+    match cue_names_of(project) {
         Ok(names) if names.is_empty() => vec![NO_CUES.to_owned()],
-        Ok(names) => names,
+        Ok(names) => names
+            .into_iter()
+            .map(|name| if selected == Some(name.as_str()) { format!("{CUE_MARK}{name}") } else { name })
+            .collect(),
         Err(why) => vec![why],
     }
+}
+
+/// **What names the selected cue**, in words: one row per file and line, from the finder's own index (so a second scan cannot disagree
+/// with it), or the sentence that nothing does. Nothing at all while no cue is selected.
+pub fn cue_use_rows(selected: Option<&str>, index: &crate::goto::GotoIndex) -> Vec<String> {
+    let Some(cue) = selected else { return Vec::new() };
+    let uses: Vec<String> = index
+        .used_by(crate::files_lang::CUE_KIND, cue)
+        .map(|named| format!("used by {}:{}", named.file, named.line + 1))
+        .collect();
+    if uses.is_empty() { vec![format!("no file names `{cue}`")] } else { uses }
 }
 
 /// **Keep one list equal to its rows.** The rows are rebuilt only when what they say changed, or when a door change respawned the list
@@ -253,7 +287,8 @@ fn keep<L: Component>(
 ) {
     let (held, since) = shown;
     *since += time.delta_secs();
-    let unfilled = lists.iter().any(|(_, filled)| !filled);
+    // **A list that is meant to be empty has nothing to be missing** (the cue uses, with no cue chosen), or it would be rebuilt every frame.
+    let unfilled = held.as_ref().is_none_or(|rows| !rows.is_empty()) && lists.iter().any(|(_, filled)| !filled);
     if held.is_some() && *since < READ_SECS && !unfilled {
         return;
     }
@@ -277,10 +312,32 @@ fn refresh_cues(
     mut commands: Commands,
     time: Res<Time>,
     project: Option<Res<Project>>,
+    selected: Option<Res<SelectedCue>>,
     lists: Query<(Entity, Has<Children>), With<CueList>>,
     mut shown: Local<(Option<Vec<String>>, f32)>,
 ) {
-    keep(&mut commands, &time, &mut shown, &lists, || Some(cue_rows(project.as_deref()?)));
+    // **A choice is shown on the frame it is made**, not at the list's next look at its file.
+    if selected.as_ref().is_some_and(|s| s.is_changed()) {
+        shown.1 = READ_SECS;
+    }
+    let chosen = selected.as_deref().and_then(|s| s.0.as_deref());
+    keep(&mut commands, &time, &mut shown, &lists, || Some(cue_rows(project.as_deref()?, chosen)));
+}
+
+fn refresh_cue_uses(
+    mut commands: Commands,
+    time: Res<Time>,
+    selected: Option<Res<SelectedCue>>,
+    index: Res<crate::goto::GotoIndex>,
+    lists: Query<(Entity, Has<Children>), With<CueUses>>,
+    mut shown: Local<(Option<Vec<String>>, f32)>,
+) {
+    if selected.as_ref().is_some_and(|s| s.is_changed()) || index.is_changed() {
+        shown.1 = READ_SECS;
+    }
+    let chosen = selected.as_deref().and_then(|s| s.0.as_deref());
+    // An empty list is a list with no rows: `keep` does not see "unfilled" as a reason to rebuild while there is nothing to say.
+    keep(&mut commands, &time, &mut shown, &lists, || Some(cue_use_rows(chosen, &index)));
 }
 
 fn refresh_lights(
