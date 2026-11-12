@@ -5,18 +5,27 @@
 //! button, what a conflict does, that a guide shown in part is read-only — by sending the change event
 //! the widget would send. That is the right shape for a rule, and it is not the same claim as **a person
 //! can type here**. So this file takes the acceptance's first line literally and goes through the
-//! widget: a press at the field's own place, the platform's key presses, and a press on Save.
+//! widget: a press at the field's own place and the platform's key presses, then Save's own activation.
 //!
-//! Three things this file is written around, because each cost a pass before:
+//! Four things this file is written around, because each cost a pass before:
 //!
-//! - **The headless harness has no window**, so keyboard messages go nowhere until one exists: the
-//!   `(Window, PrimaryWindow)` is spawned first, as `a_note_body_is_edited_on_several_lines` does.
+//! - **A pointer and a keyboard want different windows.** The editor draws into an image, and once a
+//!   primary window exists gooey's pointer resolves widgets against a window nothing is drawn into,
+//!   so a click lands nowhere; yet Bevy dispatches a focused field's keys only while a primary window
+//!   exists. So the one press, the one that focuses the field, is sent before any window is spawned,
+//!   the window is spawned for the keys, and Save is activated by its own event (the press the pointer
+//!   would have resolved to), which is what every other test of this page does.
+//! - **The field is below the fold.** The page does not scroll and the terminal pane is drawn under
+//!   it, so at the harness's default surface the area's centre lies beneath the terminal and a press
+//!   there would land on the terminal. The surface is made tall enough to hold the page, which is
+//!   what a person with a tall window has.
 //! - **A gooey text row's field is the label's sibling, not the label.** `find_by_label` walks *up* from
 //!   a `Text` to the nearest focusable ancestor, which for a row's label is the page, so the field is
 //!   found by reading the label and then taking the field under it — [`the_field_under`], which is the
 //!   one place this file spells that out.
-//! - **A fixed `text_area` puts the caret at the end** when focus arrives, so what is typed is appended.
-//!   That is what a person sees, and the test asserts it rather than typing a replacement.
+//! - **A press puts the caret where it lands**, in the middle of the text, so the person moves to the
+//!   end (End) before typing and what is typed is appended. The test does the same rather than typing
+//!   a replacement.
 
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -29,6 +38,7 @@ use bevy_cauldron::project_page::{AgentGuideStatus, AgentGuideText};
 use bevy_grimoire_core::agent_guide::PROJECT_PATH;
 use bevy_grimoire_core::trust::{self, TrustStore};
 use bevy_gooey::testing;
+use bevy_gooey::Activate;
 use bevy_gooey::{Role, TextInputOf};
 use std::path::{Path, PathBuf};
 
@@ -50,8 +60,6 @@ fn on_the_page(tag: &str) -> (PathBuf, PathBuf, App) {
     app.insert_resource(UserGuideFile(root.join("no-user-guide.md")));
     harness::stand_on_the_project_page(&mut app, &root);
     app.world_mut().resource_mut::<EditorState>().trust.file = Some(store.clone());
-    // **A window before any key is sent**, or `FocusedInput` never reaches the field.
-    app.world_mut().spawn((Window::default(), PrimaryWindow));
     settle(&mut app);
     (root, store, app)
 }
@@ -118,17 +126,13 @@ fn the_guide_is_typed_into_by_its_label_and_saved() {
     settle(&mut app);
     assert!(status(&mut app).starts_with("waiting for you"), "{}", status(&mut app));
 
-    // **The press goes on the field as it is drawn now, and the focus is read off the field that is
-    // drawn after it.** The section redraws when it has read the guide, which is a new field entity:
-    // asserting the identity of the one clicked would be asserting that a redraw did not happen,
-    // which is not the claim. The claim is that the keyboard is in the guide's own field.
-    for _ in 0..3 {
-        let field = the_field_under(&mut app, GUIDE_LABEL);
-        if testing::focused(&app) == Some(field) {
-            break;
-        }
-        testing::click(&mut app, field);
-    }
+    // **A press where the field is drawn**, and the focus is read off the field that is drawn after
+    // it: the page redraws its body when it has read the guide, which is a new field entity, so the
+    // claim is that the keyboard is in the guide's own field, not that a redraw did not happen.
+    harness::resize_surface(&mut app, 1536, 2400).unwrap_or_else(|e| panic!("{e}"));
+    settle(&mut app);
+    let field = the_field_under(&mut app, GUIDE_LABEL);
+    testing::click(&mut app, field);
     let field = the_field_under(&mut app, GUIDE_LABEL);
     assert_eq!(
         testing::focused(&app),
@@ -136,11 +140,13 @@ fn the_guide_is_typed_into_by_its_label_and_saved() {
         "a press on the field puts the keyboard in it, on a label of {:?}",
         testing::focused_label(&app)
     );
+    app.world_mut().spawn((Window::default(), PrimaryWindow));
+    testing::press(&mut app, KeyCode::End);
     testing::type_text(&mut app, "\nand a line typed on the page");
 
     let save = testing::find_by_label(&mut app, "Save")
         .unwrap_or_else(|e| panic!("the section offers no Save once the text changed: {e}"));
-    testing::click(&mut app, save);
+    app.world_mut().commands().trigger(Activate { entity: save });
     settle(&mut app);
 
     let saved = std::fs::read_to_string(guide_path(&root)).expect("the file reads");

@@ -249,6 +249,19 @@ pub struct AgentGuideReload;
 #[derive(Component)]
 pub struct AgentGuideKeepMine;
 
+/// **The row the section's state-dependent buttons are in**, filled and refilled by
+/// [`fill_the_guide_buttons`].
+#[derive(Component)]
+pub struct AgentGuideButtons;
+
+/// What a button row was last built for, so it is refilled when — and only when — one of these moves.
+#[derive(Component, Clone, Copy, PartialEq)]
+struct ButtonsFor {
+    state: crate::agent_guide::GuideState,
+    conflict: bool,
+    editing: bool,
+}
+
 /// **What the Agent guide section is holding, and what it last read.**
 ///
 /// **One resource, so the file, the edit and the answer cannot disagree.** `on_disk` is the text the
@@ -282,7 +295,7 @@ impl Plugin for ProjectPagePlugin {
             .add_systems(OnEnter(Screen::Project), (build_page, fill_page).chain())
             .add_systems(
                 Update,
-                (back_on_escape.before(bevy_gooey::GooeySystems::Navigate), launcher::hide_the_divider, act, the_guide_section, read_the_guide, answer_the_question, follow_the_files, redraw, show_the_form).chain().run_if(in_state(Screen::Project)),
+                (back_on_escape.before(bevy_gooey::GooeySystems::Navigate), launcher::hide_the_divider, act, the_guide_section, read_the_guide, answer_the_question, follow_the_files, redraw, fill_the_guide_buttons, show_the_form).chain().run_if(in_state(Screen::Project)),
             );
     }
 }
@@ -498,8 +511,6 @@ fn draw_agent_guide(parent: &mut bevy::ecs::relationship::RelatedSpawnerCommands
     };
     let state = view.state;
     let problem = view.problem.clone();
-    let conflict = held.conflict;
-    let editing = held.editing.is_some();
     parent.spawn((
         section(
             "Agent guide",
@@ -536,33 +547,56 @@ fn draw_agent_guide(parent: &mut bevy::ecs::relationship::RelatedSpawnerCommands
                             out.write(PageAction::GuideEdited(change.value.clone()));
                         }),
                     ));
-                    rows.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|row| {
-                        if conflict {
-                            // **The person says which text wins.** Neither is thrown away until they do.
-                            row.spawn((submit_button("Reload"), AgentGuideReload, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::ReloadGuide); })));
-                            row.spawn((button("Keep mine"), AgentGuideKeepMine, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::KeepMyGuide); })));
-                        } else if state == crate::agent_guide::GuideState::Waiting {
-                            // **A guide nobody has allowed is read before it is allowed**, and both answers
-                            // AG-03's modal offers are here, because this is where a person comes back to.
-                            //
-                            // **No Allow while there is an unsaved edit**: the edit is text on nobody's disk,
-                            // and granting it would both allow unread content and drop the edit. Save is the
-                            // act that writes it, and the grant follows the save.
-                            if !editing {
-                                row.spawn((submit_button("Allow this guide"), AgentGuideAllow, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::AllowGuide); })));
-                            }
-                            row.spawn((button("Trust this project"), AgentGuideTrust, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::TrustProject); })));
-                            row.spawn((button("Save"), AgentGuideSave, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::SaveGuide); })));
-                            row.spawn((button("Revert"), AgentGuideRevert, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::RevertGuide); })));
-                        } else {
-                            row.spawn((submit_button("Save"), AgentGuideSave, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::SaveGuide); })));
-                            row.spawn((button("Revert"), AgentGuideRevert, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::RevertGuide); })));
-                        }
-                    });
+                    // **The state's own buttons are filled by [`fill_the_guide_buttons`]**, not drawn with the
+                    // section, so a press of the first key — which flips whether there is an edit and so
+                    // whether Allow is offered — changes this row alone and never rebuilds the area under the
+                    // person typing in it.
+                    rows.spawn((Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, AgentGuideButtons));
                 });
             })),
         ),
     ));
+}
+
+/// **Fill the Agent guide's button row from what the section holds now**: Reload and Keep mine in a
+/// conflict, otherwise Save and Revert, with Allow and Trust beside them while the guide is waiting for
+/// the person. Allow is offered only while there is no unsaved edit.
+///
+/// **This row alone is rebuilt when the state moves** — not the page body. The first key typed flips
+/// whether there is an edit, and a rebuild of the body at that moment replaced the area under the typist,
+/// so the field lost the keyboard after one character.
+fn fill_the_guide_buttons(mut commands: Commands, page: Option<Res<ProjectPage>>, rows: Query<(Entity, Option<&ButtonsFor>), With<AgentGuideButtons>>) {
+    let Some(page) = page else { return };
+    let now = ButtonsFor { state: page.guide.view.state, conflict: page.guide.conflict, editing: page.guide.editing.is_some() };
+    let ButtonsFor { state, conflict, editing } = now;
+    for (row, built) in &rows {
+        if built == Some(&now) {
+            continue;
+        }
+        commands.entity(row).despawn_children().insert(now).with_children(|row| {
+            if conflict {
+                // **The person says which text wins.** Neither is thrown away until they do.
+                row.spawn((submit_button("Reload"), AgentGuideReload, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::ReloadGuide); })));
+                row.spawn((button("Keep mine"), AgentGuideKeepMine, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::KeepMyGuide); })));
+            } else if state == crate::agent_guide::GuideState::Waiting {
+                // **A guide nobody has allowed is read before it is allowed**, and both answers
+                // AG-03's modal offers are here, because this is where a person comes back to.
+                //
+                // **No Allow while there is an unsaved edit**: the edit is text on nobody's disk,
+                // and granting it would both allow unread content and drop the edit. Save is the
+                // act that writes it, and the grant follows the save.
+                if !editing {
+                    row.spawn((submit_button("Allow this guide"), AgentGuideAllow, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::AllowGuide); })));
+                }
+                row.spawn((button("Trust this project"), AgentGuideTrust, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::TrustProject); })));
+                row.spawn((button("Save"), AgentGuideSave, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::SaveGuide); })));
+                row.spawn((button("Revert"), AgentGuideRevert, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::RevertGuide); })));
+            } else {
+                row.spawn((submit_button("Save"), AgentGuideSave, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::SaveGuide); })));
+                row.spawn((button("Revert"), AgentGuideRevert, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::RevertGuide); })));
+            }
+        });
+    }
 }
 
 /// A map: its picture, name, size in metres and how many pieces stand in it. One that will not open says why and can be deleted.
@@ -983,14 +1017,10 @@ fn the_guide_section(
             PageAction::GuideEdited(text) => {
                 // **An edit equal to the file is not an edit.** A redraw re-draws the area with the file's
                 // text, and that arrival must not count as unsaved work.
-                let was = page.guide.editing.is_some();
                 page.guide.editing = (text != page.guide.on_disk).then_some(text);
-                // **Redraw when the area's state flips**, not on every keystroke: the buttons change with
-                // it (Allow goes while there is an edit), and a redraw per character would rebuild the field
-                // under the person typing in it.
-                if was != page.guide.editing.is_some() {
-                    page.dirty = true;
-                }
+                // **No redraw here, ever**: the buttons that change with it (Allow goes while there is an
+                // edit) are refilled in place by [`fill_the_guide_buttons`], because a rebuilt area is a
+                // field that has lost the keyboard under the person typing in it.
             }
             PageAction::RevertGuide => {
                 page.guide.editing = None;
