@@ -79,21 +79,11 @@ impl Query {
     }
 }
 
-fn wildcard(pattern: &[u8], text: &[u8]) -> bool {
-    match (pattern.first(), text.first()) {
-        (None, None) => true,
-        (Some(b'*'), _) => wildcard(&pattern[1..], text) || (!text.is_empty() && wildcard(pattern, &text[1..])),
-        (Some(b'?'), Some(_)) => wildcard(&pattern[1..], &text[1..]),
-        (Some(a), Some(b)) if a == b => wildcard(&pattern[1..], &text[1..]),
-        _ => false,
-    }
-}
-
 fn path_matches(pattern: &str, rel: &str) -> bool {
     if pattern.contains('*') || pattern.contains('?') {
         // A pattern without a `/` is about the file's name; one with it is about the path.
         let subject = if pattern.contains('/') { rel } else { rel.rsplit('/').next().unwrap_or(rel) };
-        wildcard(pattern.as_bytes(), subject.as_bytes())
+        crate::files::wildcard(pattern, subject, true)
     } else if pattern.ends_with('/') {
         rel.starts_with(pattern) || rel.contains(&format!("/{pattern}"))
     } else {

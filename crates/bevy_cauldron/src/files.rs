@@ -50,8 +50,9 @@ use bevy::prelude::*;
 use bevy::ui::InteractionDisabled;
 use bevy::ui_widgets::{Activate, ValueChange};
 use bevy_gooey::{
-    CodeCompletionRequested, CodeCompletions, CodeEditorValue, CodeHover, CodeHoverRequested, CodeIndent, CodeIndentation, CompletionItem,
-    Diagnostic, Diagnostics, FoldRanges, Highlights, SelectMode, TableSelection, Tree, TreeNode, observe, tree,
+    CodeAuthor, CodeCompletionRequested, CodeCompletions, CodeEdit, CodeEditor, CodeEditorValue, CodeHover, CodeHoverRequested, CodeIndent,
+    CodeIndentation, CodeMinimap, CodePos, CodeSeverity, CompletionItem, Diagnostic, Diagnostics, FoldRanges, Highlights, SelectMode, TableSelection, Tree,
+    TreeNode, observe, tree,
 };
 use serde_json::Value;
 
@@ -82,6 +83,20 @@ pub const MAX_FILE_BYTES: u64 = 2 * 1024 * 1024;
 /// one nobody browses from a sidebar.
 pub const TREE_LIMIT: usize = 20_000;
 
+/// **How many entries one folder lists before the tree stops reading it**: a folder of a hundred thousand files is
+/// read for its first ones and says so, rather than being collected, statted and sorted whole.
+pub const TREE_DIR_LIMIT: usize = 5_000;
+
+/// FNV-1a's offset basis and prime (64-bit): the hash a row's key and a project's session path are made with.
+const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+
+/// How many spaces the Tab key puts in a YAML or Markdown file (the writer's own step) and in anything else, and
+/// how many columns a tab character is drawn.
+const YAML_INDENT_SPACES: u8 = 2;
+const CODE_INDENT_SPACES: u8 = 4;
+const TAB_COLUMNS: u8 = 4;
+
 /// The width of the file tree's panel, in logical pixels.
 pub const TREE_PANEL_W: f32 = 300.0;
 
@@ -89,7 +104,7 @@ pub const TREE_PANEL_W: f32 = 300.0;
 const SKIPPED_DIRS: [&str; 4] = [".git", "target", ".live", "node_modules"];
 
 /// The notice under the tree when it stopped at [`TREE_LIMIT`].
-pub const TREE_TRUNCATED: &str = "The tree stops at 20,000 entries; narrow the project to see the rest";
+pub const TREE_TRUNCATED: &str = "The tree is not complete: it lists at most 20,000 entries, and 5,000 of a folder; narrow the project to see the rest";
 
 // ── What is open ─────────────────────────────────────────────────────────────
 
@@ -121,13 +136,22 @@ pub struct OpenFile {
     pub external: Option<String>,
     /// Shown, and saved, as read-only: a command file or the guide.
     pub read_only: bool,
+    /// **Why this tab cannot be edited or saved as a file**, when it cannot: the file is not text, is too big,
+    /// or has been deleted from the project. Said in the header, in place of the text it never held.
+    pub problem: Option<String>,
     /// When the text last changed by typing, on the real clock: the errors wait for [`DIAGNOSE_IDLE_S`] after it.
     edited_at: Option<f64>,
     /// Counts the times the text was replaced from outside the editor widget (a reload), so the widget knows
     /// to take it.
     pub pushed: u64,
-    /// A line to bring into view and put the caret on, when the editor next shows this file.
-    pub reveal: Option<usize>,
+    /// A match to bring into view and select when the editor next shows this file: line, column (bytes into the
+    /// line) and length (a search result's, GD-13).
+    pub reveal: Option<(usize, usize, usize)>,
+    /// A change from outside that landed on a file the person had not typed in, as the one edit that makes it:
+    /// the widget applies it without moving the caret or the person's selection (GD-14, #376).
+    incoming: Option<(CodeEdit, CodeAuthor)>,
+    /// The lines (1-based, inclusive) an agent changed and the person has not touched since: marked on the minimap.
+    pub agent_lines: Vec<[u32; 2]>,
 }
 
 impl OpenFile {
@@ -161,6 +185,27 @@ impl Files {
         self.open.get(rel).is_some_and(OpenFile::dirty)
     }
 
+    /// **Save every file with unsaved edits**, for "save and leave" and "save and quit". The first refusal stops it, naming the
+    /// file; what was saved before it stays saved.
+    pub fn save_all(&mut self, root: &Path) -> Result<(), String> {
+        let dirty: Vec<String> = self.dirty().into_iter().map(str::to_owned).collect();
+        for rel in dirty {
+            save_file(self, root, &rel)?;
+        }
+        publish_unsaved(root, Vec::new());
+        Ok(())
+    }
+
+    /// **Let go of every unsaved edit**, for "discard changes": the files are as the disk has them.
+    pub fn discard_all(&mut self, root: &Path) {
+        for file in self.open.values_mut() {
+            file.text = file.disk.clone();
+            file.pushed += 1;
+            file.incoming = None;
+        }
+        publish_unsaved(root, Vec::new());
+    }
+
     /// The paths with unsaved edits, in order.
     pub fn dirty(&self) -> Vec<&str> {
         self.open.iter().filter(|(_, f)| f.dirty()).map(|(rel, _)| rel.as_str()).collect()
@@ -174,15 +219,6 @@ impl Files {
             .entry(kind.id)
             .or_insert_with(|| bevy_grimoire_core::schema::for_kind(kind.id).ok().map(Arc::new))
             .clone()
-    }
-
-    /// Replace an open file's text from outside the editor widget (an agent's edit that could not land line by
-    /// line, a reload): the widget takes it on its next frame. Does not touch what the disk held.
-    pub fn replace_text(&mut self, rel: &str, text: String) -> bool {
-        let Some(file) = self.open.get_mut(rel) else { return false };
-        file.text = text;
-        file.pushed += 1;
-        true
     }
 }
 
@@ -228,9 +264,12 @@ impl OpenFile {
             stamp,
             external: None,
             read_only: files_lang::is_command_file(rel),
+            problem: None,
             edited_at: None,
             pushed: 0,
             reveal: None,
+            incoming: None,
+            agent_lines: Vec::new(),
         })
     }
 }
@@ -256,18 +295,29 @@ pub fn open_file(world: &mut World, rel: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// **Save one open file**: write its text, atomically, and take the write as what the disk holds. A refusal
-/// names why and writes nothing: a read-only file, a file that changed under the person's edits (they have
-/// not answered the question yet), a file that is no longer there to be replaced by a surprise.
 pub fn save_file(files: &mut Files, root: &Path, rel: &str) -> Result<(), String> {
     let file = files.open.get_mut(rel).ok_or_else(|| format!("{rel} is not open"))?;
+    if let Some(why) = &file.problem {
+        return Err(why.clone());
+    }
     if file.read_only {
         return Err(format!("{rel}: {}", files_lang::READ_ONLY_NOTE));
     }
     if file.external.is_some() {
         return Err(format!("{rel} changed on disk while you were editing it: choose Reload or Keep mine first"));
     }
+    // **Nothing to write is nothing written**: a save of a clean file does not touch it (its modification time is
+    // somebody's to watch).
+    if !file.dirty() {
+        return Ok(());
+    }
     let full = inside(root, rel)?;
+    // **A file that is gone is not recreated by a save** (and neither is its folder): the person is told, and the
+    // text stays in the tab.
+    if !full.exists() {
+        file.problem = Some(format!("{rel} was deleted from the project; your text is still here, and a save does not bring the file back"));
+        return Err(format!("{rel} no longer exists, so it was not saved"));
+    }
     // **A change the poll has not seen yet is still a change**: compare with what the disk holds this instant,
     // so a save in the quarter second after an outside write cannot overwrite it.
     if let Ok(now) = std::fs::read_to_string(&full)
@@ -282,20 +332,16 @@ pub fn save_file(files: &mut Files, root: &Path, rel: &str) -> Result<(), String
     file.stamp = Stamp::of(&full);
     Ok(())
 }
-
 // ── The tree ─────────────────────────────────────────────────────────────────
 
-/// A tree row's key: FNV-1a over the path, so the same file is the same row on every rebuild and the table
-/// keeps its selection and its open folders.
 pub fn key_of(rel: &str) -> u64 {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut hash = FNV_OFFSET;
     for byte in rel.as_bytes() {
         hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        hash = hash.wrapping_mul(FNV_PRIME);
     }
     hash
 }
-
 /// **The project's `.gitignore`, as far as a file tree needs it**: a line is a name, a path from the root, or
 /// a glob (`*` and `?`); a trailing `/` is a folder only; a leading `/` anchors at the root; `#` is a
 /// comment. Negation (`!`) and `**` are not read: a tree that shows an ignored file is a smaller harm than
@@ -328,25 +374,42 @@ impl Ignore {
             if *dir_only && !is_dir {
                 return false;
             }
-            if *anchored { glob(pattern, rel) } else { glob(pattern, name) }
+            if *anchored { wildcard(pattern, rel, false) } else { wildcard(pattern, name, false) }
         })
     }
 }
 
-/// `*` (any run of characters but `/`) and `?` (one), over the whole of `text`.
-fn glob(pattern: &str, text: &str) -> bool {
-    fn go(p: &[u8], t: &[u8]) -> bool {
-        match (p.first(), t.first()) {
-            (None, None) => true,
-            (Some(b'*'), _) => go(&p[1..], t) || (!t.is_empty() && t[0] != b'/' && go(p, &t[1..])),
-            (Some(b'?'), Some(c)) if *c != b'/' => go(&p[1..], &t[1..]),
-            (Some(a), Some(b)) if a == b => go(&p[1..], &t[1..]),
-            _ => false,
+/// **The one wildcard matcher**: `*` any run of characters, `?` one, over the whole of `text`. With `across_slash` false a
+/// `*` and a `?` stop at a `/` (a `.gitignore` line); true lets them run across folders (a path filter). Iterative, with
+/// one place to back up to, so a pattern of many stars cannot take exponential time.
+pub(crate) fn wildcard(pattern: &str, text: &str, across_slash: bool) -> bool {
+    let (p, t) = (pattern.as_bytes(), text.as_bytes());
+    let (mut pi, mut ti) = (0, 0);
+    let mut star: Option<(usize, usize)> = None;
+    while ti < t.len() {
+        let literal = pi < p.len() && p[pi] != b'*' && (p[pi] == t[ti] || (p[pi] == b'?' && (across_slash || t[ti] != b'/')));
+        if literal {
+            pi += 1;
+            ti += 1;
+        } else if pi < p.len() && p[pi] == b'*' {
+            star = Some((pi, ti));
+            pi += 1;
+        } else if let Some((sp, st)) = star {
+            if !across_slash && t[st] == b'/' {
+                return false;
+            }
+            star = Some((sp, st + 1));
+            pi = sp + 1;
+            ti = st + 1;
+        } else {
+            return false;
         }
     }
-    go(pattern.as_bytes(), text.as_bytes())
+    while pi < p.len() && p[pi] == b'*' {
+        pi += 1;
+    }
+    pi == p.len()
 }
-
 /// What the walk of a project's folders made: the tree's nodes and what each key names.
 #[derive(Default)]
 struct Walked {
@@ -354,18 +417,26 @@ struct Walked {
     names: HashMap<u64, (String, bool)>,
     count: usize,
     truncated: bool,
+    /// An order-independent sum of what is listed, so a settled tree is told from a changed one without keeping a copy.
+    fingerprint: u64,
 }
 
-fn walk_dir(root: &Path, dir: &Path, ignore: &Ignore, walked: &mut Walked, open: &dyn Fn(u64) -> Option<bool>) -> Vec<TreeNode> {
+fn walk_dir(root: &Path, dir: &Path, ignore: &Ignore, walked: &mut Walked) -> Vec<TreeNode> {
     let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
-    let mut listed: Vec<(String, bool)> = entries
-        .filter_map(Result::ok)
-        .filter_map(|entry| {
-            let meta = std::fs::symlink_metadata(entry.path()).ok()?;
-            // A link is never followed (the tree stays inside the project) and never listed.
-            (!meta.file_type().is_symlink()).then(|| (entry.file_name().to_string_lossy().into_owned(), meta.is_dir()))
-        })
-        .collect();
+    // **A folder is read for its first [`TREE_DIR_LIMIT`] entries only**: collecting, statting and sorting a folder of a
+    // hundred thousand files is the stall the limit exists to prevent.
+    let mut read = entries.filter_map(Result::ok);
+    let mut listed: Vec<(String, bool)> = Vec::new();
+    for entry in read.by_ref().take(TREE_DIR_LIMIT) {
+        let Ok(meta) = std::fs::symlink_metadata(entry.path()) else { continue };
+        // A link is never followed (the tree stays inside the project) and never listed.
+        if !meta.file_type().is_symlink() {
+            listed.push((entry.file_name().to_string_lossy().into_owned(), meta.is_dir()));
+        }
+    }
+    if read.next().is_some() {
+        walked.truncated = true;
+    }
     listed.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.to_lowercase().cmp(&b.0.to_lowercase())));
     let mut out = Vec::new();
     for (name, is_dir) in listed {
@@ -382,31 +453,25 @@ fn walk_dir(root: &Path, dir: &Path, ignore: &Ignore, walked: &mut Walked, open:
         walked.count += 1;
         let key = key_of(&rel);
         walked.names.insert(key, (rel.clone(), is_dir));
+        walked.fingerprint = walked.fingerprint.wrapping_add(key ^ u64::from(is_dir));
         let mut node = TreeNode::new(key, name);
         if is_dir {
-            node = node.children(walk_dir(root, &rel_path, ignore, walked, open));
-            if open(key).unwrap_or(false) {
-                node = node.expanded();
-            }
+            node = node.children(walk_dir(root, &rel_path, ignore, walked));
         }
         out.push(node);
     }
     out
 }
-
-/// **Every file and folder under the project, as tree nodes**, with a map from each row's key to what it
-/// names. The first level opens; the rest stay as the person left them.
-fn walk_project(root: &Path, open: &dyn Fn(u64) -> Option<bool>) -> Walked {
+fn walk_project(root: &Path) -> Walked {
     let ignore = std::fs::read_to_string(root.join(".gitignore")).map(|t| Ignore::parse(&t)).unwrap_or_default();
     let mut walked = Walked::default();
-    let nodes = walk_dir(root, root, &ignore, &mut walked, open);
+    let nodes = walk_dir(root, root, &ignore, &mut walked);
     walked.nodes = nodes;
     walked
 }
-
 /// **The paths the tree lists**, files only, in tree order: what a test and the search read.
 pub fn listed_files(root: &Path) -> Vec<String> {
-    let walked = walk_project(root, &|_| None);
+    let walked = walk_project(root);
     let mut files: Vec<String> = walked.names.into_values().filter(|(_, dir)| !dir).map(|(rel, _)| rel).collect();
     files.sort();
     files
@@ -417,6 +482,10 @@ pub fn listed_files(root: &Path) -> Vec<String> {
 /// The tree panel in the left dock.
 #[derive(Component)]
 pub struct FilesPanel;
+
+/// The sentence under the tree's title when the project has more than the tree lists.
+#[derive(Component)]
+pub struct TreeNotice;
 
 /// The tree itself: a gooey `tree`.
 #[derive(Component)]
@@ -432,7 +501,7 @@ pub struct FileHeader;
 
 /// The question a file that changed under unsaved edits asks, with its two buttons.
 #[derive(Component)]
-pub struct ConflictBar;
+pub struct ConflictBar(pub String);
 
 /// The two answers.
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
@@ -470,12 +539,11 @@ pub fn active_file(session: &Session) -> Option<String> {
 
 fn indentation_of(lang: Lang) -> CodeIndentation {
     let spaces = match lang {
-        Lang::Yaml | Lang::Markdown => 2,
-        Lang::Ron | Lang::Rhai | Lang::Plain => 4,
+        Lang::Yaml | Lang::Markdown => YAML_INDENT_SPACES,
+        Lang::Ron | Lang::Rhai | Lang::Plain => CODE_INDENT_SPACES,
     };
-    CodeIndentation { indent: CodeIndent::Spaces(spaces), tab_width: 4 }
+    CodeIndentation { indent: CodeIndent::Spaces(spaces), tab_width: TAB_COLUMNS }
 }
-
 // ── The plugin ───────────────────────────────────────────────────────────────
 
 /// **The Files workspace**: the tree, the editor and what keeps them true.
@@ -509,6 +577,7 @@ fn spawn_the_files_workspace(mut commands: Commands, frame: Res<Frame>) {
     let panel = chrome::panel_root(&mut commands, &frame, Side::Left, TREE_PANEL_W, true, false, "FILES").insert(FilesPanel).id();
     commands.entity(panel).with_children(|p| {
         chrome::title(p, "FILES");
+        p.spawn((bevy_gooey::label(String::new()), TreeNotice));
         p.spawn(Node { flex_grow: 1.0, min_height: Val::Px(0.0), flex_direction: FlexDirection::Column, ..default() })
             .with_children(|column| {
                 column.spawn((tree(Vec::<TreeNode>::new()), FilesTree, SelectMode::Single, observe(open_the_picked_file)));
@@ -546,9 +615,43 @@ fn spawn_the_files_workspace(mut commands: Commands, frame: Res<Frame>) {
                 chrome::font(chrome::text::LABEL),
                 TextLayout::new(Justify::Left, LineBreak::NoWrap),
             ));
+            host.spawn((bevy_gooey::text_input("Set a field: path value", ""), FieldLine, observe(on_field_line)));
         })
         .id();
     commands.entity(frame.viewport).add_child(host);
+}
+
+/// **The field line**: `<field path> <value>` sets one value of the open YAML file through the operation `file_edit`,
+/// with every comment kept, as the DATA line sets a game's tuning value. The same write an agent's `apply` makes.
+#[derive(Component)]
+pub struct FieldLine;
+
+fn on_field_line(change: On<ValueChange<String>>, mut commands: Commands) {
+    if !change.is_final || change.value.trim().is_empty() {
+        return;
+    }
+    let line = change.value.clone();
+    commands.queue(move |world: &mut World| set_the_field(world, &line));
+}
+
+/// **Set one field of the open file** from a `<path> <value>` line, through the operation `file_edit`, and put it on
+/// the undo stack. A refusal goes to the status line and writes nothing.
+pub fn set_the_field(world: &mut World, line: &str) {
+    let Some(rel) = world.get_resource::<Session>().and_then(active_file) else { return };
+    let Some(project) = world.get_resource::<Project>().cloned() else { return };
+    let (path, value_text) = line.trim().split_once(char::is_whitespace).unwrap_or((line.trim(), ""));
+    let value = serde_json::from_str::<serde_json::Value>(value_text.trim()).unwrap_or_else(|_| serde_json::Value::String(value_text.trim().to_owned()));
+    let mut ctx = crate::ops::Ctx { project: Some(project), source: crate::ops::Source::Human, session: crate::ops::session_id(), ..crate::ops::Ctx::default() };
+    let params = serde_json::json!({"path": rel, "edits": [{"at": path, "value": value}]});
+    let Some(mut state) = world.remove_resource::<EditorState>() else { return };
+    match crate::ops::dispatch(&mut ctx, "file_edit", &params) {
+        Ok(crate::ops::Applied::Done { outcome, operation_id, .. }) => {
+            state.status.note(outcome.summary.clone());
+            state.record_logged(operation_id, format!("{}: {path}", outcome.summary), false);
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => state.status.problem(e.0),
+    }
+    world.insert_resource(state);
 }
 
 /// A click in the tree opens the file it names; a folder's row opens nothing (its chevron opens it).
@@ -568,11 +671,13 @@ fn open_the_picked_file(picked: On<ValueChange<TableSelection>>, mut commands: C
 #[derive(Component, Default)]
 struct TreeNames {
     names: HashMap<u64, (String, bool)>,
-    listed: Vec<(String, bool)>,
+    fingerprint: u64,
     next_poll: f64,
     selected: Option<u64>,
+    truncated: bool,
+    /// The walk in flight, on a thread of its own: the tree is read off the UI thread.
+    scan: Option<std::sync::Mutex<std::sync::mpsc::Receiver<Walked>>>,
 }
-
 fn tree_names(world: &mut World) -> HashMap<u64, (String, bool)> {
     world.query_filtered::<&TreeNames, With<FilesTree>>().iter(world).next().map(|t| t.names.clone()).unwrap_or_default()
 }
@@ -605,15 +710,28 @@ fn keep_the_open_files(mut files: ResMut<Files>, session: Res<Session>, project:
                 }
                 files.open.insert(
                     (*rel).to_owned(),
-                    OpenFile { text: String::new(), disk: String::new(), stamp: None, external: None, read_only: true, edited_at: None, pushed: 0, reveal: None },
+                    OpenFile {
+                        text: String::new(),
+                        disk: String::new(),
+                        stamp: None,
+                        external: None,
+                        read_only: true,
+                        problem: Some(why.clone()),
+                        edited_at: None,
+                        pushed: 0,
+                        reveal: None,
+                        incoming: None,
+                        agent_lines: Vec::new(),
+                    },
                 );
             }
         }
     }
     files.open.retain(|rel, file| wanted.contains(&rel.as_str()) || file.dirty());
+    let dirty: Vec<String> = files.open.iter().filter(|(_, f)| f.dirty()).map(|(rel, _)| rel.clone()).collect();
+    publish_unsaved(&project.root, dirty);
 }
 
-/// **Look at each open file for a change made from outside** (an editor, a build, an agent's tool).
 fn poll_the_disk(mut files: ResMut<Files>, time: Res<Time<Real>>, mut last: Local<f64>) {
     let now = time.elapsed_secs_f64();
     if now - *last < POLL_S {
@@ -622,13 +740,30 @@ fn poll_the_disk(mut files: ResMut<Files>, time: Res<Time<Real>>, mut last: Loca
     *last = now;
     let Some(root) = files.root.clone() else { return };
     for (rel, file) in files.open.iter_mut() {
-        let full = root.join(rel);
+        let Ok(full) = inside(&root, rel) else { continue };
         let stamp = Stamp::of(&full);
         if stamp == file.stamp {
             continue;
         }
-        file.stamp = stamp;
-        let Ok(text) = std::fs::read_to_string(&full) else { continue };
+        file.stamp = stamp.clone();
+        // **A file that is gone is said to be gone**, and the text stays where it is.
+        if stamp.is_none() {
+            file.problem = Some(format!("{rel} was deleted from the project; your text is still here, and a save does not bring the file back"));
+            continue;
+        }
+        // **Read the way an open reads** (a size and a UTF-8 check), so a file that grew past the limit or stopped being
+        // text is refused here too, and the tab says why.
+        let text = match read_text(&full, rel) {
+            Ok((text, _)) => text,
+            Err(why) => {
+                file.problem = Some(why);
+                continue;
+            }
+        };
+        if file.problem.take().is_some() {
+            // It reads again (or is back): a stub with no text takes the file whole.
+            file.read_only = files_lang::is_command_file(rel);
+        }
         if text == file.disk {
             file.external = None;
         } else if text == file.text {
@@ -636,6 +771,14 @@ fn poll_the_disk(mut files: ResMut<Files>, time: Res<Time<Real>>, mut last: Loca
             file.disk = text;
             file.external = None;
         } else if file.text == file.disk {
+            // **Nobody has typed here, so the change simply lands** (GD-14, #376): as the one edit that makes it, from
+            // the Familiar's hand when an agent's `file_edit` just wrote the file, so the widget keeps the person's
+            // caret and selection and glides the changed lines in tinted in the author's colour.
+            let agent = take_agent_edit(&root, rel);
+            let ink = chrome::ink();
+            let author = if agent { CodeAuthor::new("the Familiar", ink.suggest) } else { CodeAuthor::new("outside", ink.accent) };
+            file.incoming = diff_edit(&file.text, &text).map(|edit| (edit, author));
+            file.agent_lines = if agent { changed_lines(&file.text, &text).into_iter().collect() } else { Vec::new() };
             file.disk = text.clone();
             file.text = text;
             file.pushed += 1;
@@ -645,30 +788,33 @@ fn poll_the_disk(mut files: ResMut<Files>, time: Res<Time<Real>>, mut last: Loca
         }
     }
 }
-
 /// **Show the active file in the code editor**, spawning the editor when a file is open and taking it away
-/// when none is; switch the text when the tab changes or the text was replaced from outside.
+/// when none is; switch the text when the tab changes. A change that arrived from outside lands as one external
+/// edit (the caret and the selection stay where the person left them); a search result's line is brought into view.
 fn keep_the_editor(
     mut commands: Commands,
-    files: Res<Files>,
+    mut files: ResMut<Files>,
     session: Res<Session>,
     hosts: Query<Entity, With<FilesHost>>,
-    mut editors: Query<(Entity, &mut FileEditor, &mut CodeEditorValue, Option<&InteractionDisabled>)>,
+    mut editors: Query<(Entity, &mut FileEditor, &mut CodeEditorValue, &mut CodeEditor, Option<&InteractionDisabled>)>,
 ) {
     let Ok(host) = hosts.single() else { return };
     let active = active_file(&session);
-    let existing = editors.iter_mut().next();
-    match (active.as_deref().and_then(|rel| files.open.get(rel).map(|f| (rel, f))), existing) {
+    match (active, editors.iter_mut().next()) {
         (None, Some((entity, ..))) => {
             commands.entity(entity).despawn();
         }
-        (Some((rel, file)), None) => {
-            let lang = Lang::of(rel);
+        (Some(rel), None) => {
+            let Some(file) = files.open.get_mut(&rel) else { return };
+            file.incoming = None;
             let editor = commands
                 .spawn((
-                    bevy_gooey::code_editor(rel.to_owned(), file.text.clone()),
-                    FileEditor { shown: Some(rel.to_owned()), pushed: file.pushed, highlighted: u64::MAX, analysed: u64::MAX },
-                    indentation_of(lang),
+                    bevy_gooey::code_editor(rel.clone(), file.text.clone()),
+                    FileEditor { shown: Some(rel.clone()), pushed: file.pushed, highlighted: u64::MAX, analysed: u64::MAX },
+                    indentation_of(Lang::of(&rel)),
+                    // **The text small down the right edge** (GD-12, #374): the person's way round a long file, with the
+                    // errors and the lines an agent changed marked on it.
+                    CodeMinimap,
                     observe(on_edit),
                     observe(on_completion_request),
                     observe(on_hover_request),
@@ -679,17 +825,29 @@ fn keep_the_editor(
             }
             commands.entity(host).add_child(editor);
         }
-        (Some((rel, file)), Some((entity, mut editor, mut value, disabled))) => {
-            let switched = editor.shown.as_deref() != Some(rel);
-            if switched || editor.pushed != file.pushed {
+        (Some(rel), Some((entity, mut editor, mut value, mut widget, disabled))) => {
+            let Some(file) = files.open.get_mut(&rel) else { return };
+            let switched = editor.shown.as_deref() != Some(rel.as_str());
+            if switched {
                 value.set(file.text.clone());
-                if switched {
-                    commands.entity(entity).insert(indentation_of(Lang::of(rel)));
-                }
-                editor.shown = Some(rel.to_owned());
+                file.incoming = None;
+                commands.entity(entity).insert(indentation_of(Lang::of(&rel)));
+                editor.shown = Some(rel.clone());
                 editor.pushed = file.pushed;
-                editor.highlighted = u64::MAX;
-                editor.analysed = u64::MAX;
+            } else if editor.pushed != file.pushed {
+                match file.incoming.take() {
+                    Some((edit, author)) => {
+                        if widget.apply_external_edit(&[edit], author).is_err() {
+                            // A range the widget will not take (inside a line break): the whole text instead.
+                            value.set(file.text.clone());
+                        }
+                    }
+                    None => value.set(file.text.clone()),
+                }
+                editor.pushed = file.pushed;
+            } else if let Some((line, col, len)) = file.reveal.take() {
+                widget.select(CodePos::new(line, col), CodePos::new(line, col + len));
+                widget.scroll_to_line(line.saturating_sub(REVEAL_LINES_ABOVE));
             }
             match (file.read_only, disabled.is_some()) {
                 (true, false) => {
@@ -705,6 +863,9 @@ fn keep_the_editor(
     }
 }
 
+/// How many lines of context stay above a line brought into view by a search result.
+pub const REVEAL_LINES_ABOVE: usize = 3;
+
 /// **The person typed.** Keep the text, and (Cmd or Ctrl+S) save it.
 fn on_edit(
     change: On<ValueChange<String>>,
@@ -716,8 +877,12 @@ fn on_edit(
     let Ok(editor) = editors.get(change.source) else { return };
     let Some(rel) = editor.shown.clone() else { return };
     let now = time.elapsed_secs_f64();
-    if let Some(file) = files.open.get_mut(&rel) {
+    if let Some(file) = files.open.get_mut(&rel)
+        && file.text != change.value
+    {
+        // The person typed: what they changed is theirs now, so the agent's marks go.
         file.text = change.value.clone();
+        file.agent_lines.clear();
         file.edited_at = Some(now);
     }
     if !change.is_final {
@@ -755,11 +920,11 @@ fn decorate_the_editor(mut commands: Commands, mut files: ResMut<Files>, time: R
         }
         let waiting = files.open.get(&rel).and_then(|f| f.edited_at).is_some_and(|at| now - at < DIAGNOSE_IDLE_S);
         if editor.analysed != revision && !waiting {
-            let findings = files_lang::diagnose(&rel, value.text());
-            commands.entity(entity).insert(Diagnostics::new(
-                revision,
-                findings.into_iter().map(|f| Diagnostic::new(f.range, f.severity, f.message)),
-            ));
+            let mut items: Vec<Diagnostic> = files_lang::diagnose(&rel, value.text()).into_iter().map(|f| Diagnostic::new(f.range, f.severity, f.message)).collect();
+            if let Some(file) = files.open.get(&rel) {
+                items.extend(agent_marks(value.text(), &file.agent_lines));
+            }
+            commands.entity(entity).insert(Diagnostics::new(revision, items));
             editor.analysed = revision;
             if let Some(file) = files.open.get_mut(&rel) {
                 file.edited_at = None;
@@ -768,19 +933,21 @@ fn decorate_the_editor(mut commands: Commands, mut files: ResMut<Files>, time: R
     }
 }
 
-/// **The line over the editor**: the path, a dot when there are unsaved edits, and why a file is read-only.
 fn keep_the_header(files: Res<Files>, session: Res<Session>, mut headers: Query<&mut Text, With<FileHeader>>) {
     let Ok(mut header) = headers.single_mut() else { return };
     let want = match active_file(&session).and_then(|rel| files.open.get(&rel).map(|f| (rel, f))) {
         None => "Open a file from the tree".to_owned(),
         Some((rel, file)) => {
             let mut line = rel;
+            // **Why it cannot be edited, in the words of the reason**: a file that is not text, too big or gone says so,
+            // and a command file says it is changed on its own page.
+            let note = file.problem.as_deref().or(file.read_only.then_some(files_lang::READ_ONLY_NOTE));
             if file.dirty() {
                 line.push_str("  \u{25CF}");
             }
-            if file.read_only {
+            if let Some(note) = note {
                 line.push_str("  \u{2014}  ");
-                line.push_str(files_lang::READ_ONLY_NOTE);
+                line.push_str(note);
             }
             line
         }
@@ -789,22 +956,26 @@ fn keep_the_header(files: Res<Files>, session: Res<Session>, mut headers: Query<
         header.0 = want;
     }
 }
-
-/// **The question a changed file asks**: spawned while one is waiting, gone when it is answered.
 fn keep_the_conflict_bar(
     mut commands: Commands,
     files: Res<Files>,
     session: Res<Session>,
     hosts: Query<Entity, With<FilesHost>>,
-    bars: Query<(Entity, &Children), With<ConflictBar>>,
+    bars: Query<(Entity, &ConflictBar)>,
 ) {
     let Ok(host) = hosts.single() else { return };
     let asking = active_file(&session).filter(|rel| files.open.get(rel).is_some_and(|f| f.external.is_some()));
-    match (asking, bars.single()) {
-        (Some(rel), Err(_)) => {
+    let standing = bars.single().ok();
+    // **The bar names the file it asks about**: switching to another file that also changed replaces it.
+    match (asking, standing) {
+        (Some(rel), Some((_, bar))) if bar.0 == rel => {}
+        (Some(rel), standing) => {
+            if let Some((old, _)) = standing {
+                commands.entity(old).despawn();
+            }
             let bar = commands
                 .spawn((
-                    ConflictBar,
+                    ConflictBar(rel.clone()),
                     bevy_gooey::row(1.0),
                     children![
                         (bevy_gooey::label(conflict_sentence(&rel))),
@@ -813,15 +984,17 @@ fn keep_the_conflict_bar(
                     ],
                 ))
                 .id();
-            commands.entity(host).insert_children(1, &[bar]);
+            commands.entity(host).insert_children(CONFLICT_BAR_INDEX, &[bar]);
         }
-        (None, Ok((bar, _))) => {
+        (None, Some((bar, _))) => {
             commands.entity(bar).despawn();
         }
-        _ => {}
+        (None, None) => {}
     }
 }
 
+/// Where in the editor's column the question stands: under the header (child 0), over the field line and the editor.
+const CONFLICT_BAR_INDEX: usize = 1;
 /// **Reload** takes the disk's text and drops the person's; **Keep mine** keeps theirs and takes what the disk
 /// holds as the new thing a save would replace.
 fn answer_the_conflict(activate: On<Activate>, answers: Query<&ConflictAnswer>, mut files: ResMut<Files>, session: Res<Session>) {
@@ -883,15 +1056,13 @@ fn on_hover_request(request: On<CodeHoverRequested>, mut files: ResMut<Files>, e
     }
 }
 
-/// **Keep the tree true to the folder**: read again every [`TREE_POLL_S`], replace the nodes only when what
-/// is listed changed (a settled tree costs one walk and no rebuild), and keep the row of the active file
-/// selected.
 fn keep_the_tree(
     mut commands: Commands,
     project: Option<Res<Project>>,
     session: Res<Session>,
     time: Res<Time<Real>>,
     mut trees: Query<(Entity, &mut bevy_gooey::Table, Option<&mut TreeNames>), With<FilesTree>>,
+    mut notices: Query<&mut Text, With<TreeNotice>>,
 ) {
     let Some(project) = project else { return };
     let Ok((entity, mut table, names)) = trees.single_mut() else { return };
@@ -900,16 +1071,41 @@ fn keep_the_tree(
         return;
     };
     let now = time.elapsed_secs_f64();
-    if now >= names.next_poll {
+    // **The walk is read off the UI thread**: started on a timer, taken when it is done, and only a changed listing
+    // replaces the nodes.
+    let finished = names.scan.as_ref().and_then(|scan| scan.lock().ok().map(|rx| rx.try_recv()));
+    match finished {
+        Some(Ok(walked)) => {
+            names.scan = None;
+            names.truncated = walked.truncated;
+            if walked.fingerprint != names.fingerprint || names.names.is_empty() {
+                if let Some(tree) = table.source_mut::<Tree>() {
+                    let open = tree.open_keys();
+                    tree.set_nodes(walked.nodes);
+                    for key in open {
+                        tree.set_open(key, true);
+                    }
+                }
+                names.names = walked.names;
+                names.fingerprint = walked.fingerprint;
+            }
+        }
+        Some(Err(std::sync::mpsc::TryRecvError::Disconnected)) => names.scan = None,
+        _ => {}
+    }
+    if names.scan.is_none() && now >= names.next_poll {
         names.next_poll = now + TREE_POLL_S;
-        let Some(tree) = table.source_mut::<Tree>() else { return };
-        let walked = walk_project(&project.root, &|key| tree.is_open(key));
-        let mut listed: Vec<(String, bool)> = walked.names.values().cloned().collect();
-        listed.sort();
-        if listed != names.listed {
-            tree.set_nodes(walked.nodes);
-            names.names = walked.names;
-            names.listed = listed;
+        let root = project.root.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(walk_project(&root));
+        });
+        names.scan = Some(std::sync::Mutex::new(rx));
+    }
+    let want_notice = if names.truncated { TREE_TRUNCATED } else { "" };
+    for mut notice in &mut notices {
+        if notice.0 != want_notice {
+            notice.0 = want_notice.to_owned();
         }
     }
     let want = active_file(&session).map(|rel| key_of(&rel));
@@ -924,4 +1120,124 @@ fn keep_the_tree(
             }
         }
     }
+}
+// ── What an agent's operations need to know about the open files ─────────────
+
+/// What the operations (`file_edit`, `files_replace`) may ask of this module without a window: which files a
+/// person has unsaved edits in, and which file an agent just wrote.
+///
+/// **Process-wide, keyed by project root**, because an operation runs in a [`crate::ops::Ctx`], which owns
+/// what it carries and has no world to ask. The editor publishes the first every frame it changes
+/// ([`publish_unsaved`]); the second is noted by `file_edit` as it writes and taken by the poll that sees the
+/// write ([`take_agent_edit`]).
+#[derive(Default)]
+struct Registry {
+    /// The open project's root and the files the person has unsaved edits in: one slot, because one project is open.
+    unsaved: Option<(PathBuf, Vec<String>)>,
+    agent: Vec<(PathBuf, String)>,
+}
+
+static REGISTRY: std::sync::LazyLock<std::sync::Mutex<Registry>> = std::sync::LazyLock::new(Default::default);
+
+fn registry() -> std::sync::MutexGuard<'static, Registry> {
+    // A panic with the lock held cannot leave it half-written: both fields are replaced whole.
+    REGISTRY.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+pub fn person_is_editing(root: &Path, rel: &str) -> bool {
+    registry().unsaved.as_ref().is_some_and(|(r, files)| r == root && files.iter().any(|f| f == rel))
+}
+
+/// **Whether any file of the open project has unsaved edits**: what leaving the editor, and quitting it, ask about
+/// beside the map.
+pub fn any_unsaved() -> bool {
+    registry().unsaved.as_ref().is_some_and(|(_, files)| !files.is_empty())
+}
+fn publish_unsaved(root: &Path, dirty: Vec<String>) {
+    let mut registry = registry();
+    let same = registry.unsaved.as_ref().is_some_and(|(r, files)| r == root && *files == dirty);
+    if !same {
+        registry.unsaved = (!dirty.is_empty()).then(|| (root.to_path_buf(), dirty));
+    }
+}
+/// **Note that an agent just wrote `rel`**, so the editor tints the lines it changes in the Familiar's colour.
+pub fn note_agent_edit(root: &Path, rel: &str) {
+    let mut registry = registry();
+    let entry = (root.to_path_buf(), rel.to_owned());
+    if !registry.agent.contains(&entry) {
+        registry.agent.push(entry);
+    }
+}
+
+/// Whether an agent's write of `rel` was noted, and forget it.
+fn take_agent_edit(root: &Path, rel: &str) -> bool {
+    let mut registry = registry();
+    let before = registry.agent.len();
+    registry.agent.retain(|(r, f)| !(r == root && f == rel));
+    registry.agent.len() != before
+}
+
+/// **The one edit that turns `old` into `new`**: everything between their common head and tail, on character
+/// boundaries. `None` when they are the same text.
+pub fn diff_edit(old: &str, new: &str) -> Option<CodeEdit> {
+    if old == new {
+        return None;
+    }
+    let mut start = old.bytes().zip(new.bytes()).take_while(|(a, b)| a == b).count();
+    while !old.is_char_boundary(start) || !new.is_char_boundary(start) {
+        start -= 1;
+    }
+    let (mut end_old, mut end_new) = (old.len(), new.len());
+    while end_old > start && end_new > start && old.as_bytes()[end_old - 1] == new.as_bytes()[end_new - 1] {
+        end_old -= 1;
+        end_new -= 1;
+    }
+    while end_old < old.len() && end_new < new.len() && (!old.is_char_boundary(end_old) || !new.is_char_boundary(end_new)) {
+        end_old += 1;
+        end_new += 1;
+    }
+    Some(CodeEdit::new(start..end_old, new[start..end_new].to_owned()))
+}
+
+/// **The lines (1-based, inclusive) that differ**, from the first changed line to the last in the new text.
+pub fn changed_lines(old: &str, new: &str) -> Option<[u32; 2]> {
+    if old == new {
+        return None;
+    }
+    let a: Vec<&str> = old.split('\n').collect();
+    let b: Vec<&str> = new.split('\n').collect();
+    let head = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
+    let tail = a[head..].iter().rev().zip(b[head..].iter().rev()).take_while(|(x, y)| x == y).count();
+    let last = (b.len() - tail).max(head + 1);
+    Some([head as u32 + 1, last as u32])
+}
+
+/// **The agent's changed lines, as marks the minimap draws** (and the gutter): a hint on the first word of each
+/// line, saying who changed it. The editor's own diagnostics are the one channel `bevy_gooey` marks a line
+/// through, so the marks ride it with the least severity there is.
+fn agent_marks(text: &str, lines: &[[u32; 2]]) -> Vec<Diagnostic> {
+    let index = files_lang::Lines::new(text);
+    let mut out = Vec::new();
+    for [first, last] in lines {
+        for line in (*first as usize)..=(*last as usize) {
+            if line == 0 || line > index.count() {
+                continue;
+            }
+            let range = index.range(line - 1);
+            let line_text = &text[range.clone()];
+            let indent = line_text.len() - line_text.trim_start().len();
+            let from = range.start + indent;
+            let to = (from + line_text[indent..].chars().next().map_or(0, char::len_utf8)).max(from);
+            out.push(Diagnostic::new(from..to, CodeSeverity::Hint, AGENT_CHANGED));
+        }
+    }
+    out
+}
+
+/// What the mark on an agent's line says.
+pub const AGENT_CHANGED: &str = "Changed by the Familiar";
+
+/// The marks [`agent_marks`] makes, for a test.
+pub fn agent_marks_for_test(text: &str, lines: &[[u32; 2]]) -> Vec<Diagnostic> {
+    agent_marks(text, lines)
 }

@@ -26,7 +26,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_cauldron::command_run::Chords;
 use bevy_cauldron::commands;
-use bevy_cauldron::files::{self, ConflictAnswer, FileEditor, Files, DIAGNOSE_IDLE_S, POLL_S};
+use bevy_cauldron::files::{self, ConflictAnswer, Files, DIAGNOSE_IDLE_S, POLL_S};
 use bevy_cauldron::files_lang::{self, Lang};
 use bevy_cauldron::harness;
 use bevy_cauldron::keys::Live;
@@ -394,18 +394,25 @@ fn the_tree_lists_the_projects_files_and_a_click_opens_one() {
     settle(&mut app);
     run_command(&mut app, "workspace.files");
     settle(&mut app);
-    // The tree is spawned and read again on a timer; give it its first poll.
-    std::thread::sleep(Duration::from_secs_f64(files::TREE_POLL_S + 0.1));
-    settle(&mut app);
+    // The tree is read on a thread of its own, started on a timer: step until its rows are there.
     let tree = {
         let world = app.world_mut();
         world.query_filtered::<Entity, With<files::FilesTree>>().single(world).unwrap_or_else(|e| panic!("the tree is on screen: {e}"))
     };
-    let nodes = {
-        let table = app.world().get::<bevy_gooey::Table>(tree).unwrap_or_else(|| panic!("a table"));
-        table.source::<bevy_gooey::Tree>().map(bevy_gooey::Tree::node_count).unwrap_or(0)
-    };
-    assert!(nodes >= listed.len(), "the tree holds a row for every file ({nodes} rows for {} files)", listed.len());
+    let tree_has = |app: &App, key: u64| app.world().get::<bevy_gooey::Table>(tree).and_then(|t| t.source::<bevy_gooey::Tree>().map(|t| t.contains(key))).unwrap_or(false);
+    for _ in 0..200 {
+        if tree_has(&app, files::key_of("notes.md")) {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+        app.update();
+    }
+    for file in &listed {
+        assert!(tree_has(&app, files::key_of(file)), "the tree has a row for {file}");
+    }
+    for hidden in ["target/debug/junk.txt", "secret.log", "cache/blob.bin", "target", "cache"] {
+        assert!(!tree_has(&app, files::key_of(hidden)), "the tree has no row for {hidden}");
+    }
 
     // Picking the row of a file opens its tab, active.
     app.world_mut().commands().entity(tree).insert(bevy_gooey::TableSelection::of(files::key_of("notes.md")));
@@ -510,16 +517,280 @@ fn folds_follow_the_structure_of_each_language() {
     assert!(f.contains(&(4..6)), "{f:?}");
 }
 
-/// **The decorations are for the revision they describe**: the highlights on a file's editor carry the
-/// text's own revision, so a stale one is never drawn on new text.
+/// **The decorations are for the revision they describe**: typing moves the text's revision and the colours move with it, so a
+/// stale set is never drawn on new text.
 #[test]
 fn the_colours_are_for_the_text_that_is_showing() {
     let root = project("colour");
     let mut app = files_editor(&root, MAP_RON);
     let editor = editor_of(&mut app);
-    let revision = app.world().get::<CodeEditorValue>(editor).map(CodeEditorValue::revision).unwrap_or(0);
-    let highlights = app.world().get::<Highlights>(editor).unwrap_or_else(|| panic!("the file is coloured"));
-    assert_eq!(highlights.revision(), revision, "the colours are for the text that is showing");
-    assert!(!highlights.spans().is_empty());
-    let _ = app.world().get::<FileEditor>(editor).unwrap_or_else(|| panic!("the editor knows its file"));
+    let revision = |app: &App| app.world().get::<CodeEditorValue>(editor).map(CodeEditorValue::revision).unwrap_or(0);
+    let drawn = |app: &App| app.world().get::<Highlights>(editor).map(|h| (h.revision(), h.spans().len()));
+    let first = drawn(&app).unwrap_or_else(|| panic!("the file is coloured"));
+    assert_eq!(first.0, revision(&app), "the colours are for the text that is showing");
+    assert!(first.1 > 0);
+
+    // Typing moves the text's revision, and the colours move with it in the same frames: never a stale set on new text.
+    caret_at(&mut app, 11, 12);
+    let before = revision(&app);
+    bevy_gooey::testing::type_text(&mut app, "lift: 0.5, ");
+    assert!(revision(&app) > before, "typing changed the text");
+    let after = drawn(&app).unwrap_or_else(|| panic!("still coloured"));
+    assert_eq!(after.0, revision(&app), "the colours follow the text's revision");
+    assert!(after.1 > first.1, "and cover the new words ({} then {})", first.1, after.1);
+}
+/// **GD-12 (#374), acceptance 1**: a mapping folded in a long YAML file hides its lines, and **the lines below move up
+/// by the folded height**; unfolded, they come back. Measured on where the caret of a line below the fold stands in the text (its drawn place plus the scroll).
+#[test]
+fn a_folded_mapping_moves_the_lines_below_up_by_its_height_and_unfolding_brings_them_back() {
+    let root = project("fold");
+    let mut long = String::from("version: 3\nname: draft\norigin:\n- 0.0\n- 0.0\n- 0.0\nbounds:\n- 10.0\n- 3.0\n- 10.0\nplacements:\n");
+    for n in 0..12 {
+        long.push_str(&format!("- id: floor@{n}\n  descriptor: alpha/floor\n  at:\n  - {n}.0\n  - 0.0\n  yaw: 0.0\n"));
+    }
+    long.push_str("stamps: []\nlocations: []\n");
+    std::fs::write(root.join(MAP_YAML), &long).unwrap_or_else(|e| panic!("{e}"));
+    let mut app = files_editor(&root, MAP_YAML);
+    let editor = editor_of(&mut app);
+    let header = long.lines().position(|l| l == "placements:").unwrap_or(0);
+    let below = long.lines().position(|l| l == "stamps: []").unwrap_or(0);
+    let folds = files_lang::folds(Lang::Yaml, &long);
+    let range = folds.iter().find(|r| r.start == header).cloned().unwrap_or_else(|| panic!("`placements` folds: {folds:?}"));
+    let hidden = range.end - range.start - 1;
+    assert!(hidden >= 60, "the mapping is long: {hidden} lines hide");
+
+    let y = |app: &mut App| {
+        caret_at(app, below, 0);
+        for _ in 0..60 {
+            app.update();
+        }
+        app.world().get::<CodeEditor>(editor).map(|e| e.caret_at().y + e.scroll().y).unwrap_or(f32::NAN)
+    };
+    let open = y(&mut app);
+    let line_px = {
+        caret_at(&mut app, below - 1, 0);
+        for _ in 0..60 {
+            app.update();
+        }
+        open - app.world().get::<CodeEditor>(editor).map(|e| e.caret_at().y + e.scroll().y).unwrap_or(f32::NAN)
+    };
+    assert!(line_px > 1.0, "a line has a height: {line_px}");
+
+    // Close the fold at the caret (Cmd/Ctrl+Shift+[), with the caret on the header.
+    let fold_chord = |app: &mut App, code: KeyCode, name: &str| {
+        key(app, KeyCode::ControlLeft, Key::Control, ButtonState::Pressed);
+        key(app, KeyCode::ShiftLeft, Key::Shift, ButtonState::Pressed);
+        key(app, code, Key::Character(name.into()), ButtonState::Pressed);
+        key(app, code, Key::Character(name.into()), ButtonState::Released);
+        key(app, KeyCode::ShiftLeft, Key::Shift, ButtonState::Released);
+        key(app, KeyCode::ControlLeft, Key::Unidentified(NativeKey::Unidentified), ButtonState::Released);
+        settle(app);
+    };
+    caret_at(&mut app, header, 0);
+    fold_chord(&mut app, KeyCode::BracketLeft, "[");
+    let folded = y(&mut app);
+    let moved = open - folded;
+    assert!(
+        (moved - hidden as f32 * line_px).abs() < line_px,
+        "the line below moved up by the {hidden} hidden lines ({} px), not {moved} px (a line is {line_px} px)",
+        hidden as f32 * line_px
+    );
+
+    caret_at(&mut app, header, 0);
+    fold_chord(&mut app, KeyCode::BracketRight, "]");
+    let unfolded = y(&mut app);
+    assert!((unfolded - open).abs() < 1.0, "unfolding gives the lines back: {open} then {unfolded}");
+    assert_eq!(text(&mut app), long, "folding is never written into the file");
+}
+
+/// **GD-12 (#374)**: the editor draws a minimap, and the lines an agent changed are marked on it (a hint on each, through the one
+/// channel gooey marks a line by).
+#[test]
+fn the_editor_has_a_minimap_and_a_change_of_the_familiars_is_marked_on_it() {
+    let root = project("minimap");
+    let mut app = files_editor(&root, MAP_RON);
+    let editor = editor_of(&mut app);
+    assert!(app.world().get::<bevy_gooey::CodeMinimap>(editor).is_some(), "the editor carries a minimap");
+    let marks = bevy_cauldron::files::agent_marks_for_test(MAP_TEXT, &[[11, 12]]);
+    assert_eq!(marks.len(), 2, "one mark a changed line: {marks:?}");
+    assert!(marks.iter().all(|m| m.message == bevy_cauldron::files::AGENT_CHANGED && m.severity == bevy_gooey::CodeSeverity::Hint));
+}
+
+/// **What the editor refuses to open, and what it does when a file goes away or grows** (review M1, M2, M9): a path out of
+/// the project, a link out of it, a file that is not text, one that is too big, one that grows past the limit while open,
+/// and one that is deleted (a save does not bring it back, and does not make its folder).
+#[test]
+fn a_path_out_of_the_project_a_non_text_file_a_huge_one_and_a_vanished_one_are_refused() {
+    let root = project("refusals");
+    std::fs::write(root.join("notes.md"), "# notes\n").unwrap_or_else(|e| panic!("{e}"));
+    let mut app = files_editor(&root, "notes.md");
+    let open = |app: &mut App, rel: &str| files::open_file(app.world_mut(), rel);
+
+    assert!(open(&mut app, "../outside.txt").is_err_and(|e| e.contains("not a path inside the project")), "a `..` path is refused");
+    #[cfg(unix)]
+    {
+        let outside = std::env::temp_dir().join(format!("files_out_{}.txt", std::process::id()));
+        std::fs::write(&outside, "outside\n").unwrap_or_else(|e| panic!("{e}"));
+        std::os::unix::fs::symlink(&outside, root.join("link.txt")).unwrap_or_else(|e| panic!("{e}"));
+        assert!(open(&mut app, "link.txt").is_err_and(|e| e.contains("outside the project")), "a link out of the project is refused");
+        let _ = std::fs::remove_file(&outside);
+    }
+    std::fs::write(root.join("bin.dat"), [0xff_u8, 0xfe, 0x00, 0x80]).unwrap_or_else(|e| panic!("{e}"));
+    assert!(open(&mut app, "bin.dat").is_err_and(|e| e.contains("not text")), "a file that is not UTF-8 is refused");
+    let big = vec![b'a'; files::MAX_FILE_BYTES as usize + 1];
+    std::fs::write(root.join("big.txt"), &big).unwrap_or_else(|e| panic!("{e}"));
+    assert!(open(&mut app, "big.txt").is_err_and(|e| e.contains("KiB")), "a file over the limit is refused");
+
+    // A file that grows past the limit while it is open is not loaded by the poll: the tab says why.
+    std::fs::write(root.join("grows.txt"), "small\n").unwrap_or_else(|e| panic!("{e}"));
+    open(&mut app, "grows.txt").unwrap_or_else(|e| panic!("{e}"));
+    settle(&mut app);
+    std::fs::write(root.join("grows.txt"), &big).unwrap_or_else(|e| panic!("{e}"));
+    std::thread::sleep(Duration::from_secs_f64(POLL_S + 0.1));
+    settle(&mut app);
+    let file = app.world().resource::<Files>().get("grows.txt").cloned().unwrap_or_else(|| panic!("open"));
+    assert!(file.problem.as_deref().is_some_and(|p| p.contains("KiB")), "the tab says it is too big: {:?}", file.problem);
+    assert_eq!(file.text, "small\n", "and the 2 MB+ file was not read into the editor");
+
+    // A file that is deleted: the tab says so, a save writes nothing, and the folder is not made again.
+    std::fs::create_dir_all(root.join("scripts")).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(root.join("scripts/a.rhai"), "let a = 1;\n").unwrap_or_else(|e| panic!("{e}"));
+    open(&mut app, "scripts/a.rhai").unwrap_or_else(|e| panic!("{e}"));
+    settle(&mut app);
+    app.world_mut().resource_mut::<Files>().get_mut("scripts/a.rhai").map(|f| f.text.push_str("let b = 2;\n")).unwrap_or_default();
+    std::fs::remove_dir_all(root.join("scripts")).unwrap_or_else(|e| panic!("{e}"));
+    std::thread::sleep(Duration::from_secs_f64(POLL_S + 0.1));
+    settle(&mut app);
+    assert!(app.world().resource::<Files>().get("scripts/a.rhai").is_some_and(|f| f.problem.as_deref().is_some_and(|p| p.contains("deleted"))), "the tab says the file was deleted");
+    let mut files_res = app.world_mut().resource_mut::<Files>();
+    let refused = files::save_file(&mut files_res, &root, "scripts/a.rhai").expect_err("a save of a deleted file refuses");
+    assert!(refused.contains("deleted") || refused.contains("no longer exists"), "{refused}");
+    assert!(!root.join("scripts").exists(), "the file and its folder were not made again");
+}
+
+/// **A tab with unsaved edits is not closed under the person**, and a clean file's save writes nothing.
+#[test]
+fn a_dirty_tab_keeps_its_place_and_a_clean_save_writes_nothing() {
+    let root = project("dirtytab");
+    let mut app = files_editor(&root, MAP_RON);
+    caret_at(&mut app, 0, 0);
+    bevy_gooey::testing::type_text(&mut app, "x");
+    assert!(app.world().resource::<Files>().is_dirty(MAP_RON));
+    bevy_cauldron::session::close_tab(app.world_mut(), Workspace::Files, &bevy_cauldron::session::Doc::new(bevy_cauldron::session::Kind::File, MAP_RON));
+    assert_eq!(files::active_file(app.world().resource::<Session>()).as_deref(), Some(MAP_RON), "the tab is still there");
+
+    let before = std::fs::metadata(root.join("notes.md")).ok();
+    std::fs::write(root.join("notes.md"), "# n\n").unwrap_or_else(|e| panic!("{e}"));
+    files::open_file(app.world_mut(), "notes.md").unwrap_or_else(|e| panic!("{e}"));
+    let stamp = std::fs::metadata(root.join("notes.md")).and_then(|m| m.modified()).ok();
+    let mut files_res = app.world_mut().resource_mut::<Files>();
+    files::save_file(&mut files_res, &root, "notes.md").unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(std::fs::metadata(root.join("notes.md")).and_then(|m| m.modified()).ok(), stamp, "a clean file is not rewritten");
+    let _ = before;
+}
+
+/// **Unsaved files are unsaved work** (review M8): leaving for the chooser asks even when the map is clean, and "save and
+/// leave" saves the files while "discard" lets them go.
+#[test]
+fn a_file_with_unsaved_edits_makes_leaving_ask_and_save_all_and_discard_all_do_what_they_say() {
+    let root = project("unsaved");
+    let mut app = files_editor(&root, MAP_RON);
+    assert!(!files::any_unsaved(), "nothing is unsaved yet");
+    caret_at(&mut app, 0, 0);
+    bevy_gooey::testing::type_text(&mut app, "# mine\n");
+    settle(&mut app);
+    assert!(files::any_unsaved(), "a typed file is unsaved work");
+
+    let mut state = bevy_cauldron::editor::EditorState::default();
+    let mut confirm = bevy_cauldron::confirm::Confirm::default();
+    bevy_cauldron::editor::leave_for_menu(false, &mut state, &mut confirm);
+    assert!(confirm.is_open(), "leaving asks, though the map is clean");
+
+    let typed = text(&mut app);
+    {
+        let mut res = app.world_mut().resource_mut::<Files>();
+        res.discard_all(&root);
+    }
+    settle(&mut app);
+    assert_ne!(text(&mut app), typed, "discard lets the typed text go");
+    assert_eq!(std::fs::read_to_string(root.join(MAP_RON)).unwrap_or_default(), MAP_TEXT);
+    caret_at(&mut app, 0, 0);
+    bevy_gooey::testing::type_text(&mut app, "# kept\n");
+    let typed = text(&mut app);
+    app.world_mut().resource_mut::<Files>().save_all(&root).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(std::fs::read_to_string(root.join(MAP_RON)).unwrap_or_default(), typed, "save all writes the typed text");
+    assert!(!files::any_unsaved());
+}
+
+/// **Only the project's own `.gitignore` is read** (a nested one does not hide anything): stated and tested.
+#[test]
+fn only_the_roots_gitignore_is_read() {
+    let root = project("gitignore");
+    std::fs::create_dir_all(root.join("sub")).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(root.join("sub/.gitignore"), "*.txt\n").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(root.join("sub/a.txt"), "x").unwrap_or_else(|e| panic!("{e}"));
+    assert!(files::listed_files(&root).contains(&"sub/a.txt".to_owned()), "a nested .gitignore hides nothing");
+}
+
+/// **A YAML map the loader refuses is an error in the editor** (review M6): the file reads as YAML, and the map's own
+/// validation (its name must be snake_case) is what refuses it, the same as for the RON spelling.
+#[test]
+fn a_yaml_map_the_loader_refuses_is_an_error_in_the_editor_and_so_is_its_ron_twin() {
+    let bad_yaml = MAP_YAML_TEXT.replace("name: draft", "name: BadName");
+    let found = files_lang::diagnose(MAP_YAML, &bad_yaml);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].message.contains("snake_case"), "{found:?}");
+    let bad_ron = MAP_TEXT.replace("name: \"m\"", "name: \"BadName\"");
+    let found = files_lang::diagnose(MAP_RON, &bad_ron);
+    assert_eq!(found.len(), 1, "the RON spelling is refused the same way: {found:?}");
+    assert!(found[0].message.contains("snake_case"));
+    assert!(files_lang::diagnose(MAP_YAML, MAP_YAML_TEXT).is_empty(), "and the good one reads");
+}
+
+/// **The scanner does not invent errors in valid code, and keeps its lines straight** (review M7).
+#[test]
+fn a_character_literal_and_a_backslash_newline_do_not_confuse_the_scanner() {
+    let rhai = "fn a() {\n    let c = '\"';\n    let d = '(';\n    let e = '\\n';\n}\n";
+    assert!(files_lang::diagnose("scripts/a.rhai", rhai).is_empty(), "{:?}", files_lang::diagnose("scripts/a.rhai", rhai));
+    assert_eq!(files_lang::folds(Lang::Rhai, rhai), vec![0..4], "the literals add no bracket");
+    // A string continued over a line break with a backslash: the lines after it are still counted.
+    let continued = "let s = \"a\\\nb\";\nfn x() {\n  1;\n}\n";
+    assert_eq!(files_lang::folds(Lang::Rhai, continued), vec![2..4], "line numbers do not drift");
+}
+
+/// **The colours of a YAML file are the loader's own nodes** (review M11a): every key the highlights draw is a key the loader's
+/// walk reports, and a file the loader refuses is still coloured, from the line it stopped at.
+#[test]
+fn yaml_colours_are_the_loaders_nodes() {
+    let (spans, fault) = bevy_grimoire_core::yaml::spans(MAP_YAML_TEXT);
+    assert_eq!(fault, None);
+    let keys: Vec<std::ops::Range<usize>> = spans.iter().filter(|s| s.kind == bevy_grimoire_core::yaml::SpanKind::Key).map(|s| s.range.clone()).collect();
+    let drawn: Vec<std::ops::Range<usize>> = files_lang::highlights(Lang::Yaml, MAP_YAML_TEXT, None).into_iter().filter(|(_, r)| *r == SyntaxRole::Key).map(|(r, _)| r).collect();
+    assert_eq!(keys, drawn, "the keys drawn are the keys the walk reads");
+    let broken = "a: 1\na: 2\nb: 3\n";
+    let drawn = files_lang::highlights(Lang::Yaml, broken, None);
+    assert!(drawn.iter().any(|(r, role)| *role == SyntaxRole::Key && &broken[r.clone()] == "b"), "a file the loader refuses is coloured past its fault: {drawn:?}");
+}
+
+/// **A 10,000-line file stays inside a time budget** (review M5): colours, folds and the loader's reading of it, best of
+/// three, on the test clock's own wall time.
+#[test]
+fn a_ten_thousand_line_map_is_coloured_folded_and_read_inside_a_budget() {
+    let mut long = String::from("version: 3\nname: draft\norigin:\n- 0.0\n- 0.0\n- 0.0\nbounds:\n- 100.0\n- 3.0\n- 100.0\nplacements:\n");
+    for n in 0..1700 {
+        long.push_str(&format!("- id: floor@{n}\n  descriptor: alpha/floor\n  at:\n  - {n}.0\n  - 0.0\n  yaw: 0.0\n"));
+    }
+    long.push_str("stamps: []\nlocations: []\n");
+    assert!(long.lines().count() >= 10_000);
+    let schema = bevy_grimoire_core::schema::for_kind("map").unwrap_or_else(|p| panic!("{}", p.line()));
+    let best = |f: &dyn Fn()| (0..3).map(|_| { let t = std::time::Instant::now(); f(); t.elapsed() }).min().unwrap_or_default();
+    let colour = best(&|| {
+        let _ = files_lang::highlights(Lang::Yaml, &long, Some(&schema));
+        let _ = files_lang::folds(Lang::Yaml, &long);
+    });
+    assert!(colour < Duration::from_millis(500), "colours and folds of 10k lines took {colour:?}");
+    let read = best(&|| {
+        let _ = files_lang::diagnose(MAP_YAML, &long);
+    });
+    assert!(read < Duration::from_millis(1500), "the loader's reading of 10k lines took {read:?}");
 }

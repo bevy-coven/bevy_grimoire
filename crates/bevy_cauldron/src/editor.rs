@@ -2636,6 +2636,7 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::activity_bar::ActivityBarPlugin);
         // **The Files workspace** (GD-11, #373): the file tree and the code editor.
         app.add_plugins(crate::files::FilesPlugin);
+        app.add_plugins(crate::files_panel::FilesPanelPlugin);
         app.add_plugins(crate::app_verbs::AppVerbsPlugin);
         // **Each panel header's "?"** (UI-91, #257): the guide page that covers what the panel holds.
         app.add_plugins(crate::help::HelpPlugin);
@@ -3141,6 +3142,9 @@ fn spawn_cost_readout(mut commands: Commands, frame: Res<crate::chrome::Frame>) 
 /// closing the window. Nothing to lose is `false`, which is the clean-map question.
 pub fn leave_for_menu(dirty: bool, state: &mut EditorState, confirm: &mut crate::confirm::Confirm) {
     state.leaving = true;
+    // **A file with unsaved edits is unsaved work too** (GD-11, #373): the Files workspace's text is asked about
+    // beside the map's, and the answers save or discard it with the map.
+    let dirty = dirty || crate::files::any_unsaved();
     // **One question, two keys, wherever it is asked** — see `crate::confirm`. This used to be a
     // line in the status bar answered by `S` save, `D` discard or `Esc` stay, while the chooser's
     // delete answered to `Y` and the labeller's overwrite answered to `Enter`. Three questions,
@@ -3345,6 +3349,7 @@ fn answer_the_leaving_prompt(
     mut state: ResMut<EditorState>,
     mut next: ResMut<NextState<crate::screen::Screen>>,
     mut confirm: ResMut<crate::confirm::Confirm>,
+    mut files: Option<ResMut<crate::files::Files>>,
 ) {
     let Some(choice) = confirm.answer_choice(crate::confirm::Asked::LeaveMap) else {
         return;
@@ -3353,6 +3358,15 @@ fn answer_the_leaving_prompt(
     if choice == crate::confirm::Choice::No {
         state.status.note("staying on this map".to_owned());
         return;
+    }
+    // **The files go the way the map goes**: saved with it, or let go with it; a file that will not save keeps the person here.
+    if let (Some(files), Some(project)) = (files.as_deref_mut(), project.as_deref()) {
+        if choice == crate::confirm::Choice::Alt {
+            files.discard_all(&project.root);
+        } else if let Err(e) = files.save_all(&project.root) {
+            state.status.problem(format!("NOT SAVED: {e} — staying on this map"));
+            return;
+        }
     }
     let mut open = open;
     if choice == crate::confirm::Choice::Alt
