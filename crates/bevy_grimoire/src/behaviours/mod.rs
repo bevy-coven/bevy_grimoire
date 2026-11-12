@@ -67,6 +67,7 @@ mod pickup;
 mod signal;
 mod spawner;
 mod trigger;
+mod walker;
 
 use bevy::prelude::*;
 use bevy::transform::TransformSystems;
@@ -97,6 +98,7 @@ pub use pickup::{Body, Collector, DEFAULT_PICKUP_RADIUS_M, Pickup, PickedUp};
 pub use signal::Signal;
 pub use spawner::{DEFAULT_SPAWN_INTERVAL_S, SpawnRequested, Spawner};
 pub use trigger::{DEFAULT_TRIGGER_RADIUS_M, Trigger, Triggered};
+pub use walker::{DEFAULT_WALK_SPEED_M_S, Walker};
 
 /// **Whether one world position is within `radius_m` of another**, as squared distance so no square root is
 /// taken for a comparison that needs none — the two callers are the trigger volume and the pickup's reach.
@@ -169,6 +171,7 @@ pub fn behaviours_named() -> Vec<Behaviour> {
         of::<StateMachine>("States and the transitions between them, stepped by signals"),
         of::<Body>("Marks an entity a trigger volume notices"),
         of::<Collector>("Marks an entity that takes a pickup it reaches"),
+        of::<Walker>("An entity the arrow keys and WASD walk across the ground"),
     ]
 }
 
@@ -216,6 +219,8 @@ impl Plugin for BehaviourPlugin {
             .add_message::<CountdownElapsed>()
             .add_message::<WaypointReached>()
             .add_message::<Transitioned>()
+            // **Before propagation**, so a volume and a pickup see this frame's step in the same frame.
+            .add_systems(Update, walker::walks)
             .configure_sets(
                 PostUpdate,
                 (

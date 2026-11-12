@@ -130,17 +130,25 @@ fn a_group_balanced_about_one_of_its_own_members_is_solved_to_the_others_mean() 
 
 #[test]
 fn an_empty_group_a_negative_distance_and_a_repeated_member_are_refused() {
-    let file = |kind: &str| format!("(version: {RELATIONS_VERSION}, relations: [(of: \"stall_a\", kind: {kind})])");
-    let ok = file("Balances(with: [\"stall_b\", \"stall_c\"], about: \"well\", within: 0.25)");
+    // **The relation kind is a tagged value**, so the fields sit under the tag: `kind: !Balances` then the
+    // mapping. The closure writes the variant and its body, which is what a project file holds.
+    let file = |kind: &str, body: &str| {
+        format!("version: {RELATIONS_VERSION}\nrelations:\n- of: stall_a\n  kind: !{kind}\n{body}")
+    };
+    let ok = file("Balances", "    with: [stall_b, stall_c]\n    about: well\n    within: 0.25\n");
     let r = Relations::parse(&ok).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(r, balanced(0.25));
 
-    let empty = Relations::parse(&file("Balances(with: [], about: \"well\", within: 0.25)")).expect_err("an empty group is Near");
+    let empty = Relations::parse(&file("Balances", "    with: []\n    about: well\n    within: 0.25\n"))
+        .expect_err("an empty group is Near");
     assert!(empty.contains("Near"), "{empty}");
-    let negative = Relations::parse(&file("Balances(with: [\"stall_b\"], about: \"well\", within: -1.0)")).expect_err("negative");
+    let negative = Relations::parse(&file("Balances", "    with: [stall_b]\n    about: well\n    within: -1.0\n"))
+        .expect_err("negative");
     assert!(negative.contains("-1"), "{negative}");
-    let repeated = Relations::parse(&file("Balances(with: [\"stall_b\", \"stall_b\"], about: \"well\", within: 0.25)")).expect_err("a duplicate");
+    let repeated = Relations::parse(&file("Balances", "    with: [stall_b, stall_b]\n    about: well\n    within: 0.25\n"))
+        .expect_err("a duplicate");
     assert!(repeated.contains("stall_b"), "{repeated}");
-    let itself = Relations::parse(&file("Balances(with: [\"stall_a\"], about: \"well\", within: 0.25)")).expect_err("of in with");
+    let itself = Relations::parse(&file("Balances", "    with: [stall_a]\n    about: well\n    within: 0.25\n"))
+        .expect_err("of in with");
     assert!(itself.contains("stall_a"), "{itself}");
 }

@@ -10,6 +10,7 @@
 //! | call | changes |
 //! |---|---|
 //! | [`set`] | one scalar's bytes |
+//! | [`replace_value`] | one value of any shape, for a settings file whose types the editor does not know |
 //! | [`add_item`] | one item at the end of a sequence |
 //! | [`remove_item`] | one item of a sequence |
 //! | [`add_entry`] | one entry at the end of a mapping |
@@ -176,6 +177,21 @@ fn needs_double(s: &str) -> bool {
 /// Whether `s` starts with a character YAML reads as syntax when it begins a plain scalar.
 fn starts_with_indicator(s: &str) -> bool {
     s.starts_with(['-', '?', ':', ',', '[', ']', '{', '}', '#', '&', '*', '!', '|', '>', '\'', '"', '%', '@', '`'])
+}
+
+/// **Format an `f32` at the fewest decimal places that still round-trip to the same value.**
+///
+/// Round-tripping through `parse` is what decides, rather than a tolerance, so a written file always reloads
+/// to the same `f32` the writer was holding. One decimal is exact for anything snapped to a half-metre or a
+/// whole degree; the wider forms are only reached by a value that came from elsewhere.
+pub fn fmt_number(v: f32) -> String {
+    for places in 1..=6 {
+        let s = format!("{v:.places$}");
+        if s.parse::<f32>() == Ok(v) {
+            return s;
+        }
+    }
+    format!("{v}")
 }
 
 /// **Set the scalar at `path`**, keeping its kind, and answer the whole file's new text. Only that
@@ -524,21 +540,232 @@ pub fn add_entry(text: &str, path: &str, entry: &str) -> Result<String, Problem>
     let children: Vec<&Node> = walk.nodes.iter().filter(|n| is_entry_of(&n.path, path)).collect();
     // A mapping with no entry has no sibling to copy. Its own column plus one step is where a nested
     // mapping's keys go, which is the only style there is for one.
-    let column = children
-        .iter()
-        .filter_map(|n| n.key.as_ref().map(|k| column_of(text, k.span.0)))
-        .min()
-        .unwrap_or_else(|| key_column(text, node) + yaml::INDENT_SPACES);
+    // **The document's own mapping has no key to stand beside**, so an entry added to it goes at column 0 —
+    // `key_column` answers where the file's first `key:` is, which *is* 0 for every file the writer emits, and
+    // adding a step to that would nest the entry under the last key instead of writing it at the root.
+    let column = if node.path.is_empty() {
+        0
+    } else {
+        children
+            .iter()
+            .filter_map(|n| n.key.as_ref().map(|k| column_of(text, k.span.0)))
+            .min()
+            .unwrap_or_else(|| key_column(text, node) + yaml::INDENT_SPACES)
+    };
+    // **A block value is indented one step under its key**, which is what YAML requires of a mapping or a
+    // sequence written under one: `provenance:` then its fields at `column + INDENT_SPACES`. A single-line
+    // entry (`exclude: []`) is just the key's own line at `column`.
     let mut block = String::new();
-    for (n, line) in entry_lines.iter().enumerate() {
-        // The first line names the key, so its own indentation is the indent the caller wrote it with;
-        // every later line keeps the indentation it was written with, relative to that.
-        let body = if n == 0 { line.trim_start() } else { *line };
-        block.push_str(&" ".repeat(column));
-        block.push_str(body);
+    let first = entry_lines[0].trim_start();
+    block.push_str(&" ".repeat(column));
+    block.push_str(first);
+    block.push('\n');
+    for line in entry_lines.iter().skip(1) {
+        block.push_str(&" ".repeat(column + yaml::INDENT_SPACES));
+        block.push_str(line.trim_start());
         block.push('\n');
     }
     verified(insert_after_last_of(text, node, &walk, &block, flow), path)
+}
+
+/// **Set the entry `key` of the mapping at `path`, or add it if the mapping does not have it.**
+///
+/// **One call, because a caller that has to ask which case it is has to search the file itself** — which is
+/// the bookkeeping this module exists to remove. `entry` is the key and its value as YAML (`provenance:` then
+/// its block, `scale: 1.0`), indented however the caller wrote it; [`add_entry`]'s own rules decide where it
+/// goes when it is new, so a first stamp and a re-stamp cannot disagree about the file's shape.
+#[allow(clippy::result_large_err)]
+pub fn set_entry(text: &str, path: &str, entry: &str) -> Result<String, Problem> {
+    let walk = walk_or_refuse(text)?;
+    let node = find(&walk, path)?;
+    let key = entry
+        .trim_start()
+        .split_once(':')
+        .map(|(k, _)| k.trim())
+        .filter(|k| !k.is_empty())
+        .ok_or_else(|| at_node_named(text, node, path, "an entry needs a `key:` and a value", "there is nothing to set", "write the entry's first line as `key: value`"))?;
+    let at = yaml::join_path_key(path, key);
+    let exists = walk.nodes.iter().any(|n| n.path == at);
+    if !exists {
+        return add_entry(text, path, entry);
+    }
+    // **An edit of an entry is a set of its leaf's value**, which keeps the key's own line, its comments and
+    // its neighbours — so this is `set` on the entry's own path, and a caller whose value is a block writes
+    // the entry afresh through `remove_entry` then `add_entry` (the two calls that exist for a shape change).
+    let value = entry.trim_start().split_once(':').map(|(_, v)| v.trim()).unwrap_or_default();
+    if value.is_empty() {
+        return Err(at_node_named(text, node, path, &format!("`{key}:` has no value on its line"), "an entry whose value is a block cannot be set through this call", "remove the entry and add it again"));
+    }
+    // **What stands there decides how it is written.** A scalar takes `set`; a collection takes the collection's
+    // own replacement, which is `set` for a flow list (`exclude: [a]` on one line) and otherwise a refusal —
+    // because a block list's items are lines a person wrote and one call cannot rewrite them without
+    // guessing which is which.
+    let existing = walk.nodes.iter().find(|n| n.path == at);
+    match existing.map(|n| n.kind) {
+        Some(NodeKind::Sequence) => {
+            // A list's items are replaced by rewriting the entry's own line, which `set` does for a flow list
+            // and which `replace_lines` does for a block one.
+            replace_entry_lines(text, &at, entry)
+        }
+        Some(NodeKind::Mapping) => replace_entry_lines(text, &at, entry),
+        _ => set(text, &at, scalar_of(value), None),
+    }
+}
+
+/// **Replace whatever stands at `path` with `value`, a YAML value, and answer the old one as text.**
+///
+/// A family crate's settings are its own serde types, so the editor cannot know a leaf's kind and
+/// [`set`] (which keeps it) is the wrong call for them: a field is a number today and a struct the next
+/// time, and `value` is whatever YAML the crate's own type reads there. The old value comes back as YAML
+/// too, so the caller's undo is this same call with it.
+///
+/// - **A scalar or a flow collection** (`hour: 6.5`, `at: [1.0, 2.0]`) on one line is replaced in place, so
+///   the line's comment and every neighbour stay.
+/// - **A block value, or a replacement that spans lines**, replaces the entry's own lines: the key stays, the
+///   value goes one step in under it (or onto the key's line when it is one line), and the old value comes
+///   back dedented.
+///
+/// `value` is checked to be one well-formed YAML value (no duplicate key, no anchor, no second document)
+/// before anything is changed, and the result is checked to read again.
+#[allow(clippy::result_large_err)]
+pub fn replace_value(text: &str, path: &str, value: &str) -> Result<(String, String), Problem> {
+    let value = dedent(value);
+    if value.trim().is_empty() {
+        return Err(yaml::problem_nowhere(FILE, Some(path.to_owned()), "a value is empty", "a field holds a value, and nothing is not one", "write the value as YAML, e.g. `6.5` or `{a: 1}`"));
+    }
+    yaml::to_json(&value, path)?;
+    let walk = walk_or_refuse(text)?;
+    let node = find(&walk, path)?;
+    let one_line = !value.contains('\n');
+    let inline_old = match node.kind {
+        NodeKind::Scalar => node.scalar.as_ref().is_some_and(|leaf| leaf.style != Style::Block),
+        _ => is_flow(text, node),
+    };
+    if one_line && inline_old {
+        let old = text[node.span.0..node.span.1].to_owned();
+        let mut out = String::with_capacity(text.len() + value.len());
+        out.push_str(&text[..node.span.0]);
+        out.push_str(value.trim());
+        out.push_str(&text[node.span.1..]);
+        return verified(out, path).map(|out| (out, old));
+    }
+    let Some(key) = &node.key else {
+        return Err(at_node_named(text, node, path, &format!("`{path}` is an item, and a block value cannot replace one"), "only an entry of a mapping owns its lines", "replace the whole list through its entry"));
+    };
+    let line_start = text[..key.span.0].rfind('\n').map_or(0, |at| at + 1);
+    let column = column_of(text, key.span.0);
+    let key_line_end = text[key.span.1..].find('\n').map_or(text.len(), |at| key.span.1 + at + 1);
+    // **An empty null (`key:` and nothing) owns only its key's line**: the parser places its span at the
+    // next token, so asking where it ends would take the next entry with it.
+    let empty = node.kind == NodeKind::Scalar && node.scalar.as_ref().is_some_and(|leaf| leaf.style == Style::Plain && leaf.text.is_empty());
+    let end = if empty { key_line_end } else { end_of_last_line(text, content_end(text, node, &walk)) };
+    // What the entry's value was, as text a later call can put back: the lines after the key's own line,
+    // dedented, or what follows `key:` on it when the value is on that line.
+    let old = if inline_old {
+        text[node.span.0..node.span.1].to_owned()
+    } else {
+        dedent(&text[key_line_end.min(end)..end]).trim_end().to_owned()
+    };
+    let key_text = text[key.span.0..key.span.1].to_owned();
+    let mut block = String::new();
+    block.push_str(&" ".repeat(column));
+    block.push_str(&key_text);
+    block.push(':');
+    if one_line {
+        block.push(' ');
+        block.push_str(value.trim());
+        block.push('\n');
+    } else {
+        block.push('\n');
+        // **A list keeps the dash column it had**, and one that had none (a `null`) is written the way this
+        // repository's writer writes a list under a key: at the key's own column. Anything else goes one
+        // step in, which is what a mapping under a key needs.
+        let indent = if node.kind == NodeKind::Sequence && !is_flow(text, node) {
+            let first = walk.nodes.iter().find(|n| is_item_of(&n.path, &node.path)).map_or(node.span.0, |n| n.span.0);
+            column_of(text, dash_on_line(text, first).unwrap_or(first))
+        } else if value.trim_start().starts_with("- ") {
+            column
+        } else {
+            column + yaml::INDENT_SPACES
+        };
+        for line in value.trim_end().lines() {
+            if !line.trim().is_empty() {
+                block.push_str(&" ".repeat(indent));
+                block.push_str(line);
+            }
+            block.push('\n');
+        }
+    }
+    let mut out = String::with_capacity(text.len() + block.len());
+    out.push_str(&text[..line_start]);
+    out.push_str(&block);
+    out.push_str(&text[end..]);
+    verified(out, path).map(|out| (out, old))
+}
+
+/// **`text` with its common leading indentation removed**, blank lines left out of the count.
+fn dedent(text: &str) -> String {
+    let body = text.trim_matches('\n');
+    let common = body.lines().filter(|l| !l.trim().is_empty()).map(|l| l.len() - l.trim_start().len()).min().unwrap_or(0);
+    body.lines().map(|l| if l.len() >= common { &l[common..] } else { l.trim_start() }).collect::<Vec<_>>().join("\n")
+}
+
+/// **A scalar as the value a written line spells**: a number, a bool, a quoted string or a plain word.
+fn scalar_of(value: &str) -> Value {
+    let plain = value.trim();
+    if let Some(inner) = plain.strip_prefix('"').and_then(|t| t.strip_suffix('"')) {
+        return Value::Str(inner.to_owned());
+    }
+    if let Some(inner) = plain.strip_prefix('\'').and_then(|t| t.strip_suffix('\'')) {
+        return Value::Str(inner.replace("''", "'"));
+    }
+    match plain {
+        "true" => return Value::Bool(true),
+        "false" => return Value::Bool(false),
+        _ => {}
+    }
+    if let Ok(i) = plain.parse::<i64>() {
+        return Value::Int(i);
+    }
+    if let Ok(f) = plain.parse::<f64>()
+        && f.is_finite()
+    {
+        return Value::Float(f);
+    }
+    Value::Str(plain.to_owned())
+}
+
+/// **Replace the entry at `path` with `entry`, taking exactly its own lines.**
+///
+/// The shape-changing sibling of [`set`], which writes one scalar's bytes: this is for a value that *is* a
+/// collection (`exclude: [a, b]`, or a block list a person wrote), where a replacement changes how many lines
+/// the entry occupies. What is kept is everything the entry did not own: the key's own line comment stands
+/// above the new value, and so does every comment and blank line around it.
+#[allow(clippy::result_large_err)]
+fn replace_entry_lines(text: &str, path: &str, entry: &str) -> Result<String, Problem> {
+    let walk = walk_or_refuse(text)?;
+    let node = find(&walk, path)?;
+    let key_at = node.key.as_ref().map_or(node.span.0, |k| k.span.0);
+    let line_start = text[..key_at].rfind('\n').map_or(0, |at| at + 1);
+    let column = column_of(text, key_at);
+    let end = end_of_last_line(text, content_end(text, node, &walk));
+    // The new value, at the entry's own column: the key's line is replaced by the caller's first line, and a
+    // block value's lines follow one step in, which is what YAML needs of a mapping under a key.
+    let lines: Vec<&str> = entry.trim_end_matches('\n').lines().collect();
+    let mut block = String::new();
+    block.push_str(&" ".repeat(column));
+    block.push_str(lines[0].trim_start());
+    block.push('\n');
+    for line in lines.iter().skip(1) {
+        block.push_str(&" ".repeat(column + yaml::INDENT_SPACES));
+        block.push_str(line.trim_start());
+        block.push('\n');
+    }
+    let mut out = String::with_capacity(text.len() + block.len());
+    out.push_str(&text[..line_start]);
+    out.push_str(&block);
+    out.push_str(&text[end..]);
+    verified(out, path)
 }
 
 /// **Remove item `index` of the sequence at `path`**, taking only its own lines.
@@ -749,6 +976,8 @@ fn walk_or_refuse(text: &str) -> Result<Walk, Problem> {
 /// The node at `path`, or a refusal naming it and its nearest neighbours.
 #[allow(clippy::result_large_err)]
 fn find<'a>(walk: &'a Walk, path: &str) -> Result<&'a Node, Problem> {
+    // **The root's own path is the empty string**, which is how the walk spells it, and a caller wanting the
+    // document's mapping says `""` rather than a name the file does not have.
     walk.nodes.iter().find(|n| n.path == path).ok_or_else(|| {
         let near = nearest(walk, path);
         // A path the file does not have has no line: no position is claimed rather than `line 1`.

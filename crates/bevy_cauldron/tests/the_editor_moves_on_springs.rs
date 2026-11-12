@@ -116,7 +116,7 @@ fn a_command_chosen_from_the_palette_runs_while_the_palette_fades() {
 #[test]
 fn the_players_reduced_motion_is_gooeys_and_only_that_flag() {
     let mut app = editor("moves_reduced");
-    let user = std::env::temp_dir().join(format!("moves_reduced_{}/settings.ron", std::process::id()));
+    let user = std::env::temp_dir().join(format!("moves_reduced_{}/settings.yaml", std::process::id()));
     std::fs::create_dir_all(user.parent().expect("a folder")).expect("a folder");
     app.insert_resource(bevy_cauldron::settings::UserSettingsFile(user.clone()));
     app.insert_resource(MotionSettings { duration_scale: 1.5, reduced: false });
@@ -131,10 +131,10 @@ fn the_players_reduced_motion_is_gooeys_and_only_that_flag() {
         }
         false
     };
-    std::fs::write(&user, "(version: 1, reduced_motion: Some(true))").expect("a settings file");
+    std::fs::write(&user, "{version: 1, reduced_motion: true}").expect("a settings file");
     assert!(until(&mut app, true), "Reduced motion writes gooey's MotionSettings::reduced");
     assert_eq!(app.world().resource::<MotionSettings>().duration_scale, 1.5, "and only that flag");
     std::thread::sleep(Duration::from_millis(30));
-    std::fs::write(&user, "(version: 1, reduced_motion: Some(false))").expect("a settings file");
+    std::fs::write(&user, "{version: 1, reduced_motion: false}").expect("a settings file");
     assert!(until(&mut app, false), "switching it off turns it off again");
 }

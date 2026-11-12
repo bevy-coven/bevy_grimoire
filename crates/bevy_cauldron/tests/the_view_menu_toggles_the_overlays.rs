@@ -33,7 +33,7 @@ fn editor(tag: &str) -> App {
         .place("site/torch", (0.0, 0.0))
         .place("site/torch", (30.0, 0.0))
         .build("m");
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_lights\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_lights\"]}").unwrap();
     // Owner exception (2026-11-12, NV-08 #385): opened on the World workspace, where the LIGHT MAP button lives now.
     let mut app = bevy_cauldron::harness::build_headless_at(&root, "m", None, bevy_cauldron::tiles::Mode::World).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
@@ -41,7 +41,7 @@ fn editor(tag: &str) -> App {
     }
     let mut open = app.world_mut().resource_mut::<bevy_cauldron::project::OpenMap>();
     for p in open.map.placements.iter_mut() {
-        p.family.insert("bevy_lights".to_owned(), "(base: 1000.0)".to_owned());
+        p.family.insert("bevy_lights".to_owned(), "{base: 1000.0}".to_owned());
     }
     app
 }
@@ -150,7 +150,7 @@ fn the_overlay_colours_come_from_the_skin() {
 /// colours come from and not what a person sees today.
 ///
 /// **Exact, not approximate.** The skin states its two overlay tones in `LinearRgba` — the only tones in
-/// `src/editor_skin.ron` that are linear — because `light_overlay::SHIPPED` is linear, so the two are
+/// `src/editor_skin.yaml` that are linear — because `light_overlay::SHIPPED` is linear, so the two are
 /// the same numbers in the same space and a change to either fails here on the value itself.
 #[test]
 fn the_editor_skin_draws_the_shipped_overlay() {

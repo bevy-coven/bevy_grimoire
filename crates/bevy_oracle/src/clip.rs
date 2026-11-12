@@ -35,7 +35,7 @@ pub const FRAMES: usize = 3;
 /// The question id, so the answer is named in one place.
 pub const QUESTION_ID: &str = "shows";
 
-/// **The clip check**, as a [`Check`] a project's `checks.ron` carries.
+/// **The clip check**, as a [`Check`] a project's `checks.yaml` carries.
 ///
 /// `name` is the check's own name (`clip_shows_its_title`); the images it needs are named by
 /// [`still`] and [`frame`], so a capture directory holds `still.png`, `frame0.png`, `frame1.png` and
@@ -98,13 +98,13 @@ pub struct Labelled {
 ///
 /// A set is data, so it is a file and not a constant: a person adding a mismatch runs the same path the
 /// loop does, and a pass can see what a threshold was chosen from.
-pub const LABELLED_FILE: &str = "clip_samples.ron";
+pub const LABELLED_FILE: &str = "clip_samples.yaml";
 
 /// Read a labelled set, refusing a file whose samples cannot be read as evidence.
 pub fn load_labelled(path: &Path) -> Result<Vec<Labelled>, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut samples: Vec<Labelled> =
-        ron::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+        serde_yaml_ng::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
     // **A relative `dir` is relative to the manifest**, so a committed manifest works from any clone and
     // from any working directory. An absolute one is left alone, which is what a scratch set uses.
     if let Some(base) = path.parent() {
@@ -261,7 +261,7 @@ mod tests {
         let path = dir.join(LABELLED_FILE);
         let one = |truth: bool| {
             format!(
-                "[(id: \"a\", title: \"t\", dir: \"d\", truth: {truth})]"
+                "[{{id: \"a\", title: \"t\", dir: \"d\", truth: {truth}}}]"
             )
         };
         std::fs::write(&path, one(true)).unwrap();
@@ -270,7 +270,7 @@ mod tests {
         assert!(load_labelled(&path).is_err(), "every sample a mismatch must be refused");
         std::fs::write(
             &path,
-            "[(id: \"a\", title: \"t\", dir: \"d\", truth: true), (id: \"b\", title: \"u\", dir: \"e\", truth: false)]",
+            "[{id: \"a\", title: \"t\", dir: \"d\", truth: true}, {id: \"b\", title: \"u\", dir: \"e\", truth: false}]",
         )
         .unwrap();
         assert_eq!(load_labelled(&path).unwrap().len(), 2, "one of each is a set");

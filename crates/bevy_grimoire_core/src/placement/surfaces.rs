@@ -21,7 +21,7 @@ use super::manifest::ManifestItem;
 const SURFACE_SUPPORT: u32 = 1 << 0; // any support top (drawer/table/desk) — never a bed
 const SURFACE_WORKTOP: u32 = 1 << 1; // a desk/table worktop only
 // A narrow ledge inside a unit — a bookcase, a rack. Appended 2026-08-18 beside the `shelf` token in
-// this game's `vocab.ron`: a bookcase and a desk both offer somewhere to put something, and what
+// this game's `vocab.yaml`: a bookcase and a desk both offer somewhere to put something, and what
 // sits on one is not what sits on the other. Deliberately NOT implied by `support`: a piece that
 // offers both says both, the way a desk already says `["support", "worktop"]`.
 const SURFACE_SHELF: u32 = 1 << 2;

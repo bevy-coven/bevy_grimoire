@@ -44,10 +44,10 @@ fn a_tab_runs_the_shell_the_settings_name_with_its_arguments() {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap_or_else(|e| panic!("{e}"));
     }
-    let file = root.join("assets/grimoire/editor.ron");
+    let file = root.join("assets/grimoire/editor.yaml");
     std::fs::write(
         &file,
-        format!("(version: 1, terminal_shell: Some({:?}), terminal_shell_args: Some([\"--login\", \"two words\"]))", script.display().to_string()),
+        format!("{{version: 1, terminal_shell: {:?}, terminal_shell_args: [\"--login\", \"two words\"]}}", script.display().to_string()),
     )
     .unwrap_or_else(|e| panic!("{}: {e}", file.display()));
 
@@ -75,19 +75,19 @@ fn a_tab_runs_the_shell_the_settings_name_with_its_arguments() {
 
 #[test]
 fn a_shell_that_names_nothing_to_run_is_refused_with_its_key() {
-    let empty = SettingsLayer::read("editor.ron", "(version: 1, terminal_shell: Some(\"  \"))")
+    let empty = SettingsLayer::read("editor.yaml", "{version: 1, terminal_shell: \"  \"}")
         .expect_err("a blank shell runs nothing");
     assert_eq!(empty.field.as_deref(), Some("terminal_shell"), "the refusal names the key: {}", empty.reason);
-    let orphan = SettingsLayer::read("editor.ron", "(version: 1, terminal_shell_args: Some([\"-l\"]))")
+    let orphan = SettingsLayer::read("editor.yaml", "{version: 1, terminal_shell_args: [\"-l\"]}")
         .expect_err("arguments with no shell are for nothing");
     assert_eq!(orphan.field.as_deref(), Some("terminal_shell_args"), "the refusal names the key: {}", orphan.reason);
 }
 
 #[test]
 fn a_layer_that_names_a_shell_brings_its_own_arguments_and_not_the_one_beneath() {
-    let user = SettingsLayer::read("settings.ron", "(version: 1, terminal_shell: Some(\"/bin/zsh\"), terminal_shell_args: Some([\"-l\"]))")
+    let user = SettingsLayer::read("settings.yaml", "{version: 1, terminal_shell: \"/bin/zsh\", terminal_shell_args: [\"-l\"]}")
         .unwrap_or_else(|e| panic!("{}", e.reason));
-    let project = SettingsLayer::read("editor.ron", "(version: 1, terminal_shell: Some(\"/bin/fish\"))")
+    let project = SettingsLayer::read("editor.yaml", "{version: 1, terminal_shell: \"/bin/fish\"}")
         .unwrap_or_else(|e| panic!("{}", e.reason));
     let settings = EditorSettings::resolve(Some(&user), Some(&project));
     assert_eq!(settings.terminal_shell.as_deref(), Some("/bin/fish"), "the project's shell beats the person's");

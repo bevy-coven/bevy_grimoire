@@ -278,7 +278,7 @@ pub enum Shown {
     Clip { rig: String, slot: usize },
     /// **A project file**, and the lines changed when the operation knows them (GD-14, #376).
     File {
-        /// Relative to the project root, the way a refusal names one: `assets/grimoire/vocab.ron`.
+        /// Relative to the project root, the way a refusal names one: `assets/grimoire/vocab.yaml`.
         path: String,
         /// `[first, last]`, 1-based, when the changed span is known.
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -305,7 +305,7 @@ pub enum Shown {
 
 impl Shown {
     /// **The change in words a refusal can name**: `a library piece `lamp_tall``, ``the file
-    /// `assets/grimoire/vocab.ron` ``. Used where the editor cannot show it (AF-03, #359), so the
+    /// `assets/grimoire/vocab.yaml` ``. Used where the editor cannot show it (AF-03, #359), so the
     /// problem says which change it could not show rather than `Some(Shown { .. })`.
     pub fn words(&self) -> String {
         match self {
@@ -765,7 +765,7 @@ pub struct Ctx {
     /// **The project's root directory, when there is no loaded `Project` in hand.**
     ///
     /// The menu is the screen you are on *before* a door: it has a root and an unloaded library, and
-    /// opening the whole `Project` to make one map would parse every kit and require `vocab.ron`.
+    /// opening the whole `Project` to make one map would parse every kit and require `vocab.yaml`.
     /// What a *change made from the menu* needs is the root — the log line goes in it, and a map goes
     /// in its `maps/`. An operation that needs the library says so, which is the refusal it already
     /// has; nothing dispatched from the menu does.
@@ -1156,7 +1156,7 @@ pub mod map_create {
                     });
                 }
                 let text = p.restore.map(|r| r.text).unwrap_or_default();
-                bevy_grimoire_core::ron_surgery::save_atomic(&path, &text).map_err(Refusal::new)?;
+                bevy_grimoire_core::save::save_atomic(&path, &text).map_err(Refusal::new)?;
                 return Ok(Outcome {
                     summary: format!("put map `{name}` back from the log"),
                     affected: 1,
@@ -3894,7 +3894,7 @@ pub mod map_open {
                 "required": ["name"],
                 "properties": {
                     "name": {
-                        "description": "The map to open, by name. The name IS its file (maps/<name>.map.ron), so a name that does not exist is refused rather than started.",
+                        "description": "The map to open, by name. The name IS its file (maps/<name>.map.yaml), so a name that does not exist is refused rather than started.",
                         "type": "string"
                     }
                 }
@@ -4382,7 +4382,7 @@ pub mod placement_add {
 /// operation does is the step after that: take a `.glb` that is already inside the project, measure it
 /// with `import::measure`, run the Meshes tab's own four admissions (`tiles::admit_candidate`), and
 /// write it into the library. It shares no code with golem and neither project knows the other's
-/// schema — golem writes `kit.yaml` for kitbashing in Blender, and this writes a `library.ron`
+/// schema — golem writes `kit.yaml` for kitbashing in Blender, and this writes a `library.yaml`
 /// `Descriptor` for placing on a map. The duplication to refuse is a second *generator*, not a bridge.
 ///
 /// # The path is confined to the project
@@ -4607,7 +4607,7 @@ pub mod piece_import {
             trial.descriptors.push(descriptor);
             crate::tiles::commit_measured(project, trial).map_err(Refusal::new)?;
             // **The new piece's breaches of the project's standards** (#138 slice 3), read from the
-            // policy-applied library a placement uses, and from `standards.ron` as it is now. Reported,
+            // policy-applied library a placement uses, and from `standards.yaml` as it is now. Reported,
             // not refused: the piece is admitted either way, and the summary says what it breaks.
             let (standards, broken) = match project.library.get(&imported) {
                 Some(d) => crate::ops_brp::piece_standards_json(d, &project.project_dir),
@@ -4675,7 +4675,7 @@ pub mod piece_import {
 
 /// **Send one piece back out of the library, and put it back (E-002, #129 slice 8).**
 ///
-/// `Delete` on the Meshes tab's library shelf took a piece out of `library.ron` with a write of its
+/// `Delete` on the Meshes tab's library shelf took a piece out of `library.yaml` with a write of its
 /// own, so an agent could import a piece and never un-import one (the removal existed only as
 /// `piece_import`'s undo form), the key left no operation-log line, and the registry's two-front-end
 /// rule listed it as unmigrated. This is the same removal, named: `id` takes the piece out, and the
@@ -5673,7 +5673,7 @@ pub mod piece_set_cells {
 
 /// **Add one token to an axis of the project's vocabulary (E-002, #129 slice 11).**
 ///
-/// `Shift+T`, and the `+` chip on an axis row, opened a prompt whose Enter spliced `vocab.ron` with a
+/// `Shift+T`, and the `+` chip on an axis row, opened a prompt whose Enter spliced `vocab.yaml` with a
 /// write of its own, so an agent could use the vocabulary and never grow it, no log line named the
 /// addition, and the registry's two-front-end rule listed `Shift+T` as unmigrated. This is the same
 /// addition, named: `axis` (`kind`, `effects`, `look` or `surfaces`), `name` (lowercase letters,
@@ -5717,7 +5717,7 @@ pub mod vocab_add_token {
     }
 
     fn vocab_path(project: &Project) -> std::path::PathBuf {
-        project.root.join("assets/grimoire/vocab.ron")
+        project.root.join("assets/grimoire/vocab.yaml")
     }
 
     /// **The splice, run on a copy**, so a plan writes nothing.
@@ -5728,7 +5728,7 @@ pub mod vocab_add_token {
         let text = std::fs::read_to_string(&path)
             .map_err(|e| Refusal::new(format!("{}: {e}. Nothing was added.", path.display())))?;
         let copy = std::env::temp_dir().join(format!(
-            "grimoire-vocab-plan-{}-{}.ron",
+            "grimoire-vocab-plan-{}-{}.yaml",
             std::process::id(),
             COPIES.fetch_add(1, Ordering::Relaxed)
         ));
@@ -5748,7 +5748,7 @@ pub mod vocab_add_token {
         }
         fn shows(&self, ctx: &Ctx, _params: &serde_json::Value) -> Shown {
             // **The vocabulary is one project file**, at the root of the grimoire directory.
-            shown_named(ctx, "assets/grimoire/vocab.ron")
+            shown_named(ctx, "assets/grimoire/vocab.yaml")
         }
         fn writes(&self) -> &'static [&'static str] {
             &["vocab"]
@@ -5804,7 +5804,7 @@ pub mod vocab_add_token {
             if let Err(why) = project.reload_vocab() {
                 // **The file goes back as it was**: a vocabulary the project cannot resolve is not
                 // one to leave on disk.
-                let _ = bevy_grimoire_core::ron_surgery::save_atomic(&path, &was);
+                let _ = bevy_grimoire_core::save::save_atomic(&path, &was);
                 return Err(Refusal::new(format!("the project would not take it, so nothing was added: {why}")));
             }
             Ok(Outcome {
@@ -5818,7 +5818,7 @@ pub mod vocab_add_token {
     }
 }
 
-/// **Adopt a rig's measured gait values into `rigs.ron`** (E-002, #129 slice 13). Enter on the Anim tab
+/// **Adopt a rig's measured gait values into `rigs.yaml`** (E-002, #129 slice 13). Enter on the Anim tab
 /// and an agent's `apply` are this one operation: it measures the rig's mesh now, rewrites each gait
 /// slot that is not kept, stamps provenance and refuses the whole write unless the edited manifest
 /// parses back to what was built ([`crate::anim_tab::adopt_text`]). Undo puts the manifest back whole.
@@ -5829,7 +5829,7 @@ pub mod rig_adopt_measured {
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     #[serde(deny_unknown_fields)]
     pub struct Params {
-        /// The rig's name in `rigs.ron`.
+        /// The rig's name in `rigs.yaml`.
         pub rig: String,
         /// Gait slots to hold back for this write only, by index in the rig's slot list.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -5843,7 +5843,7 @@ pub mod rig_adopt_measured {
         serde_json::from_value(raw.clone()).map_err(|e| {
             Refusal::new(format!(
                 "this is not a rig to adopt measured values for: {e}. The fields are `rig` (a name in \
-                 rigs.ron) and, optionally, `skip_slots` (slot indexes to leave as they are)."
+                 rigs.yaml) and, optionally, `skip_slots` (slot indexes to leave as they are)."
             ))
         })
     }
@@ -5887,14 +5887,14 @@ pub mod rig_adopt_measured {
                 path,
                 was,
                 text: restore.clone(),
-                summary: format!("put rigs.ron back as it was before '{}' adopted its measured values", p.rig),
+                summary: format!("put rigs.yaml back as it was before '{}' adopted its measured values", p.rig),
             });
         }
         let rigs = bevy_grimoire_core::rigs::Rigs::parse(&was)
             .map_err(|e| Refusal::new(format!("{}: {e}. Nothing was changed.", path.display())))?;
         let Some(rig) = rigs.get(&p.rig) else {
             return Err(Refusal::new(format!(
-                "no rig named `{}` in rigs.ron (it has {}). Nothing was changed.",
+                "no rig named `{}` in rigs.yaml (it has {}). Nothing was changed.",
                 p.rig,
                 rigs.rigs.keys().map(|k| format!("`{k}`")).collect::<Vec<_>>().join(", ")
             )));
@@ -5941,7 +5941,7 @@ pub mod rig_adopt_measured {
 
         /// **A manifest write is a kit-level change, scoped to its own rig** by the `id` its recorded state
         /// carries, like a pack's exclusion: a bare `operation_undo` scopes past it to the open map's newest
-        /// change instead of reverting `rigs.ron`, and it joins the Meshes history beside the other
+        /// change instead of reverting `rigs.yaml`, and it joins the Meshes history beside the other
         /// library writes when an agent makes it.
         fn writes_library(&self) -> bool {
             true
@@ -5960,7 +5960,7 @@ pub mod rig_adopt_measured {
                 "properties": {
                     "rig": {
                         "type": "string",
-                        "description": "The rig's name in rigs.ron, as the Anim tab lists it."
+                        "description": "The rig's name in rigs.yaml, as the Anim tab lists it."
                     },
                     "skip_slots": {
                         "type": "array",
@@ -5971,7 +5971,7 @@ pub mod rig_adopt_measured {
             })
         }
 
-        /// **Whether `rigs.ron` is still what the change left**, against what it recorded.
+        /// **Whether `rigs.yaml` is still what the change left**, against what it recorded.
         fn state_of(&self, ctx: &Ctx, after: &serde_json::Value) -> Option<serde_json::Value> {
             let rig = after.get("id")?.as_str()?.strip_prefix("rig:")?;
             let text = std::fs::read_to_string(manifest(ctx.project.as_ref()?)).ok()?;
@@ -5981,7 +5981,7 @@ pub mod rig_adopt_measured {
         fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
             let p = parse(params)?;
             let Some(project) = ctx.project.as_ref() else {
-                return Err(Refusal::new("no project is open, so there is no rigs.ron to adopt values into."));
+                return Err(Refusal::new("no project is open, so there is no rigs.yaml to adopt values into."));
             };
             let e = edit(project, &p)?;
             let mut planned = state_json(&p.rig, &e.text);
@@ -5992,11 +5992,11 @@ pub mod rig_adopt_measured {
         fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
             let p = parse(params)?;
             let Some(project) = ctx.project.as_ref() else {
-                return Err(Refusal::new("no project is open, so there is no rigs.ron to adopt values into."));
+                return Err(Refusal::new("no project is open, so there is no rigs.yaml to adopt values into."));
             };
             let e = edit(project, &p)?;
-            bevy_grimoire_core::ron_surgery::save_atomic(&e.path, &e.text).map_err(|why| {
-                Refusal::new(format!("rigs.ron refused the change, so nothing was written: {why}"))
+            bevy_grimoire_core::save::save_atomic(&e.path, &e.text).map_err(|why| {
+                Refusal::new(format!("rigs.yaml refused the change, so nothing was written: {why}"))
             })?;
             Ok(Outcome {
                 summary: e.summary,
@@ -7121,7 +7121,7 @@ fn civil_from_unix(secs: i64) -> (i64, u32, u32, u32, u32, u32) {
 /// **Append one entry to the log.**
 ///
 /// **An append, not a replace.** The file is opened with `append(true)`, so the log cannot lose
-/// an earlier line by being rewritten — and the crate's own `ron_surgery::save_atomic` rules do
+/// an earlier line by being rewritten — and the crate's own `save::save_atomic` rules do
 /// not apply to it, because it is not a document anybody edits.
 fn append(ctx: &Ctx, entry: &mut Entry) -> Result<(), String> {
     // **A root is enough.** The log lives at a fixed place under it, and a change made from the menu
@@ -9534,7 +9534,7 @@ pub mod piece_set_mount {
 
 /// **Leave a pack out of the kit, or bring it back** (E-002, #129 slice 7).
 ///
-/// `Shift+R` on the Meshes tab wrote the kit's `project.ron` with a splice of its own, named by no
+/// `Shift+R` on the Meshes tab wrote the kit's `project.yaml` with a splice of its own, named by no
 /// operation, so an agent could label a piece and not say that a whole folder of art is not what the
 /// kit is built from, no log line named the change, and Cmd+Z could not take it back. This is the same
 /// write, one validated, saved, logged and undoable change for the key and for an agent.
@@ -9755,7 +9755,7 @@ pub mod pack_set_excluded {
             };
             let e = edit(project, &p)?;
             // **The file first**, so a refused write leaves the policy as it was.
-            bevy_grimoire_core::ron_surgery::save_atomic(&e.path, &e.text).map_err(|why| {
+            bevy_grimoire_core::save::save_atomic(&e.path, &e.text).map_err(|why| {
                 Refusal::new(format!(
                     "the policy file refused the change, so nothing was written: {why}"
                 ))
@@ -11073,7 +11073,7 @@ pub mod stamp_remove {
 ///
 /// A rules file is prose about a layout as much as it is numbers (`// houses should outnumber the
 /// road`), and `to_string_pretty` would delete every comment in it — the failure
-/// [`bevy_grimoire_core::ron_surgery`] exists to prevent, and the reason `rules_renamed` already edits
+/// [`bevy_grimoire_core::yaml_surgery`] exists to prevent, and the reason `rules_renamed` already edits
 /// this file by hand.
 ///
 /// # The rewrite is checked before it is written
@@ -11181,7 +11181,7 @@ pub mod rules_set {
             if rules.blocks.is_empty() {
                 return Err(Refusal::new(
                     "this project states no block rules, so there is no rule to change. \
-                     grimoire_list_rules reads what there is; a rule has to be authored in rules.ron \
+                     grimoire_list_rules reads what there is; a rule has to be authored in rules.yaml \
                      before it can be tuned."
                         .to_owned(),
                 ));
@@ -11379,195 +11379,42 @@ pub mod rules_set {
         }
 
         /// **The text surgery itself**: replace this block's numbers, leaving every other byte.
+        ///
+        /// A block is found by its position among the file's `blocks`, which is the position it has in
+        /// the rules the editor holds (the file is read in order), and every field is a path into it, so
+        /// a `weights` row whose `prefix` holds the characters `cell:` cannot be mistaken for the field.
         fn surgery(
             text: &str,
             was: &bevy_grimoire_core::rules::BlockRules,
             expected: &bevy_grimoire_core::rules::Rules,
             example: &str,
         ) -> Result<String, String> {
-            let now = &expected
-                .blocks
-                .iter()
-                .find(|b| b.example == example)
-                .ok_or_else(|| format!("`{example}` is not a block"))?;
-            let needle = format!("example: \"{example}\"");
-            let seen = text.matches(&needle).count();
-            if seen != 1 {
-                return Err(format!(
-                    "`{needle}` appears {seen} times; a block is found by exactly one"
-                ));
-            }
-            let at = text.find(&needle).ok_or_else(|| format!("`{needle}` not found"))?;
-            // **The block's own parentheses.** A rules file is one struct of structs, so counting
-            // depth from the `(` before its `example` to the matching `)` bounds it exactly.
-            let open = text[..at]
-                .rfind('(')
-                .ok_or_else(|| "no `(` before the block".to_string())?;
-            let mut depth = 0usize;
-            let mut close = None;
-            for (i, ch) in text[open..].char_indices() {
-                match ch {
-                    '(' => depth += 1,
-                    ')' => {
-                        depth = depth.saturating_sub(1);
-                        if depth == 0 {
-                            close = Some(open + i);
-                            break;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            let close = close.ok_or_else(|| "the block's `(` is never closed".to_string())?;
-            let mut body = text[open..=close].to_owned();
-
+            use bevy_grimoire_core::yaml_surgery::{Value, replace_value, set};
+            let found: Vec<usize> = expected.blocks.iter().enumerate().filter(|(_, b)| b.example == example).map(|(i, _)| i).collect();
+            let [index] = found[..] else {
+                return Err(format!("`example: {example}` appears {} times; a block is found by exactly one", found.len()));
+            };
+            let now = &expected.blocks[index];
+            let at = |field: &str| format!("blocks[{index}].{field}");
+            let mut out = text.to_owned();
             // **One field at a time, and only the ones that moved.**
             if was.cell != now.cell {
-                Self::set_field(&mut body, "cell", &now.cell.to_string())?;
+                out = set(&out, &at("cell"), Value::Float(f64::from(now.cell)), None).map_err(|p| p.line())?;
             }
             if was.seed != now.seed {
-                Self::set_field(&mut body, "seed", &now.seed.to_string())?;
+                out = set(&out, &at("seed"), Value::Int(now.seed as i64), None).map_err(|p| p.line())?;
             }
             if was.attempts != now.attempts {
-                Self::set_field(&mut body, "attempts", &now.attempts.to_string())?;
+                out = set(&out, &at("attempts"), Value::Int(i64::from(now.attempts)), None).map_err(|p| p.line())?;
             }
             if was.no_empty != now.no_empty {
-                Self::set_field(&mut body, "no_empty", &now.no_empty.to_string())?;
+                out = set(&out, &at("no_empty"), Value::Bool(now.no_empty), None).map_err(|p| p.line())?;
             }
             if was.weights != now.weights {
-                Self::set_field(&mut body, "weights", &Self::render_weights(&now.weights))?;
+                let weights = bevy_grimoire_core::yaml::to_string(&now.weights).map_err(|p| p.line())?;
+                out = replace_value(&out, &at("weights"), &weights).map_err(|p| p.line())?.0;
             }
-            let mut out = String::with_capacity(text.len() + 32);
-            out.push_str(&text[..open]);
-            out.push_str(&body);
-            out.push_str(&text[close + 1..]);
             Ok(out)
-        }
-
-        /// **`[(prefix: "a", times: 1.0)]`**, as the file writes it.
-        ///
-        /// **A whole number gets its `.0`.** `50.0f64.to_string()` is `50`, and RON reads that back as
-        /// an integer into a float field only by luck of the parser; more to the point, a file the
-        /// author wrote as `100.0` coming back as `100` is a diff in a file nobody asked to reformat,
-        /// and the round-trip a test compares is then unequal. Measured live on Sanctuary's own
-        /// `times: 100.0`, which came back `times: 50` — the number right and the spelling wrong.
-        fn render_weights(weights: &[bevy_grimoire_core::rules::Weight]) -> String {
-            let rows: Vec<String> = weights
-                .iter()
-                .map(|w| {
-                    let t = w.times;
-                    let text = if t.is_finite() && t.fract() == 0.0 {
-                        format!("{t:.1}")
-                    } else {
-                        t.to_string()
-                    };
-                    format!("(prefix: {:?}, times: {text})", w.prefix)
-                })
-                .collect();
-            format!("[{}]", rows.join(", "))
-        }
-
-        /// **Where a field's `name:` starts, at the block's own depth and outside any string.**
-        ///
-        /// **Not `body.find(name)`.** A weight's `prefix` is arbitrary text, so a file holding
-        /// `weights: [(prefix: "cell:x", times: 2.0)]` contains the characters `cell:` — and a
-        /// `find` that took the first match would edit inside the prefix and leave the real field
-        /// alone. Measured: with `weights` written before `cell` in a hand-edited file, that
-        /// produced `Expected end of string` and the whole-file parse check refused the write, so
-        /// the file survived — but the operation had aimed at the wrong bytes, and the parse check
-        /// was the only thing standing between the author and a broken rules file.
-        ///
-        /// A field of [`bevy_grimoire_core::rules::BlockRules`] is a depth-1 key of the block, so the
-        /// scan counts brackets and skips strings, and accepts the name only where the depth is 1.
-        fn field_at(body: &str, needle: &str) -> Option<usize> {
-            let bytes = body.as_bytes();
-            let mut depth = 0i32;
-            let mut in_string = false;
-            let mut escaped = false;
-            let mut i = 0;
-            while i < bytes.len() {
-                let c = bytes[i] as char;
-                if in_string {
-                    if escaped {
-                        escaped = false;
-                    } else if c == '\\' {
-                        escaped = true;
-                    } else if c == '"' {
-                        in_string = false;
-                    }
-                    i += 1;
-                    continue;
-                }
-                match c {
-                    '"' => in_string = true,
-                    '(' | '[' => depth += 1,
-                    ')' | ']' => depth -= 1,
-                    // **A name at depth 1 is this block's own field.** The block's opening `(` is
-                    // depth 1, and every nested value — a `weights` row, a `size` pair — is deeper.
-                    _ if depth == 1 && body[i..].starts_with(needle) => {
-                        // Only a real key: the character before must not be part of a longer name.
-                        let before = body[..i].chars().next_back();
-                        let boundary = before.is_none_or(|b| {
-                            !(b.is_alphanumeric() || b == '_' || b == ':')
-                        });
-                        if boundary {
-                            return Some(i);
-                        }
-                    }
-                    _ => {}
-                }
-                i += 1;
-            }
-            None
-        }
-
-        /// **Replace one field's value inside a block's text**, or say the field is not there.
-        ///
-        /// The value runs from after `name:` to the comma that ends it **at the field's own nesting
-        /// depth**, so `weights: [(prefix: "a", times: 1.0)]` is one value and the comma inside it is
-        /// not the end. Quotes are skipped, so a prefix containing a comma or a bracket is safe.
-        fn set_field(body: &mut String, name: &str, value: &str) -> Result<(), String> {
-            let needle = format!("{name}:");
-            let at = Self::field_at(body, &needle)
-                .ok_or_else(|| format!("the block states no `{name}` to replace"))?;
-            let from = at + needle.len();
-            let bytes = body.as_bytes();
-            let mut i = from;
-            let mut depth = 0i32;
-            let mut in_string = false;
-            let mut escaped = false;
-            while i < bytes.len() {
-                let c = bytes[i] as char;
-                if in_string {
-                    if escaped {
-                        escaped = false;
-                    } else if c == '\\' {
-                        escaped = true;
-                    } else if c == '"' {
-                        in_string = false;
-                    }
-                    i += 1;
-                    continue;
-                }
-                match c {
-                    '"' => in_string = true,
-                    '(' | '[' => depth += 1,
-                    ')' | ']' => {
-                        if depth == 0 {
-                            break;
-                        }
-                        depth -= 1;
-                    }
-                    ',' if depth == 0 => break,
-                    _ => {}
-                }
-                i += 1;
-            }
-            let span = &body[from..i];
-            let trimmed = span.trim();
-            let start = from + span.find(trimmed).unwrap_or(0);
-            body.replace_range(start..start + trimmed.len(), value);
-            Ok(())
         }
     }
 
@@ -11576,7 +11423,7 @@ pub mod rules_set {
             "rules_set"
         }
         fn shows(&self, ctx: &Ctx, _params: &serde_json::Value) -> Shown {
-            shown_named(ctx, "assets/grimoire/rules.ron")
+            shown_named(ctx, "assets/grimoire/rules.yaml")
         }
         fn writes(&self) -> &'static [&'static str] {
             &["rules"]
@@ -11640,7 +11487,7 @@ pub mod rules_set {
             };
             let before = Self::block_of(&project.rules, &p.example)?.clone();
             let file = project.project_dir.join(bevy_grimoire_core::rules::FILE);
-            if let Err(e) = bevy_grimoire_core::ron_surgery::save_atomic(&file, &new) {
+            if let Err(e) = bevy_grimoire_core::save::save_atomic(&file, &new) {
                 return Err(Refusal::new(format!(
                     "the rule was not changed, and nothing was written: {e}"
                 )));
@@ -11729,7 +11576,7 @@ pub mod map_rename {
                 "properties": {
                     "name": {
                         "type": "string",
-                        "description": "The map's new name. It is forced to snake_case, the way every map name is, because the name becomes the file: `Town Two` is written as `town_two.map.ron`. It must not be empty, and no other map in the project may have it."
+                        "description": "The map's new name. It is forced to snake_case, the way every map name is, because the name becomes the file: `Town Two` is written as `town_two.map.yaml`. It must not be empty, and no other map in the project may have it."
                     }
                 }
             })
@@ -11776,14 +11623,16 @@ pub mod map_rename {
         };
         let old = std::fs::read_to_string(&file)
             .map_err(|e| refuse(format!("{}: {e}", file.display())))?;
-        let needle = format!("example: \"{was}\"");
+        // **A YAML example is a plain scalar** (`example: m`), quoted only when YAML needs it, so the needle is
+        // the value as the writer emits it — not the RON spelling this used to look for.
+        let needle = format!("example: {was}");
         if old.matches(&needle).count() != named {
             return Err(refuse(format!(
                 "{} names `{was}` in a form this rename cannot rewrite; change its example by hand first",
                 file.display()
             )));
         }
-        let new = old.replace(&needle, &format!("example: \"{name}\""));
+        let new = old.replace(&needle, &format!("example: {name}"));
         let parsed = bevy_grimoire_core::rules::Rules::parse(&new)
             .map_err(|e| refuse(format!("{}: {e}", file.display())))?;
         let expected = project
@@ -11891,7 +11740,7 @@ pub mod map_rename {
             };
             let file = project.project_dir.join(bevy_grimoire_core::rules::FILE);
             if let Some((_, new)) = &rules
-                && let Err(e) = bevy_grimoire_core::ron_surgery::save_atomic(&file, new)
+                && let Err(e) = bevy_grimoire_core::save::save_atomic(&file, new)
             {
                 ctx.open = Some(open);
                 return Err(Refusal::new(format!(
@@ -11914,7 +11763,7 @@ pub mod map_rename {
                 // the refusal says so: the rules file then names the new map, and the author must fix it.
                 let mut message = format!("the map was not renamed, and nothing was written: {e}");
                 if let Some((old, _)) = &rules
-                    && let Err(restore) = bevy_grimoire_core::ron_surgery::save_atomic(&file, old)
+                    && let Err(restore) = bevy_grimoire_core::save::save_atomic(&file, old)
                 {
                     message.push_str(&format!(
                         "; {} could not be put back ({restore}), and it now names `{name}`, so change its example by hand",

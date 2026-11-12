@@ -1400,7 +1400,7 @@ fn give_the_keyboard_back(mut focus: ResMut<TerminalFocus>) {
 ///
 /// The card and the bar's chip are rebuilt when their *content* moves — a check passed, a tab
 /// changed — which is exactly why their ink cannot be read once at spawn: a project's
-/// `family/bevy_gooey.ron` edited while the card stands reached the panels, the list rows and the
+/// `family/bevy_gooey.yaml` edited while the card stands reached the panels, the list rows and the
 /// status band, and left this tab in the editor's darks. This is the split
 /// [`crate::chrome::dim_the_ground`] makes for a panel's ground: the spawn paints what it always
 /// painted, and this system reads the skin, so a card built before an edit follows it.

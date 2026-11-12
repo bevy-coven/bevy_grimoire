@@ -45,7 +45,7 @@ fn operations() -> Vec<(&'static str, &'static str, &'static str, Value)> {
     #[cfg_attr(not(feature = "bevy_flora"), allow(unused_mut))]
     let mut ops = vec![
         ("person_set", "people", "people: []", json!({"map": "m", "name": "Ola", "at": [2.0, 2.0]})),
-        ("trigger_set", "scripts", "triggers: []", json!({"map": "m", "id": "t", "on": "Activity(\"work\")", "then": "let x = 1;"})),
+        ("trigger_set", "scripts", "triggers: []", json!({"map": "m", "id": "t", "on": "!Activity work", "then": "let x = 1;"})),
     ];
     // A forest is planted only in a build with `bevy_flora`; the refusal comes before the stroke is looked at.
     #[cfg(feature = "bevy_flora")]
@@ -63,9 +63,9 @@ fn a_file_of_another_version_refuses_the_operation_and_stays_as_it_was() {
     for (op, dir, rest, params) in operations() {
         for version in [2u32, 0] {
             let (mut ctx, grimoire) = open(&format!("another_version_{dir}_{version}"));
-            let file = grimoire.join(dir).join("m.ron");
+            let file = grimoire.join(dir).join("m.yaml");
             std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-            let text = format!("(version: {version}, {rest})");
+            let text = format!("version: {version}\n{rest}\n");
             std::fs::write(&file, &text).unwrap();
 
             let said = refusal(&mut ctx, op, &params);
@@ -82,8 +82,8 @@ fn a_file_of_another_version_refuses_the_operation_and_stays_as_it_was() {
 fn the_types_themselves_refuse_another_version_and_name_the_field() {
     fn refused<T: serde::de::DeserializeOwned>(kind: &'static str, rest: &str) {
         for version in [2u32, 0, 7] {
-            let text = format!("(version: {version}, {rest})");
-            let r = match reload_check::read::<T>(kind, "x.ron", &text) {
+            let text = format!("version: {version}\n{rest}\n");
+            let r = match reload_check::read::<T>(kind, "x.yaml", &text, |t| bevy_grimoire_core::yaml::from_str(t, "x.yaml").map_err(|p| p.line())) {
                 Err(r) => r,
                 Ok(_) => panic!("`{kind}` at version {version} was taken as this build's"),
             };
@@ -101,14 +101,14 @@ fn the_types_themselves_refuse_another_version_and_name_the_field() {
 #[test]
 fn a_file_with_no_version_is_taken_and_written_back_with_one() {
     let cases = [
-        ("person_set", "people", "(people: [(name: \"Mara\", at: (1.0, 2.0))])", "Mara", json!({"map": "m", "name": "Ola", "at": [2.0, 2.0]}), "Ola"),
+        ("person_set", "people", "{people: [{name: \"Mara\", at: [1.0, 2.0]}]}", "Mara", json!({"map": "m", "name": "Ola", "at": [2.0, 2.0]}), "Ola"),
         (
             "trigger_set",
             "scripts",
-            "(triggers: [(id: \"first\", on: \"Activity(\\\"work\\\")\", then: \"let x = 1;\")])",
+            "{triggers: [{id: \"first\", on: \"!Activity work\", then: \"let x = 1;\"}]}",
             "first",
-            json!({"map": "m", "id": "t", "on": "Activity(\"work\")", "then": "let x = 1;"}),
-            "\"t\"",
+            json!({"map": "m", "id": "t", "on": "!Activity work", "then": "let x = 1;"}),
+            "id: t",
         ),
     ];
     for (op, dir, old, old_row, params, new_row) in cases {
@@ -118,7 +118,7 @@ fn a_file_with_no_version_is_taken_and_written_back_with_one() {
             continue;
         }
         let (mut ctx, grimoire) = open(&format!("no_version_{dir}"));
-        let file = grimoire.join(dir).join("m.ron");
+        let file = grimoire.join(dir).join("m.yaml");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, old).unwrap();
 
@@ -135,13 +135,13 @@ fn a_file_with_no_version_is_taken_and_written_back_with_one() {
 /// **The same, for a reader that is not an operation**: an old file is the first version, with its rows.
 #[test]
 fn a_file_from_before_the_version_reads_as_the_first() {
-    let forest: Forest = ron::from_str("(trees: [])").unwrap();
-    let people: People = ron::from_str("(people: [(name: \"Mara\", at: (1.0, 2.0))])").unwrap();
-    let scripts: Scripts = ron::from_str("(triggers: [(id: \"first\", on: \"Activity(\\\"work\\\")\", then: \"let x = 1;\")])").unwrap();
+    let forest: Forest = bevy_grimoire_core::yaml::from_str("{trees: []}", "test").unwrap();
+    let people: People = bevy_grimoire_core::yaml::from_str("{people: [{name: \"Mara\", at: [1.0, 2.0]}]}", "test").unwrap();
+    let scripts: Scripts = bevy_grimoire_core::yaml::from_str("{triggers: [{id: \"first\", on: \"!Activity work\", then: \"let x = 1;\"}]}", "test").unwrap();
     assert_eq!((forest.version, people.version, scripts.version), (1, 1, 1));
     assert_eq!((people.people.len(), scripts.triggers.len()), (1, 1), "and the rows are there");
     // Written again, the version it was missing comes with it, and the text reads back as the same value.
-    let again: People = ron::from_str(&ron::to_string(&people).unwrap()).unwrap();
+    let again: People = bevy_grimoire_core::yaml::from_str(&bevy_grimoire_core::yaml::to_string(&people).unwrap(), "test").unwrap();
     assert_eq!(again, people);
 }
 
@@ -149,10 +149,10 @@ fn a_file_from_before_the_version_reads_as_the_first() {
 #[test]
 fn a_new_file_is_written_with_its_version() {
     for (kind, text) in [
-        ("forest", ron::to_string(&Forest::default()).unwrap()),
-        ("people", ron::to_string(&People::default()).unwrap()),
-        ("scripts", ron::to_string(&Scripts::default()).unwrap()),
+        ("forest", bevy_grimoire_core::yaml::to_string(&Forest::default()).unwrap()),
+        ("people", bevy_grimoire_core::yaml::to_string(&People::default()).unwrap()),
+        ("scripts", bevy_grimoire_core::yaml::to_string(&Scripts::default()).unwrap()),
     ] {
-        assert!(text.starts_with("(version:1") || text.starts_with("(version: 1"), "`{kind}` is written with its version first: {text}");
+        assert!(text.starts_with("version: 1"), "`{kind}` is written with its version first: {text}");
     }
 }

@@ -2,7 +2,7 @@
 //!
 //! Slice 1 put `standards::check` in core, but an agent importing or placing pieces reads
 //! `grimoire_state`, not a library function. So the state answer carries a `standards` section read
-//! from the `standards.ron` beside `kits.ron`: every breach naming the piece, the rule, what was
+//! from the `standards.yaml` beside `kits.yaml`: every breach naming the piece, the rule, what was
 //! measured and the bound, and every rule that covers no piece at all (a misspelt `kind` token,
 //! which would otherwise read as a kit that meets everything). The file is read on each call, so an
 //! edit is seen with no restart, and a file that does not parse is named, never read as "no rules".
@@ -26,7 +26,7 @@ fn editor(name: &str) -> (App, PathBuf) {
     for _ in 0..8 {
         app.update();
     }
-    (app, root.join("assets/grimoire/standards.ron"))
+    (app, root.join("assets/grimoire/standards.yaml"))
 }
 
 fn state(app: &mut App) -> serde_json::Value {
@@ -43,13 +43,11 @@ fn state(app: &mut App) -> serde_json::Value {
 }
 
 fn write(path: &Path, rules: &str) {
-    std::fs::write(path, format!("(version: 1, rules: [{rules}])"))
+    std::fs::write(path, format!("{{version: 1, rules: [{rules}]}}"))
         .unwrap_or_else(|e| panic!("{path:?}: {e}"));
 }
 
-const MODULE_AND_TYPO: &str = r#"
-    (name: "module", kind: Some("prop"), dim: Width, multiple_of: Some(2.0)),
-    (name: "door passage", kind: Some("dorr"), dim: Width, min: Some(1.0)),
+const MODULE_AND_TYPO: &str = r#"{name: "module", kind: "prop", dim: Width, multiple_of: 2.0}, {name: "door passage", kind: "dorr", dim: Width, min: 1.0}
 "#;
 
 #[test]
@@ -84,17 +82,17 @@ fn an_edit_to_the_file_is_seen_by_the_next_call() {
     );
     write(&file, MODULE_AND_TYPO);
     assert_eq!(state(&mut app)["standards"]["breaches"].as_array().map(Vec::len), Some(1));
-    write(&file, r#"(name: "module", dim: Width, multiple_of: Some(0.1)),"#);
+    write(&file, r#"{name: "module", dim: Width, multiple_of: 0.1}"#);
     assert_eq!(state(&mut app)["standards"]["breaches"], serde_json::json!([]));
 }
 
 #[test]
 fn a_file_that_does_not_parse_is_named_not_read_as_none() {
     let (mut app, file) = editor(&format!("standards_bad_{}", std::process::id()));
-    write(&file, r#"(name: "module", dim: Width, min: Some(3.0), max: Some(2.0)),"#);
+    write(&file, r#"{name: "module", dim: Width, min: 3.0, max: 2.0}"#);
     let st = &state(&mut app)["standards"];
     let error = st["error"].as_str().unwrap_or_else(|| panic!("no error named: {st}"));
-    assert!(error.contains("standards.ron"), "the error names the file: {error}");
+    assert!(error.contains("standards.yaml"), "the error names the file: {error}");
     assert!(error.contains("min 3"), "and what is wrong in it: {error}");
     assert_eq!(st["breaches"], serde_json::json!([]), "{st}");
 }

@@ -106,16 +106,16 @@ fn judge() -> Judge {
     Judge { asked: Mutex::new(Vec::new()) }
 }
 
-/// A project whose own `checks.ron` carries a check about the game, and whose `play.ron` names the port.
+/// A project whose own `checks.yaml` carries a check about the game, and whose `play.yaml` names the port.
 fn game_project(tag: &str, port: u16) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("grimoire-decide-game-{tag}-{}", std::process::id()));
     std::fs::create_dir_all(dir.join("assets/grimoire")).unwrap();
     std::fs::write(
-        dir.join("assets/grimoire/checks.ron"),
-        r#"(checks: [(name: "hud_readable", question: "Is the HUD hard to read?", images: ["game"], facts: true, threshold: 0.6)])"#,
+        dir.join("assets/grimoire/checks.yaml"),
+        r#"checks: [{name: hud_readable, question: "Is the HUD hard to read?", images: [game], facts: true, threshold: 0.6}]"#,
     )
     .unwrap();
-    std::fs::write(dir.join("play.ron"), format!(r#"(version: 1, command: ["game"], port: {port})"#)).unwrap();
+    std::fs::write(dir.join("play.yaml"), format!("version: 1\ncommand: [\"game\"]\nport: {port}\n")).unwrap();
     dir
 }
 
@@ -123,7 +123,7 @@ fn game_project(tag: &str, port: u16) -> PathBuf {
 async fn a_named_check_runs_on_a_frame_of_the_running_game_and_the_game_state_is_its_facts() {
     let game = serve(json!({"player": {"x": 3.0, "stuck": true}}));
     let dir = game_project("check", game.port);
-    // The agent names only the check: it asks for the image `game`, so the server reads the game on play.ron's port.
+    // The agent names only the check: it asks for the image `game`, so the server reads the game on play.yaml's port.
     let p = DecideParams { check: Some("hud_readable".into()), ..Default::default() };
     let checks = load_checks(&dir).unwrap();
     assert!(needs_game(&p, &checks), "a check that asks for the image `game` reads the game");
@@ -175,7 +175,7 @@ fn a_game_check_is_the_games_own_and_the_editor_has_none() {
     assert!(Checks::builtin().get("hud_readable").is_none(), "no editor check is about a game's HUD");
     let dir = game_project("own", 1);
     let checks = load_checks(&dir).unwrap();
-    let check = checks.get("hud_readable").expect("the game's own checks.ron defines it");
+    let check = checks.get("hud_readable").expect("the game's own checks.yaml defines it");
     assert_eq!(check.images, ["game"]);
     assert!(checks.get("floating").is_some(), "the editor's checks are still there beside it");
     // The editor-side asks without a game get a refusal naming the missing frame, never an answer from less.
@@ -187,7 +187,7 @@ fn a_game_check_is_the_games_own_and_the_editor_has_none() {
 
 #[test]
 fn a_frame_given_as_a_file_is_not_replaced_by_reading_the_game() {
-    let checks = Checks::from_ron(r#"(checks: [(name: "g", question: "Q?", images: ["game"], threshold: 0.5)])"#).unwrap();
+    let checks = Checks::from_yaml(r#"checks: [{name: g, question: "Q?", images: [game], threshold: 0.5}]"#).unwrap();
     let p = DecideParams { check: Some("g".into()), ..Default::default() };
     assert!(needs_game(&p, &checks));
     let given = DecideParams {

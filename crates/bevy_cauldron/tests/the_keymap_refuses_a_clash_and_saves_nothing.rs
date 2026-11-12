@@ -19,7 +19,7 @@ use crate::fixtures;
 fn rig(tag: &str) -> (App, PathBuf) {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").build("m");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
-    let user = root.join(format!("user_config_{tag}_{}/settings.ron", std::process::id()));
+    let user = root.join(format!("user_config_{tag}_{}/settings.yaml", std::process::id()));
     std::fs::create_dir_all(user.parent().unwrap()).unwrap();
     app.insert_resource(UserSettingsFile(user.clone()));
     for _ in 0..3 {
@@ -104,10 +104,10 @@ fn reset_and_rebinding_to_the_default_take_the_entry_out_of_the_file() {
 
 #[test]
 fn a_keymap_entry_for_no_command_or_with_no_key_is_refused_by_name() {
-    let good = "(version: 1, keymap: {\"file.save\": (modifiers: (ctrl: true, shift: false, alt: false, meta: false), key: KeyY)})";
-    assert!(SettingsLayer::read("settings.ron", good).is_ok(), "a rebinding reads");
+    let good = "{version: 1, keymap: {\"file.save\": {modifiers: {ctrl: true, shift: false, alt: false, meta: false}, key: KeyY}}}";
+    assert!(SettingsLayer::read("settings.yaml", good).is_ok(), "a rebinding reads");
     let unknown = good.replace("file.save", "file.teleport");
-    let r = SettingsLayer::read("settings.ron", &unknown).unwrap_err();
+    let r = SettingsLayer::read("settings.yaml", &unknown).unwrap_err();
     assert_eq!(r.field.as_deref(), Some("keymap.file.teleport"), "{}", r.reason);
     // Resolution is per command, the project over the user.
     let user = SettingsLayer::read("u", good).unwrap();
@@ -133,7 +133,7 @@ fn a_reset_that_would_hand_back_a_chord_another_command_took_is_refused() {
     use std::collections::BTreeMap;
     let dir = std::env::temp_dir().join(format!("grimoire_keymap_reset_clash_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let file = dir.join("settings.ron");
+    let file = dir.join("settings.yaml");
     let elsewhere = Shortcut::new(Modifiers::PRIMARY | Modifiers::SHIFT, KeyCode::KeyY);
     // Save moves off Ctrl+S, then Undo takes Ctrl+S: both fine at the time.
     rebind(&file, "file.save", Some(elsewhere), &BTreeMap::new(), None).unwrap();
@@ -156,15 +156,15 @@ fn choosing_a_commands_default_in_the_project_keeps_it_when_the_user_rebound_it(
     use std::collections::BTreeMap;
     let dir = std::env::temp_dir().join(format!("grimoire_keymap_project_default_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let project = dir.join("editor.ron");
+    let project = dir.join("editor.yaml");
     let users = Shortcut::new(Modifiers::PRIMARY | Modifiers::SHIFT, KeyCode::KeyY);
     // The user's file gives Save Ctrl+Shift+Y; the project asks for Ctrl+S, the default, which is not what is in force.
     rebind(&project, "file.save", Some(ctrl_s()), &BTreeMap::new(), Some(users)).unwrap();
-    let layer = SettingsLayer::read("editor.ron", &std::fs::read_to_string(&project).unwrap()).unwrap();
+    let layer = SettingsLayer::read("editor.yaml", &std::fs::read_to_string(&project).unwrap()).unwrap();
     assert_eq!(layer.keymap.get("file.save"), Some(&ctrl_s()), "the project's choice is saved, because the layer below says something else");
     // And choosing what the user's layer already gives is no rebinding in the project's file.
     rebind(&project, "file.save", Some(users), &BTreeMap::new(), Some(users)).unwrap();
-    let layer = SettingsLayer::read("editor.ron", &std::fs::read_to_string(&project).unwrap()).unwrap();
+    let layer = SettingsLayer::read("editor.yaml", &std::fs::read_to_string(&project).unwrap()).unwrap();
     assert!(layer.keymap.is_empty(), "{:?}", layer.keymap);
     let _ = std::fs::remove_dir_all(&dir);
 }

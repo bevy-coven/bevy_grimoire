@@ -44,7 +44,7 @@ fn done(r: Result<Applied, ops::Refusal>) -> String {
 fn setup(tag: &str) -> (Ctx, std::path::PathBuf) {
     let (mut ctx, dir) = project(tag);
     std::fs::create_dir_all(dir.join("terrain")).unwrap();
-    std::fs::write(dir.join("terrain/m.ron"), ron::to_string(&valley()).unwrap()).unwrap();
+    std::fs::write(dir.join("terrain/m.yaml"), bevy_grimoire_core::yaml::to_string(&valley()).unwrap()).unwrap();
     // A spring inside the bowl, so the pond has to hold it.
     done(ops::dispatch(&mut ctx, "water_place", &json!({"map": "m", "place": {"Spring": {"x": 11.5, "z": 16.5, "rate_m3_s": 2.0, "radius_m": 1.0}}})));
     (ctx, dir)
@@ -53,12 +53,12 @@ fn setup(tag: &str) -> (Ctx, std::path::PathBuf) {
 #[test]
 fn a_spring_in_a_bowl_settles_into_a_pond_that_reloads() {
     let (mut ctx, dir) = setup("pond");
-    let file = dir.join("water/m.field.ron");
+    let file = dir.join("water/m.field.yaml");
     assert!(!file.exists(), "placing never runs the simulation");
     let planned = ops::preview(&ctx, &bevy_cauldron::ops_water::WaterRun, &json!({"map": "m", "pour_s": 20.0})).unwrap();
     assert!(!file.exists(), "a preview keeps nothing: {planned}");
     done(ops::dispatch(&mut ctx, "water_run", &json!({"map": "m", "pour_s": 20.0})));
-    let field: WaterField = ron::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let field: WaterField = bevy_grimoire_core::yaml::from_str(&std::fs::read_to_string(&file).unwrap(), "test").unwrap();
     assert!(field.settled, "the water stopped moving after {} steps", field.steps);
     // 2 m3/s for 20 s = 40 m3; the bowl (6x4 inside the rim, floor 1 m below the slope) holds it.
     assert!(field.volume_m3() > 38.0, "the bowl kept the poured water: {}", field.volume_m3());
@@ -73,7 +73,7 @@ fn a_spring_in_a_bowl_settles_into_a_pond_that_reloads() {
 #[test]
 fn running_and_keeping_is_one_undo() {
     let (mut ctx, dir) = setup("undo");
-    let file = dir.join("water/m.field.ron");
+    let file = dir.join("water/m.field.yaml");
     let first = done(ops::dispatch(&mut ctx, "water_run", &json!({"map": "m", "pour_s": 5.0})));
     let before = std::fs::read_to_string(&file).unwrap();
     let second = done(ops::dispatch(&mut ctx, "water_run", &json!({"map": "m", "pour_s": 10.0})));
@@ -92,5 +92,5 @@ fn a_run_with_no_water_or_no_ground_is_refused() {
     done(ops::dispatch(&mut ctx, "water_place", &json!({"map": "m", "place": {"Spring": {"x": 1.0, "z": 1.0, "rate_m3_s": 1.0, "radius_m": 1.0}}})));
     let r = ops::dispatch(&mut ctx, "water_run", &json!({"map": "m"}));
     assert!(matches!(r, Err(_) | Ok(Applied::Refused(_))), "no terrain to run on");
-    assert!(!dir.join("water/m.field.ron").exists());
+    assert!(!dir.join("water/m.field.yaml").exists());
 }

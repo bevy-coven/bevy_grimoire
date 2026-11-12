@@ -37,14 +37,14 @@ fn labelled_project(name: &str) -> App {
         .labelled_by(
             "site/mixed",
             "alpha",
-            "(kind: Some(Human), effects: None, look: Some(Model), surfaces: None, mount: None, note: None)",
-            r#"model: Some("gemma-x"), at: "2026-10-21", confidence: Some(Medium)"#,
+            "{kind: Human, effects: null, look: Model, surfaces: null, mount: null, note: null}",
+            r#"{model: "gemma-x", at: "2026-10-21", confidence: Medium}"#,
         )
         .labelled_by(
             "site/judged",
             "alpha",
-            "(kind: Some(Human), effects: Some(Human), look: Some(Human), surfaces: None, mount: None, note: None)",
-            r#"model: None, at: "2026-10-22", confidence: None"#,
+            "{kind: Human, effects: Human, look: Human, surfaces: null, mount: null, note: null}",
+            r#"{model: null, at: "2026-10-22", confidence: null}"#,
         )
         .build("m");
     started(&root)

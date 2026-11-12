@@ -41,7 +41,7 @@ pub struct Refusal {
 }
 
 impl Refusal {
-    /// `site/forest/yard.ron (trees[2].yaw): 1:47: Expected float`: the file, the field when the file
+    /// `site/forest/yard.yaml (trees[2].yaw): 1:47: Expected float`: the file, the field when the file
     /// got that far, and why. The same sentence `KindVerdict::sentence` says.
     pub fn sentence(&self) -> String {
         match &self.field {
@@ -60,73 +60,69 @@ pub enum Check {
     Unchecked,
 }
 
-/// The type's own reader on `text`, and on a refusal the field it is wrong at.
-fn run<T: DeserializeOwned>(
+/// **The same, for a kind whose reader parses YAML now** (GD-03, #365): the field a refusal names is found
+/// by the YAML deserialiser, which knows the field path, rather than by the RON one, which cannot read the
+/// text at all. One function per spelling and no branch inside either, so the two readers cannot come to
+/// disagree about a file by accident.
+fn run_yaml<T: DeserializeOwned>(
     text: &str,
-    parse: impl Fn(&str) -> Result<T, String>,
+    parse: fn(&str) -> Result<T, String>,
 ) -> Result<(), (Option<String>, String)> {
     match parse(text) {
         Ok(_) => Ok(()),
-        Err(reason) => Err((field_of::<T>(text), reason)),
+        Err(reason) => Err((field_of_yaml::<T>(text), reason)),
     }
 }
 
-/// **The type's own reader on `text`, in the format the file is written in**, with the field a refusal is at.
+/// **The path to the field a YAML document is wrong at as a `T`**, or `None` when it reads.
 ///
-/// **One table of kinds serves both formats** ([`check_as`]), and both end in the same type's `parse`, which is where
-/// its validators live (`Map::parse` runs `validate`, the rules arm runs `validate_numbers`): a YAML file is read by
-/// the YAML reader into the type ([`crate::yaml::from_str`], the one a load uses), and the value is then handed to
-/// `parse` as the RON text of that value, so a file the loader refuses is refused here whichever way it is spelled.
-fn read_as<T: serde::Serialize + DeserializeOwned>(
-    format: Format,
-    text: &str,
+/// [`field_of`]'s counterpart for the kinds the cutover moved, and the same shape: the deserialiser is run
+/// again with `serde_path_to_error` only to name the path, because the kind's own `parse` answers a
+/// sentence and not a path. A missing field is named by itself (serde reports it at the document's root,
+/// which is no field at all); an unknown or wrongly typed one already has it in the path.
+fn field_of_yaml<T: DeserializeOwned>(text: &str) -> Option<String> {
+    let deserializer = serde_yaml_ng::Deserializer::from_str(text);
+    let err = serde_path_to_error::deserialize::<_, T>(deserializer).err()?;
+    let path = err.path().to_string();
+    let path = path.trim_start_matches('.');
+    // **`serde_yaml_ng` prefixes the path to its own message** (`blocks[0]: missing field `cell` at line 3`),
+    // where `serde_json` and `ron` do not, so the field is found anywhere in the first line rather than only at
+    // its start. A refusal that dropped it would name the item and not the field the item is missing.
+    let message = err.inner().to_string();
+    let missing = message
+        .find("missing field `")
+        .map(|at| &message[at + "missing field `".len()..])
+        .and_then(|rest| rest.split_once('`'))
+        .map(|(field, _)| field.to_owned());
+    match (path.is_empty(), missing) {
+        (true, None) => None,
+        (true, Some(field)) => Some(field),
+        (false, None) => Some(path.to_owned()),
+        (false, Some(field)) => Some(format!("{path}.{field}")),
+    }
+}
+
+/// **Read `text` as the `T` that kind `kind` is**, for a type whose reader lives in a layer above this
+/// crate (the editor's forests, people and triggers).
+///
+/// **The reading is the caller's**, and that is the point: a kind whose type another crate declares is read
+/// by that crate's reader — this crate cannot name the type's spelling, and guessing at it would be the second
+/// reader #365 exists to remove. So a caller hands in the reader its own crate uses, and this adds what every
+/// reader here adds: the kind, the file, and the field the refusal is about.
+pub fn read<T: DeserializeOwned>(
+    kind: &'static str,
     file: &str,
-    parse: impl Fn(&str) -> Result<T, String>,
-) -> Result<(), (Option<String>, String)> {
-    match format {
-        Format::Ron => run(text, parse),
-        Format::Yaml => {
-            let value: T = crate::yaml::from_str(text, file).map_err(|problem| {
-                (problem.where_.as_ref().and_then(|at| at.field.clone()), problem.why.clone().unwrap_or_else(|| problem.what.clone()))
-            })?;
-            let as_ron = ron::ser::to_string(&value).map_err(|e| (None, format!("{file} did not read back: {e}")))?;
-            parse(&as_ron).map(|_| ()).map_err(|reason| (None, reason))
-        }
-    }
-}
-
-/// **The path to the field `text` is wrong at as a `T`**, or `None` when it reads as one.
-fn field_of<T: DeserializeOwned>(text: &str) -> Option<String> {
-    let mut de = ron::de::Deserializer::from_str(text).ok()?;
-    let err = serde_path_to_error::deserialize::<_, T>(&mut de).err()?;
-    // A path serde_path_to_error cannot name (text that ended mid-value) prints `?` for the segment.
-    let path = err.path().to_string().replace(".?", "");
-    // ron raises a missing or an unknown field at the struct, so the path ends at the struct. An unknown
-    // one was refused while its key was being read, so the path already ends with it.
-    let (named, key_in_path) = match err.inner() {
-        ron::Error::MissingStructField { field, .. } => (Some(field.to_string()), false),
-        ron::Error::NoSuchStructField { found, .. } => (Some(found.to_string()), true),
-        _ => (None, false),
-    };
-    match (path.as_str(), named) {
-        (".", None) => None,
-        (".", Some(field)) => Some(field),
-        (_, None) => Some(path),
-        (_, Some(field)) if key_in_path && (path == field || path.ends_with(&format!(".{field}"))) => Some(path),
-        (_, Some(field)) => Some(format!("{path}.{field}")),
-    }
-}
-
-/// **Read `text` as the `T` that kind `kind` is**, for a type whose reader is plain `ron::from_str` and
-/// which lives in a layer above this crate (the editor's forests, people and triggers). A file that
-/// does not read is refused with the file and the field, exactly as [`check`] does for the kinds this
-/// crate owns, so the one reader decides both whether to apply a file and what to tell its author.
-pub fn read<T: DeserializeOwned>(kind: &'static str, file: &str, text: &str) -> Result<T, Refusal> {
-    ron::from_str(text).map_err(|e: ron::error::SpannedError| Refusal {
+    text: &str,
+    parse: fn(&str) -> Result<T, String>,
+) -> Result<T, Refusal> {
+    parse(text).map_err(|reason| Refusal {
         kind,
         file: file.to_owned(),
-        field: field_of::<T>(text),
-        reason: e.to_string(),
+        // **The field is found by the YAML walk**, which is the spelling every project file has now: the
+        // kind's own `parse` answers a sentence and not a path, so without this a refusal would name no field
+        // and the author would hunt the file for the one key that is wrong.
+        field: field_of_yaml::<T>(text),
+        reason,
     })
 }
 
@@ -195,16 +191,6 @@ fn line_as<T: DeserializeOwned>(line: &str) -> Result<T, (Option<String>, String
 
 /// **Parse `text` as `kind`.** `file` is only what a refusal names.
 pub fn check(kind: &FileKind, file: &str, text: &str) -> Check {
-    check_as(kind, file, text, Format::Ron)
-}
-
-/// **Parse `text` as `kind`, read as YAML** (GD-11, #373): the file editor's check of a converted project's files. The
-/// same table and the same validators as [`check`], through the reader a load uses ([`crate::yaml::from_str`]).
-pub fn check_yaml(kind: &FileKind, file: &str, text: &str) -> Check {
-    check_as(kind, file, text, Format::Yaml)
-}
-
-fn check_as(kind: &FileKind, file: &str, text: &str, format: Format) -> Check {
     use crate::{
         composition::Compositions, data_files::DataFiles, destructible::{Bake, Marks}, family::Family,
         heightfield::Heightfield,
@@ -214,36 +200,37 @@ fn check_as(kind: &FileKind, file: &str, text: &str, format: Format) -> Check {
         vocab::Vocabularies, volume::Volume, water::{WaterField, WaterPlan},
     };
     let result = match kind.id {
-        "kits" => read_as(format, text, file, Kits::parse),
-        "vocab" => read_as(format, text, file, Vocabularies::parse),
-        "library" => read_as(format, text, file, Library::parse),
-        "policy" => read_as(format, text, file, Policy::parse),
-        "rules" => read_as(format, text, file, |t| {
-            // `Rules::parse` only reads RON. What the editor refuses to open (a version it does not read, a
-            // number no block can use) is `validate_numbers`, so a reload that said `applied` for a file the
-            // project open refuses was telling the author the edit had landed.
+        "kits" => run_yaml(text, Kits::parse),
+        "vocab" => run_yaml(text, Vocabularies::parse),
+        "library" => run_yaml(text, Library::parse),
+        "policy" => run_yaml(text, Policy::parse),
+        "rules" => run_yaml(text, |t| {
+            // **`Rules::parse` reads YAML, and what it cannot refuse by itself is a rule no block can use.** The
+            // editor refuses a version it does not read and a number no block can use; `validate_numbers` is the
+            // second half of that, so a reload that said `applied` for a file the project open refuses was telling
+            // the author the edit had landed.
             let rules = Rules::parse(t)?;
             rules.validate_numbers().map(|()| rules)
         }),
-        "compositions" => read_as(format, text, file, Compositions::parse),
-        "standards" => read_as(format, text, file, Standards::parse),
-        "repetition" => read_as(format, text, file, RepetitionRules::parse),
-        "rigs" => read_as(format, text, file, Rigs::parse),
-        "notes" => read_as(format, text, file, Notes::from_ron),
-        "plan" => read_as(format, text, file, Plan::from_ron),
-        "references" => read_as(format, text, file, References::from_ron),
-        "relations" => read_as(format, text, file, Relations::parse),
-        "map" => read_as(format, text, file, Map::parse),
-        "terrain" => read_as(format, text, file, Heightfield::parse),
-        "water_plan" => read_as(format, text, file, WaterPlan::parse),
-        "water_field" => read_as(format, text, file, WaterField::parse),
-        "volume" => read_as(format, text, file, Volume::parse),
-        "data_registry" => read_as(format, text, file, DataFiles::parse),
-        "family_list" => read_as(format, text, file, Family::from_ron),
-        "agent" => read_as(format, text, file, AgentSettings::from_ron),
-        "play" => read_as(format, text, file, PlayConfig::from_ron),
-        "destructible_marks" => read_as(format, text, file, Marks::parse),
-        "destructible_bake" => read_as(format, text, file, Bake::parse),
+        "compositions" => run_yaml(text, Compositions::parse),
+        "standards" => run_yaml(text, Standards::parse),
+        "repetition" => run_yaml(text, RepetitionRules::parse),
+        "rigs" => run_yaml(text, Rigs::parse),
+        "notes" => run_yaml(text, Notes::parse),
+        "plan" => run_yaml(text, Plan::parse),
+        "references" => run_yaml(text, References::parse),
+        "relations" => run_yaml(text, Relations::parse),
+        "map" => run_yaml(text, Map::parse),
+        "terrain" => run_yaml(text, Heightfield::parse),
+        "water_plan" => run_yaml(text, WaterPlan::parse),
+        "water_field" => run_yaml(text, WaterField::parse),
+        "volume" => run_yaml(text, Volume::parse),
+        "data_registry" => run_yaml(text, DataFiles::parse),
+        "family_list" => run_yaml(text, Family::parse),
+        "agent" => run_yaml(text, AgentSettings::parse),
+        "play" => run_yaml(text, PlayConfig::parse),
+        "destructible_marks" => run_yaml(text, Marks::parse),
+        "destructible_bake" => run_yaml(text, Bake::parse),
         _ => return Check::Unchecked,
     };
     match result {
@@ -252,33 +239,22 @@ fn check_as(kind: &FileKind, file: &str, text: &str, format: Format) -> Check {
     }
 }
 
-/// **How a project file is written**: the format its text is read in.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Format {
-    /// A RON file (`kits.ron`, `maps/town.map.ron`): what a project is written in until GD-03's cutover.
-    Ron,
-    /// A YAML file (`kits.yaml`, `maps/town.map.yaml`): what [`crate::migrate`] writes.
-    Yaml,
-}
+/// **The directory a project's own files live in, under its root** (`assets/grimoire`): a kind based at
+/// [`crate::reload::Base::Grimoire`] is found by what follows it.
+pub const GRIMOIRE_DIR: &str = "assets/grimoire";
 
-/// **The kind a project-relative file is, and the format its text is in** (GD-11, #373).
+/// **The kind a project-relative file is** (GD-11, #373), or `None` for a path no kind owns.
 ///
-/// The registry's patterns name the RON paths (`maps/<name>.map.ron`); a project converted by
-/// [`crate::migrate`] holds the same files as `.yaml` (`maps/<name>.map.yaml`), so a `.yaml` path is
-/// looked up by the RON path it replaced. `rel` is spelled with `/` and is relative to the project's root:
-/// a kind based at the game's root matches it as it stands, a kind based at the project's own directory
-/// ([`crate::migrate::GRIMOIRE_DIR`]) matches what follows that directory.
-pub fn kind_of_path(rel: &str) -> Option<(&'static FileKind, Format)> {
+/// `rel` is spelled with `/` and is relative to the project's root: a kind based at the game's root matches it
+/// as it stands, a kind based at the project's own directory ([`GRIMOIRE_DIR`]) matches what follows that
+/// directory. A file that is not YAML has no kind: nothing reads RON.
+pub fn kind_of_path(rel: &str) -> Option<&'static FileKind> {
     use crate::reload::{kind_of, Base};
-    let (ron_path, format) = match rel.strip_suffix(".yaml") {
-        Some(stem) => (format!("{stem}.ron"), Format::Yaml),
-        None => (rel.to_owned(), Format::Ron),
-    };
-    if let Some(kind) = kind_of(Base::Root, &ron_path) {
-        return Some((kind, format));
+    if let Some(kind) = kind_of(Base::Root, rel) {
+        return Some(kind);
     }
-    let inside = ron_path.strip_prefix(crate::migrate::GRIMOIRE_DIR)?.strip_prefix('/')?;
-    kind_of(Base::Grimoire, inside).map(|kind| (kind, format))
+    let inside = rel.strip_prefix(GRIMOIRE_DIR)?.strip_prefix('/')?;
+    kind_of(Base::Grimoire, inside)
 }
 
 /// **The kinds [`check`] cannot read**, so a reader knows which refusals it has to find another way.

@@ -1,6 +1,6 @@
 //! **The project's own checks, as the editor holds them** (#200, H3).
 //!
-//! `Checks::for_project` reads `assets/grimoire/checks.ron` fresh on every run, so one bad edit (a hand
+//! `Checks::for_project` reads `assets/grimoire/checks.yaml` fresh on every run, so one bad edit (a hand
 //! edit, a truncated write, an agent's mistake) made every after-edit check silently not run: the
 //! journal said "not run" with the parser's position and nothing said which field was wrong, and the
 //! second reader dropped the error altogether. Now one system looks at the file, decides each edit
@@ -15,7 +15,7 @@
 //!
 //! The type is the decision crate's, above core, so [`bevy_grimoire_core::reload_check::check`] cannot
 //! read it; [`bevy_grimoire_core::reload_check::read`] names the field of a file that does not parse,
-//! and [`Checks::from_ron`] says why a file that did parse breaks a rule (two checks with one name, a
+//! and [`Checks::from_yaml`] says why a file that did parse breaks a rule (two checks with one name, a
 //! threshold outside 0..=1), which has no one field.
 
 use std::path::{Path, PathBuf};
@@ -46,7 +46,7 @@ enum Seen {
 /// **The last good checks of the open project**, and what the view last saw of their file.
 #[derive(Resource, Default)]
 pub struct ChecksView {
-    /// The `checks.ron` this holds the checks of; another project's file starts the view afresh.
+    /// The `checks.yaml` this holds the checks of; another project's file starts the view afresh.
     path: PathBuf,
     stat: Option<(SystemTime, u64)>,
     /// What the last look found, good or refused, so the same bytes are decided once.
@@ -58,7 +58,7 @@ pub struct ChecksView {
     good: Option<Checks>,
 }
 
-/// `<project root>/assets/grimoire/checks.ron`, the path `Checks::for_project` reads.
+/// `<project root>/assets/grimoire/checks.yaml`, the path `Checks::for_project` reads.
 fn path_in(root: &Path) -> PathBuf {
     root.join("assets").join("grimoire").join(PROJECT_CHECKS_FILE)
 }
@@ -76,7 +76,7 @@ pub fn checks_for(view: Option<&ChecksView>, root: &Path) -> Result<Checks, Stri
 /// **A file's text as the checks it defines, or why not**: the field it is wrong at when it did not
 /// parse (`None` for a rule it breaks after parsing, which the reason names), and the reason.
 fn read(file: &str, text: &str) -> Result<Checks, (Option<String>, String)> {
-    let e = match Checks::from_ron(text) {
+    let e = match Checks::from_yaml(text) {
         Ok(checks) => return Ok(checks),
         Err(e) => e,
     };
@@ -86,15 +86,15 @@ fn read(file: &str, text: &str) -> Result<Checks, (Option<String>, String)> {
     };
     // The decision crate's reader says where in the text, not which field; the shared one says both for
     // a file that does not parse. A file that parses and still refuses broke a rule: no field.
-    match reload_check::read::<Checks>("checks", file, text) {
-        Err(r) => Err((r.field, r.reason)),
+    match reload_check::read::<Checks>("checks", file, text, |t| Checks::from_yaml(t).map_err(|e| e.to_string())) {
+        Err(r) => Err((r.field, reason)),
         Ok(_) => Err((None, reason)),
     }
 }
 
-/// **Read the project's `checks.ron` when it changed, and decide it once.**
+/// **Read the project's `checks.yaml` when it changed, and decide it once.**
 ///
-/// A file that reads replaces the held checks; one that is refused (not RON, a wrong type, a missing
+/// A file that reads replaces the held checks; one that is refused (not YAML, a wrong type, a missing
 /// field, two checks of one name, a threshold outside 0..=1) leaves them; a file that is gone is the
 /// editor's checks alone and clears its verdict. A refusal names the file as the project's directory
 /// sees it and the field it is wrong at.

@@ -477,29 +477,8 @@ fn stamp_and_piece_in_one_box(name: &str) -> App {
         .composition("site/room", &[("site/wall", "site/wall", (0.0, 0.0))])
         .place("site/wall", (3.0, 0.0))
         .build("m");
-    let map = root.join("assets/grimoire/maps/m.map.ron");
-    let text = std::fs::read_to_string(&map).expect("the map is there");
-    let stamped = text.replace(
-        "stamps: [],",
-        r#"stamps: [
-        (
-            id: "room@1",
-            of: "site/room",
-            at: (0.0, 0.0),
-            yaw: 0.0,
-            overrides: [],
-            of_fingerprint: None,
-            owned: false,
-            owned_because: None,
-            note: None,
-        ),
-    ],"#,
-    );
-    assert_ne!(
-        stamped, text,
-        "the fixture's map has no `stamps: [],` to fill; this test would stamp nothing"
-    );
-    std::fs::write(&map, stamped).expect("the map is writable");
+    let map = root.join("assets/grimoire/maps/m.map.yaml");
+    fixtures::add_stamp(&map, r#"{id: "room@1", of: "site/room", at: [0.0, 0.0], yaw: 0.0, overrides: [], of_fingerprint: null, owned: false, owned_because: null, note: null}"#);
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.init_resource::<Script>();
     app.world_mut().spawn((Window::default(), PrimaryWindow));

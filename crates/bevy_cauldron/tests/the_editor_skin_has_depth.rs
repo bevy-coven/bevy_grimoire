@@ -1,6 +1,6 @@
 //! **The editor's skin carries depth, and what stands above the screen casts it** (UI-R02, #332).
 //!
-//! `editor_skin.ron` keeps the editor's measured colours and sizes (the tests beside it pin them) and
+//! `editor_skin.yaml` keeps the editor's measured colours and sizes (the tests beside it pin them) and
 //! adds bevy_gooey's elevation stacks, so a panel, a popover and a dialog stand at three heights.
 
 use bevy::prelude::*;
@@ -36,11 +36,10 @@ fn the_skin_has_three_heights_each_softer_and_longer_than_the_last_and_is_still_
 #[test]
 fn the_file_states_the_stacks_itself() {
     // Not the library's default filling a gap: the file names `elevation`, so the depth is the editor's data.
-    let text = include_str!("../src/editor_skin.ron");
-    let value: ron::Value = ron::from_str(text).expect("the editor skin reads as RON");
-    let ron::Value::Map(fields) = value else { panic!("a skin is a struct") };
-    let stated = fields.iter().any(|(name, _)| matches!(name, ron::Value::String(n) if n == "elevation"));
-    assert!(stated, "src/editor_skin.ron states its own `elevation`");
+    let text = include_str!("../src/editor_skin.yaml");
+    let value = bevy_grimoire_core::yaml::to_json(text, "editor_skin.yaml").expect("the editor skin reads as YAML");
+    let serde_json::Value::Object(fields) = value else { panic!("a skin is a struct") };
+    assert!(fields.contains_key("elevation"), "src/editor_skin.yaml states its own `elevation`");
 }
 
 #[test]

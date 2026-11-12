@@ -2,7 +2,7 @@
 //!
 //! `bevy_gooey` was an optional feature, so a default build had no skin, no style plugin and no
 //! `ui_skin` tests. It is now required: a headless editor on default features carries the running
-//! skin, `family.ron` may list the crate without a problem, and `EditorUiPlugin` is the one plugin
+//! skin, `family.yaml` may list the crate without a problem, and `EditorUiPlugin` is the one plugin
 //! that added gooey's plugins.
 
 use bevy::prelude::*;
@@ -21,7 +21,7 @@ fn a_default_build_has_the_gooey_skin_and_one_plugin_that_owns_it() {
     assert!(app.world().get_resource::<GooeySkin>().is_some(), "the running skin exists with no cargo feature");
     assert!(bevy_cauldron::family_host::built().contains(&"bevy_gooey"), "the build says it has gooey");
 
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_gooey\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_gooey\"]}").unwrap();
     assert!(
         bevy_cauldron::family_host::problems_with(&root, &bevy_cauldron::family_host::built()).is_empty(),
         "a project may list bevy_gooey in a default build"

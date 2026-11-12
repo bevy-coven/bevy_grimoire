@@ -832,13 +832,16 @@ const BED_AT: (f32, f32) = (28.0, -28.0);
 /// How near the camera's focus must come to the bed for the finder to have framed it, in metres.
 const FRAMED_WITHIN_M: f32 = 6.0;
 /// The registered data file the finder fixture holds, and its id.
-const DATA_REGISTRY: &str = "(version: 1, files: [(id: \"tuning\", path: \"mob.ron\", bounds: {\"mob.speed\": (min: 0.0, max: 9.0)})])";
-const DATA_FILE: &str = "// tuning\n(mob: (speed: 1.50, name: \"orc\", hp: 7), fast: false)\n";
+// **The registry's own name is YAML now** (GD-03, #365), and so is the file it registers: the fixture writes both spellings the
+// project reads, and a `.ron` here would be a project this build refuses at open.
+const DATA_REGISTRY: &str = "version: 1\nfiles:\n- id: tuning\n  path: mob.yaml\n  bounds:\n    mob.speed:\n      min: 0.0\n      max: 9.0\n";
+const DATA_FILE: &str = "# tuning\nmob:\n  speed: 1.50\n  name: orc\n  hp: 7\nfast: false\n";
 /// **The rig the finder fixture holds, and the clip a person asks for** (NV-11, #391): a clip is a slot of the rig's manifest entry, and the
 /// finder names it by the slot's note. The clip is slot 1, so a finder that landed on the rig alone, or on its first slot, is caught.
-const RIGS: &str = "(version: 3, rigs: { \"hound\": (mesh: \"characters/hound.glb\", scale: 1.0, slots: [\
-    (clip: 0, playback: Free(speed: 1.0), note: Some(\"idle\")), \
-    (clip: 1, playback: Free(speed: 1.0), note: Some(\"gallop\"))])})";
+///
+/// **YAML, as `rigs.yaml` is** (GD-03, #365): a variant is a tag and an `Option` is its value or null, so this is the manifest the
+/// bench and the finder read.
+const RIGS: &str = "version: 3\nrigs:\n  hound:\n    mesh: characters/hound.glb\n    scale: 1.0\n    slots:\n    - clip: 0\n      playback: !Free\n        speed: 1.0\n      note: idle\n    - clip: 1\n      playback: !Free\n        speed: 1.0\n      note: gallop\n";
 const CLIP_RIG: &str = "hound";
 const CLIP_SLOT: usize = 1;
 
@@ -867,10 +870,10 @@ fn finder_editor(tag: &str) -> App {
         .build("meadow");
     // **Where the project reads its registry from** is its authoring kit's directory, which the project says.
     let dir = bevy_cauldron::project::Project::open(&root, None).unwrap_or_else(|e| panic!("{e}")).grimoire_dir;
-    std::fs::write(dir.join("mob.ron"), DATA_FILE).unwrap_or_else(|e| panic!("{e}"));
-    std::fs::write(dir.join("data.ron"), DATA_REGISTRY).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(dir.join("mob.yaml"), DATA_FILE).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(dir.join("data.yaml"), DATA_REGISTRY).unwrap_or_else(|e| panic!("{e}"));
     // **A rig with two clips** (NV-11, #391), in the manifest the bench and the finder both read.
-    std::fs::write(root.join("assets/grimoire/rigs.ron"), RIGS).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(root.join("assets/grimoire/rigs.yaml"), RIGS).unwrap_or_else(|e| panic!("{e}"));
     let mut app = bevy_cauldron::harness::build_headless(&root, "meadow", None).unwrap_or_else(|e| panic!("{e}"));
     app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(1.0 / 60.0)));
     app.world_mut().spawn((Window::default(), bevy::window::PrimaryWindow));

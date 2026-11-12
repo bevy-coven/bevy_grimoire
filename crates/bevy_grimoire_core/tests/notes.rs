@@ -11,13 +11,13 @@ fn scratch(tag: &str) -> std::path::PathBuf {
 
 #[test]
 fn the_file_sits_beside_the_map() {
-    assert_eq!(path_for_map(Path::new("a/maps/town.map.ron")), Path::new("a/maps/town.notes.ron"));
+    assert_eq!(path_for_map(Path::new("a/maps/town.map.yaml")), Path::new("a/maps/town.notes.yaml"));
 }
 
 #[test]
 fn a_note_on_two_placements_and_a_tile_survives_a_restart() {
     let dir = scratch("roundtrip");
-    let path = path_for_map(&dir.join("town.map.ron"));
+    let path = path_for_map(&dir.join("town.map.yaml"));
     let mut notes = Notes::default();
     let id = notes
         .add(
@@ -55,14 +55,14 @@ fn a_note_needs_a_target_and_text_and_ids_are_unique_on_load() {
     twice.add(vec![Target::Cell(0, 0)], "a").unwrap();
     let again = twice.notes[0].clone();
     twice.notes.push(again);
-    let doubled = twice.to_ron().unwrap();
-    assert!(Notes::from_ron(&doubled).unwrap_err().contains("twice"));
+    let doubled = twice.to_yaml().unwrap();
+    assert!(Notes::parse(&doubled).unwrap_err().contains("twice"));
 }
 
 #[test]
 fn no_notes_writes_no_file_and_a_missing_file_is_empty() {
     let dir = scratch("empty");
-    let path = dir.join("town.notes.ron");
+    let path = dir.join("town.notes.yaml");
     assert_eq!(Notes::load(&path).unwrap(), Notes::default());
     Notes::default().save(&path).unwrap();
     assert!(!path.exists());
@@ -71,8 +71,8 @@ fn no_notes_writes_no_file_and_a_missing_file_is_empty() {
 #[test]
 fn a_change_to_the_notes_file_is_a_reload_for_a_file_watch() {
     let dir = scratch("watch");
-    let path = dir.join("town.notes.ron");
-    let mut watch = FileWatch::new(&dir, &["ron"]);
+    let path = dir.join("town.notes.yaml");
+    let mut watch = FileWatch::new(&dir, &["yaml"]);
     let mut notes = Notes::default();
     notes.add(vec![Target::Cell(0, 0)], "look").unwrap();
     notes.save(&path).unwrap();

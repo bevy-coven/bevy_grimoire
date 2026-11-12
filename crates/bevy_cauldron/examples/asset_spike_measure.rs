@@ -1,5 +1,5 @@
 //! **Measures #204's spike: how fast, and whether at all, each watcher notices a write to
-//! `standards.ron`.**
+//! `standards.yaml`.**
 //!
 //! ```text
 //! cargo run --release -p bevy_cauldron --features asset_spike --example asset_spike_measure -- [trials] [gap between the three files of a save, ms]
@@ -36,7 +36,7 @@ fn standards(n: u32) -> Standards {
 }
 
 fn text(n: u32) -> String {
-    standards(n).to_ron().expect("a standards text")
+    standards(n).to_yaml().expect("a standards text")
 }
 
 #[derive(Clone, Copy)]
@@ -58,9 +58,9 @@ impl Way {
 type Seen = Option<(f64, u32)>;
 
 fn trial(way: Way, n: u32, dir: &Path) -> [Seen; 4] {
-    let file = dir.join("standards.ron");
+    let file = dir.join("standards.yaml");
     way.write(&file, &text(0));
-    let (mut app, _handles) = app_over(dir, &["standards.ron"]);
+    let (mut app, _handles) = app_over(dir, &["standards.yaml"]);
     let begin = Instant::now();
     while !app.world().resource::<Heard>().events.iter().any(|h| matches!(h, Heard1::Loaded(_))) {
         assert!(begin.elapsed() < Duration::from_secs(10), "the asset never loaded the first text");
@@ -74,8 +74,8 @@ fn trial(way: Way, n: u32, dir: &Path) -> [Seen; 4] {
     }
     app.world_mut().resource_mut::<Heard>().events.clear();
     // A watch stats when it is made, so these two start from the file as it is before the write.
-    let mut default_watch = FileWatch::new(dir, &["ron"]);
-    let mut quick_watch = FileWatch::new(dir, &["ron"]).with_timing(0.1, 0.1);
+    let mut default_watch = FileWatch::new(dir, &["yaml"]);
+    let mut quick_watch = FileWatch::new(dir, &["yaml"]).with_timing(0.1, 0.1);
     // The editor's own watcher (`mapper::watch::tick_watch`): the file's size and modification time
     // every 250 ms of the wall clock, a change at once and no settle time. The rule, on the one file.
     let stamp = || std::fs::metadata(&file).ok().map(|m| (m.len(), m.modified().ok()));
@@ -130,7 +130,7 @@ fn trial(way: Way, n: u32, dir: &Path) -> [Seen; 4] {
 /// Returns the milliseconds from the first write to each file's arrival in the asset system (`None` for a
 /// file that never arrived), and how many reloads a `FileWatch` over the directory said were due.
 fn set_trial(n: u32, gap_ms: u64, dir: &Path) -> (Vec<Option<f64>>, u32) {
-    const FILES: [&str; 3] = ["a.ron", "b.ron", "c.ron"];
+    const FILES: [&str; 3] = ["a.yaml", "b.yaml", "c.yaml"];
     for file in FILES {
         atomic_file::write(&dir.join(file), text(0)).expect("a first text");
     }
@@ -146,7 +146,7 @@ fn set_trial(n: u32, gap_ms: u64, dir: &Path) -> (Vec<Option<f64>>, u32) {
         std::thread::sleep(STEP);
     }
     app.world_mut().resource_mut::<Heard>().events.clear();
-    let mut watch = FileWatch::new(dir, &["ron"]);
+    let mut watch = FileWatch::new(dir, &["yaml"]);
     let mut next_write = 0;
     let (mut arrived, mut reloads) = (vec![None; FILES.len()], 0u32);
     let t0 = Instant::now();

@@ -17,9 +17,9 @@ use serde_json::{Value, json};
 
 use crate::fixtures;
 
-const GROUND: &str = "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, heights: [0.0, 0.0, 0.0, 0.0])";
-const WATER: &str = "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: [0.5, 0.0, 0.0, 0.0], settled: true, steps: 3)";
-const WATER_DEEPER: &str = "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: [0.9, 0.0, 0.0, 0.0], settled: true, steps: 4)";
+const GROUND: &str = "{origin: [0.0, 0.0], cell_m: 1.0, width: 2, depth: 2, heights: [0.0, 0.0, 0.0, 0.0]}";
+const WATER: &str = "{origin: [0.0, 0.0], cell_m: 1.0, width: 2, depth: 2, depth_m: [0.5, 0.0, 0.0, 0.0], settled: true, steps: 3}";
+const WATER_DEEPER: &str = "{origin: [0.0, 0.0], cell_m: 1.0, width: 2, depth: 2, depth_m: [0.9, 0.0, 0.0, 0.0], settled: true, steps: 4}";
 
 fn editor(tag: &str) -> App {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").build("m");
@@ -92,8 +92,8 @@ fn problems(app: &App) -> Vec<String> {
 /// A map with its ground and one pool drawn, every file applied.
 fn drawn(tag: &str) -> (App, Entity) {
     let mut app = editor(tag);
-    write(&app, "terrain", "m.ron", GROUND);
-    write(&app, "water", "m.field.ron", WATER);
+    write(&app, "terrain", "m.yaml", GROUND);
+    write(&app, "water", "m.field.yaml", WATER);
     until(&mut app, "the pool drawn", |a| entities(a, TerrainView::Water).len() == 1);
     assert_eq!(entities(&mut app, TerrainView::Ground).len(), 1);
     assert_eq!(verdict(&mut app, "water_field")["outcome"], json!("applied"));
@@ -105,24 +105,24 @@ fn drawn(tag: &str) -> (App, Entity) {
 #[test]
 fn a_water_field_that_does_not_fill_its_shape_is_refused_and_the_pool_stays() {
     let (mut app, pool) = drawn("reload_water_short");
-    write(&app, "water", "m.field.ron", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: [0.5, 0.0, 0.0], settled: true, steps: 3)");
+    write(&app, "water", "m.field.yaml", "{origin: [0.0, 0.0], cell_m: 1.0, width: 2, depth: 2, depth_m: [0.5, 0.0, 0.0], settled: true, steps: 3}");
     until(&mut app, "the refusal", |a| verdict(a, "water_field")["outcome"] == json!("refused"));
 
     let v = verdict(&mut app, "water_field");
-    assert!(v["file"].as_str().unwrap().ends_with("water/m.field.ron"), "{v}");
+    assert!(v["file"].as_str().unwrap().ends_with("water/m.field.yaml"), "{v}");
     assert!(v["reason"].as_str().unwrap().contains("3 depths for 2x2"), "{v}");
     assert_eq!(entities(&mut app, TerrainView::Water), vec![pool], "the pool drawn before stays, untouched");
     assert_eq!(entities(&mut app, TerrainView::Ground).len(), 1, "the ground is still drawn");
     assert_eq!(verdict(&mut app, "terrain")["outcome"], json!("applied"), "the other files are fine by themselves");
     assert_eq!(reloads(&mut app)["ok"], json!(false));
     let said = problems(&app);
-    assert!(said.iter().any(|p| p.contains("water/m.field.ron") && p.contains("3 depths for 2x2")), "the status line names it: {said:?}");
+    assert!(said.iter().any(|p| p.contains("water/m.field.yaml") && p.contains("3 depths for 2x2")), "the status line names it: {said:?}");
 }
 
 #[test]
 fn a_field_of_the_wrong_type_is_named() {
     let (mut app, pool) = drawn("reload_water_wrong_type");
-    write(&app, "water", "m.field.ron", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: [0.5, 0.0, 0.0, 0.0], settled: 7, steps: 3)");
+    write(&app, "water", "m.field.yaml", "{origin: [0.0, 0.0], cell_m: 1.0, width: 2, depth: 2, depth_m: [0.5, 0.0, 0.0, 0.0], settled: 7, steps: 3}");
     until(&mut app, "the refusal", |a| verdict(a, "water_field")["outcome"] == json!("refused"));
     assert_eq!(verdict(&mut app, "water_field")["field"], json!("settled"));
     assert_eq!(entities(&mut app, TerrainView::Water), vec![pool]);
@@ -134,7 +134,7 @@ fn a_volume_edit_that_cannot_be_meshed_is_refused_and_the_ground_stays() {
     let ground = entities(&mut app, TerrainView::Ground);
     use bevy_grimoire_core::volume::{Edit, Mode, Shape, Volume};
     let flat = Edit { shape: Shape::Sphere { center: [1.0, 0.0, 1.0], radius_m: 0.0 }, mode: Mode::Carve, smooth_m: 0.0 };
-    write(&app, "volume", "m.ron", &ron::to_string(&Volume { edits: vec![flat], ..Volume::default() }).unwrap());
+    write(&app, "volume", "m.yaml", &bevy_grimoire_core::yaml::to_string(&Volume { edits: vec![flat], ..Volume::default() }).unwrap());
     until(&mut app, "the refusal", |a| verdict(a, "volume")["outcome"] == json!("refused"));
     let v = verdict(&mut app, "volume");
     assert!(v["reason"].as_str().unwrap().contains("edit 0") && v["reason"].as_str().unwrap().contains("above zero"), "{v}");
@@ -146,7 +146,7 @@ fn a_volume_edit_that_cannot_be_meshed_is_refused_and_the_ground_stays() {
 fn one_edit_is_one_verdict_however_many_frames_pass_and_a_fix_applies() {
     let (mut app, pool) = drawn("reload_water_once");
     let before = reloads(&mut app)["seq"].as_u64().unwrap();
-    write(&app, "water", "m.field.ron", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: [0.5], settled: true, steps: 3)");
+    write(&app, "water", "m.field.yaml", "{origin: [0.0, 0.0], cell_m: 1.0, width: 2, depth: 2, depth_m: [0.5], settled: true, steps: 3}");
     until(&mut app, "the refusal", |a| verdict(a, "water_field")["outcome"] == json!("refused"));
     let refused_at = reloads(&mut app)["seq"].as_u64().unwrap();
     assert_eq!(refused_at, before + 1, "one edit, one decision");
@@ -156,7 +156,7 @@ fn one_edit_is_one_verdict_however_many_frames_pass_and_a_fix_applies() {
     assert_eq!(reloads(&mut app)["seq"].as_u64().unwrap(), refused_at, "no new decision while nothing was edited");
     assert_eq!(app.world().resource::<EditorState>().status.raised(), said, "the refusal is said once, not every half second");
 
-    write(&app, "water", "m.field.ron", WATER_DEEPER);
+    write(&app, "water", "m.field.yaml", WATER_DEEPER);
     until(&mut app, "the fix applied", |a| verdict(a, "water_field")["outcome"] == json!("applied"));
     assert_eq!(reloads(&mut app)["seq"].as_u64().unwrap(), refused_at + 1);
     assert_eq!(reloads(&mut app)["ok"], json!(true));
@@ -169,9 +169,9 @@ fn one_edit_is_one_verdict_however_many_frames_pass_and_a_fix_applies() {
 fn a_refused_file_that_is_then_removed_is_no_longer_refused() {
     // An undo takes a bad file away; the view follows it, and the state does not keep the old refusal.
     let (mut app, _) = drawn("reload_water_removed");
-    write(&app, "water", "m.field.ron", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: [0.5], settled: true, steps: 3)");
+    write(&app, "water", "m.field.yaml", "{origin: [0.0, 0.0], cell_m: 1.0, width: 2, depth: 2, depth_m: [0.5], settled: true, steps: 3}");
     until(&mut app, "the refusal", |a| verdict(a, "water_field")["outcome"] == json!("refused"));
-    let file = app.world().resource::<Project>().grimoire_dir.join("water").join("m.field.ron");
+    let file = app.world().resource::<Project>().grimoire_dir.join("water").join("m.field.yaml");
     std::fs::remove_file(&file).unwrap_or_else(|e| panic!("{file:?}: {e}"));
     until(&mut app, "the refusal gone", |a| verdict(a, "water_field") == Value::Null);
     assert_eq!(reloads(&mut app)["ok"], json!(true), "{}", reloads(&mut app));

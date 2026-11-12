@@ -1,7 +1,7 @@
 //! **The editor's colours are a gooey skin, and the skin is data** (UI-02, #210).
 //!
 //! `chrome.rs` drew the editor with its own colour table and its own elevation test. The same
-//! colours are now `src/editor_skin.ron`, read as `bevy_gooey`'s `GooeySkin`, and the library's own
+//! colours are now `src/editor_skin.yaml`, read as `bevy_gooey`'s `GooeySkin`, and the library's own
 //! `problems()` is the check that the ladder is a ladder and the ink is readable. These tests hold
 //! the file and the table to one another while the table still exists, so neither can drift.
 

@@ -1,7 +1,7 @@
 //! **A settings edit made while a capture sequence runs reaches the terminal's text size** (#327).
 //!
 //! Found recording the terminal-settings clip: `tools/demo/record.py` saved a new `terminal_text_scale`
-//! into the project's `editor.ron` while `grimoire_capture_sequence` ran, and after the capture the
+//! into the project's `editor.yaml` while `grimoire_capture_sequence` ran, and after the capture the
 //! terminal had more columns than before (213, from 150) where the same edit without a capture took the
 //! count down (161 to 113). The edit is the same file and the same reader, so a capture must not change
 //! what the terminal does with it.
@@ -37,8 +37,8 @@ fn columns(app: &App) -> u16 {
 fn a_text_size_saved_while_a_capture_runs_makes_the_terminal_narrower_in_cells() {
     let tag = format!("capture_settings_{}", std::process::id());
     let root = fixtures::Fixture::new(&tag).descriptor("floor", "alpha").build("m");
-    let file = root.join("assets/grimoire/editor.ron");
-    std::fs::write(&file, "(version: 1)").unwrap_or_else(|e| panic!("{}: {e}", file.display()));
+    let file = root.join("assets/grimoire/editor.yaml");
+    std::fs::write(&file, "{version: 1}").unwrap_or_else(|e| panic!("{}: {e}", file.display()));
     let guard = SHELL_ENV.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     unsafe { std::env::set_var("SHELL", "/bin/sh") };
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
@@ -78,7 +78,7 @@ fn a_text_size_saved_while_a_capture_runs_makes_the_terminal_narrower_in_cells()
     let running = |app: &App| app.world().resource::<Sequencer>().status(id)["status"] == "running";
     assert!(running(&app), "the capture is running when the file is saved");
 
-    std::fs::write(&file, format!("(version: 1, terminal_text_scale: Some({SCALE}))"))
+    std::fs::write(&file, format!("{{version: 1, terminal_text_scale: {SCALE}}}"))
         .unwrap_or_else(|e| panic!("{e}"));
     let mut after = before;
     for _ in 0..TRIES {

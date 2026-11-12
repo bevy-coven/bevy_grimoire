@@ -3,7 +3,7 @@
 //! The trees are `bevy_flora`'s own [`Scatter`](bevy_flora::Scatter): its Poisson-disc trunks, its
 //! species weights and groves, its seed. The editor only masks the scatter to the stroke (a trunk
 //! stays only within `radius_m` of the stroke's polyline), stands each tree on the map's terrain and
-//! writes the result to `<grimoire_dir>/forest/<map>.ron`. The game reads the same file and spawns the
+//! writes the result to `<grimoire_dir>/forest/<map>.yaml`. The game reads the same file and spawns the
 //! trees through the crate's pools and LOD; the editor never builds one entity per leaf.
 //!
 //! A stroke is a gesture: it arrives whole and makes one change and one undo. The inverse is the same
@@ -22,7 +22,7 @@ use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, enclose, point_b
 #[serde(deny_unknown_fields)]
 pub struct Tree {
     pub id: u32,
-    /// A preset name or a `.tree.ron` path: whatever the game's pools are keyed by.
+    /// A preset name or a `.tree.yaml` path: whatever the game's pools are keyed by.
     pub species: String,
     /// World `(x, z)` of the trunk.
     pub at: (f32, f32),
@@ -43,7 +43,7 @@ pub struct Tree {
 /// The format version of a forest file (#202). A file with no `version` is the first.
 pub const FOREST_VERSION: u32 = 1;
 
-/// A map's planted forest: `<grimoire_dir>/forest/<map>.ron`.
+/// A map's planted forest: `<grimoire_dir>/forest/<map>.yaml`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Forest {
@@ -87,7 +87,7 @@ pub struct Plant {
     pub scale: Option<(f32, f32)>,
 }
 
-/// One tree placed by hand: a preset name or `.tree.ron` path, at `(x, z)`, with an age and a seed.
+/// One tree placed by hand: a preset name or `.tree.yaml` path, at `(x, z)`, with an age and a seed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Place {
@@ -144,7 +144,7 @@ impl Params {
         }
         if let Some(pl) = &p.place {
             if pl.species.trim().is_empty() {
-                return Err(Refusal::new("a placed tree needs a species (a preset name or a .tree.ron path). Nothing was changed."));
+                return Err(Refusal::new("a placed tree needs a species (a preset name or a .tree.yaml path). Nothing was changed."));
             }
             if !(pl.age_years.is_finite() && pl.age_years >= 0.0) {
                 return Err(Refusal::new("`age_years` must be 0 or more. Nothing was changed."));
@@ -176,21 +176,21 @@ fn forest_path(ctx: &Ctx, map: &str) -> Result<std::path::PathBuf, Refusal> {
     let Some(project) = ctx.project.as_ref() else {
         return Err(Refusal::new("no project is open, so there is no forest to plant."));
     };
-    Ok(project.grimoire_dir.join("forest").join(format!("{}.ron", map_name(map)?)))
+    Ok(project.grimoire_dir.join("forest").join(format!("{}.yaml", map_name(map)?)))
 }
 
 /// **The saved forest of a map**, empty when there is none.
 pub fn forest_of(project: &crate::project::Project, map: &str) -> Forest {
-    std::fs::read_to_string(project.grimoire_dir.join("forest").join(format!("{map}.ron")))
+    std::fs::read_to_string(project.grimoire_dir.join("forest").join(format!("{map}.yaml")))
         .ok()
-        .and_then(|t| ron::from_str(&t).ok())
+        .and_then(|t| bevy_grimoire_core::yaml::from_str(&t, "forest").ok())
         .unwrap_or_default()
 }
 
 /// **The saved forest of a map for an operation that rewrites the file**: empty when there is no file,
 /// and a refusal naming the file and the field when there is one that does not read (#200).
 pub fn try_forest_of(project: &crate::project::Project, map: &str) -> Result<Forest, Refusal> {
-    crate::map_files::read_or_empty("forest", project, &project.grimoire_dir.join("forest").join(format!("{map}.ron")))
+    crate::map_files::read_or_empty("forest", project, &project.grimoire_dir.join("forest").join(format!("{map}.yaml")))
 }
 
 /// Squared distance from `p` to the segment `a`-`b`.
@@ -297,7 +297,7 @@ impl ForestScatter {
             let project = ctx.project.as_ref().expect("forest_path needs a project");
             let mut forest = try_forest_of(project, &p.map)?;
             // A terrain file that does not read is flat ground here, as the terrain view draws it (#187).
-            let ground = std::fs::read_to_string(project.grimoire_dir.join("terrain").join(format!("{}.ron", p.map)))
+            let ground = std::fs::read_to_string(project.grimoire_dir.join("terrain").join(format!("{}.yaml", p.map)))
                 .ok()
                 .and_then(|t| bevy_grimoire_core::heightfield::Heightfield::parse(&t).ok());
             let added = match (&p.place, &p.plant) {
@@ -307,8 +307,7 @@ impl ForestScatter {
             };
             let n = added.len();
             forest.trees.extend(added);
-            let text = ron::ser::to_string_pretty(&forest, ron::ser::PrettyConfig::default())
-                .map_err(|e| Refusal::new(format!("the forest could not be written: {e}")))?;
+            let text = bevy_grimoire_core::yaml::to_string(&forest).map_err(|p| Refusal::new(format!("the forest could not be written: {}", p.line())))?;
             (Some(text), n)
         };
         if write {

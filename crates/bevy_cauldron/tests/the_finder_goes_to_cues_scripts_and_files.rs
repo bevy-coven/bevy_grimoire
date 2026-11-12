@@ -31,10 +31,21 @@ const FRAME: f32 = 1.0 / 60.0;
 const SETTLE: usize = 60;
 
 /// The project's sound file, in the crate's own shape.
-const CUES: &str = "(cues: (cues: [(name: \"door.creak\"), (name: \"wind.loop\")]))";
+const CUES: &str = "\
+cues:
+  cues:
+  - name: door.creak
+  - name: wind.loop
+";
 
 /// The same file after an agent adds a cue.
-const MORE_CUES: &str = "(cues: (cues: [(name: \"door.creak\"), (name: \"wind.loop\"), (name: \"bell.toll\")]))";
+const MORE_CUES: &str = "\
+cues:
+  cues:
+  - name: door.creak
+  - name: wind.loop
+  - name: bell.toll
+";
 
 fn editor(tag: &str) -> (App, std::path::PathBuf) {
     let root = fixtures::Fixture::new(&format!("goto_files_{tag}_{}", std::process::id()))
@@ -43,7 +54,7 @@ fn editor(tag: &str) -> (App, std::path::PathBuf) {
         .side(64.0)
         .build("m");
     for (rel, text) in [
-        ("family/bevy_siren.ron", CUES),
+        ("family/bevy_siren.yaml", CUES),
         ("scripts/lantern.rhai", "let lit = true;\n"),
         ("notes/design.md", "# the design\n"),
     ] {
@@ -178,7 +189,7 @@ fn a_files_name_opens_the_files_workspace_on_it() {
 #[test]
 fn a_cue_added_to_the_sound_file_is_found_without_reopening_the_project() {
     let (mut app, root) = editor("added");
-    std::fs::write(root.join("family/bevy_siren.ron"), MORE_CUES).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(root.join("family/bevy_siren.yaml"), MORE_CUES).unwrap_or_else(|e| panic!("{e}"));
     // A sound file is a project file the editor reads every second and a half; a little longer than that.
     for _ in 0..180 {
         app.update();

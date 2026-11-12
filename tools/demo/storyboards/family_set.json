@@ -44,8 +44,8 @@
   {
    "at": 2.2,
    "write": {
-    "path": "family/bevy_elements.ron",
-    "text": "(\n    clock: (\n        date: (year: 2026, month: 6, day: 21),\n        hour: 20.0,\n        time_scale: 60.0,\n        paused: true,\n    ),\n    location: (latitude_deg: 45.0, longitude_deg: 0.0, utc_offset_hours: 0.0),\n    climate: (\n        mean_temperature_c: 11.0, annual_amplitude_c: 9.0, diurnal_amplitude_c: 5.0,\n        warmest_day: 200, mean_humidity: 0.75, wet_hour_probability: 0.35,\n        storm_share: 0.05, fog_share: 0.08, dust_share: 0.0,\n        prevailing_wind: (1.0, 0.0), mean_wind_ms: 4.0, reference_elevation_m: 0.0, seed: 0,\n    ),\n    forced_weather: None,\n)\n"
+    "path": "family/bevy_elements.yaml",
+    "text": "clock:\n  date:\n    year: 2026\n    month: 6\n    day: 21\n  hour: 20.0\n  time_scale: 60.0\n  paused: true\nlocation:\n  latitude_deg: 45.0\n  longitude_deg: 0.0\n  utc_offset_hours: 0.0\nclimate:\n  mean_temperature_c: 11.0\n  annual_amplitude_c: 9.0\n  diurnal_amplitude_c: 5.0\n  warmest_day: 200\n  mean_humidity: 0.75\n  wet_hour_probability: 0.35\n  storm_share: 0.05\n  fog_share: 0.08\n  dust_share: 0.0\n  prevailing_wind:\n  - 1.0\n  - 0.0\n  mean_wind_ms: 4.0\n  reference_elevation_m: 0.0\n  seed: 0\nforced_weather: null\n"
    },
    "caption": "agent: family_set clock.hour = 20.0"
   },

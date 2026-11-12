@@ -1,6 +1,6 @@
 //! **The Game UI preview panel** (UI-03, #211).
 //!
-//! A game ships `family/bevy_gooey.ron` so its own UI matches its art. This panel is the one place the
+//! A game ships `family/bevy_gooey.yaml` so its own UI matches its art. This panel is the one place the
 //! editor shows that palette, and it shows it the way `bevy_gooey` means a skin to be shown: a
 //! [`SkinScope`] on this subtree, so the widgets below it are drawn from the game's skin while the rest
 //! of the window keeps the editor's own.
@@ -143,9 +143,9 @@ pub fn toggle_the_preview(
 /// on screen is their game's or the editor's.
 fn note_the_skin(game: Res<GameSkin>, mut notes: Query<&mut Text, With<GameUiPreviewNote>>) {
     let text = if game.0.is_some() {
-        "Drawn from this project's family/bevy_gooey.ron. The editor's own panels keep their palette."
+        "Drawn from this project's family/bevy_gooey.yaml. The editor's own panels keep their palette."
     } else {
-        "This project ships no family/bevy_gooey.ron, so this is the editor's own palette. Edit a game skin's accent and the buttons here follow it."
+        "This project ships no family/bevy_gooey.yaml, so this is the editor's own palette. Edit a game skin's accent and the buttons here follow it."
     };
     for mut note in &mut notes {
         if note.0 != text {

@@ -46,14 +46,14 @@ impl BalloonPreview {
     }
 }
 
-/// The first placed piece whose `bevy_speech_bubbles` value is the conversation's name (a RON string).
+/// The first placed piece whose `bevy_speech_bubbles` value is the conversation's name (a YAML scalar).
 pub fn speaker_of<'a>(map: &'a Map, conversation: &str) -> Option<&'a str> {
     map.placements
         .iter()
         .find(|p| {
             p.family
                 .get("bevy_speech_bubbles")
-                .and_then(|v| ron::from_str::<String>(v).ok())
+                .and_then(|v| bevy_grimoire_core::yaml::from_str::<String>(v, "bevy_speech_bubbles").ok())
                 .is_some_and(|name| name == conversation)
         })
         .map(|p| p.id.as_str())

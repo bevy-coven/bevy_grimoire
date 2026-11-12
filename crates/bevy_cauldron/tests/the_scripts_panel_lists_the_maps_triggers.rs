@@ -46,13 +46,13 @@ mod society {
         assert!(texts.iter().any(|(t, _, _)| t == "SCRIPTS"), "the panel has its heading; drawn: {texts:?}");
         assert!(texts.iter().any(|(t, _, _)| t == "no triggers on this map"));
 
-        for (id, on) in [("dawn", "Activity(\"work\")"), ("dusk", "Activity(\"sleep\")")] {
+        for (id, on) in [("dawn", "!Activity work"), ("dusk", "!Activity sleep")] {
             ops::dispatch(&mut ctx, "trigger_set", &json!({"map": "m", "id": id, "on": on, "then": "fx.bark(actor, \"hi\");", "bind": {"area": [0, 0, 4, 4]}}))
                 .unwrap();
         }
         let texts = drawn(&mut app);
         let (dawn, dusk) = (row(&texts, "dawn").expect("dawn row"), row(&texts, "dusk").expect("dusk row"));
-        assert!(dawn.0.contains("Activity(\"work\")") && dawn.0.ends_with("· area"), "{}", dawn.0);
+        assert!(dawn.0.contains("!Activity work") && dawn.0.ends_with("· area"), "{}", dawn.0);
         assert!(dusk.1 >= dawn.1 + dawn.2 - 0.5, "rows stack: dawn {dawn:?}, dusk {dusk:?}");
         assert!(!texts.iter().any(|(t, _, _)| t == "no triggers on this map"));
 
@@ -66,7 +66,7 @@ mod society {
         use bevy_cauldron::ops_scripts::{Bind, Trigger};
         let t = Trigger {
             id: "t".into(),
-            on: "Activity(\"work\")".into(),
+            on: "!Activity work".into(),
             condition: Some("true".into()),
             then: "fx.bark(actor, \"hi\");".into(),
             once: false,
@@ -75,7 +75,7 @@ mod society {
         };
         assert_eq!(
             trigger_line(&t),
-            "trigger t | Activity(\"work\") | true | fx.bark(actor, \"hi\"); | people=Mara,Tobin | area=0,0,4,4"
+            "trigger t | !Activity work | true | fx.bark(actor, \"hi\"); | people=Mara,Tobin | area=0,0,4,4"
         );
     }
 }

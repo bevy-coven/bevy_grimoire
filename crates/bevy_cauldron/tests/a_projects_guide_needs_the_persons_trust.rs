@@ -33,7 +33,7 @@ fn editor(tag: &str) -> (App, PathBuf, PathBuf, PathBuf) {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").build("m");
     let home = root.join(".user-config");
     std::fs::create_dir_all(&home).expect("the person's folder is made");
-    let store = root.join("trusted.ron");
+    let store = root.join("trusted.yaml");
     TrustStore::default().save(&store).expect("an empty store");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.insert_resource(UserGuideFile(home.join(USER_FILE)));
@@ -229,7 +229,7 @@ fn the_session_remembers_what_was_refused() {
 ///
 /// The long-guide question has **no affirmative grant**. A two-answer modal's `Y` would have to mean one of
 /// them, and the only grants available are the text's (unread — the question cannot show it) and
-/// `Scope::Project`, **which is the same list `TrustStore::decision` reads for `agent.ron` and `play.ron`**:
+/// `Scope::Project`, **which is the same list `TrustStore::decision` reads for `agent.yaml` and `play.yaml`**:
 /// a long guide plus a habitual `Y` would trust the project's program launches, which is a decision nobody
 /// made about a program. So the question is a note with one answer, and `Y` does nothing at all.
 #[test]

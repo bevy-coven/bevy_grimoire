@@ -25,10 +25,10 @@
 //! Every addressable thing here carries an optional `note:`. That is deliberate and it is what lets a
 //! map be written by an ordinary serializer.
 //!
-//! This project already knows what happens otherwise. `assets/site/site67.ron` is 15% comments and its
-//! props list carries more prose than data; `assets/config/config.ron` carries ~563 comment lines, and
+//! This project already knows what happens otherwise. `assets/site/site67.yaml` is 15% comments and its
+//! props list carries more prose than data; `assets/config/config.yaml` carries ~563 comment lines, and
 //! on 2026-07-16 a `to_string_pretty` bake deleted 279 of them. The response there was
-//! [`crate::ron_surgery`] — rewrite the file as text so the comments survive. That is the right answer
+//! a surgical text rewrite of the file so the comments survive. That is the right answer
 //! for a file a human authored and a tool visits.
 //!
 //! For a format being designed now it is the wrong problem to solve. If the reasoning is a **field**,
@@ -38,7 +38,7 @@
 //! generalises it.
 //!
 //! So: an grimoire map is serialized normally and **never** text-spliced. The surgical writer stays for
-//! `site67.ron` and `config.ron`, whose prose is a 48-line ASCII floor plan and paragraphs introducing
+//! `site67.yaml` and `config.yaml`, whose prose is a 48-line ASCII floor plan and paragraphs introducing
 //! blocks of records — none of it attached to a record, so none of it with a field to live in.
 //!
 //! # Versioning: refuse what you cannot understand
@@ -76,7 +76,7 @@ use crate::placement::ir::Guard;
 /// *removal*, so `deny_unknown_fields` means a map still carrying them is refused by name rather
 /// than read with them ignored — which is the loud failure this schema's rules are for. **`6`
 /// replaced `palette` with [`Map::bash`]** — the ad-hoc per-map list became a combination declared
-/// once in `kits.ron`, so two maps can draw on the same one and it is validated in one place.
+/// once in `kits.yaml`, so two maps can draw on the same one and it is validated in one place.
 /// **`7` added [`Map::enclosure`]** — how much of a generated region should close into rooms was a
 /// constant in the editor, so the author who wanted more enclosed rooms edited Rust (E-005). Its
 /// default is the pair of numbers the editor shipped, so an older map generates exactly as it did.
@@ -85,6 +85,15 @@ use crate::placement::ir::Guard;
 /// **`9` added [`Placed::family`]** — the family-crate settings a piece carries; an older map says
 /// `family: {}` by saying nothing.
 pub const MAP_VERSION: u32 = 9;
+
+/// **The name a map's file carries**, with the map's own name in it: `maps/town.map.yaml`. The suffix is the
+/// part a caller needs, since the stem is the map's name.
+pub const MAP_SUFFIX: &str = ".map.yaml";
+
+/// **One map file's name**, for a refusal that names the file it is about: `yard` → `maps/yard.map.yaml`.
+pub fn file_of(name: &str) -> String {
+    format!("maps/{name}{MAP_SUFFIX}")
+}
 
 /// One authored world.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -130,7 +139,7 @@ pub struct Map {
     /// cross kits. `OpenMap::palette_namespaces` folds the namespaces the content already names
     /// back in, so naming a bash cannot strand a placement.
     ///
-    /// The name is not checked here — a map validates in isolation and cannot see `kits.ron`.
+    /// The name is not checked here — a map validates in isolation and cannot see `kits.yaml`.
     /// `OpenMap::open` refuses a name the project does not declare.
     ///
     /// **No `serde(default)`, and it would change nothing if there were one.** Serde deserializes a
@@ -467,216 +476,27 @@ pub enum Effect {
     Drain { drive: String, rate: f32 },
 }
 
-/// One value in the row printer's config, with the refusal naming what it was for.
-fn compact<T: Serialize>(
-    value: &T,
-    config: &ron::ser::PrettyConfig,
-    what: &str,
-) -> Result<String, String> {
-    ron::ser::to_string_pretty(value, config.clone())
-        .map_err(|e| format!("map: serialize `{what}`: {e}"))
-}
-
-/// **A patch written as only what it overrides**, or as all of it when that cannot be proved safe.
-///
-/// `full` and `default` are the patch and [`Descriptor::default`] in the row printer's compact
-/// form, so their struct fields line up one for one. Every field the two say alike is dropped, at
-/// every depth of nested structs; what is left is read back, and kept only if it is the same patch.
-/// A field whose serde default is not its `Default` value would read back differently, and then the
-/// whole patch is written, so the shortening can never lose an override.
-fn minimal_patch(patch: &Descriptor, full: &str, default: &str) -> String {
-    let short = prune(full, default).unwrap_or_else(|| "()".to_owned());
-    match ron::from_str::<Descriptor>(&short) {
-        Ok(back) if back == *patch => short,
-        _ => full.to_owned(),
-    }
-}
-
-/// `value` without the struct fields `default` also says, or `None` when it says nothing else.
-fn prune(value: &str, default: &str) -> Option<String> {
-    if value == default {
-        return None;
-    }
-    let (Some(fields), Some(defaults)) = (struct_fields(value), struct_fields(default)) else {
-        return Some(value.to_owned());
-    };
-    let kept: Vec<String> = fields
-        .iter()
-        .filter_map(|(name, field)| {
-            match defaults.iter().find(|(other, _)| other == name) {
-                Some((_, was)) => prune(field, was),
-                None => Some((*field).to_owned()),
-            }
-            .map(|written| format!("{name}: {written}"))
-        })
-        .collect();
-    if kept.is_empty() {
-        return Some(value.to_owned());
-    }
-    Some(format!("({})", kept.join(", ")))
-}
-
-/// The `name: value` fields of a compact struct, `(a: 1, b: (c: 2))`, or `None` for anything else
-/// (a tuple, a list, an option, a scalar, an empty `()`).
-fn struct_fields(text: &str) -> Option<Vec<(&str, &str)>> {
-    let inner = text.strip_prefix('(')?.strip_suffix(')')?;
-    let items = split_top(inner)?;
-    if items.is_empty() {
-        return None;
-    }
-    items
-        .into_iter()
-        .map(|item| {
-            let (name, value) = item.split_once(": ")?;
-            let ident = !name.is_empty()
-                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-                && !name.starts_with(|c: char| c.is_ascii_digit());
-            ident.then_some((name, value))
-        })
-        .collect()
-}
-
-/// Split `inner` on the commas at its own depth, outside strings. `None` when the brackets do not
-/// balance, which means `inner` was not the inside of one value.
-fn split_top(inner: &str) -> Option<Vec<&str>> {
-    let mut items = Vec::new();
-    let (mut depth, mut start, mut in_string, mut escaped) = (0usize, 0usize, false, false);
-    for (i, c) in inner.char_indices() {
-        if in_string {
-            match (escaped, c) {
-                (true, _) => escaped = false,
-                (false, '\\') => escaped = true,
-                (false, '"') => in_string = false,
-                _ => {}
-            }
-            continue;
-        }
-        match c {
-            '"' => in_string = true,
-            '(' | '[' | '{' => depth += 1,
-            ')' | ']' | '}' => depth = depth.checked_sub(1)?,
-            ',' if depth == 0 => {
-                items.push(inner[start..i].trim());
-                start = i + 1;
-            }
-            _ => {}
-        }
-    }
-    if depth != 0 || in_string {
-        return None;
-    }
-    let last = inner[start..].trim();
-    if !last.is_empty() {
-        items.push(last);
-    }
-    Some(items)
-}
-
-/// `\'` written back as `'`. The printer escapes a string with `char::escape_debug`, which escapes
-/// an apostrophe that RON reads the same either way. A backslash is always an escape's first
-/// character, so walking escape by escape never mistakes an escaped backslash for one.
-fn unescape_apostrophes(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut chars = text.chars();
-    while let Some(c) = chars.next() {
-        if c != '\\' {
-            out.push(c);
-            continue;
-        }
-        match chars.next() {
-            Some('\'') => out.push('\''),
-            Some(next) => {
-                out.push('\\');
-                out.push(next);
-            }
-            None => out.push('\\'),
-        }
-    }
-    out
-}
-
 impl Map {
     /// Parse and validate. One path, no fallback — every failure names what and where.
     pub fn parse(text: &str) -> Result<Map, String> {
-        let map: Map = ron::from_str(text).map_err(|e| format!("map: {e}"))?;
+        let map: Map = crate::yaml::from_str(text, "a map").map_err(|p| format!("map: {}", p.line()))?;
         map.validate()?;
         Ok(map)
     }
 
-    /// **The map as its file: one placement a line.**
+    /// **The map as its file**, written by the one YAML writer.
     ///
-    /// # Why not `to_string_pretty` of the whole map
+    /// # Why the one writer, and what happened to the row printer
     ///
-    /// The pretty printer puts every field of every placement on its own line, so a 739-row town is
-    /// four thousand lines and a person reading a diff scrolls past five lines to see one yaw. A
-    /// hand-exported map writes a row a line, and the first save of one through the plain printer
-    /// reformatted the whole file: an edit of one placement became a diff of every placement. That
-    /// matters most when the editor writes every change through to a running game (`--live`), where
-    /// each write is a commit-sized diff in someone's tree.
-    ///
-    /// So the header is the pretty printer's, unchanged, and each row is the same printer with
-    /// `compact_structs` (and compact arrays and maps), which writes a placement on one line. The
-    /// result reads back as the same map; a file already written this way reads back and writes byte
-    /// for byte.
-    ///
-    /// # Two things the printer says that a hand-written file does not
-    ///
-    /// - **A placement's `patch` states only what it overrides.** [`Descriptor`] writes every field,
-    ///   defaults included, because the library is written that way; a patch is an override, and a
-    ///   road's `Some((extent: (footprint: Some((4.877, 190.1975)))))` became a 400-character row
-    ///   of `None`s and empty lists. [`minimal_patch`] drops every field the default descriptor
-    ///   also says, and checks that what is left reads back as the same patch.
-    /// - **An apostrophe is written as itself.** The printer escapes every string with
-    ///   `char::escape_debug`, which writes `'` as `\'`; both read back as the same string, and
-    ///   prose with apostrophes is what notes are made of.
-    pub fn to_ron(&self) -> Result<String, String> {
-        let pretty = ron::ser::PrettyConfig::default();
-        let header = Map { placements: Vec::new(), ..self.clone() };
-        let mut text = ron::ser::to_string_pretty(&header, pretty.clone())
-            .map_err(|e| format!("map: serialize: {e}"))?;
-        if !self.placements.is_empty() {
-            const EMPTY: &str = "\n    placements: [],\n";
-            let at = text.find(EMPTY).ok_or_else(|| {
-                "map: serialize: the header has no `placements: [],` line to fill".to_owned()
-            })?;
-            let row_config = pretty
-                .compact_structs(true)
-                .compact_arrays(true)
-                .compact_maps(true);
-            let default_patch = compact(&Descriptor::default(), &row_config, "the default patch")?;
-            let mut rows = String::from("\n    placements: [\n");
-            for placed in &self.placements {
-                let row = match &placed.patch {
-                    None => compact(placed, &row_config, &placed.id)?,
-                    Some(patch) => {
-                        // The row with the default descriptor standing in for the patch, so the
-                        // patch's place in the row is the printer's, then the minimal patch in it.
-                        let stand_in = Placed {
-                            patch: Some(Descriptor::default()),
-                            ..placed.clone()
-                        };
-                        let row = compact(&stand_in, &row_config, &placed.id)?;
-                        let full = compact(patch, &row_config, &placed.id)?;
-                        let written = minimal_patch(patch, &full, &default_patch);
-                        row.replacen(
-                            &format!("patch: Some({default_patch})"),
-                            &format!("patch: Some({written})"),
-                            1,
-                        )
-                    }
-                };
-                rows.push_str("        ");
-                rows.push_str(&row);
-                rows.push_str(",\n");
-            }
-            rows.push_str("    ],\n");
-            text.replace_range(at..at + EMPTY.len(), &rows);
-        }
-        let mut text = unescape_apostrophes(&text);
-        if !text.ends_with('\n') {
-            text.push('\n');
-        }
-        Ok(text)
+    /// A map used to be written by `ron::ser::to_string_pretty` with a second pass that put each placement on
+    /// one line, because the pretty printer spent five lines on a row and a 739-row town was four thousand
+    /// lines to scroll past a single yaw. YAML has no such problem: a placement is a block mapping, so a row
+    /// is the fields it sets and nothing else, and an edit of one field is a diff of one line. The second
+    /// pass is gone with the format, which is one fewer thing between a value and its text — and the
+    /// shortening it existed for (`minimal_patch`, `prune`, `struct_fields`) went with it, because a YAML
+    /// row states only the fields it sets and a `patch` is a `Descriptor` whose defaults the reader applies.
+    pub fn to_yaml(&self) -> Result<String, String> {
+        crate::yaml::to_string(self).map_err(|p| format!("map: {}", p.line()))
     }
 
     /// **The map as a consumer sees it**: the same map, with every stamp's rows in
@@ -689,7 +509,7 @@ impl Map {
     /// [`Self::placements`] and finds only the hand-authored rows is reading a *different level*
     /// from the one the author drew: the editor showed the group, the game does not have it.
     ///
-    /// That was measured, not supposed. Sanctuary's `town.map.ron` was stamped once with
+    /// That was measured, not supposed. Sanctuary's `town.map.yaml` was stamped once with
     /// `town/house_cottage_plaster`; the editor drew its 18 members, and the game, loading the
     /// same file through [`crate::project_data::load`], received 728 placements where the editor
     /// had 746. The 18 missing rows were the house.
@@ -1126,28 +946,83 @@ mod tests {
     /// reformatted it would turn an edit of one yaw into a diff of every row.
     #[test]
     fn a_map_written_one_row_a_line_reads_back_byte_for_byte() -> Result<(), String> {
-        let text = r#"(
-    version: 7,
-    name: "yard",
-    origin: (0.0, 0.0, 0.0),
-    bounds: (300.0, 60.0, 1120.0),
-    bash: None,
-    placements: [
-        (id: "torch_00", descriptor: "town/torch", at: (-137.1617, -94.9464), yaw: 0.0, lift: 9.1441),
-        (id: "smelter_table", descriptor: "town/table", at: (-66.1, 120.6), yaw: 180.0, owned: true, owned_because: Some("the smith works here")),
-        (id: "smelter_ingots", descriptor: "dress_ingots_steel", at: (-66.1, 120.6), yaw: 0.0, on: Some("smelter_table")),
-        (id: "road_0_0", descriptor: "town/road", at: (-109.7293, 0.0), yaw: 90.0, patch: Some((extent: (footprint: Some((4.877, 190.1975)))))),
-    ],
-    locations: [],
-    note: Some("A yard, for the writer's test. Positions are metres."),
-    enclosure: (
-        wish: 0.25,
-        weight: 200,
-    ),
-)
-"#;
+        let text = r"version: 7
+name: yard
+origin:
+- 0.0
+- 0.0
+- 0.0
+bounds:
+- 300.0
+- 60.0
+- 1120.0
+bash: null
+placements:
+- id: torch_00
+  descriptor: town/torch
+  at:
+  - -137.1617
+  - -94.9464
+  yaw: 0.0
+  lift: 9.1441
+- id: smelter_table
+  descriptor: town/table
+  at:
+  - -66.1
+  - 120.6
+  yaw: 180.0
+  owned: true
+  owned_because: the smith works here
+- id: smelter_ingots
+  descriptor: dress_ingots_steel
+  at:
+  - -66.1
+  - 120.6
+  yaw: 0.0
+  on: smelter_table
+- id: road_0_0
+  descriptor: town/road
+  at:
+  - -109.7293
+  - 0.0
+  yaw: 90.0
+  patch:
+    id: ''
+    mesh: null
+    align:
+      scale: null
+      stretch_y: null
+      y_offset: null
+      pivot: null
+      rotate: null
+      front: null
+    extent:
+      footprint:
+      - 4.877
+      - 190.1975
+      height: null
+    mount: null
+    clearance: []
+    offers:
+      surfaces: []
+      faces: []
+      sockets: []
+    kind: []
+    effects: []
+    look: []
+    placement:
+      rooms: []
+      group: null
+    subgrid: null
+    note: null
+locations: []
+note: A yard, for the writer's test. Positions are metres.
+enclosure:
+  wish: 0.25
+  weight: 200
+";
         let map = Map::parse(text)?;
-        let written = map.to_ron()?;
+        let written = map.to_yaml()?;
         assert_eq!(written, text);
         assert_eq!(Map::parse(&written)?, map);
         Ok(())
@@ -1165,17 +1040,34 @@ mod tests {
     /// loud, and this pins it — the shipped maps were migrated in the same commit.
     #[test]
     fn a_map_still_carrying_the_moved_lattice_is_refused_by_name() {
-        let stale = r#"(version: 4, name: "m", origin: (0.0, 0.0, 0.0), face_bands: 2, placements: [], locations: [])"#;
+        let stale = "version: 4\nname: m\norigin: [0.0, 0.0, 0.0]\nface_bands: 2\nplacements: []\nlocations: []\n";
         let e = Map::parse(stale).err().unwrap_or_default();
         assert!(e.contains("face_bands"), "the refusal names the field: {e}");
 
-        let stale = r#"(version: 4, name: "m", origin: (0.0, 0.0, 0.0), snap_divisor: 4, placements: [], locations: [])"#;
+        let stale = "version: 4\nname: m\norigin: [0.0, 0.0, 0.0]\nsnap_divisor: 4\nplacements: []\nlocations: []\n";
         let e = Map::parse(stale).err().unwrap_or_default();
         assert!(e.contains("snap_divisor"), "the refusal names the field: {e}");
 
         // And one carrying neither of them still opens, meaning exactly what it meant.
         let before =
-            r#"(version: 2, name: "m", origin: (0.0, 0.0, 0.0), placements: [], locations: [])"#;
+            r"version: 2
+name: m
+origin:
+- 0.0
+- 0.0
+- 0.0
+bounds:
+- 10.0
+- 4.0
+- 10.0
+bash: null
+placements: []
+locations: []
+note: null
+enclosure:
+  wish: 0.25
+  weight: 200
+";
         Map::parse(before).unwrap_or_else(|e| panic!("a pre-lattice map still opens: {e}"));
     }
 
@@ -1189,27 +1081,78 @@ mod tests {
     #[test]
     fn a_map_names_a_bash_or_says_none_and_none_is_every_bound_kit() {
         let stated =
-            r#"(version: 6, name: "m", origin: (0.0, 0.0, 0.0), bash: None, placements: [], locations: [])"#;
+            r"version: 6
+name: m
+origin:
+- 0.0
+- 0.0
+- 0.0
+bounds:
+- 10.0
+- 4.0
+- 10.0
+bash: null
+placements: []
+locations: []
+note: null
+enclosure:
+  wish: 0.25
+  weight: 200
+";
         let m = Map::parse(stated).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(m.bash, None, "`None` is every bound kit, and it is written down");
         assert_eq!(Map::default().bash, None, "a new map starts there too");
 
-        let silent = r#"(version: 6, name: "m", origin: (0.0, 0.0, 0.0), placements: [], locations: [])"#;
+        let silent = r"version: 6
+name: m
+origin:
+- 0.0
+- 0.0
+- 0.0
+bounds:
+- 10.0
+- 4.0
+- 10.0
+bash: null
+placements: []
+locations: []
+note: null
+enclosure:
+  wish: 0.25
+  weight: 200
+";
         let m = Map::parse(silent).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(m.bash, None, "and omitting it is the same value, not a second meaning");
 
         let named =
-            r#"(version: 6, name: "m", origin: (0.0, 0.0, 0.0), bash: Some("hub"), placements: [], locations: [])"#;
+            r"version: 6
+name: m
+origin:
+- 0.0
+- 0.0
+- 0.0
+bounds:
+- 10.0
+- 4.0
+- 10.0
+bash: hub
+placements: []
+locations: []
+note: null
+enclosure:
+  wish: 0.25
+  weight: 200
+";
         let m = Map::parse(named).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(m.bash.as_deref(), Some("hub"));
 
         // **Written back out every time.** No `skip_serializing_if`, so a map saved from this
         // program always says which combination it draws on.
-        let out = ron::ser::to_string(&Map { bash: Some("hub".into()), ..Map::default() })
-            .unwrap_or_else(|e| panic!("{e}"));
-        assert!(out.contains("bash:Some(\"hub\")") || out.contains("bash: Some(\"hub\")"), "{out}");
-        let out = ron::ser::to_string(&Map::default()).unwrap_or_else(|e| panic!("{e}"));
-        assert!(out.contains("bash:None") || out.contains("bash: None"), "{out}");
+        let out = crate::yaml::to_string(&Map { bash: Some("hub".into()), ..Map::default() })
+            .unwrap_or_else(|p| panic!("{}", p.line()));
+        assert!(out.contains("bash: hub"), "{out}");
+        let out = crate::yaml::to_string(&Map::default()).unwrap_or_else(|p| panic!("{}", p.line()));
+        assert!(out.contains("bash: null"), "{out}");
     }
 
     fn table_map() -> Map {
@@ -1350,7 +1293,7 @@ mod tests {
     fn the_map_round_trips_through_ron() {
         let m = table_map();
         let text =
-            ron::ser::to_string_pretty(&m, ron::ser::PrettyConfig::default()).expect("serializes");
+            m.to_yaml().expect("serializes");
         assert_eq!(Map::parse(&text).expect("parses"), m);
     }
 
@@ -1378,7 +1321,7 @@ mod tests {
             });
         }
         let text =
-            ron::ser::to_string_pretty(&m, ron::ser::PrettyConfig::default()).expect("serializes");
+            m.to_yaml().expect("serializes");
 
         // The lines that used to be written for every placement, none of which says anything when
         // it holds its default. **`note` is counted on the placement rows only**: the map's own
@@ -1429,7 +1372,7 @@ mod tests {
             ..Placed::default()
         });
         let text =
-            ron::ser::to_string_pretty(&m, ron::ser::PrettyConfig::default()).expect("serializes");
+            m.to_yaml().expect("serializes");
         for stated in [
             "owned: true",
             "the gate the level starts at",
@@ -1445,7 +1388,7 @@ mod tests {
     }
 
     /// **The reason `note:` is a field.** The same `to_string_pretty` that deleted 279 lines of
-    /// rationale from `config.ron` on 2026-07-16 carries these through untouched, because they are
+    /// rationale from `config.yaml` on 2026-07-16 carries these through untouched, because they are
     /// data. No surgical writer, no comment-preserving pass, nothing to forget.
     ///
     /// The assertion is deliberately on the *serialized text* as well as the parsed value: a
@@ -1457,7 +1400,7 @@ mod tests {
         m.placements[0].note = Some("the slab the specimen goes on".into());
 
         let text =
-            ron::ser::to_string_pretty(&m, ron::ser::PrettyConfig::default()).expect("serializes");
+            m.to_yaml().expect("serializes");
         for prose in [
             "a galley, for the schema tests",
             "the slab the specimen goes on",
@@ -1496,8 +1439,7 @@ mod tests {
         ] {
             let mut m = table_map();
             m.note = Some(prose.to_owned());
-            let text = ron::ser::to_string_pretty(&m, ron::ser::PrettyConfig::default())
-                .expect("serializes");
+            let text = m.to_yaml().expect("serializes");
             assert_eq!(
                 Map::parse(&text).expect("parses").note.as_deref(),
                 Some(prose),
@@ -1509,14 +1451,30 @@ mod tests {
     /// Absence is the normal case — a map with nothing to explain must not be forced to say so.
     #[test]
     fn a_note_is_optional_everywhere() {
-        let text = r#"(
-            version: 1,
-            name: "bare",
-            origin: (0.0, 0.0, 0.0),
-            placements: [
-                ( id: "a", descriptor: "crate", at: (1.0, 1.0), yaw: 0.0 ),
-            ],
-        )"#;
+        let text = r"version: 1
+name: bare
+origin:
+- 0.0
+- 0.0
+- 0.0
+bounds:
+- 10.0
+- 4.0
+- 10.0
+bash: null
+placements:
+- id: a
+  descriptor: crate
+  at:
+  - 1.0
+  - 1.0
+  yaw: 0.0
+locations: []
+note: null
+enclosure:
+  wish: 0.25
+  weight: 200
+";
         let m = Map::parse(text).expect("a map with no notes must parse");
         assert_eq!(m.note, None);
         assert_eq!(m.placements[0].note, None);

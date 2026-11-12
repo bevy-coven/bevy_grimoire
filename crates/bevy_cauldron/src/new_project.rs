@@ -32,7 +32,7 @@ use crate::screen::Screen;
 use crate::ui::submit_button;
 
 /// The vocabulary every new project starts from, byte for byte as the example project keeps it.
-pub(crate) const VOCAB: &[u8] = include_bytes!("../../../assets/grimoire/vocab.ron");
+pub(crate) const VOCAB: &[u8] = include_bytes!("../../../assets/grimoire/vocab.yaml");
 
 /// What a new project starts with.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -53,7 +53,7 @@ const FIRST_MAP_METRES: [f32; 3] = [10.0, 10.0, 4.0];
 /// Where the Prototype Kit's meshes are in the example project (and in the new one, which keeps the path so each row's
 /// `mesh` names the same file), and the file holding the kit's rows.
 const PROTOTYPE_MESHES: &str = "assets/kenney_prototype-kit";
-const PROTOTYPE_ROWS: &str = "assets/grimoire/library_kenney_from_manifests.ron";
+const PROTOTYPE_ROWS: &str = "assets/grimoire/library_kenney_from_manifests.yaml";
 
 /// What a Starter kit's library says about itself, in place of the example's "generated" note.
 const PROTOTYPE_NOTE: &str = "Kenney's Prototype Kit (CC0, its licence is beside the meshes). Add your own meshes from the library; they land in this kit.";
@@ -231,7 +231,7 @@ fn copy_prototype_kit(dir: &Path) -> Result<(), String> {
     let meshes = example.join(PROTOTYPE_MESHES);
     crate::launcher::copy_tree(&meshes, &dir.join(PROTOTYPE_MESHES)).map_err(|e| format!("{} was not copied: {e}", meshes.display()))?;
     let into = dir.join(crate::catalog::GRIMOIRE_DIR).join(STARTER_KIT).join(bevy_grimoire_core::policy::LIBRARY_FILE);
-    bevy_grimoire_core::ron_surgery::save_atomic(&into, &library.to_ron()?)
+    bevy_grimoire_core::save::save_atomic(&into, &library.to_yaml()?)
 }
 
 /// **The file a new project is given so the generated folder is not committed**, and what it says.
@@ -393,7 +393,7 @@ fn spawn_the_card(
                                     // the project still opens — the guide is simply withheld until the
                                     // project page can allow it.
                                     // **The grant is part of making the project**, and its store is
-                                    // resolved here: `None` is the person's own `trusted.ron`
+                                    // resolved here: `None` is the person's own `trusted.yaml`
                                     // (`crate::trusted::store_path`), so a real editor always writes one.
                                     // There is no silent "no store, no grant" arm: a guide nobody allowed
                                     // is the state this whole slice exists to prevent.

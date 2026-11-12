@@ -4,7 +4,7 @@
 //! compiler. A **new component type or a new system** does not, so the rebuild is made a step the
 //! person can watch rather than a wait they endure outside the editor:
 //!
-//! - **`game_build`** runs the build command `play.ron` names (`build`), behind the same trust gate as
+//! - **`game_build`** runs the build command `play.yaml` names (`build`), behind the same trust gate as
 //!   `play`: a file that names a program names this one too, and a person allows it the once.
 //! - **The build is a background job** ([`crate::jobs`], UI-22). **Cargo is run, never
 //!   reimplemented**: the command is the file's own, with `--message-format=json-diagnostic-rendered-ansi`
@@ -47,7 +47,7 @@ use crate::screen::Screen;
 /// name the same job.
 pub const BUILD_JOB: &str = "game_build";
 
-/// **The flag cargo is given for machine-readable messages**, when `play.ron`'s own build command does
+/// **The flag cargo is given for machine-readable messages**, when `play.yaml`'s own build command does
 /// not name one. A command that names its own `--message-format` is run as written.
 ///
 /// # Why not the issue's `json-render-diagnostics`
@@ -311,7 +311,7 @@ impl GameBuild {
         // **The command must exist before anything starts**, so a project that has none is told what
         // to write rather than shown a job that fails a second later.
         config.build_argv(&root).map_err(Refusal::new)?;
-        // **The same gate Play is behind**, on the build's own command: a `play.ron` that names a
+        // **The same gate Play is behind**, on the build's own command: a `play.yaml` that names a
         // program runs nothing until a person has allowed it, and the build is a second program the
         // same file names.
         if let Some(spec) = config.build_spec()
@@ -733,7 +733,7 @@ pub fn spawn_section(s: &mut ChildSpawnerCommands) {
 /// errors and the relaunch are one path.
 ///
 /// **A build no person has allowed is not started**: the question is raised, exactly as Play raises it
-/// for the game, because `play.ron` names both programs.
+/// for the game, because `play.yaml` names both programs.
 fn on_build_click(
     activate: On<Activate>,
     buttons: Query<(), With<BuildButton>>,

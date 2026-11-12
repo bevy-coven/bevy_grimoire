@@ -48,28 +48,29 @@ use bevy_cauldron::project::Project;
 use crate::fixtures;
 
 /// A rules file whose one weight prefix names the fixture's only piece, `alpha`.
-const RULES: &str = "(\n\
-    version: 1,\n\
-    blocks: [\n\
-        (\n\
-            example: \"m\",\n\
-            regions: [],\n\
-            cell: 2.0,\n\
-            size: (4, 4),\n\
-            border: None,\n\
-            no_empty: true,\n\
-            weights: [(prefix: \"alpha\", times: 2.0)],\n\
-            footprints: [],\n\
-            attempts: 8,\n\
-            seed: 7,\n\
-        ),\n\
-    ],\n)\n";
+const RULES: &str = r"version: 1
+blocks:
+- example: m
+  regions: []
+  cell: 2.0
+  size:
+  - 4
+  - 4
+  border: null
+  no_empty: true
+  weights:
+  - prefix: alpha
+    times: 2.0
+  footprints: []
+  attempts: 8
+  seed: 7
+";
 
 fn boot(name: &str, rules: &str) -> App {
     let root = fixtures::Fixture::new(name)
         .side(8.0)
         .descriptor("alpha", "alpha")
-        .rules(rules)
+        .rules_text(rules)
         .build("m");
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());
@@ -123,10 +124,10 @@ fn undo(app: &mut App) -> serde_json::Value {
 
 /// The file, parsed — so a rewrite that kept the right characters but broke the file cannot pass.
 fn on_disk(app: &App) -> bevy_grimoire_core::rules::Rules {
-    let path = app.world().resource::<Project>().project_dir.join("rules.ron");
+    let path = app.world().resource::<Project>().project_dir.join("rules.yaml");
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     bevy_grimoire_core::rules::Rules::parse(&text)
-        .unwrap_or_else(|e| panic!("rules.ron no longer parses: {e}\n{text}"))
+        .unwrap_or_else(|e| panic!("rules.yaml no longer parses: {e}\n{text}"))
 }
 
 /// **The preview says a prefix tunes nothing, before anything is written.**
@@ -256,23 +257,23 @@ fn a_list_with_one_dead_prefix_names_only_that_one() {
 /// person's Cmd+Z is refused.
 #[test]
 fn a_file_that_already_held_a_dead_prefix_can_still_be_changed_and_undone() {
-    const STALE: &str = "(\n\
-        version: 1,\n\
-        blocks: [\n\
-            (\n\
-                example: \"m\",\n\
-                regions: [],\n\
-                cell: 2.0,\n\
-                size: (4, 4),\n\
-                border: None,\n\
-                no_empty: true,\n\
-                weights: [(prefix: \"gone/\", times: 3.0)],\n\
-                footprints: [],\n\
-                attempts: 8,\n\
-                seed: 7,\n\
-            ),\n\
-        ],\n\
-    )\n";
+    const STALE: &str = r"version: 1
+blocks:
+- example: m
+  regions: []
+  cell: 2.0
+  size:
+  - 4
+  - 4
+  border: null
+  no_empty: true
+  weights:
+  - prefix: gone/
+    times: 3.0
+  footprints: []
+  attempts: 8
+  seed: 7
+";
     let mut app = boot("weight_stale_prefix", STALE);
     assert_eq!(
         on_disk(&app).blocks[0].weights[0].prefix,

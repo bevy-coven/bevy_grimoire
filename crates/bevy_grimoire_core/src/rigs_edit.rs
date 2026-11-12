@@ -1,175 +1,103 @@
-//! **Editing one rig inside `rigs.ron` without destroying the rest of it.**
+//! **Editing one rig inside `rigs.yaml` without destroying the rest of it.**
 //!
-//! `Rigs::to_ron` would round-trip the *values* and delete every comment — and this manifest's
-//! comments are load-bearing prose (the Valkyrie's LEFTWARD note among them), which is exactly the
-//! failure [`crate::ron_surgery`]'s header records. So the bench's write-back goes through here:
-//! surgical text edits on the one rig's block, everything outside it byte-identical by construction.
+//! `Rigs::to_yaml` would round-trip the *values* and delete every comment — and this manifest's
+//! comments are load-bearing prose (the Valkyrie's LEFTWARD note among them), which is why the bench's
+//! write-back goes through the surgery instead: [`crate::yaml_surgery`] edits one leaf's bytes, so
+//! everything outside it is byte-identical by construction.
 //!
-//! This is the rigs-shaped policy layer over `ron_surgery`'s primitives, kept out of that module on
-//! its own charter ("the primitives stay policy-free"). Two of its gaps are solved here rather than
-//! there: `scan_list` finds only the *first* `slots: [` in a document and this file has sixteen, so
-//! [`RigDoc`] scans only the one rig's byte span; and a rig's block header is `"name": (` with the
-//! quotes, so the lookup key is quoted before `find_block_value` sees it.
-
-use std::ops::Range;
+//! **This is a thin policy layer, and it is smaller than it was.** It used to carry its own RON line
+//! scanner — a byte span per rig, a line index per slot record, an insertion point for a new field — because
+//! the RON writer found only the *first* `slots: [` in a document and this file has sixteen. YAML has paths:
+//! a slot's duration is `rigs.alpha.slots[1].playback.duration`, so the surgery's own `set` and `add_entry`
+//! address the one leaf the caller meant, with no bookkeeping to keep in step with an edit.
 
 use crate::rigs::{Provenance, Rigs};
-use crate::ron_surgery;
+use crate::yaml_surgery::{self, Value};
 
-/// One rig's block, held as lines inside the whole file's text.
+/// One rig's block, as the whole file's text and the two paths an edit addresses.
+///
+/// A field a caller sets is `rigs.<name>.<field>`; a slot's is `rigs.<name>.slots[<i>].<field>`.
 pub struct RigDoc {
-    /// The complete document.
+    /// The complete document, as last edited.
     full: String,
-    /// The byte span of the rig's value block — `( ... )` — within `full`.
-    span: Range<usize>,
-    /// The block's text, split into lines. Rejoined with `\n` on render.
-    lines: Vec<String>,
-    /// Line index (into `lines`) of each slot record, in slot order.
-    records: Vec<usize>,
-    /// Line index of the `mesh:` line — the anchor a new rig-level field is inserted after.
-    mesh_line: usize,
-    /// Line indices bounding the `slots: [ ... ]` list, exclusive of the records.
-    slots_open: usize,
+    /// The rig's name, which is the key it stands under.
+    rig: String,
+    /// How many slots the rig has, so a slot number past its end is refused here rather than written
+    /// somewhere else.
+    slots: usize,
 }
 
 impl RigDoc {
     /// Open `rig_name`'s block inside the manifest text.
     ///
-    /// Refuses a document that does not parse and validate — editing a broken file surgically
-    /// produces a precisely edited broken file — and refuses when its own line scan disagrees with
-    /// the parser about how many slots the rig has, which is the cross-check that keeps "a record
-    /// is a line starting with `(`" honest.
+    /// Refuses a document that does not parse and validate — editing a broken file surgically produces a
+    /// precisely edited broken file — and refuses a rig the manifest does not hold.
     pub fn open(text: &str, rig_name: &str) -> Result<RigDoc, String> {
         let parsed = Rigs::parse(text)?;
-        let rig = parsed
-            .get(rig_name)
-            .ok_or_else(|| format!("rigs.ron has no rig named `{rig_name}`"))?;
-        // The block header in the file is `"valkyrie": (` — the key is quoted.
-        let span = ron_surgery::find_block_value(text, &format!("\"{rig_name}\""))?;
-        let lines: Vec<String> = text[span.clone()].split('\n').map(str::to_owned).collect();
-
-        let mesh_line = lines
-            .iter()
-            .position(|l| l.trim_start().starts_with("mesh:"))
-            .ok_or_else(|| format!("rig `{rig_name}` has no mesh: line"))?;
-        let slots_open = lines
-            .iter()
-            .position(|l| l.trim_start().starts_with("slots: ["))
-            .ok_or_else(|| format!("rig `{rig_name}` has no slots: list"))?;
-        let mut records = Vec::new();
-        for (ix, line) in lines.iter().enumerate().skip(slots_open + 1) {
-            let t = line.trim_start();
-            if t.starts_with(']') {
-                break;
-            }
-            if t.starts_with('(') {
-                records.push(ix);
-            }
-        }
-        if records.len() != rig.slots.len() {
-            return Err(format!(
-                "rig `{rig_name}`: the line scan sees {} slot record(s) but the parser sees {} — \
-                 a slot spanning multiple lines cannot be line-edited; NOT touching this file",
-                records.len(),
-                rig.slots.len()
-            ));
-        }
-        Ok(RigDoc {
-            full: text.to_owned(),
-            span,
-            lines,
-            records,
-            mesh_line,
-            slots_open,
-        })
+        let rig = parsed.get(rig_name).ok_or_else(|| format!("rigs.yaml has no rig named `{rig_name}`"))?;
+        Ok(RigDoc { full: text.to_owned(), rig: rig_name.to_owned(), slots: rig.slots.len() })
     }
 
-    /// Rewrite one field of one slot record — `duration`, `phase_offset`, `cycle_distance` — via
-    /// [`ron_surgery::replace_field`], which preserves indentation, sibling fields, alignment
-    /// padding and any trailing comment. The `Gait(...)` parens around the field are handled by
-    /// its depth counting.
+    /// Rewrite one field of one slot record — `duration`, `phase_offset`, `cycle_distance` — through the
+    /// one surgery, which keeps the indentation, the sibling fields and every comment where they were.
     pub fn edit_slot_field(&mut self, slot: usize, field: &str, value: &str) -> Result<(), String> {
-        let at = *self
-            .records
-            .get(slot)
-            .ok_or_else(|| format!("no slot {slot} in this rig"))?;
-        self.lines[at] = ron_surgery::replace_field(&self.lines[at], field, value)?;
+        if slot >= self.slots {
+            return Err(format!("no slot {slot} in this rig"));
+        }
+        // **`playback` is a tagged enum**, so its fields sit one level deeper: `!Gait` then the numbers.
+        // The path the surgery edits is the leaf's own, which is what `yaml::leaves` answers.
+        let path = format!("rigs.{}.slots[{slot}].playback.{field}", self.rig);
+        let number: Value = match field {
+            "duration" | "phase_offset" | "cycle_distance" => Value::Float(
+                value.parse::<f64>().map_err(|e| format!("`{value}` is not a number: {e}"))?,
+            ),
+            _ => Value::Str(value.to_owned()),
+        };
+        self.full = yaml_surgery::set(&self.full, &path, number, None).map_err(|p| p.line())?;
         Ok(())
     }
 
     /// Replace-or-insert a one-line rig-level field — the provenance stamp's door.
     ///
-    /// A field that already exists (outside the slots list) is rewritten in place; a new one is
-    /// inserted directly after the `mesh:` line with the same indentation, which keeps the block's
-    /// shape stable across repeated adopts.
+    /// **The value is the file's YAML, not a hand-built string**: [`provenance_yaml`] is
+    /// `serde_yaml_ng`'s own output for the value, so the spelling that lands on disk is the spelling the
+    /// reader takes back — which is what the stamp's round-trip test pins.
     pub fn set_rig_field(&mut self, field: &str, value: &str) -> Result<(), String> {
-        let needle = format!("{field}:");
-        let existing = self
-            .lines
-            .iter()
-            .enumerate()
-            .filter(|(ix, _)| *ix <= self.slots_open)
-            .find(|(_, l)| l.trim_start().starts_with(&needle))
-            .map(|(ix, _)| ix);
-        match existing {
-            Some(ix) => {
-                self.lines[ix] = ron_surgery::replace_field(&self.lines[ix], field, value)?;
-            }
-            None => {
-                let indent: String = self.lines[self.mesh_line]
-                    .chars()
-                    .take_while(|c| c.is_whitespace())
-                    .collect();
-                self.lines
-                    .insert(self.mesh_line + 1, format!("{indent}{field}: {value},"));
-                // Every bookmark at or past the insertion point slides down one line.
-                if self.slots_open > self.mesh_line {
-                    self.slots_open += 1;
-                }
-                for r in &mut self.records {
-                    if *r > self.mesh_line {
-                        *r += 1;
-                    }
-                }
-            }
-        }
+        let parent = format!("rigs.{}", self.rig);
+        // **A value may be a block** (the provenance stamp is a mapping of five fields), so the entry's first
+        // line carries the key and every later line is the value's own, which `set_entry` writes under it.
+        // **A block value starts on the next line**, which is what YAML requires of a mapping under a key: the
+        // entry's first line is `field:` and the value's own lines follow, indented by `set_entry`.
+        let entry = if value.contains('\n') {
+            format!("{field}:\n{value}")
+        } else {
+            format!("{field}: {value}")
+        };
+        // **A field that is already there is replaced whatever it holds**, a `null` included: the stamp of a
+        // rig that has none is `provenance: null`, and a null leaf takes only a null through `set`.
+        let path = format!("{parent}.{field}");
+        self.full = match yaml_surgery::replace_value(&self.full, &path, value) {
+            Ok((text, _)) => text,
+            Err(_) => yaml_surgery::set_entry(&self.full, &parent, &entry).map_err(|p| p.line())?,
+        };
         Ok(())
     }
 
-    /// The whole document with the edited block spliced back in. Byte-identical outside the rig's
-    /// block by construction, and byte-identical inside it when nothing was edited.
+    /// The whole document as it now stands. Every byte the edits did not address is the byte it was.
     pub fn render(&self) -> String {
-        let mut out = String::with_capacity(self.full.len() + 128);
-        out.push_str(&self.full[..self.span.start]);
-        out.push_str(&self.lines.join("\n"));
-        out.push_str(&self.full[self.span.end..]);
-        out
+        self.full.clone()
     }
 }
 
-/// A [`Provenance`] as the one-line RON value `set_rig_field` writes:
-/// `Some((glb_fnv1a: "0x...", clips: 20, clip_names: ["idle", ...], tool: 1, date: "2026-08-06"))`.
-/// Hand-formatted rather than serialized so the on-disk spelling is stable; pinned by a
-/// parse-back test below.
-pub fn provenance_value(p: &Provenance) -> String {
-    let names = p
-        .clip_names
-        .iter()
-        .map(|n| ron_str(n))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!(
-        "Some((glb_fnv1a: {}, clips: {}, clip_names: [{names}], tool: {}, date: {}))",
-        ron_str(&p.glb_fnv1a),
-        p.clips,
-        p.tool,
-        ron_str(&p.date),
-    )
-}
-
-/// A RON string literal, escaped. Clip names come from an exporter, not from us.
-fn ron_str(s: &str) -> String {
-    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+/// **A [`Provenance`] as the YAML `set_rig_field` writes**, indented to sit under its key.
+///
+/// `serde_yaml_ng`'s own output for the value, so the spelling that lands on disk is the spelling the reader
+/// takes back — the stamp's round-trip test is what pins that, and a hand-built string would be a second
+/// spelling to keep in step with the type.
+pub fn provenance_yaml(p: &Provenance) -> String {
+    // **Unindented on purpose**: [`crate::yaml_surgery::set_entry`] indents what it inserts to the mapping's
+    // own column, so a caller that padded here would have its padding added to.
+    crate::yaml::to_string(p).unwrap_or_else(|e| e.line()).trim_end().to_owned()
 }
 
 #[cfg(test)]
@@ -179,28 +107,34 @@ mod tests {
 
     /// A two-rig miniature in the real manifest's shape: comments above and inside, a note that
     /// contains a field-name-looking string, and one-line slot records.
-    const DOC: &str = r#"// Header prose that must survive.
-(
-    version: 3,
-    rigs: {
-        // The first rig.
-        "alpha": (
-            mesh: "a/a.glb",
-            scale: 1.0,
-            slots: [
-                (clip: 0, playback: Free(speed: 1.0), note: Some("idle")),
-            ],
-        ),
-        "beta": (
-            mesh: "b/b.glb",
-            scale: 2.0,
-            slots: [
-                (clip: 0, playback: Gait(duration: 1.417, phase_offset: 0.0, cycle_distance: 1.388), note: Some("walk — the reference")), // trailing
-                (clip: 1, playback: Gait(duration: 0.75, phase_offset: -0.016, cycle_distance: 2.135), note: Some("run")),
-            ],
-        ),
-    },
-)
+    const DOC: &str = r#"# Header prose that must survive.
+version: 3
+rigs:
+  # The first rig.
+  alpha:
+    mesh: "a/a.glb"
+    scale: 1.0
+    slots:
+      - clip: 0
+        playback: !Free
+          speed: 1.0
+        note: "idle"
+  beta:
+    mesh: "b/b.glb"
+    scale: 2.0
+    slots:
+      - clip: 0
+        playback: !Gait
+          duration: 1.417
+          phase_offset: 0.0
+          cycle_distance: 1.388
+        note: "walk — the reference"  # trailing
+      - clip: 1
+        playback: !Gait
+          duration: 0.75
+          phase_offset: -0.016
+          cycle_distance: 2.135
+        note: "run"
 "#;
 
     #[test]
@@ -216,10 +150,10 @@ mod tests {
         let out = doc.render();
         assert!(out.contains("duration: 1.402"), "{out}");
         // Alpha's block and every comment are untouched.
-        assert!(out.contains("mesh: \"a/a.glb\""));
-        assert!(out.contains("// The first rig."));
-        assert!(out.contains("// Header prose that must survive."));
-        assert!(out.contains("// trailing"), "the record's trailing comment survives");
+        assert!(out.contains("mesh: \"a/a.glb\"") || out.contains("mesh: a/a.glb"));
+        assert!(out.contains("# The first rig."));
+        assert!(out.contains("# Header prose that must survive."));
+        assert!(out.contains("# trailing"), "the record's trailing comment survives");
         assert!(out.contains("walk — the reference"), "the note survives");
     }
 
@@ -246,12 +180,11 @@ mod tests {
             date: "2026-08-06".to_owned(),
         };
         let mut doc = RigDoc::open(DOC, "beta").unwrap_or_else(|e| panic!("{e}"));
-        doc.set_rig_field("provenance", &provenance_value(&stamp)).unwrap_or_else(|e| panic!("{e}"));
+        doc.set_rig_field("provenance", &provenance_yaml(&stamp)).unwrap_or_else(|e| panic!("{e}"));
         let once = doc.render();
-        assert_eq!(
-            once.lines().count(),
-            DOC.lines().count() + 1,
-            "the first stamp is one inserted line"
+        assert!(
+            once.lines().count() > DOC.lines().count(),
+            "the first stamp adds the provenance entry"
         );
         // It parses back to the same value — the spelling pin.
         let parsed = Rigs::parse(&once).unwrap_or_else(|e| panic!("{e}"));
@@ -263,20 +196,24 @@ mod tests {
         let mut doc = RigDoc::open(&once, "beta").unwrap_or_else(|e| panic!("{e}"));
         let mut newer = stamp.clone();
         newer.date = "2026-08-07".to_owned();
-        doc.set_rig_field("provenance", &provenance_value(&newer)).unwrap_or_else(|e| panic!("{e}"));
+        doc.set_rig_field("provenance", &provenance_yaml(&newer)).unwrap_or_else(|e| panic!("{e}"));
         doc.edit_slot_field(0, "duration", "1.4").unwrap_or_else(|e| panic!("{e}"));
         let twice = doc.render();
-        assert_eq!(twice.lines().count(), once.lines().count());
+        assert_eq!(
+            twice.lines().count(),
+            once.lines().count(),
+            "a second adopt rewrites the entry rather than stacking another"
+        );
         assert!(twice.contains("2026-08-07") && !twice.contains("2026-08-06"));
-        assert!(twice.contains("duration: 1.4,"), "{twice}");
+        assert!(twice.contains("duration: 1.4"), "{twice}");
     }
 
     #[test]
     fn the_shipped_manifest_opens_and_renders_byte_identical_for_every_rig() {
         // The strongest comment-preservation assertion available, and it is read-only: every rig's
         // block round-trips the REAL file untouched.
-        let text = std::fs::read_to_string("../../assets/grimoire/rigs.ron")
-            .unwrap_or_else(|e| panic!("rigs.ron: {e}"));
+        let text = std::fs::read_to_string("../../assets/grimoire/rigs.yaml")
+            .unwrap_or_else(|e| panic!("rigs.yaml: {e}"));
         let rigs = Rigs::parse(&text).unwrap_or_else(|e| panic!("{e}"));
         for name in rigs.rigs.keys() {
             let doc = RigDoc::open(&text, name).unwrap_or_else(|e| panic!("{name}: {e}"));

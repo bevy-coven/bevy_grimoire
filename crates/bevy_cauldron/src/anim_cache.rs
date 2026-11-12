@@ -28,7 +28,7 @@ use crate::project::Project;
 pub const CACHE_VERSION: u32 = 1;
 
 /// The cache file, relative to the project root.
-pub const CACHE_PATH: &str = "target/anim_bench_cache.ron";
+pub const CACHE_PATH: &str = "target/anim_bench_cache.yaml";
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct CacheFile {
@@ -66,13 +66,13 @@ fn warm_reports(root: &std::path::Path) -> BTreeMap<String, RigReport> {
     let Ok(text) = std::fs::read_to_string(root.join(CACHE_PATH)) else {
         return out; // no cache yet — the first session writes one
     };
-    let Ok(file) = ron::from_str::<CacheFile>(&text) else {
+    let Ok(file) = bevy_grimoire_core::yaml::from_str::<CacheFile>(&text, CACHE_PATH) else {
         return out; // an older/foreign shape re-measures; it does not complain
     };
     if file.version != CACHE_VERSION || file.tool != bevy_grimoire_core::rigs::BENCH_TOOL_VERSION {
         return out;
     }
-    let Ok(manifest_text) = std::fs::read_to_string(root.join("assets/grimoire/rigs.ron")) else {
+    let Ok(manifest_text) = std::fs::read_to_string(root.join("assets/grimoire/rigs.yaml")) else {
         return out;
     };
     let Ok(rigs) = bevy_grimoire_core::rigs::Rigs::parse(&manifest_text) else {
@@ -161,7 +161,7 @@ pub(crate) fn save_bench_cache(
         tool: bevy_grimoire_core::rigs::BENCH_TOOL_VERSION,
         entries,
     };
-    let Ok(text) = ron::ser::to_string_pretty(&file, ron::ser::PrettyConfig::default()) else {
+    let Ok(text) = bevy_grimoire_core::yaml::to_string(&file) else {
         return;
     };
     let path = project.root.join(CACHE_PATH);
@@ -193,8 +193,8 @@ mod tests {
         std::fs::create_dir_all(dir.join("assets/grimoire")).unwrap_or_else(|e| panic!("{e}"));
         std::fs::create_dir_all(dir.join("assets/characters")).unwrap_or_else(|e| panic!("{e}"));
         std::fs::copy(
-            ws.join("assets/grimoire/rigs.ron"),
-            dir.join("assets/grimoire/rigs.ron"),
+            ws.join("assets/grimoire/rigs.yaml"),
+            dir.join("assets/grimoire/rigs.yaml"),
         )
         .unwrap_or_else(|e| panic!("{e}"));
         std::fs::copy(
@@ -208,7 +208,7 @@ mod tests {
     fn valkyrie_report_and_rig(
         root: &std::path::Path,
     ) -> (RigReport, bevy_grimoire_core::rigs::Rig) {
-        let text = std::fs::read_to_string(root.join("assets/grimoire/rigs.ron"))
+        let text = std::fs::read_to_string(root.join("assets/grimoire/rigs.yaml"))
             .unwrap_or_else(|e| panic!("{e}"));
         let rigs = bevy_grimoire_core::rigs::Rigs::parse(&text).unwrap_or_else(|e| panic!("{e}"));
         let rig = rigs
@@ -225,8 +225,8 @@ mod tests {
             tool: bevy_grimoire_core::rigs::BENCH_TOOL_VERSION,
             entries,
         };
-        let text = ron::ser::to_string_pretty(&file, ron::ser::PrettyConfig::default())
-            .unwrap_or_else(|e| panic!("{e}"));
+        let text = bevy_grimoire_core::yaml::to_string(&file)
+            .unwrap_or_else(|p| panic!("{}", p.line()));
         let path = root.join(CACHE_PATH);
         std::fs::create_dir_all(path.parent().unwrap_or_else(|| panic!("no parent")))
             .unwrap_or_else(|e| panic!("{e}"));
@@ -286,8 +286,8 @@ mod tests {
             tool: bevy_grimoire_core::rigs::BENCH_TOOL_VERSION,
             entries,
         };
-        let text = ron::ser::to_string_pretty(&file, ron::ser::PrettyConfig::default())
-            .unwrap_or_else(|e| panic!("{e}"));
+        let text = bevy_grimoire_core::yaml::to_string(&file)
+            .unwrap_or_else(|p| panic!("{}", p.line()));
         std::fs::create_dir_all(root.join("target")).unwrap_or_else(|e| panic!("{e}"));
         std::fs::write(root.join(CACHE_PATH), text).unwrap_or_else(|e| panic!("{e}"));
         assert!(warm_reports(&root).is_empty(), "a version bump must drop the file");

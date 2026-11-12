@@ -11,7 +11,7 @@ use bevy_grimoire_core::rules::RULES_VERSION;
 
 fn refused(text: &str) -> Refusal {
     let kind = kind_by_id("rules").expect("a registry kind");
-    match reload_check::check(kind, "rules.ron", text) {
+    match reload_check::check(kind, "rules.yaml", text) {
         Check::Refused(r) => r,
         other => panic!("a file with a field the type does not know must be refused, got {other:?}"),
     }
@@ -19,18 +19,18 @@ fn refused(text: &str) -> Refusal {
 
 #[test]
 fn an_unknown_field_at_the_top_of_a_file_is_named_as_itself() {
-    let r = refused(&format!("(version: {RULES_VERSION}, bogus: 2)"));
+    let r = refused(&format!("version: {RULES_VERSION}\nbogus: 2\n"));
     assert_eq!(r.field.as_deref(), Some("bogus"), "{r:?}");
 }
 
 #[test]
 fn an_unknown_field_inside_a_list_is_named_by_its_whole_path() {
-    let r = refused(&format!("(version: {RULES_VERSION}, blocks: [(bogus: 1)])"));
+    let r = refused(&format!("version: {RULES_VERSION}\nblocks:\n- bogus: 1\n"));
     assert_eq!(r.field.as_deref(), Some("blocks[0].bogus"), "{r:?}");
 }
 
 #[test]
 fn a_missing_field_is_still_named_inside_its_struct() {
-    let r = refused(&format!("(version: {RULES_VERSION}, blocks: [(example: \"yard\")])"));
+    let r = refused(&format!("version: {RULES_VERSION}\nblocks:\n- example: yard\n"));
     assert_eq!(r.field.as_deref(), Some("blocks[0].cell"), "{r:?}");
 }

@@ -2,7 +2,7 @@
 //! same operation (E-002, #129 slice 12).**
 //!
 //! Keeping the edges a scan derived wrote a library piece's lattice with a write of its own (cell by cell,
-//! straight to `library.ron`), so an agent could never put one token on one cell and another on the next,
+//! straight to `library.yaml`), so an agent could never put one token on one cell and another on the next,
 //! no log line named the keep, and the registry's two-front-end rule listed `AcceptEdges` as unmigrated. It
 //! is now `piece_set_cells` with its `edges` verb. The first two tests go through the registered BRP
 //! method, the way an agent's request goes; the last two press the real key on the Meshes tab, the way a
@@ -201,7 +201,7 @@ fn stage_and_keep(app: &mut App, cells: Vec<((u32, u32, u32), &'static str)>) {
 
 /// **A person's Enter on a staged derivation is one `piece_set_cells` line stamped as a person's, it writes
 /// the staged tokens and no other cell, the proposal is spent, and Cmd+Z takes the whole keep back.** Before
-/// slice 12 the key wrote `library.ron` itself and logged nothing (failed with the routing disabled: no line).
+/// slice 12 the key wrote `library.yaml` itself and logged nothing (failed with the routing disabled: no line).
 #[test]
 fn a_persons_enter_keeps_the_derived_edges_through_the_operation_and_cmd_z_follows_it() {
     let mut app = editor("keep-edges-person");
@@ -240,7 +240,7 @@ fn a_staged_token_the_project_lacks_is_refused_and_writes_nothing() {
 
     let said = app.world().resource::<ImportState>().status.problem_text();
     assert!(said.contains("undeclared-token"), "the refusal must name the token: `{said}`");
-    assert!(said.contains("vocab.ron"), "and say where to declare it: `{said}`");
+    assert!(said.contains("vocab.yaml"), "and say where to declare it: `{said}`");
     assert_eq!(lattice(&app), first, "a refused keep edited the lattice");
     assert_eq!(file(&app), text, "a refused keep wrote the file");
     assert_eq!(log(&app).len(), lines_before, "a refused keep logged a line");

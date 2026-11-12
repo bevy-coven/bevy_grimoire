@@ -127,7 +127,7 @@ fn open_map(app: &mut App, map: &str) {
 
 /// **The map path a project calls `name`.**
 fn map_path(root: &std::path::Path, name: &str) -> std::path::PathBuf {
-    root.join("assets/grimoire/maps").join(format!("{name}.map.ron"))
+    root.join("assets/grimoire/maps").join(format!("{name}.map.yaml"))
 }
 
 /// **The open project's root**, which is what the record compares — the harness canonicalises it, so

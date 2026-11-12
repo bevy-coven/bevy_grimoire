@@ -50,8 +50,8 @@ fn project(tag: &str) -> std::path::PathBuf {
         .build("m");
     std::fs::write(root.join("build_stub.py"), STUB_BUILD).unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(
-        root.join("play.ron"),
-        format!(r#"(version: 2, command: ["{py}", "-c", "pass"], build: ["{py}", "build_stub.py"])"#, py = fixtures_python()),
+        root.join("play.yaml"),
+        format!("version: 2\ncommand: [\"{py}\", \"-c\", \"pass\"]\nbuild: [\"{py}\", \"build_stub.py\"]\n", py = fixtures_python()),
     )
     .unwrap_or_else(|e| panic!("{e}"));
     root

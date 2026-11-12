@@ -1,5 +1,0 @@
-(
-    version: 1,
-    note: Some("Empty on purpose — `scp` is a new kit. Import meshes on the Meshes tab; they land here."),
-    descriptors: [],
-)

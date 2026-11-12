@@ -200,7 +200,7 @@ pub struct ImportState {
 /// writer to restore through, so undoing re-runs exactly the validation an edit does.
 ///
 /// Both halves, because an edit lands in one or the other: a **library** entry is written to
-/// `library.ron`, while a **candidate** is `Persist::InMemory` until Accept. Snapshotting only the
+/// `library.yaml`, while a **candidate** is `Persist::InMemory` until Accept. Snapshotting only the
 /// library would leave every pre-Accept edit — id, mount, size, height, lattice — outside the history.
 #[derive(Clone)]
 pub struct Snapshot {
@@ -534,7 +534,7 @@ pub(crate) const TILE_VIEW_HEIGHT: f32 = 4.0;
 /// **The divisions readout** — derived, not typed.
 ///
 /// Divisions used to be three editable fields on the descriptor. They are now one number on the
-/// project (`project.ron`'s `divisions`), and a piece's lattice is derived from its own size, so
+/// project (`project.yaml`'s `divisions`), and a piece's lattice is derived from its own size, so
 /// there is nothing here to type into: a per-tile override would be a second way to say what the
 /// project already says, and the two would disagree the first time anybody used it.
 ///
@@ -878,7 +878,7 @@ pub struct ScaleReadout;
 /// **How far from 1.0 counts as a scale.** Below this the field stores `None` instead.
 ///
 /// A stored `Some(1.0)` is an identity that every reader would then multiply by, and it would show up
-/// in `library.ron` as an authored fact where there is none — the same rule `rotate_mesh` follows when
+/// in `library.yaml` as an authored fact where there is none — the same rule `rotate_mesh` follows when
 /// it writes `(want != (0,0,0)).then_some(want)`. The bound is a tenth of a millimetre on a 1 m piece,
 /// which is finer than anything the importer can measure.
 /// **A row's rhythm at half the skin's step**: the 3 px [`crate::chrome::GAP_TIGHT`] the hand-built
@@ -1119,7 +1119,7 @@ fn scale_keys(
 ///
 /// `M` could put a piece *on* a wall and then not say where: [`mount_options`] is a list of literals,
 /// so `1.8` — eye level, for a sign — was the only wall height reachable without hand-editing the kit's
-/// `library.ron`. A picture at 1.2 m and a sconce at 2.1 m were both a text editor away.
+/// `library.yaml`. A picture at 1.2 m and a sconce at 2.1 m were both a text editor away.
 ///
 /// Only offered for the two mounts that carry a height. For the rest the field is not drawn at all
 /// rather than drawn dead: `bevy_grimoire_core::descriptor::mount_height` is the one place that decides
@@ -1347,7 +1347,7 @@ fn tile_history_keys(
     // against the map — that check belongs to the one forward path that can lose a descriptor,
     // `remove_tile`, which refuses while the map still places the piece. A snapshot restore is the
     // other way a descriptor can vanish (undoing an Accept, redoing a remove), and skipping the same
-    // guard here rewrote `library.ron` out from under a map that still referenced it: every
+    // guard here rewrote `library.yaml` out from under a map that still referenced it: every
     // `resolve_y` from then on refused the whole map, and the two files disagreed on disk.
     // **Every map in the project gets a vote, not just the one that used to be open.** This read
     // `project.map` — whichever map the author happened to have loaded — so restoring a snapshot
@@ -1855,7 +1855,7 @@ fn held_shift(keyboard: &ButtonInput<KeyCode>) -> bool {
 ///
 /// The proposal half of FVS-R-26. `bevy_grimoire_core::adjacency::derive_edges` does the reading; this holds
 /// the answer until an author accepts it, on the machine-proposed / human-confirmed pattern
-/// `labels.rs` already runs for the vision model. Nothing here reaches `library.ron`.
+/// `labels.rs` already runs for the vision model. Nothing here reaches `library.yaml`.
 ///
 /// **Keyed by descriptor id**, because the selection moves: a proposal about `site/wall` must not be
 /// applied to whatever the author walked to afterwards. `accept_derived_edges` checks it.
@@ -2066,7 +2066,7 @@ fn apply_edges(
 /// `edge` is a **closed** vocabulary axis. `vocab.rs` says why in as many words: an empty axis is
 /// *"the honest reading of 'this project has not decided what its tiles present'"*, and the tokens
 /// are matched by equality, so *"a typo does not read as a wrong token, it reads as a token that
-/// matches nothing."* A derivation that quietly widened `vocab.ron` would be taking that decision on
+/// matches nothing."* A derivation that quietly widened `vocab.yaml` would be taking that decision on
 /// the author's behalf — so this states which tokens to declare and refuses until they are.
 ///
 /// One round-trip the first time, and none after. The alternative — writing the axis from an
@@ -2131,7 +2131,7 @@ fn accept_derived_edges(
     apply_edges(&mut candidate, &proposal.cells);
     if let Err(why) = project.vocab.masks(&candidate) {
         state.status.problem(format!(
-            "not applied — {why} Declare it in vocab.ron and press {} again.",
+            "not applied — {why} Declare it in vocab.yaml and press {} again.",
             crate::keys::chord(Action::ScanMesh),
         ));
         return;
@@ -2183,7 +2183,7 @@ pub(crate) struct AutoScanned {
 /// # Candidates only, and only when there is nothing to lose
 ///
 /// A **library entry** is never scanned automatically. Its edits go through `persist`, so a scan on
-/// selection would rewrite `library.ron` every time an author clicked a row — browsing the 45-piece
+/// selection would rewrite `library.yaml` every time an author clicked a row — browsing the 45-piece
 /// kit would be 45 writes — and it would mark cells someone had deliberately left open. That is what
 /// the `rescan mesh` chip is for: the same act, asked for.
 ///
@@ -3201,7 +3201,7 @@ impl ImportState {
     ///
     /// A library entry when one is selected, otherwise the selected candidate. Before this existed
     /// the pane returned early unless a *candidate* was selected, so an accepted tile's lattice was
-    /// reachable only by hand-editing `library.ron` — which is why all 42 shipped descriptors still
+    /// reachable only by hand-editing `library.yaml` — which is why all 42 shipped descriptors still
     /// have `cells: []`. Authoring a lattice was, in practice, impossible through the tool that has
     /// the lattice editor in it.
     ///
@@ -3228,7 +3228,7 @@ impl ImportState {
     /// [`Self::editing`] takes whichever library it is handed, and which one that is turns out to be
     /// a real decision rather than a detail. `Project::measured` is what an edit is written *to*.
     /// The layered library is what the piece *is*: under `--kit site_greybox`, `site/wall` is measured
-    /// at 1.0 m and the kit's `project.ron` stretches it to 2.40 — so the measurement derives a
+    /// at 1.0 m and the kit's `project.yaml` stretches it to 2.40 — so the measurement derives a
     /// 2-row lattice and the piece that gets placed has 5.
     ///
     /// Every reader of the lattice's *shape* was asking `measured`, so an author authored on a grid
@@ -3380,10 +3380,10 @@ impl ImportState {
 /// # It writes `measured`, not `library`
 ///
 /// This used to serialize the **layered** library over `library_path`. Under `--kit site` — whose
-/// `project.ron` stretches `site/wall` to a 2.40 m facility — toggling one lattice cell therefore
+/// `project.yaml` stretches `site/wall` to a 2.40 m facility — toggling one lattice cell therefore
 /// wrote that facility's wall height into the measurements file the kit exists to share, and the
 /// next load applied the patches again on top of it. A library is measurements; a project's
-/// architecture belongs in `project.ron` and must not leak downward into it.
+/// architecture belongs in `project.yaml` and must not leak downward into it.
 ///
 /// # Re-layering happens *before* the write
 ///
@@ -3397,7 +3397,7 @@ fn write_library(project: &mut Project) -> Result<std::path::PathBuf, String> {
 }
 
 thread_local! {
-    /// **How many times this thread has written a kit's `library.ron`** — E-049's measure.
+    /// **How many times this thread has written a kit's `library.yaml`** — E-049's measure.
     ///
     /// A thread, not a process: libtest gives every test its own thread, so one test's writes cannot
     /// be read as another's. The write itself does not change; only the count of them does, which is
@@ -3405,7 +3405,7 @@ thread_local! {
     static LIBRARY_WRITES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-/// **The writes of `library.ron` this thread has made**, for the test that pins one per edit.
+/// **The writes of `library.yaml` this thread has made**, for the test that pins one per edit.
 ///
 /// Reads a count rather than the file: two identical writes leave the same bytes on disk, so a
 /// file comparison cannot see the duplicate at all — which is exactly why it survived.
@@ -3476,8 +3476,8 @@ pub(crate) fn commit_measured(
     let (layered, library, masks) = rebuild_from(project, &measured)?;
 
     let path = project.library_path.clone();
-    let text = measured.to_ron()?;
-    bevy_grimoire_core::ron_surgery::save_atomic(&path, &text)?;
+    let text = measured.to_yaml()?;
+    bevy_grimoire_core::save::save_atomic(&path, &text)?;
     LIBRARY_WRITES.with(|n| n.set(n.get() + 1));
 
     // **What the Map has to redraw, worked out by comparison.** The already-placed entities were
@@ -3593,7 +3593,7 @@ mod changed_ids_tests {
 ///
 /// This returned a bare `String` that was sometimes `NOT WRITTEN: {e}`, and all nine call sites
 /// handed it to the status line as though it were a receipt — so an edit that never reached
-/// `library.ron` read exactly like one that did, in the same colour, and was gone as soon as the
+/// `library.yaml` read exactly like one that did, in the same colour, and was gone as soon as the
 /// author moved the cursor. See [`crate::chrome::Status`].
 fn persist(project: &mut Project, where_to: Persist, said: String) -> Result<String, String> {
     match where_to {
@@ -3924,7 +3924,7 @@ impl Plugin for TilesPlugin {
                     // **The text fields, last.** `cell_keys` and `commit_candidate` both take
                     // `ResMut<ImportState>` and used to sit in this tuple unordered — so Bevy could
                     // run the field first, clear its own typing flag, and let the same `Enter` fall
-                    // through to "add to library". Six descriptors arrived in `library.ron` that way.
+                    // through to "add to library". Six descriptors arrived in `library.yaml` that way.
                     rename_candidate.in_set(crate::keys::Phase::Text),
                     (
                         cell_keys.in_set(crate::keys::Phase::Text),
@@ -4839,7 +4839,7 @@ fn scan_on_entering_the_kits_door(
 ///
 /// One key, both directions: the row already says which state it is in, and a separate restore verb
 /// would be a second way to say the same thing. **Written through `pack_set_excluded` (E-002, #129
-/// slice 7)**, the operation an agent calls, which splices the kit's `project.ron` through
+/// slice 7)**, the operation an agent calls, which splices the kit's `project.yaml` through
 /// `policy::rewrite_exclude` (the file's prose stays) and logs one line that Cmd+Z takes back.
 pub fn exclude_pack(
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -4856,7 +4856,7 @@ pub fn exclude_pack(
     // This read only `state.selected`, the *mesh* cursor, and never consulted the heading cursor.
     // Since the arrows learned to stand on a heading (`put_cursor`), standing on pack A's heading
     // leaves `selected` wherever it last was — so `Shift+R` on A's heading excluded **B**, and wrote
-    // `project.ron` to do it. The audit's M2. `Selected::now` already collapses the two fields in
+    // `project.yaml` to do it. The audit's M2. `Selected::now` already collapses the two fields in
     // this precedence for the scroll follower; the same order is the answer here, and the comment
     // above was right all along about what it should mean by "highlighted".
     let Some(pack) = state.focused_pack.clone().or_else(|| {
@@ -4881,7 +4881,7 @@ pub fn exclude_pack(
 
 /// **Which mesh directories the kit being authored draws on.**
 ///
-/// A pack is "in use" when a descriptor in *this kit's* `library.ron` names a mesh inside it.
+/// A pack is "in use" when a descriptor in *this kit's* `library.yaml` names a mesh inside it.
 ///
 /// # It asked about the map until the doors split, and that question has no answer here
 ///
@@ -5066,7 +5066,7 @@ mod pack_fold_tests {
             kits: Vec::new().into(),
             bashes: Vec::new(),
             namespace: "nonexistent".to_owned(),
-            library_path: std::path::PathBuf::from("/nonexistent/library.ron"),
+            library_path: std::path::PathBuf::from("/nonexistent/library.yaml"),
             vocab: bevy_grimoire_core::vocab::Vocabularies::default(),
             compositions: bevy_grimoire_core::composition::Compositions::default(),
             library: library.into(),
@@ -6092,7 +6092,7 @@ fn commit_candidate(
     // **A question owns `Enter` while it is up.** `labels::answer_overwrite` reads the same key in
     // the same phase, and reading a key does not consume it — so without this the `Enter` that
     // answers "re-label everything" would also add the highlighted candidate to the library. That is
-    // the `xseam` shape (`keys.rs`), which put six descriptors in `library.ron` the first time.
+    // the `xseam` shape (`keys.rs`), which put six descriptors in `library.yaml` the first time.
     if queue.ask.is_some() {
         return;
     }
@@ -6542,7 +6542,7 @@ pub(crate) fn take_out_of_library(id: &str, project: &mut Project) -> Result<std
         // a piece back STRIPS it; editing it does not, and editing is almost always what was wanted.
         return Err(format!(
             "`{id}` is a member of {}: {}. It cannot be sent back while they hold it — the project \
-             would stop opening with `compositions.ron` naming a descriptor nothing defines. \
+             would stop opening with `compositions.yaml` naming a descriptor nothing defines. \
              {} edits it in place without removing it; sending it back means redefining {} first.",
             if groups.len() == 1 {
                 "the composition"
@@ -6618,7 +6618,7 @@ pub(crate) fn remove_blockers(id: &str, project: &Project) -> Result<Option<Stri
         // a piece back STRIPS it; editing it does not, and editing is almost always what was wanted.
         return Err(format!(
             "`{id}` is a member of {}: {}. It cannot be sent back while they hold it — the project \
-             would stop opening with `compositions.ron` naming a descriptor nothing defines. \
+             would stop opening with `compositions.yaml` naming a descriptor nothing defines. \
              {} edits it in place without removing it; sending it back means redefining {} first.",
             if groups.len() == 1 {
                 "the composition"
@@ -6794,7 +6794,7 @@ fn toggle_tag(axis: Axis, token_ix: usize, project: &mut Project, state: &mut Im
             state.record(history_before);
             let said = format!("{} tags updated", axis.label().to_lowercase());
             // **No `persist` here — `label_set` already wrote the file.** Its commit is
-            // `commit_measured`, which is the one door to `library.ron`; `Persist::Library` would
+            // `commit_measured`, which is the one door to `library.yaml`; `Persist::Library` would
             // serialize and write the identical library a second time. That cost two `to_ron` ->
             // `save_atomic` round trips per click, and no existing test could see it because the
             // bytes on disk are right either way (E-049,
@@ -6948,7 +6948,7 @@ fn move_selection(
         return;
     }
 
-    // **On the Tiles tab there is only one list.** A tile member must name a `library.ron`
+    // **On the Tiles tab there is only one list.** A tile member must name a `library.yaml`
     // descriptor; a candidate is a mesh that has been measured and not imported, so it is not a
     // legal source and walking it here would move a focus the tile author cannot spend. This is one
     // path rather than two — the tab does not *prefer* the library, it is the only list it has.
@@ -7581,7 +7581,7 @@ pub(crate) fn library_ids(
 ///
 /// # Newest first, and why that is not "reordered by recency"
 ///
-/// `library.ron` is appended to, so its order *is* definition order and the piece you just imported
+/// `library.yaml` is appended to, so its order *is* definition order and the piece you just imported
 /// was at the bottom of it — 88 rows today, and the kit this editor exists to build is 700. Worse,
 /// `right` seeded the selection with `.first()`, so switching to this shelf landed you on the oldest
 /// piece in the project every time. Asked for at the keyboard, 2026-08-20: *"whenever a user
@@ -8312,7 +8312,7 @@ fn refresh_lines(
 pub enum Shelf {
     /// Measured, not imported. The `NOT YET IMPORTED` packs.
     Candidates,
-    /// In `library.ron` — a mesh the editor can build with.
+    /// In `library.yaml` — a mesh the editor can build with.
     Library,
     /// The authored tiles, one row each, with `New Tile +` at the top.
     Tiles,
@@ -9696,7 +9696,7 @@ impl ListInk {
 /// per breach, `rule: dim found m, why bound m`, in file order; then one line per pair of sub-kit
 /// modules that do not nest where a rule covering the piece is one of the two (#168 slice 3), in
 /// `grimoire_state`'s words; or one line naming the file when it does not parse. Empty when the piece
-/// breaks no rule, is in no such pair, or there is no `standards.ron`.
+/// breaks no rule, is in no such pair, or there is no `standards.yaml`.
 fn standards_lines(piece: &Descriptor, project_dir: &std::path::Path) -> Vec<String> {
     use bevy_grimoire_core::standards::{Dim, Why};
     let standards = match crate::ops_brp::load_standards(project_dir) {
@@ -9780,7 +9780,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             }
             // **The pane follows the focus, not the candidate list.** It used to return here unless a
             // candidate was selected, which is why an accepted tile's lattice could only be reached
-            // by hand-editing `library.ron`.
+            // by hand-editing `library.yaml`.
             // **Both layers, because this pane shows both things.** `d` is the measurement — the
             // size row below is about exactly that, and the id and note it displays are the
             // ones an edit would be written back to. `placed` is the same piece as it will stand,
@@ -9945,7 +9945,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     p.spawn((
                         Text::new(format!(
                             "wants `{}` on {} ({}) - needs a human vocab edit; see \
-                             slop/llm/vocab_proposals.ron",
+                             slop/llm/vocab_proposals.yaml",
                             t.token, t.axis, t.why
                         )),
                         TextColor(suggest_ink),
@@ -10053,7 +10053,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             // (#168 slice 3): it can meet its own rule while its kit drifts off another's grid. Off
             // `placed`, the layered piece, because that is what a map places and what
             // `grimoire_state.standards` checks. Nothing to report, no row: a met rule is not news.
-            // Read from `standards.ron` on each rebuild, and `watch` rebuilds the pane when that file
+            // Read from `standards.yaml` on each rebuild, and `watch` rebuilds the pane when that file
             // changes; a file that does not parse is named, never read as no rules.
             let standards_lines = standards_lines(placed, &project.project_dir);
             if !standards_lines.is_empty() {
@@ -10401,7 +10401,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     //
                     // For every axis but `effects` that is the model's answer verbatim. `effects` has a
                     // derived half the model is deliberately never asked for (`implies` on a `kind`
-                    // token in `vocab.ron` — a bed recharges stamina because this game says beds do,
+                    // token in `vocab.yaml` — a bed recharges stamina because this game says beds do,
                     // and no render can show it), so ghosting the raw answer meant a bed's proposal
                     // read `effects: []` while
                     // applying it wrote `stamina-recharge`. Reported as the model refusing to
@@ -10511,7 +10511,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                             );
                         }
                         // **The `+` chip — the mouse half of the vocabulary prompt.** Growing the
-                        // vocabulary was a hand edit to `vocab.ron`; this opens the same prompt
+                        // vocabulary was a hand edit to `vocab.yaml`; this opens the same prompt
                         // `Shift+T` does, with the axis preset to this row's. `Shift+T` is the
                         // keyboard half, and both go through `token_prompt::open`.
                         crate::chrome::chip(
@@ -10528,7 +10528,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             });
 
             // **Rooms and group** — the first UI these placement fields have ever had. Read-only:
-            // apply writes them, and hand-editing free text stays a `library.ron` edit, as today.
+            // apply writes them, and hand-editing free text stays a `library.yaml` edit, as today.
             {
                 let p_rooms = proposal
                     .as_ref()
@@ -10668,7 +10668,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             ));
             p.spawn((
                 Text::new(format!(
-                    // **`from the map`, not `from project.ron`.** The setting moved on 2026-08-16,
+                    // **`from the map`, not `from project.yaml`.** The setting moved on 2026-08-16,
                     // and a row telling an author to go and edit a file that no longer holds the
                     // number is worse than a row saying nothing.
                     "{marked} of {} marked — {} division(s) per {:.1} m tile, from the map",
@@ -10932,7 +10932,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
 /// **What `write_library` writes**, which is the whole of the kit-corruption fix.
 ///
 /// The defect these pin: `write_library` used to serialize the *layered* library over
-/// `library_path`, so under `--kit site` — whose `project.ron` stretches walls to a 2.40 m facility
+/// `library_path`, so under `--kit site` — whose `project.yaml` stretches walls to a 2.40 m facility
 /// — toggling one lattice cell wrote that facility's wall height into the measurements file the kit
 /// exists to share, and the next load applied the patch again on top of it.
 /// **What `M` does to an authored wall height.** See `cycle_mount`.
@@ -11241,7 +11241,7 @@ mod write_library_tests {
             namespace: dir
                 .file_name()
                 .map_or_else(|| "grimoire".to_owned(), |n| n.to_string_lossy().into_owned()),
-            library_path: dir.join("library.ron"),
+            library_path: dir.join("library.yaml"),
             vocab: bevy_grimoire_core::vocab::Vocabularies::default(),
             measured: measured.into(),
             library: library.into(),
@@ -11284,7 +11284,7 @@ mod write_library_tests {
         write_library(&mut project).unwrap_or_else(|e| panic!("{e}"));
 
         let written =
-            std::fs::read_to_string(dir.join("library.ron")).unwrap_or_else(|e| panic!("{e}"));
+            std::fs::read_to_string(dir.join("library.yaml")).unwrap_or_else(|e| panic!("{e}"));
         let back = Library::parse(&written).unwrap_or_else(|e| panic!("{e}"));
         let wall = back.get("wall").unwrap_or_else(|| panic!("wall survives"));
         assert_eq!(
@@ -11294,7 +11294,7 @@ mod write_library_tests {
         );
         assert_eq!(
             wall.align.stretch_y, None,
-            "`stretch_y` is this project's architecture and belongs in project.ron alone"
+            "`stretch_y` is this project's architecture and belongs in project.yaml alone"
         );
         assert!(
             wall.subgrid.as_ref().is_some_and(|g| g.cells.len() == 1),
@@ -11334,7 +11334,7 @@ mod write_library_tests {
         commit_measured(&mut project, trial).unwrap_or_else(|e| panic!("{e}"));
 
         let written =
-            std::fs::read_to_string(dir.join("library.ron")).unwrap_or_else(|e| panic!("{e}"));
+            std::fs::read_to_string(dir.join("library.yaml")).unwrap_or_else(|e| panic!("{e}"));
         let back = Library::parse(&written).unwrap_or_else(|e| panic!("{e}"));
         assert!(
             back.get("crate_b").is_some(),
@@ -11379,7 +11379,7 @@ mod write_library_tests {
         write_library(&mut project).unwrap_or_else(|e| panic!("{e}"));
 
         let written =
-            std::fs::read_to_string(dir.join("library.ron")).unwrap_or_else(|e| panic!("{e}"));
+            std::fs::read_to_string(dir.join("library.yaml")).unwrap_or_else(|e| panic!("{e}"));
         assert!(
             !written.contains("ghost"),
             "a write serializes `measured`; anything only in `library` cannot reach the file"
@@ -11404,7 +11404,7 @@ mod write_library_tests {
         let mut project = project_in(&dir, stretching_policy());
         write_library(&mut project).unwrap_or_else(|e| panic!("{e}"));
         let before =
-            std::fs::read_to_string(dir.join("library.ron")).unwrap_or_else(|e| panic!("{e}"));
+            std::fs::read_to_string(dir.join("library.yaml")).unwrap_or_else(|e| panic!("{e}"));
 
         // Removing `wall` strands the policy patch that names it.
         let mut trial = project.measured.clone();
@@ -11423,7 +11423,7 @@ mod write_library_tests {
             "nor out of the derived layer"
         );
         assert_eq!(
-            std::fs::read_to_string(dir.join("library.ron")).unwrap_or_else(|e| panic!("{e}")),
+            std::fs::read_to_string(dir.join("library.yaml")).unwrap_or_else(|e| panic!("{e}")),
             before,
             "and the file must be byte-identical"
         );
@@ -11448,7 +11448,7 @@ mod write_library_tests {
         );
 
         let written =
-            std::fs::read_to_string(dir.join("library.ron")).unwrap_or_else(|e| panic!("{e}"));
+            std::fs::read_to_string(dir.join("library.yaml")).unwrap_or_else(|e| panic!("{e}"));
         let back = Library::parse(&written).unwrap_or_else(|e| panic!("{e}"));
         let reopened = project
             .policy
@@ -11471,7 +11471,7 @@ mod write_library_tests {
         let mut project = project_in(&dir, stretching_policy());
         write_library(&mut project).unwrap_or_else(|e| panic!("{e}"));
         let before =
-            std::fs::read_to_string(dir.join("library.ron")).unwrap_or_else(|e| panic!("{e}"));
+            std::fs::read_to_string(dir.join("library.yaml")).unwrap_or_else(|e| panic!("{e}"));
 
         // The only `wall` is gone, so the rule about walls matches nothing.
         project.measured.descriptors.clear();
@@ -11479,7 +11479,7 @@ mod write_library_tests {
         assert!(err.contains("matches no descriptor"), "{err}");
 
         let after =
-            std::fs::read_to_string(dir.join("library.ron")).unwrap_or_else(|e| panic!("{e}"));
+            std::fs::read_to_string(dir.join("library.yaml")).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(
             before, after,
             "a refused write must not have touched the file"

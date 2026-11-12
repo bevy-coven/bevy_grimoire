@@ -32,8 +32,8 @@ fn ctx(tag: &str, port: u16) -> (Ctx, std::path::PathBuf) {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").build("town");
     std::fs::write(root.join("game.py"), GAME).unwrap();
     std::fs::write(
-        root.join("play.ron"),
-        format!(r#"(version: 1, command: ["{py}", "game.py", "{{map}}", "{{camera}}", "{port}"], port: {port})"#, py = fixtures_python()),
+        root.join("play.yaml"),
+        format!("version: 1\ncommand: [\"{py}\", \"game.py\", \"{{map}}\", \"{{camera}}\", \"{port}\"]\nport: {port}\n", py = fixtures_python()),
     )
     .unwrap();
     (Ctx { root: Some(root.clone()), session: "test".to_owned(), trust_file: Some(fixtures::trusted_store(&root)), ..Ctx::default() }, root)
@@ -88,7 +88,7 @@ fn a_project_with_no_play_file_says_how_to_write_one() {
     let mut c = Ctx { root: Some(root), session: "test".to_owned(), ..Ctx::default() };
     let e = match ops::dispatch(&mut c, "play", &json!({"map": "town"})) {
         Err(e) | Ok(Applied::Refused(e)) => e.0,
-        Ok(_) => panic!("played without a play.ron"),
+        Ok(_) => panic!("played without a play.yaml"),
     };
-    assert!(e.contains("play.ron") && e.contains("command"), "{e}");
+    assert!(e.contains("play.yaml") && e.contains("command"), "{e}");
 }

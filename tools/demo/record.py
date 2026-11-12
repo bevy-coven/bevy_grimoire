@@ -56,7 +56,7 @@ Storyboard format (JSON):
                                                 saves the answer's operation_id; "$built" anywhere in a
                                                 later step's args is replaced by it (note_resolve's ops)
       {"at": 6.0, "caption": "person: ..."}
-      {"at": 7.0, "write": {"path": "assets/grimoire/standards.ron", "text": "..."}}
+      {"at": 7.0, "write": {"path": "assets/grimoire/standards.yaml", "text": "..."}}
                                                 a person saving a project file (path under --project),
                                                 for a live reload; the editor reads it, nothing is injected.
                                                 "$now_ms" in the text is the time of the write in Unix

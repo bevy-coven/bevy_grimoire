@@ -1,6 +1,6 @@
 //! **The Map inspector says which intended relations the open map breaks** (#137 slice 5).
 //!
-//! `grimoire_state.relations` tells an agent which relations in `<map>.relations.ron` the map breaks;
+//! `grimoire_state.relations` tells an agent which relations in `<map>.relations.yaml` the map breaks;
 //! a person on the Map tab saw nothing. So the inspector has a `RELATIONS` row: how many are unmet
 //! and missing and the first broken one in words, `N met` dimmed when all hold, `none` with no
 //! file, and the file named when it does not read. The file is re-read about once a second, so an
@@ -25,7 +25,7 @@ fn editor(name: &str, relations: Option<&str>) -> (App, PathBuf) {
         .place_as("door", "site/door", (8.0, 8.0))
         .place_as("crate", "site/crate", (8.0, 8.5))
         .build("m");
-    let file = root.join("assets/grimoire/maps/m.relations.ron");
+    let file = root.join("assets/grimoire/maps/m.relations.yaml");
     if let Some(r) = relations {
         write(&file, r);
     }
@@ -37,7 +37,7 @@ fn editor(name: &str, relations: Option<&str>) -> (App, PathBuf) {
 }
 
 fn write(path: &Path, relations: &str) {
-    std::fs::write(path, format!("(version: 1, relations: [{relations}])"))
+    std::fs::write(path, format!("{{version: 1, relations: [{relations}]}}"))
         .unwrap_or_else(|e| panic!("{path:?}: {e}"));
 }
 
@@ -61,11 +61,7 @@ fn relations_row(app: &mut App) -> (String, Vec2) {
     (value.1.clone(), value.3)
 }
 
-const BROKEN: &str = r#"
-    (of: "chair", kind: Faces("table")),
-    (of: "chair", kind: Near(to: "table", within: 3.0)),
-    (of: "door", kind: ClearInFront(depth: 2.0, width: 1.0)),
-    (of: "lamp", kind: Near(to: "door", within: 2.0)),
+const BROKEN: &str = r#"{of: "chair", kind: !Faces "table"}, {of: "chair", kind: !Near {to: "table", within: 3.0}}, {of: "door", kind: !ClearInFront {depth: 2.0, width: 1.0}}, {of: "lamp", kind: !Near {to: "door", within: 2.0}}
 "#;
 
 #[test]
@@ -83,7 +79,7 @@ fn no_file_reads_none_and_all_met_reads_the_count() {
 
     let (mut app, _) = editor(
         &format!("inspector_relations_met_{}", std::process::id()),
-        Some(r#"(of: "chair", kind: Near(to: "table", within: 3.0))"#),
+        Some(r#"{of: "chair", kind: !Near {to: "table", within: 3.0}}"#),
     );
     assert_eq!(relations_row(&mut app).0, "1 met");
 }
@@ -92,17 +88,17 @@ fn no_file_reads_none_and_all_met_reads_the_count() {
 fn an_edit_to_the_file_shows_without_a_restart() {
     let (mut app, file) = editor(&format!("inspector_relations_live_{}", std::process::id()), None);
     assert_eq!(relations_row(&mut app).0, "none");
-    write(&file, r#"(of: "door", kind: ClearInFront(depth: 2.0, width: 1.0))"#);
+    write(&file, r#"{of: "door", kind: !ClearInFront {depth: 2.0, width: 1.0}}"#);
     std::thread::sleep(std::time::Duration::from_millis(1200));
     for _ in 0..4 {
         app.update();
     }
     assert_eq!(relations_row(&mut app).0, "1 unmet: door clear in front (crate in the way)");
 
-    std::fs::write(&file, "(version: 1, relations: [oops])").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(&file, "{version: 1, relations: [oops]}").unwrap_or_else(|e| panic!("{e}"));
     std::thread::sleep(std::time::Duration::from_millis(1200));
     for _ in 0..4 {
         app.update();
     }
-    assert_eq!(relations_row(&mut app).0, "m.relations.ron does not read");
+    assert_eq!(relations_row(&mut app).0, "m.relations.yaml does not read");
 }

@@ -39,7 +39,7 @@ impl Plugin for LivePlugin {
     }
 }
 
-/// **The game's newest verdict on a reload**, as last read from `.live/game.ron`. Empty without
+/// **The game's newest verdict on a reload**, as last read from `.live/game.yaml`. Empty without
 /// `--live` and while no game has answered.
 #[derive(Resource, Default)]
 pub struct LiveGame {
@@ -142,7 +142,7 @@ fn poll_verdict(
         return;
     }
     *last = Some(Instant::now());
-    // **A game writes its verdict at the project directory** (the one holding `kits.ron`), not in a kit's.
+    // **A game writes its verdict at the project directory** (the one holding `kits.yaml`), not in a kit's.
     // The kit's own directory is read when the project's has none: this editor used to look only there
     // (its two verdict tests still write there), and a game never writes there.
     let read = Verdict::read(&project.project_dir).and_then(|v| match v {

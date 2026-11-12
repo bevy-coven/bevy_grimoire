@@ -102,9 +102,9 @@ fn the_settings_files_text_size_reaches_the_stored_scale() {
     let root = fixtures::Fixture::new(&format!("text_scale_{}", std::process::id()))
         .descriptor("site/wall", "alpha")
         .build("m");
-    let settings_file = root.join(format!("user_config_text_{}/settings.ron", std::process::id()));
+    let settings_file = root.join(format!("user_config_text_{}/settings.yaml", std::process::id()));
     std::fs::create_dir_all(settings_file.parent().expect("a settings folder")).expect("a settings folder");
-    std::fs::write(&settings_file, "(version: 1, text_scale: Some(1.75))").expect("a settings file");
+    std::fs::write(&settings_file, "{version: 1, text_scale: 1.75}").expect("a settings file");
 
     let was = chrome::text_scale();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
@@ -143,7 +143,7 @@ fn the_settings_files_interface_size_reaches_the_ui_scale() {
         let root = fixtures::Fixture::new(&format!("ui_scale_{tag}_{}", std::process::id()))
             .descriptor("site/wall", "alpha")
             .build("m");
-        let settings_file = root.join(format!("user_config_ui_{tag}_{}/settings.ron", std::process::id()));
+        let settings_file = root.join(format!("user_config_ui_{tag}_{}/settings.yaml", std::process::id()));
         std::fs::create_dir_all(settings_file.parent().expect("a settings folder")).expect("a settings folder");
         std::fs::write(&settings_file, contents).expect("a settings file");
         let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
@@ -159,8 +159,8 @@ fn the_settings_files_interface_size_reaches_the_ui_scale() {
         }
         app.world().resource::<UiScale>().0
     };
-    let at_design = at("design", "(version: 1)");
-    let larger = at("large", "(version: 1, interface_scale: Some(1.25))");
+    let at_design = at("design", "{version: 1}");
+    let larger = at("large", "{version: 1, interface_scale: 1.25}");
     assert!(at_design > 0.0, "the fit ran at all: {at_design}");
     assert!(
         (larger - at_design * 1.25).abs() < 1e-4,

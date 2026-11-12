@@ -249,8 +249,7 @@ fn the_runs_posts_are_ordinary_rows_a_map_accepts() {
         .unwrap_or_else(|e| panic!("the map must accept a run's rows: {e}"));
 
     // **And it round-trips through the file** — the same rows, the same places.
-    let text = ron::ser::to_string_pretty(&map, ron::ser::PrettyConfig::default())
-        .unwrap_or_else(|e| panic!("{e}"));
+    let text = map.to_yaml().unwrap_or_else(|e| panic!("{e}"));
     let back = Map::parse(&text).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(back.placements, rows);
     assert_eq!(back.placements.len(), 4);

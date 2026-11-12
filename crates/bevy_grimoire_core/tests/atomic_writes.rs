@@ -1,5 +1,5 @@
 //! **A write of a project file is all or nothing, for a reader, for a crash and for a second writer**
-//! (#199, H2). Everything here goes through `ron_surgery::save_atomic`, the call every operation
+//! (#199, H2). Everything here goes through `save::save_atomic`, the call every operation
 //! makes, so each test measures what an editor save does.
 //!
 //! - A reader that parses the map in a loop while it is replaced never sees a torn file.
@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 
 use bevy_grimoire_core::live::{FileWatch, POLL_SECS};
 use bevy_grimoire_core::map::{Map, Placed};
-use bevy_grimoire_core::ron_surgery::save_atomic;
+use bevy_grimoire_core::save::save_atomic;
 
 /// A scratch directory under the OS's temp, removed when it goes out of scope.
 struct Scratch(PathBuf);
@@ -48,7 +48,7 @@ fn map_text(rows: usize, yaw: f32) -> String {
             ..Default::default()
         })
         .collect();
-    Map { name: "town".to_owned(), placements, ..Default::default() }.to_ron().unwrap_or_else(|e| panic!("{e}"))
+    Map { name: "town".to_owned(), placements, ..Default::default() }.to_yaml().unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// Sets the flag when it drops, so a reader loop ends even when the writer panics: a failing test
@@ -105,7 +105,7 @@ fn read_while_replacing(target: &Path, times: usize, replace: impl Fn(&Path, &st
 fn a_reader_never_sees_a_torn_map_while_it_is_replaced() {
     let dir = Scratch::new("reader");
     // The editor's own save, flushes included.
-    read_while_replacing(&dir.0.join("town.map.ron"), 300, save_atomic);
+    read_while_replacing(&dir.0.join("town.map.yaml"), 300, save_atomic);
 }
 
 #[test]
@@ -113,7 +113,7 @@ fn a_reader_never_sees_a_torn_map_while_it_is_replaced_ten_thousand_times() {
     let dir = Scratch::new("reader_10k");
     // The same replace without the flushes: a flush does not change what a *reader* can see, and
     // ten thousand of them is minutes on a Mac.
-    read_while_replacing(&dir.0.join("town.map.ron"), 10_000, |p, t| {
+    read_while_replacing(&dir.0.join("town.map.yaml"), 10_000, |p, t| {
         bevy_grimoire_core::atomic_file::write_cache(p, t).map_err(|e| e.to_string())
     });
 }
@@ -157,7 +157,7 @@ fn a_writer_to_kill() {
 #[test]
 fn a_writer_killed_at_random_points_leaves_the_old_file_or_the_new_one() {
     let dir = Scratch::new("kill");
-    let target = dir.0.join("town.map.ron");
+    let target = dir.0.join("town.map.yaml");
     let started = target.with_extension("started");
     let exe = std::env::current_exe().unwrap_or_else(|e| panic!("{e}"));
     let (a, b, old) = (payload(b'a'), payload(b'b'), payload(b'o'));
@@ -220,7 +220,7 @@ fn a_writer_killed_at_random_points_leaves_the_old_file_or_the_new_one() {
 #[test]
 fn two_writers_of_one_path_do_not_corrupt_each_other() {
     let dir = Scratch::new("writers");
-    let target = dir.0.join("town.map.ron");
+    let target = dir.0.join("town.map.yaml");
     let payloads: Vec<String> = b"wxyz".iter().map(|byte| (*byte as char).to_string().repeat(256 * 1024)).collect();
     save_atomic(&target, &payloads[0]).unwrap_or_else(|e| panic!("{e}"));
 
@@ -257,7 +257,7 @@ fn two_writers_of_one_path_do_not_corrupt_each_other() {
         .unwrap_or_else(|e| panic!("{e}"))
         .flatten()
         .map(|e| e.file_name().to_string_lossy().into_owned())
-        .filter(|n| n != "town.map.ron")
+        .filter(|n| n != "town.map.yaml")
         .collect();
     assert!(left.is_empty(), "the writers left files behind: {left:?}");
 }
@@ -271,7 +271,7 @@ fn two_writers_of_one_path_do_not_corrupt_each_other() {
 #[test]
 fn no_file_a_write_makes_but_the_target_is_a_ron_file() {
     let dir = Scratch::new("names");
-    let target = dir.0.join("town.map.ron");
+    let target = dir.0.join("town.map.yaml");
     let done = AtomicBool::new(false);
     let caught = AtomicBool::new(false);
     let seen: BTreeSet<String> = std::thread::scope(|scope| {
@@ -280,7 +280,7 @@ fn no_file_a_write_makes_but_the_target_is_a_ron_file() {
             while !done.load(Ordering::Acquire) {
                 for entry in std::fs::read_dir(&dir.0).into_iter().flatten().flatten() {
                     let name = entry.file_name().to_string_lossy().into_owned();
-                    if name != "town.map.ron" {
+                    if name != "town.map.yaml" {
                         caught.store(true, Ordering::Release);
                     }
                     seen.insert(name);
@@ -302,7 +302,7 @@ fn no_file_a_write_makes_but_the_target_is_a_ron_file() {
         looker.join().unwrap_or_else(|_| panic!("the looker panicked"))
     });
     for name in &seen {
-        if name == "town.map.ron" {
+        if name == "town.map.yaml" {
             continue;
         }
         assert!(
@@ -318,9 +318,9 @@ fn no_file_a_write_makes_but_the_target_is_a_ron_file() {
 #[test]
 fn a_rename_replaced_file_is_loaded_once() {
     let dir = Scratch::new("once");
-    let target = dir.0.join("maps").join("town.map.ron");
+    let target = dir.0.join("maps").join("town.map.yaml");
     save_atomic(&target, &map_text(5, 0.0)).unwrap_or_else(|e| panic!("{e}"));
-    let mut watch = FileWatch::new(&dir.0, &["ron"]);
+    let mut watch = FileWatch::new(&dir.0, &["yaml"]);
 
     // A file system's clock can be as coarse as a few milliseconds, so a replace made at once after
     // the last stat would share its mtime and be invisible to a watch that compares mtimes.

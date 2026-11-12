@@ -1,7 +1,7 @@
 //! **A destructible marks file or a bake that does not read is refused naming the file and the field, and
 //! is never overwritten** (#200, H3).
 //!
-//! `destructible_set` reads `destructible.ron`, changes one piece and writes the whole file back, and
+//! `destructible_set` reads `destructible.yaml`, changes one piece and writes the whole file back, and
 //! `destructible_hit` reads it and the piece's cached bake. The marks file read with the parser's
 //! position and no field, and a bake that did not parse was baked again over the damaged bytes with no
 //! word. Now each of the three bad files (corrupt, a field of the wrong type, a required field missing)
@@ -45,26 +45,26 @@ fn hit(ctx: &mut Ctx) -> Result<(), String> {
 }
 
 fn marks(root: &Path) -> PathBuf {
-    root.join("destructible.ron")
+    root.join("destructible.yaml")
 }
 
 fn bake(root: &Path) -> PathBuf {
-    root.join("destructible/site__cart.bake.ron")
+    root.join("destructible/site__cart.bake.yaml")
 }
 
 /// The three bad marks files: `(what is wrong, the text, the field the refusal must name)`.
 const BAD_MARKS: [(&str, &str, Option<&str>); 3] = [
-    ("corrupt", "(version: 1, pieces: [\"site/cart\"", None),
-    ("wrong type", "(version: \"one\", pieces: [\"site/cart\"])", Some("version")),
-    ("missing field", "(version: 1)", Some("pieces")),
+    ("corrupt", "version: 1\npieces: [site/cart", None),
+    ("wrong type", "version: one\npieces: [site/cart]\n", Some("version")),
+    ("missing field", "version: 1\n", Some("pieces")),
 ];
 
 /// The three bad bakes, and a damaged chunk where a hand edit lands.
 const BAD_BAKES: [(&str, &str, Option<&str>); 4] = [
-    ("corrupt", "(version: 1, key: 5, chunks: [(points: [(0.0, 0.0, 0.0)]", None),
-    ("wrong type", "(version: 1, key: \"k\", chunks: [])", Some("key")),
-    ("missing field", "(version: 1, chunks: [])", Some("key")),
-    ("damaged chunk", "(version: 1, key: 5, chunks: [(points: [], faces: []), (points: 7, faces: [])])", Some("chunks[1].points")),
+    ("corrupt", "version: 1\nkey: 5\nchunks:\n- points: [[0.0, 0.0, 0.0]", None),
+    ("wrong type", "version: 1\nkey: k\nchunks: []\n", Some("key")),
+    ("missing field", "version: 1\nchunks: []\n", Some("key")),
+    ("damaged chunk", "version: 1\nkey: 5\nchunks:\n- points: []\n  faces: []\n- points: 7\n  faces: []\n", Some("chunks[1].points")),
 ];
 
 fn names(refusal: &str, file: &str, field: Option<&str>, what: &str) {
@@ -83,10 +83,10 @@ fn a_marks_file_that_does_not_read_refuses_both_calls_and_stays_as_it_was() {
         let before = text.as_bytes();
         for on in [true, false] {
             let refusal = set(&mut ctx, on).expect_err(what);
-            names(&refusal, "destructible.ron", field, what);
+            names(&refusal, "destructible.yaml", field, what);
         }
         let refusal = hit(&mut ctx).expect_err(what);
-        names(&refusal, "destructible.ron", field, what);
+        names(&refusal, "destructible.yaml", field, what);
         assert_eq!(std::fs::read(marks(&root)).unwrap(), before, "{what}: the bytes stand");
         assert!(!bake(&root).exists(), "{what}: nothing was baked over a marks file that does not read");
     }
@@ -97,7 +97,7 @@ fn once_the_marks_are_fixed_the_same_call_applies_and_keeps_the_pieces_that_were
     let (mut ctx, root) = open("marks_fixed");
     std::fs::write(marks(&root), BAD_MARKS[1].1).unwrap();
     set(&mut ctx, true).expect_err("refused while the file is bad");
-    std::fs::write(marks(&root), "(version: 1, pieces: [\"site/other\"])").unwrap();
+    std::fs::write(marks(&root), "version: 1\npieces: [site/other]\n").unwrap();
     let done = set(&mut ctx, true).expect("the fixed file applies");
     assert_eq!(done.after.as_ref().unwrap()["baked"], true, "{done:?}");
     let text = std::fs::read_to_string(marks(&root)).unwrap();
@@ -113,9 +113,9 @@ fn a_bake_that_does_not_read_refuses_both_calls_and_stays_as_it_was() {
         let marked = std::fs::read(marks(&root)).unwrap();
         // Taking the mark off reads no bake, so only marking (which bakes) and a hit refuse.
         let refusal = set(&mut ctx, true).expect_err(what);
-        names(&refusal, "destructible/site__cart.bake.ron", field, what);
+        names(&refusal, "destructible/site__cart.bake.yaml", field, what);
         let refusal = hit(&mut ctx).expect_err(what);
-        names(&refusal, "destructible/site__cart.bake.ron", field, what);
+        names(&refusal, "destructible/site__cart.bake.yaml", field, what);
         assert_eq!(std::fs::read(bake(&root)).unwrap(), text.as_bytes(), "{what}: the bake was not baked over");
         assert_eq!(std::fs::read(marks(&root)).unwrap(), marked, "{what}: the marks were not written either");
         // Taking the mark off reads no bake: it applies, and the damaged file is still not touched.
@@ -129,7 +129,7 @@ fn a_removed_bake_is_baked_again_and_a_stale_one_too() {
     let (mut ctx, root) = open("bake_stale");
     set(&mut ctx, true).expect("a first mark bakes");
     let good = std::fs::read(bake(&root)).unwrap();
-    std::fs::write(bake(&root), "(version: 1, key: 5, chunks: [])").unwrap();
+    std::fs::write(bake(&root), "version: 1\nkey: 5\nchunks: []\n").unwrap();
     // Reads, but was made from something else: stale, so baked again, to the same bytes as the first time.
     let again = set(&mut ctx, true).expect("a stale bake is baked again");
     assert_eq!(again.after.as_ref().unwrap()["baked"], true, "{again:?}");

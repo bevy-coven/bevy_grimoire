@@ -26,7 +26,6 @@ bevy_grimoire_rng = { path = "../bevy_grimoire_rng", version = "0.1.0" }
 # boundary is policed on that side rather than taken on trust here.
 bevy_grimoire_solver = { path = "../bevy_grimoire_solver", version = "0.1.0" }
 serde.workspace = true
-ron.workspace = true
 # On a refused reload, the field the file is wrong at (`reload_check.rs`); never on the happy path.
 serde_path_to_error.workspace = true
 # Reading a `.glb`'s JSON chunk (`glb.rs`). Data only — no engine, no renderer. The reader is
@@ -37,8 +36,11 @@ rand.workspace = true
 rand_chacha.workspace = true
 # The digest a guide grant holds (`trust.rs`): whether a project's `AGENTS.md` is the text a person allowed.
 sha2.workspace = true
+# **The container a bake writes** (`bake.rs`, GD-08, #370): postcard over a value tree, so a release reads its data in
+# milliseconds where the YAML takes tens. Pure Rust, serde only, no engine.
+postcard = { version = "1.1", default-features = false, features = ["use-std"] }
 # The platform's per-user data and config folders (`user_dirs.rs`): the one place the editor and its MCP server
-# name where `recent.ron`, `settings.ron`, `trusted.ron` and `cauldron.log` live. No engine in it.
+# name where `recent.yaml`, `settings.yaml`, `trusted.yaml` and `cauldron.log` live. No engine in it.
 dirs = "6"
 # The one YAML reader and writer every project file goes through (`yaml.rs`, GD-01, #363), and the event
 # parser that says where each node stands — which is what a refusal's line and field path come from.
@@ -53,6 +55,12 @@ schemars.workspace = true
 # validator can say so. It is a dev-dependency because nothing in the product validates a document
 # against a schema at runtime: an editor does, and this crate only generates the schema.
 [dev-dependencies]
+# **The RON reader, which is no longer a dependency of this crate** (GD-03, #365). The migration has to read
+# a release's files as it wrote them, and its tests compare the YAML it writes against the value those files
+# held; so the reader sits in `bevy_grimoire_migrate` and a TEST depends on it. `the_dependency_list_stays_closed`
+# only reads `[dependencies]`, so this is invisible to the ratchet, and that is the point: nothing in the
+# product half of this crate can reach RON.
+bevy_grimoire_migrate = { path = "../bevy_grimoire_migrate" }
 # **No default features**: with them, `jsonschema` is ~50 crates including `reqwest` and
 # `aws-lc-sys`, for a remote `$ref` resolver, a CLI and a language binding this test never uses. A schema
 # here is one local document whose `$defs` are in the same file, so nothing needs fetching.

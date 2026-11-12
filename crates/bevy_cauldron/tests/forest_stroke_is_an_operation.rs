@@ -44,7 +44,7 @@ fn trees_stand_only_under_the_stroke_on_the_ground_and_one_undo_removes_them() {
     let forest = forest_of(&project, "m");
     assert!(forest.trees.len() > 20, "a 24 m x 8 m stroke at 2 m spacing plants a forest, got {}", forest.trees.len());
     let ground: bevy_grimoire_core::heightfield::Heightfield =
-        ron::from_str(&std::fs::read_to_string(project.grimoire_dir.join("terrain").join("m.ron")).unwrap()).unwrap();
+        bevy_grimoire_core::yaml::from_str(&std::fs::read_to_string(project.grimoire_dir.join("terrain").join("m.yaml")).unwrap(), "test").unwrap();
     let line = [(0.0, 0.0), (20.0, 0.0)];
     for t in &forest.trees {
         assert!(under_stroke(t.at, &line, 4.0), "tree {} at {:?} is outside the stroke", t.id, t.at);

@@ -87,7 +87,7 @@ pub enum Asked {
     /// rule the leave question follows, because a turn's worth of changes must not be discarded by
     /// reflex.
     Presentation,
-    /// **A project's `agent.ron` or `play.ron` wants to start a program no person has allowed.**
+    /// **A project's `agent.yaml` or `play.yaml` wants to start a program no person has allowed.**
     ///
     /// The one question with three answers: **allow this command** (the exact program, arguments and
     /// directory; an edit to any of them asks again), **trust the whole project**, or **not now**. The
@@ -426,7 +426,7 @@ fn answer_by_activate(
 /// gooey's [`dialog`]: the scrim, the centring, the opaque framed card and the modal tab group are
 /// the library's, in the skin's colours. The card used to be `chrome::modal_card`, which the modals
 /// shared so that none of them could dim, pad or stack differently; gooey's `dialog` is that one
-/// contract now, and the editor's skin (`src/editor_skin.ron`) is what colours it. Only the z-order
+/// contract now, and the editor's skin (`src/editor_skin.yaml`) is what colours it. Only the z-order
 /// is the editor's own: [`crate::chrome::MODAL_Z`], in front of every panel, which gooey's default
 /// of 100 is not.
 ///

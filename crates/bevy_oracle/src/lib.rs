@@ -22,7 +22,7 @@ mod transport;
 mod types;
 
 pub use calibrate::{Calibration, Sample, calibrate};
-pub use check::{BUILTIN_CHECKS_RON, CHECKS_VERSION, Check, PROJECT_CHECKS_FILE, Checks, Evidence, Finding};
+pub use check::{BUILTIN_CHECKS_YAML, CHECKS_VERSION, Check, PROJECT_CHECKS_FILE, Checks, Evidence, Finding};
 pub use clip::{FRAMES, LABELLED_FILE, Labelled, clip_check, load_labelled, score_set};
 pub use b64::data_url;
 pub use run::{Verdict, evidence_from, run_checks};
@@ -47,7 +47,7 @@ pub enum Error {
     Fixture(String),
     /// A calibration was asked of a set that cannot calibrate.
     Calibration(String),
-    /// A `checks.ron` that does not parse or breaks a rule (duplicate name, threshold outside 0..=1).
+    /// A `checks.yaml` that does not parse or breaks a rule (duplicate name, threshold outside 0..=1).
     Checks(String),
     /// A check was asked without an image or the facts it needs; it does not answer from less.
     MissingEvidence { check: String, missing: String },
@@ -68,7 +68,7 @@ impl fmt::Display for Error {
             }
             Error::Fixture(m) => write!(f, "decision fixture: {m}"),
             Error::Calibration(m) => write!(f, "decision calibration: {m}"),
-            Error::Checks(m) => write!(f, "checks.ron: {m}"),
+            Error::Checks(m) => write!(f, "checks.yaml: {m}"),
             Error::MissingEvidence { check, missing } => {
                 write!(f, "check `{check}` needs {missing}, which was not captured; it does not answer from less")
             }

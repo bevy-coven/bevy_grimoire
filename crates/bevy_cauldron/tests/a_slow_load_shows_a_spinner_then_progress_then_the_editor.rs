@@ -155,8 +155,8 @@ fn project_with_a_broken_terrain_file(tag: &str) -> (PathBuf, String) {
     let root = project(tag);
     let kit = Project::open(&root, None).unwrap_or_else(|e| panic!("{e}")).grimoire_dir;
     std::fs::create_dir_all(kit.join("terrain")).unwrap();
-    std::fs::write(kit.join("terrain/m.ron"), "(version: \"one\")").unwrap();
-    let file = format!("{}/terrain/m.ron", kit.file_name().unwrap().to_string_lossy());
+    std::fs::write(kit.join("terrain/m.yaml"), "{version: \"one\"}").unwrap();
+    let file = format!("{}/terrain/m.yaml", kit.file_name().unwrap().to_string_lossy());
     (root, file)
 }
 

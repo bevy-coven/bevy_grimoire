@@ -1,7 +1,7 @@
 //! **An agent can send a piece back out of the library, and `Delete` on the Meshes shelf is the same
 //! operation (E-002, #129 slice 8).**
 //!
-//! `Delete` took a piece out of `library.ron` with a write of its own, named by no operation, so an agent
+//! `Delete` took a piece out of `library.yaml` with a write of its own, named by no operation, so an agent
 //! could import a piece and never un-import one, no log line named the change, and the registry's
 //! two-front-end rule listed the key as unmigrated. It is now the registered operation `piece_remove`.
 //! The first three tests go through the registered BRP methods, the way an agent's request goes; the
@@ -104,7 +104,7 @@ fn mesh_of(app: &App, id: &str) -> String {
 
 /// **One call takes the piece out, the file and the editor's library follow, one log line names it, and
 /// one undo puts the whole descriptor back where it stood.** A piece in the middle of the file is the
-/// case that shows the place: a put-back at the end would reorder `library.ron`.
+/// case that shows the place: a put-back at the end would reorder `library.yaml`.
 #[test]
 fn an_agent_removes_a_piece_and_one_undo_puts_it_back_where_it_stood() {
     let mut app = editor("piece-remove-agent");
@@ -131,8 +131,8 @@ fn an_agent_removes_a_piece_and_one_undo_puts_it_back_where_it_stood() {
         "the editor's library still holds the piece"
     );
     assert!(!ids(&app).contains(&"site/b".to_owned()), "the measured layer still holds the piece");
-    assert!(!file(&app).contains("\"site/b\""), "the library file still holds the piece: {}", file(&app));
-    assert!(file(&app).contains("\"site/a\""), "the removal took more than the one piece");
+    assert!(!file(&app).contains("id: site/b"), "the library file still holds the piece: {}", file(&app));
+    assert!(file(&app).contains("id: site/a"), "the removal took more than the one piece");
     let lines = log(&app);
     assert_eq!(lines.len(), lines_before + 1, "a removal is one log line");
     assert_eq!(lines.last().map(|l| l.op.as_str()), Some("piece_remove"));
@@ -173,7 +173,7 @@ fn an_agent_removes_a_piece_and_one_undo_puts_it_back_where_it_stood() {
         Some(&before),
         "the descriptor must come back exactly as it was, judgements and all"
     );
-    assert!(file(&app).contains("\"site/b\""), "undo must put the file back: {}", file(&app));
+    assert!(file(&app).contains("id: site/b"), "undo must put the file back: {}", file(&app));
     assert_eq!(
         candidate_at(&app, &mesh),
         None,
@@ -310,7 +310,7 @@ fn candidate_at(app: &App, mesh: &str) -> Option<usize> {
 
 /// **A person's `Delete` on a library piece is one `piece_remove` line stamped as a person's, it sends
 /// the mesh back to NOT IMPORTED with the cursor on it, Cmd+Z puts the piece back and lands on it, and
-/// Cmd+Shift+Z sends it out again.** Before slice 8 the key wrote `library.ron` itself and logged
+/// Cmd+Shift+Z sends it out again.** Before slice 8 the key wrote `library.yaml` itself and logged
 /// nothing.
 #[test]
 fn a_persons_delete_removes_through_the_operation_and_cmd_z_and_redo_follow_it() {
@@ -328,7 +328,7 @@ fn a_persons_delete_removes_through_the_operation_and_cmd_z_and_redo_follow_it()
         app.update();
     }
     assert!(app.world().resource::<Project>().library.get("site/b").is_none(), "Delete did not remove the piece");
-    assert!(!file(&app).contains("\"site/b\""), "Delete did not reach the library file: {}", file(&app));
+    assert!(!file(&app).contains("id: site/b"), "Delete did not reach the library file: {}", file(&app));
     let lines = log(&app);
     assert_eq!(lines.len(), lines_before + 1, "one press of Delete is one log line");
     assert_eq!(lines.last().map(|l| l.op.as_str()), Some("piece_remove"));
@@ -348,7 +348,7 @@ fn a_persons_delete_removes_through_the_operation_and_cmd_z_and_redo_follow_it()
         app.world().resource::<Project>().library.get("site/b").is_some(),
         "one Cmd+Z must put the piece back"
     );
-    assert!(file(&app).contains("\"site/b\""), "Cmd+Z must put the file back: {}", file(&app));
+    assert!(file(&app).contains("id: site/b"), "Cmd+Z must put the file back: {}", file(&app));
     assert_eq!(candidate_at(&app, &mesh), None, "a restored piece is not also a candidate");
     assert_eq!(
         app.world().resource::<ImportState>().selected_library_id.as_deref(),

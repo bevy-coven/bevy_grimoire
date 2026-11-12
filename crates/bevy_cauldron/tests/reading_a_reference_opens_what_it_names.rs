@@ -70,7 +70,7 @@ fn a_file_references_page_is_the_files_workspace_at_that_file() {
         .expect("the open map is inside the project")
         .to_string_lossy()
         .replace('\\', "/");
-    assert_eq!(path, "assets/grimoire/maps/m.map.ron", "the file a person edits for `bed@0`");
+    assert_eq!(path, "assets/grimoire/maps/m.map.yaml", "the file a person edits for `bed@0`");
 
     // **Owner exception (2026-11-12): tests/reading_a_reference_opens_what_it_names.rs::a_file_reference_is_refused_with_the_page_that_is_missing:
     // the refusal this asserted was a stand-in for the Files workspace (GD-11, #373), which now exists** (review M1). The pin
@@ -83,7 +83,7 @@ fn a_file_references_page_is_the_files_workspace_at_that_file() {
             // **The selection opens the file itself**, by the path the change named, and at its first line when one was given.
             match select {
                 bevy_cauldron::reveal::Select::File { path: opened, line } => {
-                    assert_eq!(opened, "assets/grimoire/maps/m.map.ron", "the file the change is in");
+                    assert_eq!(opened, "assets/grimoire/maps/m.map.yaml", "the file the change is in");
                     assert_eq!(line, None, "no line was named, so the file opens at its top");
                 }
                 _ => panic!("a project file's selection is the file itself"),

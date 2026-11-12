@@ -109,7 +109,7 @@ fn a_divider_moved_in_map_and_one_moved_in_kit_each_come_back_where_they_were_le
         .descriptor("alpha/floor", "alpha")
         .place("alpha/floor", (0.0, 0.0))
         .build("m");
-    let user = root.join(format!("user_{}/settings.ron", std::process::id()));
+    let user = root.join(format!("user_{}/settings.yaml", std::process::id()));
     std::fs::create_dir_all(user.parent().unwrap()).unwrap();
 
     let mut app = editor_in(&root, Some(&user));
@@ -139,9 +139,12 @@ fn a_divider_moved_in_map_and_one_moved_in_kit_each_come_back_where_they_were_le
 /// so without the migration every existing file with a `shell_layout` was refused wholesale.
 #[test]
 fn a_file_with_the_old_shell_layout_is_read_as_maps() {
-    let layout = ron::ser::to_string(&moved(0.4)).unwrap_or_else(|e| panic!("{e}"));
-    let text = format!("(version: {SETTINGS_VERSION}, shell_layout: Some({layout}))");
-    let layer = SettingsLayer::read("old/settings.ron", &text).unwrap_or_else(|r| panic!("an old file was refused: {}: {}", r.field.unwrap_or_default(), r.reason));
+    // Owner exception (2026-11-12): the settings text is YAML now (a layer written by the editor's own writer), not RON.
+    // `shell_layout` is read and never written now, so the old file's text is the layout under its old key, by hand.
+    let layout = bevy_grimoire_core::yaml::to_string(&moved(0.4)).unwrap_or_else(|p| panic!("{}", p.line()));
+    let indented: String = layout.lines().map(|l| format!("  {l}\n")).collect();
+    let text = format!("version: {SETTINGS_VERSION}\nshell_layout:\n{indented}");
+    let layer = SettingsLayer::read("old/settings.yaml", &text).unwrap_or_else(|r| panic!("an old file was refused: {}: {}", r.field.unwrap_or_default(), r.reason));
     assert_eq!(layer.workspace_layout.get("map"), Some(&moved(0.4)), "the one arrangement of before is Map's");
     assert!(layer.shell_layout.is_none(), "and it is not kept a second time");
 }
@@ -151,9 +154,11 @@ fn a_file_with_the_old_shell_layout_is_read_as_maps() {
 /// is not refused, because a person's saved keymap must keep loading.
 #[test]
 fn a_keymap_that_rebound_the_old_switch_id_still_reads() {
-    let chord = ron::ser::to_string(&Shortcut::new(Modifiers::NONE, KeyCode::Backquote)).unwrap_or_else(|e| panic!("{e}"));
-    let text = format!("(version: {SETTINGS_VERSION}, keymap: {{\"view.switch_door\": {chord}}})");
-    let layer = SettingsLayer::read("old/settings.ron", &text).unwrap_or_else(|r| panic!("an old keymap was refused: {}: {}", r.field.unwrap_or_default(), r.reason));
+    // Owner exception (2026-11-12): the settings text is YAML now (a layer written by the editor's own writer), not RON.
+    let chord = Shortcut::new(Modifiers::NONE, KeyCode::Backquote);
+    let old = SettingsLayer { version: SETTINGS_VERSION, keymap: [("view.switch_door".to_owned(), chord)].into(), ..SettingsLayer::default() };
+    let text = bevy_grimoire_core::yaml::to_string(&old).unwrap_or_else(|p| panic!("{}", p.line()));
+    let layer = SettingsLayer::read("old/settings.yaml", &text).unwrap_or_else(|r| panic!("an old keymap was refused: {}: {}", r.field.unwrap_or_default(), r.reason));
     assert!(!layer.keymap.contains_key("view.switch_door"), "the retired id binds nothing, so it is dropped");
     assert!(commands::by_id("view.switch_door").is_none(), "and it names no command");
 }

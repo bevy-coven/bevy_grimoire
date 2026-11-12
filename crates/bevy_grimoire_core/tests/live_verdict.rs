@@ -32,13 +32,13 @@ fn a_bad_or_newer_file_is_refused_by_path() {
     let path = Verdict::path(&d);
     std::fs::write(&path, "not ron").unwrap();
     let e = Verdict::read(&d).unwrap_err();
-    assert!(e.contains("game.ron"), "{e}");
+    assert!(e.contains("game.yaml"), "{e}");
     let newer = format!(
-        "(version: {}, at_unix_ms: 1, ok: true, message: \"\")",
+        "version: {}\nat_unix_ms: 1\nok: true\nmessage: \"\"\n",
         VERDICT_VERSION + 1
     );
     std::fs::write(&path, newer).unwrap();
     let e = Verdict::read(&d).unwrap_err();
-    assert!(e.contains("game.ron") && e.contains("newer"), "{e}");
+    assert!(e.contains("game.yaml") && e.contains("newer"), "{e}");
     let _ = std::fs::remove_dir_all(&d);
 }

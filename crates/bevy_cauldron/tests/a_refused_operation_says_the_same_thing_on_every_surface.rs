@@ -101,17 +101,17 @@ fn a_refusal_that_is_only_a_sentence_says_only_its_what() {
 
 #[test]
 fn a_refused_file_names_its_file_field_reason_and_what_the_editor_kept() {
-    let verdict = KindVerdict::refused("rigs", "rigs.ron", Some("rigs[2]".to_owned()), "1:47: Expected float");
+    let verdict = KindVerdict::refused("rigs", "rigs.yaml", Some("rigs[2]".to_owned()), "1:47: Expected float");
     let p = verdict.problem("the rigs already loaded stay");
     assert_eq!(
         p.to_json(),
         serde_json::json!({
-            "what": "rigs.ron was refused, so the rigs already loaded stay",
-            "where": {"file": "rigs.ron", "field": "rigs[2]"},
+            "what": "rigs.yaml was refused, so the rigs already loaded stay",
+            "where": {"file": "rigs.yaml", "field": "rigs[2]"},
             "why": "1:47: Expected float",
-            "fix": "correct rigs.ron and save it; the editor reads it again at once",
+            "fix": "correct rigs.yaml and save it; the editor reads it again at once",
         })
     );
     // The journal's old sentence is still in the line, so anyone searching it for the field finds it.
-    assert!(p.line().contains("rigs.ron (rigs[2]): 1:47: Expected float"), "{}", p.line());
+    assert!(p.line().contains("rigs.yaml (rigs[2]): 1:47: Expected float"), "{}", p.line());
 }

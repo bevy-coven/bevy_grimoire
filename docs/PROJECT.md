@@ -276,7 +276,7 @@ statuses. This is the rarest thing in the repository and the most valuable.
 **3. Refusal over degradation, everywhere.**
 
 A headless editor refuses a snip rather than writing an empty picture. A `variety` that cannot be
-measured is `null`, not `0.0`. A blank `rules.ron` is refused rather than read as "no rules". A save is
+measured is `null`, not `0.0`. A blank `rules.yaml` is refused rather than read as "no rules". A save is
 a hard link that fails rather than a rename that overwrites. When the code had to choose between a
 plausible answer and no answer, it chose no answer, and it says why at the site.
 

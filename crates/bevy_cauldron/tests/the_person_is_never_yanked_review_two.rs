@@ -547,7 +547,7 @@ fn another_project_clears_the_follows_queue() {
 fn the_toggle_row_is_ticked_from_the_setting_and_writes_the_users_layer() {
     let root = room("round2_toggle_row");
     let mut app = editor(&root);
-    let user = root.join(format!("round2_user_{}/settings.ron", std::process::id()));
+    let user = root.join(format!("round2_user_{}/settings.yaml", std::process::id()));
     std::fs::create_dir_all(user.parent().expect("a parent")).expect("the user's dir");
     app.insert_resource(bevy_cauldron::settings::UserSettingsFile(user.clone()));
     for _ in 0..frames_of(0.5) {
@@ -579,14 +579,14 @@ fn the_toggle_row_is_ticked_from_the_setting_and_writes_the_users_layer() {
         )
     });
     assert!(
-        text.contains("follow_agent: Some(false)"),
+        text.contains("follow_agent: false"),
         "the row did not write the person's own layer: {text}"
     );
     // **And the project's file is untouched**, because this is not this project's preference.
-    let project_file = app.world().resource::<Project>().project_dir.join("editor.ron");
+    let project_file = app.world().resource::<Project>().project_dir.join("editor.yaml");
     assert!(
         !project_file.exists() || !std::fs::read_to_string(&project_file).unwrap_or_default().contains("follow_agent"),
-        "the row wrote the project's editor.ron, which is another project's preference to set"
+        "the row wrote the project's editor.yaml, which is another project's preference to set"
     );
     // **And the running editor follows it**, which is the setting reaching its one reader.
     for _ in 0..frames_of(1.5) {

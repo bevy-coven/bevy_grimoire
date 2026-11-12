@@ -102,6 +102,6 @@ fn resolving_keeps_summary_assumptions_ops_and_two_captures() {
     assert_eq!((ops.len(), summary.as_str(), assumptions.len()), (2, "swept the yard", 1));
     assert_eq!(captures, &["b.png", "a.png"]);
     assert_eq!(n.get(&id).unwrap().status(), "done");
-    let back = Notes::from_ron(&n.to_ron().unwrap()).unwrap();
+    let back = Notes::parse(&n.to_yaml().unwrap()).unwrap();
     assert_eq!(back, n, "the record survives the file");
 }

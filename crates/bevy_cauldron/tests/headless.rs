@@ -765,12 +765,12 @@ mod stepped {
     ///
     /// # It also guards the kit against being emptied
     ///
-    /// **The subject is the kit `assets/grimoire/kits.ron` declares as `authoring`** — the one the
+    /// **The subject is the kit `assets/grimoire/kits.yaml` declares as `authoring`** — the one the
     /// editor opens when nobody says otherwise, which is `furniture`. It used to be `site`, and that
     /// is the whole lesson: `assets/grimoire/site/` was **shared with the game**
     /// (`src/site/kit.rs::SITE_PROJECT_DIR`), so when it was cleared on 2026-08-15 to make a blank
     /// slate, 32 game tests went down with it while this suite stayed green. It was cleared again on
-    /// 2026-08-16 and this time for good — `kits.ron` says so in its own note, *"the kit was cleared
+    /// 2026-08-16 and this time for good — `kits.yaml` says so in its own note, *"the kit was cleared
     /// … and is being re-authored"* — so a test naming it was pinned to a directory the project had
     /// deliberately stopped shipping.
     ///
@@ -794,8 +794,8 @@ mod stepped {
         // rather than skipping, and no unit test can see that.
         assert!(
             !project.library.descriptors.is_empty(),
-            "the kit `assets/grimoire/kits.ron` names as `authoring` is empty, so the editor opens on \
-             nothing. A blank slate belongs in a kit of its own — bind it in `kits.ron` and author \
+            "the kit `assets/grimoire/kits.yaml` names as `authoring` is empty, so the editor opens on \
+             nothing. A blank slate belongs in a kit of its own — bind it in `kits.yaml` and author \
              there rather than emptying the one every default open lands in."
         );
         // The kit's own configuration is the project rather than the content.
@@ -961,7 +961,7 @@ mod stepped {
     /// It read the shipped `site/wall` — the one piece whose lattice was hand-authored rather than
     /// derived — because `Fixture` wrote `subgrid: None` on every descriptor and so could assert
     /// nothing. On 2026-08-15 that kit was emptied and this test was deleted; the kit came back and
-    /// it did with it. On 2026-08-16 the kit was cleared for good (`kits.ron`: *"being
+    /// it did with it. On 2026-08-16 the kit was cleared for good (`kits.yaml`: *"being
     /// re-authored"*), and pinning a loader invariant to a corpus that has now moved out from under
     /// it twice is the fixture rule's whole argument, made twice.
     ///
@@ -1602,7 +1602,7 @@ fn the_maps_bash_narrows_the_palette_but_never_hides_what_is_placed() {
 ///
 /// Not resolved to every-kit, which is the only other thing it could do and is a palette nobody
 /// chose. `Map::validate` cannot make this call — a map validates in isolation and never sees
-/// `kits.ron` — so `OpenMap::open` is the one place both halves are in hand, and the refusal names
+/// `kits.yaml` — so `OpenMap::open` is the one place both halves are in hand, and the refusal names
 /// what was declared so the next keystroke is obvious.
 #[test]
 fn a_map_naming_an_undeclared_bash_will_not_open() {
@@ -1614,9 +1614,8 @@ fn a_map_naming_an_undeclared_bash_will_not_open() {
         .build("m");
     let maps = root.join("assets/grimoire/maps");
     std::fs::write(
-        maps.join("wrong.map.ron"),
-        "(version: 6, name: \"wrong\", origin: (0.0, 0.0, 0.0), bounds: (8.0, 3.0, 8.0), \
-         bash: Some(\"nope\"), placements: [], stamps: [], locations: [])",
+        maps.join("wrong.map.yaml"),
+        "{version: 6, name: \"wrong\", origin: [0.0, 0.0, 0.0], bounds: [8.0, 3.0, 8.0], bash: \"nope\", placements: [], stamps: [], locations: []}",
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
@@ -1624,7 +1623,7 @@ fn a_map_naming_an_undeclared_bash_will_not_open() {
     assert_eq!(
         project.bashes.iter().map(|b| b.name.as_str()).collect::<Vec<_>>(),
         vec!["hub"],
-        "the project carries what `kits.ron` declares"
+        "the project carries what `kits.yaml` declares"
     );
 
     let e = OpenMap::open(&project, "wrong")
@@ -1635,9 +1634,8 @@ fn a_map_naming_an_undeclared_bash_will_not_open() {
 
     // The map that names a declared one opens, so the refusal is about the name and nothing else.
     std::fs::write(
-        maps.join("right.map.ron"),
-        "(version: 6, name: \"right\", origin: (0.0, 0.0, 0.0), bounds: (8.0, 3.0, 8.0), \
-         bash: Some(\"hub\"), placements: [], stamps: [], locations: [])",
+        maps.join("right.map.yaml"),
+        "{version: 6, name: \"right\", origin: [0.0, 0.0, 0.0], bounds: [8.0, 3.0, 8.0], bash: \"hub\", placements: [], stamps: [], locations: []}",
     )
     .unwrap_or_else(|e| panic!("{e}"));
     let open = OpenMap::open(&project, "right").unwrap_or_else(|e| panic!("{e}"));
@@ -1647,7 +1645,7 @@ fn a_map_naming_an_undeclared_bash_will_not_open() {
 /// **A bash cannot strand a placement**, which is the guarantee the whole design rests on.
 ///
 /// A map may name a combination that leaves out a kit whose pieces are already on it — by being
-/// given the bash after the fact, or by the bash being edited in `kits.ron` afterwards. Every bound
+/// given the bash after the fact, or by the bash being edited in `kits.yaml` afterwards. Every bound
 /// kit loads either way, so the placement still resolves and still draws; what would break is the
 /// palette, which would stop offering the rows that describe what the author is looking at.
 /// `OpenMap::palette_namespaces` folds the in-use set back in, so it cannot.
@@ -1688,7 +1686,7 @@ fn a_bash_that_leaves_out_a_placed_kit_still_offers_it() {
 /// **A tile can seat two kits' pieces, and a map can stamp it.** This is what the whole collections
 /// split was for.
 ///
-/// Before it, `compositions.ron` sat beside `library.ron` inside a kit directory and `Project::open`
+/// Before it, `compositions.yaml` sat beside `library.yaml` inside a kit directory and `Project::open`
 /// loaded exactly one kit — so a tile authored in `site` was invisible to every map opened on
 /// `furniture`, and a tile naming both could not be validated at all, because neither kit's library
 /// could answer for the other's pieces.
@@ -1755,7 +1753,7 @@ fn a_tile_can_seat_two_kits_pieces_and_a_map_can_stamp_it() {
 /// re-skin of the other, and it is why "what does `site/floor` mean" is a question about the
 /// *project*: neither directory can answer it about itself.
 ///
-/// So the pair is not loaded together — `kits.ron` refuses to bind one namespace twice, naming both
+/// So the pair is not loaded together — `kits.yaml` refuses to bind one namespace twice, naming both
 /// skins — and a project picks one. **Swapping the skin is editing one line**, and every map,
 /// composition and id resolves against the other directory without moving.
 ///
@@ -3578,7 +3576,7 @@ fn a_captured_group_is_written_and_reads_back() {
     // Cloned rather than held: `keep_as_group` wants both resources at once, and two live borrows
     // of one world is what `resource_scope` exists to avoid. The map is only read here.
     let open = world.resource::<bevy_cauldron::project::OpenMap>().map.clone();
-    let open = bevy_cauldron::project::OpenMap::new(open, std::path::PathBuf::from("m.map.ron"));
+    let open = bevy_cauldron::project::OpenMap::new(open, std::path::PathBuf::from("m.map.yaml"));
     let world = app.world_mut();
     let mut project = world.resource_mut::<bevy_cauldron::project::Project>();
     assert!(
@@ -3632,7 +3630,7 @@ fn a_captured_group_is_written_and_reads_back() {
     );
 
     // And it is on disk, parseable, with the members the set held.
-    let path = root.join("assets/grimoire/compositions.ron");
+    let path = root.join("assets/grimoire/compositions.yaml");
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
     let reread = bevy_grimoire_core::composition::Compositions::parse(&text)
         .unwrap_or_else(|e| panic!("what was written must parse: {e}"));
@@ -3960,7 +3958,7 @@ fn shift_arrow_flushes_the_mesh_and_the_bare_arrow_still_nudges() {
 /// **Undo steps back through the tile, one brought-in mesh at a time.**
 ///
 /// Reported from use: *"Undo is not working on the tiles tab when I bring in two meshes."* It was not
-/// broken, it was **absent** — `UndoTile` is bound in `Context::Meshes` only, over `library.ron`
+/// broken, it was **absent** — `UndoTile` is bound in `Context::Meshes` only, over `library.yaml`
 /// edits, and nothing ever snapshotted the tile in hand. So `Cmd+Z` on this tab reached no handler
 /// at all.
 ///
@@ -4423,7 +4421,7 @@ fn a_tile_survives_a_save_and_a_reopen() {
         .find(|c| c.id == id)
         .unwrap_or_else(|| {
             panic!(
-                "`{id}` must be in compositions.ron after a save; found {:?}",
+                "`{id}` must be in compositions.yaml after a save; found {:?}",
                 project
                     .compositions
                     .compositions
@@ -4592,7 +4590,7 @@ fn the_arrows_walk_the_library_from_the_tiles_tab() {
 ///
 /// `ImportState::editing` falls back to the focused *candidate* when nothing in the library is
 /// selected — and a candidate is a mesh that has been measured and not imported. Dropping one wrote
-/// a member naming an id `library.ron` has never heard of, which expands to nothing at stamp time:
+/// a member naming an id `library.yaml` has never heard of, which expands to nothing at stamp time:
 /// a tile that looks authored and places nothing. Reachable by hand today — select a candidate on
 /// the Meshes tab, press the Tiles tab, press `Enter`. Refused at the door instead.
 #[test]
@@ -5416,7 +5414,7 @@ fn derived_edges_refuse_an_undeclared_token_and_say_which() {
         "and name the axis it belongs to: `{said}`"
     );
     assert!(
-        said.contains("vocab.ron"),
+        said.contains("vocab.yaml"),
         "and say where to declare it: `{said}`"
     );
     // Nothing may reach the lattice: refusing after a partial write would leave a piece carrying
@@ -6922,7 +6920,7 @@ fn every_piece_a_shipped_guide_names_exists_in_the_shipped_kit() {
         .and_then(|p| p.parent())
         .unwrap_or_else(|| panic!("the crate must live two levels under the workspace"))
         .to_path_buf();
-    // The kit `kits.ron` declares as `authoring` — what an author gets on a plain open, and so the
+    // The kit `kits.yaml` declares as `authoring` — what an author gets on a plain open, and so the
     // library every shipped card has to be walkable against. `None` is how that field is resolved;
     // naming `furniture` was a directory standing in for the declaration.
     let mut app = harness::build_headless(&workspace, "untitled_map", None)
@@ -7744,7 +7742,7 @@ fn a_tile_too_big_to_generate_names_the_member_that_did_it() {
 ///
 /// This is the defect that made the transcript untrustworthy, and it is worth stating exactly,
 /// because it looked like the tool working. An author ran the site-kit script; the step "build and
-/// save the corner tile" reported PASS; `compositions.ron` contained no corner tile, then or after.
+/// save the corner tile" reported PASS; `compositions.yaml` contained no corner tile, then or after.
 /// The transcript recorded 1/1 for work that never happened, and `k/n` being believable is the whole
 /// reason this module exists.
 ///
@@ -7916,7 +7914,7 @@ fn the_shipped_tiles_become_solver_prototypes() {
     else {
         panic!("the crate must sit two levels under the repo root");
     };
-    // The kit `kits.ron` declares as `authoring`. `compositions.ron` is the **project's**, not any
+    // The kit `kits.yaml` declares as `authoring`. `compositions.yaml` is the **project's**, not any
     // one kit's, so what is under test is every tile that ships — the kit resolved here decides
     // which library those tiles are resolved against.
     //
@@ -8039,7 +8037,7 @@ fn all_four_arrows_step_the_piece_in_four_different_directions() {
 /// tile was a new one: an author who finished four could not see the set, could not tell a duplicate
 /// from a new one, and could not correct one. That is not hypothetical — a guided run produced
 /// `site/tile_4` with its low wall in the middle of the tile instead of flush against an edge, and
-/// the only way to fix it was to hand-edit `compositions.ron`.
+/// the only way to fix it was to hand-edit `compositions.yaml`.
 ///
 /// The Tiles page is the tab's first page: every authored tile, one row each, `New Tile +` at the
 /// top. `right` drills to the Meshes page (opening the tile under the cursor on the way), `left`
@@ -9261,7 +9259,7 @@ fn the_definition_bench_lists_one_kit_and_the_composing_palette_lists_the_merge(
 
     assert_eq!(
         project.namespace, "furniture",
-        "the kit being authored is the one `kits.ron` names"
+        "the kit being authored is the one `kits.yaml` names"
     );
     assert_eq!(
         project.library.descriptors.len(),
@@ -9509,7 +9507,7 @@ fn a_tile_takes_the_name_its_author_types() {
     // **`furniture/`, not `wall/` and no longer `kit/`.** The fixture's descriptors carry no namespace
     // to inherit, so the tile is named after the kit's own directory. It used to
     // be the literal `"kit"`, which is a namespace nobody chose and which collided across every
-    // unnamespaced kit; `assets/grimoire/compositions.ron` still carries a `kit/tile_1` from that.
+    // unnamespaced kit; `assets/grimoire/compositions.yaml` still carries a `kit/tile_1` from that.
     // `wall/` is the third wrong answer, and the one `descriptors.first()` used to give.
     assert_eq!(
         open_id(&app),
@@ -9676,7 +9674,7 @@ fn a_named_tile_is_a_row_on_the_tiles_page_before_it_is_saved() {
 ///
 /// The `Enter` half is the part worth pinning hardest: it must leave the box **without** the same
 /// keypress falling through to `BuildDrop` and dropping a piece. That is the `xseam` shape the tab
-/// has paid for before — six descriptors once arrived in `library.ron` from an `Enter` that
+/// has paid for before — six descriptors once arrived in `library.yaml` from an `Enter` that
 /// committed a field and then kept going.
 #[test]
 fn f_focuses_the_filter_and_enter_hands_the_keyboard_back() {
@@ -10394,7 +10392,7 @@ fn the_project_page_sees_the_shipped_project() {
     let labels: Vec<&str> = catalog.kits.iter().map(|k| k.label.as_str()).collect();
 
     // **`furniture`, where `grimoire` used to be.** The project root stopped being a kit on
-    // 2026-08-16: `assets/grimoire/` holds `vocab.ron`, `kits.ron`, `compositions.ron` and `maps/`,
+    // 2026-08-16: `assets/grimoire/` holds `vocab.yaml`, `kits.yaml`, `compositions.yaml` and `maps/`,
     // and every library lives in a kit directory beside them. The 75 flat ids that used to sit at
     // the root are `furniture` now, which is what the root directory always held.
     assert!(
@@ -10415,13 +10413,13 @@ fn the_project_page_sees_the_shipped_project() {
     };
     assert!(
         pieces("furniture") > 0,
-        "the furniture kit is empty. It is `assets/grimoire/library.ron`'s 75 pieces, moved rather \
+        "the furniture kit is empty. It is `assets/grimoire/library.yaml`'s 75 pieces, moved rather \
          than cleared — put it back with `git checkout HEAD -- assets/grimoire/furniture/`"
     );
 
     // **Every kit is now a subdirectory, and every one is `--kit`-able.** The no-flag mode was the
     // root kit, and there is no root kit; `Project::open(kit: None)` reads `authoring` from
-    // `kits.ron` instead, which is a project's statement rather than a directory's accident.
+    // `kits.yaml` instead, which is a project's statement rather than a directory's accident.
     assert!(
         catalog.kits.iter().all(|k| k.flag.is_some()),
         "no kit is the no-flag one any more: {labels:?}"
@@ -10684,7 +10682,7 @@ fn the_menu_key_saves_and_goes() {
         "and having saved, it goes — in the same press"
     );
     // The write is real: the placement is on disk, not merely flagged clean.
-    let on_disk = root.join("assets/grimoire/maps/m.map.ron");
+    let on_disk = root.join("assets/grimoire/maps/m.map.yaml");
     let written = std::fs::read_to_string(&on_disk)
         .unwrap_or_else(|e| panic!("the saved map must be on disk at {on_disk:?}: {e}"));
     assert!(
@@ -11269,7 +11267,7 @@ fn the_leaving_question_is_visible_on_a_door_that_is_not_the_map() {
 ///
 /// Reported at the keyboard 2026-08-18 as *"click on Tiles and it rotates our selected mesh"*. It
 /// does not: driven over BRP, the preview's rotation quaternion is identical on both tabs and
-/// `library.ron` is never written. What followed the author across was the **note** — one `String`
+/// `library.yaml` is never written. What followed the author across was the **note** — one `String`
 /// on the `ImportState` that Meshes and Tiles share, only ever overwritten — still reading
 /// `lamp_tall 270,270,180 deg` from a turn made minutes earlier. A message announcing a rotation,
 /// on a tab just arrived at, beside a piece genuinely lying on its side, is a complete story.
@@ -14790,7 +14788,7 @@ fn delete_sends_a_mesh_back_to_not_imported_and_lands_on_it() {
 ///
 /// Asked for at the keyboard, 2026-08-20: *"whenever a user switches over to that list, the most
 /// recent item that they're working on is the one that's already selected."* Two things were wrong.
-/// `library.ron` is appended to, so the piece you had just imported was at the *bottom* of a list
+/// `library.yaml` is appended to, so the piece you had just imported was at the *bottom* of a list
 /// that is 88 rows today and is meant to be 700; and `right` seeded the selection with `.first()`,
 /// which was therefore the oldest piece in the project, every time.
 ///
@@ -14827,7 +14825,7 @@ fn the_library_reads_newest_first_and_remembers_the_row_you_left() {
     assert_eq!(
         shelf(&app),
         vec!["newest".to_owned(), "middle".to_owned(), "oldest".to_owned()],
-        "the shelf reads newest-defined first — `library.ron` is appended to, so its own order is \
+        "the shelf reads newest-defined first — `library.yaml` is appended to, so its own order is \
          oldest first and the piece you just imported was at the bottom"
     );
 
@@ -15933,7 +15931,7 @@ fn a_corrupt_cached_portrait_is_ignored() {
 }
 
 /// **Palette headings say which kit a group is from, once there are two.** A project that mixes a
-/// first-party kit with a tile set shows each kind once per kit, kits in `kits.ron` order; a project
+/// first-party kit with a tile set shows each kind once per kit, kits in `kits.yaml` order; a project
 /// with one kit keeps the plain kind headings.
 mod palette_headings {
     use super::*;
@@ -15964,7 +15962,7 @@ mod palette_headings {
     }
 }
 
-/// **The project's block rules in the editor** — `rules.ron` read at open, and `G` laying a block
+/// **The project's block rules in the editor** — `rules.yaml` read at open, and `G` laying a block
 /// the way the game does.
 ///
 /// Three things are claimed. The rules are validated against the library at open, so a rules file
@@ -15983,9 +15981,7 @@ mod block_rules {
     /// the only thing the layout has to satisfy is the border and the pins.
     fn rule(example: &str, regions: &str, border: &str) -> String {
         format!(
-            "(version: 1, blocks: [(example: \"{example}\", regions: [{regions}], cell: 2.0, \
-             size: (4, 4), border: Some(\"{border}\"), no_empty: true, weights: [], \
-             footprints: [], attempts: 8, seed: 7)])"
+            "version: 1\nblocks:\n- example: {example}\n  regions: [{regions}]\n  cell: 2.0\n  size: [4, 4]\n  border: {border}\n  no_empty: true\n  weights: []\n  footprints: []\n  attempts: 8\n  seed: 7\n"
         )
     }
 
@@ -16023,7 +16019,7 @@ mod block_rules {
             .descriptor("lot", "alpha")
             .descriptor("garden", "alpha")
             .side(8.0)
-            .rules(&rule("m", "", "street"));
+            .rules_text(&rule("m", "", "street"));
         for (id, at, owned) in example_rows(true) {
             f = if owned { f.place_owned(id, at) } else { f.place(id, at) };
         }
@@ -16093,7 +16089,7 @@ mod block_rules {
             .descriptor("street", "alpha")
             .descriptor("lot", "alpha")
             .descriptor("region", "alpha")
-            .rules(&rule("block", "\"region\"", "street"))
+            .rules_text(&rule("block", "region", "street"))
             .place("region", (2.0, -3.0))
             .build("m");
         let mut rows = example_rows(false);
@@ -16161,7 +16157,7 @@ mod block_rules {
         let root = Fixture::new("rules-no-example")
             .descriptor("street", "alpha")
             .descriptor("region", "alpha")
-            .rules(&rule("block", "\"region\"", "street"))
+            .rules_text(&rule("block", "region", "street"))
             .place("region", (0.0, 0.0))
             .build("m");
         let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
@@ -16173,7 +16169,7 @@ mod block_rules {
         let state = app.world().resource::<EditorState>();
         assert!(state.status.has_problem(), "a missing example must be said");
         assert!(
-            state.status.problem_text().contains("block.map.ron"),
+            state.status.problem_text().contains("block.map.yaml"),
             "and must name the file: {}",
             state.status.problem_text()
         );
@@ -16192,7 +16188,7 @@ mod block_rules {
         }
         assert!(
             app.world().resource::<Project>().rules.blocks.is_empty(),
-            "no rules.ron is no rules"
+            "no rules.yaml is no rules"
         );
         generate(&mut app);
         let proposal = app.world().resource::<Proposal>();
@@ -16210,7 +16206,7 @@ mod block_rules {
             .descriptor("street", "alpha")
             .descriptor("region", "alpha")
             .descriptor("floor", "alpha")
-            .rules(&rule("block", "\"region\"", "street"))
+            .rules_text(&rule("block", "region", "street"))
             .place("floor", (0.5, 0.5))
             .place("floor", (1.5, 0.5))
             .build("m");
@@ -16233,13 +16229,13 @@ mod block_rules {
     fn a_rules_file_naming_a_missing_descriptor_fails_the_open() {
         let root = Fixture::new("rules-missing")
             .descriptor("street", "alpha")
-            .rules(&rule("m", "", "nowhere"))
+            .rules_text(&rule("m", "", "nowhere"))
             .build("m");
         let e = match Project::open(&root, None) {
             Ok(_) => panic!("a rules file naming `nowhere` must not open"),
             Err(e) => e,
         };
-        assert!(e.contains("rules.ron"), "the error must name the file: {e}");
+        assert!(e.contains("rules.yaml"), "the error must name the file: {e}");
         assert!(e.contains("nowhere"), "and the descriptor: {e}");
     }
 
@@ -16247,13 +16243,13 @@ mod block_rules {
     fn a_rules_file_that_does_not_parse_fails_the_open() {
         let root = Fixture::new("rules-garbled")
             .descriptor("street", "alpha")
-            .rules("(version: 1, blocks: [")
+            .rules_text("version: 1\nblocks: [\n")
             .build("m");
         let e = match Project::open(&root, None) {
             Ok(_) => panic!("a rules file that does not parse must not open"),
             Err(e) => e,
         };
-        assert!(e.contains("rules.ron"), "the error must name the file: {e}");
+        assert!(e.contains("rules.yaml"), "the error must name the file: {e}");
     }
 }
 

@@ -91,12 +91,12 @@ impl FurnitureManifest {
 /// the solver (`collapse_grid`'s `assert!(n <= 32)`) at furnish time.
 pub const MAX_TILED_PROTOTYPES: usize = 31;
 
-/// Parse a manifest from RON text. Returns a descriptive error rather than panicking — the caller
+/// Parse a manifest from YAML text. Returns a descriptive error rather than panicking — the caller
 /// (plugin build) decides how loudly to surface a malformed manifest. Also enforces the WFC
 /// [`MAX_TILED_PROTOTYPES`] cap so a data-only kit swap can never crash the solver later.
 pub fn parse_manifest(text: &str) -> Result<FurnitureManifest, String> {
-    let manifest = ron::from_str::<FurnitureManifest>(text)
-        .map_err(|e| format!("manifest parse error: {e}"))?;
+    let manifest = crate::yaml::from_str::<FurnitureManifest>(text, "a manifest")
+        .map_err(|p| format!("manifest parse error: {}", p.line()))?;
     validate_manifest(&manifest)?;
     Ok(manifest)
 }
@@ -184,15 +184,22 @@ mod tests {
 
     #[test]
     fn parses_roles_and_affordances() {
-        let text = r#"(
-            items: [
-                ( key: "ceiling_light", glb: "x/Ceiling Light.glb", category: "light",
-                  tags: ["ceiling"], role: Anchor(host: Ceiling), footprint: (0.6, 0.6),
-                  affordances: ["emit"] ),
-                ( key: "sofa", glb: "x/Sofa A.glb", category: "seating",
-                  role: Freestanding, footprint: (1.9, 0.9), affordances: ["sit"] ),
-            ],
-        )"#;
+        let text = r#"items:
+  - key: ceiling_light
+    glb: x/Ceiling Light.glb
+    category: light
+    tags: [ceiling]
+    role: !Anchor
+      host: Ceiling
+    footprint: [0.6, 0.6]
+    affordances: [emit]
+  - key: sofa
+    glb: x/Sofa A.glb
+    category: seating
+    role: !Freestanding
+    footprint: [1.9, 0.9]
+    affordances: [sit]
+"#;
         let m = parse_manifest(text).expect("valid manifest");
         assert_eq!(m.items.len(), 2);
         assert!(matches!(
@@ -213,25 +220,37 @@ mod tests {
     #[test]
     fn rejects_silently_droppable_scatter_authoring() {
         // A provided class parses: the lamp targets "worktop" and the desk offers it.
-        let ok = r#"(
-            items: [
-                ( key: "desk", glb: "x/Desk.glb", category: "table", role: Freestanding,
-                  footprint: (1.9, 0.9), surfaces: ["support", "worktop"] ),
-                ( key: "lamp", glb: "x/Lamp.glb", category: "light",
-                  role: Scatter(surface: "worktop"), footprint: (0.3, 0.3) ),
-            ],
-        )"#;
+        let ok = r#"items:
+  - key: desk
+    glb: x/Desk.glb
+    category: table
+    role: !Freestanding
+    footprint: [1.9, 0.9]
+    surfaces: [support, worktop]
+  - key: lamp
+    glb: x/Lamp.glb
+    category: light
+    role: !Scatter
+      surface: worktop
+    footprint: [0.3, 0.3]
+"#;
         parse_manifest(ok).expect("a provided scatter class is valid");
 
         // (1) A scatter class nothing offers → rejected, naming the prop and the class.
-        let unprovided = r#"(
-            items: [
-                ( key: "bed", glb: "x/Bed.glb", category: "bed", role: Freestanding,
-                  footprint: (2.0, 1.6), affordances: ["sleep"] ),
-                ( key: "lamp", glb: "x/Lamp.glb", category: "light",
-                  role: Scatter(surface: "worktop"), footprint: (0.3, 0.3) ),
-            ],
-        )"#;
+        let unprovided = r#"items:
+  - key: bed
+    glb: x/Bed.glb
+    category: bed
+    role: !Freestanding
+    footprint: [2.0, 1.6]
+    affordances: [sleep]
+  - key: lamp
+    glb: x/Lamp.glb
+    category: light
+    role: !Scatter
+      surface: worktop
+    footprint: [0.3, 0.3]
+"#;
         let err =
             parse_manifest(unprovided).expect_err("a provider-less scatter class must be rejected");
         assert!(
@@ -240,12 +259,14 @@ mod tests {
         );
 
         // (2) An unknown token in `surfaces` (the typo'd-provider case) → rejected at the door.
-        let bad_provider = r#"(
-            items: [
-                ( key: "desk", glb: "x/Desk.glb", category: "table", role: Freestanding,
-                  footprint: (1.9, 0.9), surfaces: ["workop"] ),
-            ],
-        )"#;
+        let bad_provider = r#"items:
+  - key: desk
+    glb: x/Desk.glb
+    category: table
+    role: !Freestanding
+    footprint: [1.9, 0.9]
+    surfaces: [workop]
+"#;
         let err =
             parse_manifest(bad_provider).expect_err("an unknown surfaces token must be rejected");
         assert!(
@@ -254,12 +275,14 @@ mod tests {
         );
 
         // (3) An unknown token in a `Scatter` role (e.g. the playbook's old "media") → rejected.
-        let bad_target = r#"(
-            items: [
-                ( key: "tv", glb: "x/TV.glb", category: "appliance",
-                  role: Scatter(surface: "media"), footprint: (0.9, 0.3) ),
-            ],
-        )"#;
+        let bad_target = r#"items:
+  - key: tv
+    glb: x/TV.glb
+    category: appliance
+    role: !Scatter
+      surface: media
+    footprint: [0.9, 0.3]
+"#;
         let err =
             parse_manifest(bad_target).expect_err("an unknown scatter class must be rejected");
         assert!(
@@ -275,10 +298,10 @@ mod tests {
         let mut body = String::new();
         for i in 0..=MAX_TILED_PROTOTYPES {
             body.push_str(&format!(
-                "( key: \"t{i}\", glb: \"x/t{i}.glb\", category: \"decor\", role: Tiled, footprint: (0.5, 0.5) ),\n"
+                "  - key: t{i}\n    glb: x/t{i}.glb\n    category: decor\n    role: !Tiled\n    footprint: [0.5, 0.5]\n"
             ));
         }
-        let text = format!("( items: [ {body} ] )");
+        let text = format!("items:\n{body}");
         let err =
             parse_manifest(&text).expect_err("more than the cap of Tiled items must be rejected");
         assert!(

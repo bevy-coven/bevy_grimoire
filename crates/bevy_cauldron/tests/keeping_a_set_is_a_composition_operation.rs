@@ -69,7 +69,7 @@ fn define(app: &mut App, parameters: serde_json::Value) -> serde_json::Value {
 }
 
 fn comps(root: &std::path::Path) -> String {
-    std::fs::read_to_string(root.join("assets/grimoire/compositions.ron")).unwrap_or_default()
+    std::fs::read_to_string(root.join("assets/grimoire/compositions.yaml")).unwrap_or_default()
 }
 
 fn log(app: &App) -> Vec<Entry> {
@@ -105,7 +105,7 @@ fn an_agent_defines_a_group_from_a_literal_set_and_one_undo_takes_it_back() {
     let made = define(&mut app, serde_json::json!({"id": "Corner Pile", "set": literal_set()}));
     assert_eq!(made["outcome"], "applied", "{made}");
     let after = comps(&root);
-    assert!(after.contains("id: \"corner_pile\""), "the id is forced to snake_case and written: {after}");
+    assert!(after.contains("id: corner_pile"), "the id is forced to snake_case and written: {after}");
     let project = app.world().resource::<Project>();
     let c = project.compositions.compositions.iter().find(|c| c.id == "corner_pile").expect("the project holds it");
     assert_eq!(c.members.len(), 3);
@@ -117,7 +117,7 @@ fn an_agent_defines_a_group_from_a_literal_set_and_one_undo_takes_it_back() {
     assert_eq!(undone["outcome"], "applied", "{undone}");
     assert!(
         !comps(&root).contains("corner_pile"),
-        "undo takes the group out of compositions.ron: {}",
+        "undo takes the group out of compositions.yaml: {}",
         comps(&root)
     );
     assert!(app.world().resource::<Project>().compositions.compositions.is_empty(), "and out of the project");
@@ -149,7 +149,7 @@ fn a_set_that_cannot_make_a_group_is_refused_and_nothing_is_written() {
         let r = define(&mut app, params);
         assert_eq!(r["outcome"], "refused", "{what} was accepted: {r}");
     }
-    assert_eq!(comps(&root), before, "a refusal wrote compositions.ron");
+    assert_eq!(comps(&root), before, "a refusal wrote compositions.yaml");
     assert_eq!(log(&app).len(), lines, "a refusal logged a line");
 }
 
@@ -224,7 +224,7 @@ fn a_persons_m_name_enter_keeps_the_set_through_the_operation() {
     }
 
     let after = comps(&root);
-    assert!(after.contains("id: \"abc\""), "Enter did not reach compositions.ron: {after}");
+    assert!(after.contains("id: abc"), "Enter did not reach compositions.yaml: {after}");
     let entries = log(&app);
     assert_eq!(entries.len(), lines + 1, "one Enter is one log line");
     let last = entries.last().expect("a line");
@@ -240,7 +240,7 @@ fn a_persons_m_name_enter_keeps_the_set_through_the_operation() {
     let id = last.operation_id.clone();
     let undone = call(&mut app, "grimoire/operation_undo", serde_json::json!({"operation_id": id, "dry_run": false}));
     assert_eq!(undone["outcome"], "applied", "{undone}");
-    assert!(!comps(&root).contains("id: \"abc\""), "one undo takes the group back: {}", comps(&root));
+    assert!(!comps(&root).contains("id: abc"), "one undo takes the group back: {}", comps(&root));
     assert!(app.world().resource::<Project>().compositions.compositions.is_empty(), "and out of the project");
 }
 
@@ -297,5 +297,5 @@ fn a_preview_of_a_group_that_would_contain_itself_is_refused() {
     assert_eq!(dry["outcome"], "refused", "the preview said yes to a group that contains itself: {dry}");
     let real = define(&mut app, params);
     assert_eq!(real["outcome"], "refused", "the write agrees: {real}");
-    assert_eq!(comps(&root), before, "a refusal wrote compositions.ron");
+    assert_eq!(comps(&root), before, "a refusal wrote compositions.yaml");
 }

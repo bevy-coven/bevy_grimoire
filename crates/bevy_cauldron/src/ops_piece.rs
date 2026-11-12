@@ -6,7 +6,7 @@
 //! describe it or resize it, and no log line named either change. Both fields now dispatch these, so a
 //! person's edit and an agent's are one validated, saved and logged change with one undo.
 //!
-//! **Both go through [`crate::tiles::commit_measured`]**, the one door to `library.ron`, after asking
+//! **Both go through [`crate::tiles::commit_measured`]**, the one door to `library.yaml`, after asking
 //! [`crate::tiles::check_measured`] so a preview refuses what the commit would. Each inverse puts back
 //! the fields the change touched and, for the note, the label record its provenance lives in, and is
 //! the writer's own undo only ([`Operation::only_as_undo`]).

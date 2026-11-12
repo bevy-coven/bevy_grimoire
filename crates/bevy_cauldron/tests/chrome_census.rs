@@ -252,7 +252,7 @@ fn spacing_comes_from_the_scale() {
 /// **The editor's palette, by the name that used to be a constant.**
 ///
 /// It was parsed out of `chrome.rs`'s `pub const … : Color = Color::srgb(…)` lines. Those are gone
-/// (UI-02, #210): the palette is `chrome::Ink`, read from `src/editor_skin.ron`. So the scan reads the
+/// (UI-02, #210): the palette is `chrome::Ink`, read from `src/editor_skin.yaml`. So the scan reads the
 /// ink instead — **the same colours, in the same names**, which is what lets every assertion below
 /// keep its `("VOID", "PANEL_BG")` pair and go on measuring the thing it was written to measure.
 ///
@@ -344,7 +344,7 @@ fn ratio(a: [f32; 3], b: [f32; 3]) -> f32 {
 /// 2.5 is the floor, not the target; the shipped ladder's tightest adjacent pair is 2.95.
 ///
 /// **It is also the library's rule now** (UI-02, #210). The ladder lives in the skin
-/// (`editor_skin.ron`'s `surfaces`, lowest first), and `GooeySkin::problems()` checks every adjacent
+/// (`editor_skin.yaml`'s `surfaces`, lowest first), and `GooeySkin::problems()` checks every adjacent
 /// step at gooey's own [`ELEVATION_STEP`] — so the first thing this test asks is the library's
 /// verdict, and the pairs below are the ones gooey cannot know: a *recessed* ground (`Ink::focus_bg`,
 /// `Ink::row_pressed`) and a card above the scrim (`Ink::overlay_bg`) are not on the ladder, and a ladder

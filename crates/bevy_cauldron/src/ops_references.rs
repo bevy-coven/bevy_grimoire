@@ -1,7 +1,7 @@
 //! **Reference images as a registered operation** (#124, E-075): `reference_set`.
 //!
 //! A reference is a project-relative image the person pointed at with "like this"
-//! (`bevy_grimoire_core::references`, the `.references.ron` beside the `.map.ron`). This operation is the
+//! (`bevy_grimoire_core::references`, the `.references.yaml` beside the `.map.yaml`). This operation is the
 //! only way the editor changes that file, so the person's line in the terrain field and an agent's
 //! `apply` are one change with one log line and one undo. The agent reads the list in `grimoire_state`
 //! (`references`) and names one back with its id, which `References::cite` words.

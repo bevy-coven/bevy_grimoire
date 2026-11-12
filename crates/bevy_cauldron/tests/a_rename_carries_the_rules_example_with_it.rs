@@ -1,9 +1,9 @@
 //! **A rename carries the rules' example with it (B-029).**
 //!
-//! `rules.ron` names the map a block's grammar is learned from (`example: "m"`, so
-//! `maps/m.map.ron`). `map_rename` moved the file and left that name behind, so generating the block
+//! `rules.yaml` names the map a block's grammar is learned from (`example: "m"`, so
+//! `maps/m.map.yaml`). `map_rename` moved the file and left that name behind, so generating the block
 //! failed with "the example map cannot be read" and the rename's receipt said nothing about it. The
-//! rename now rewrites each rule that names the old map, in memory and in `rules.ron`, and undo
+//! rename now rewrites each rule that names the old map, in memory and in `rules.yaml`, and undo
 //! takes both back the same way. These go through the registered BRP methods, as an agent's do.
 
 use bevy::prelude::*;
@@ -12,16 +12,28 @@ use bevy_cauldron::project::{OpenMap, Project};
 
 use crate::fixtures;
 
-const RULES: &str = "// the block rules: learned from `m`\n\
-(version: 1, blocks: [(example: \"m\", regions: [], cell: 2.0, \
-size: (4, 4), border: None, no_empty: true, weights: [], \
-footprints: [], attempts: 8, seed: 7)])\n";
+const RULES: &str = r"# the block rules: learned from `m`
+version: 1
+blocks:
+- example: m
+  regions: []
+  cell: 2.0
+  size:
+  - 4
+  - 4
+  border: null
+  no_empty: true
+  weights: []
+  footprints: []
+  attempts: 8
+  seed: 7
+";
 
 fn editor(name: &str) -> App {
     let root = fixtures::Fixture::new(name)
         .descriptor("site/wall", "alpha")
         .place("site/wall", (0.0, 0.0))
-        .rules(RULES)
+        .rules_text(RULES)
         .build("m");
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());
@@ -63,7 +75,7 @@ fn undo(app: &mut App) -> serde_json::Value {
 }
 
 fn rules_path(app: &App) -> std::path::PathBuf {
-    app.world().resource::<Project>().project_dir.join("rules.ron")
+    app.world().resource::<Project>().project_dir.join("rules.yaml")
 }
 
 fn example_in_memory(app: &App) -> String {
@@ -71,9 +83,9 @@ fn example_in_memory(app: &App) -> String {
 }
 
 fn example_on_disk(app: &App) -> String {
-    let text = std::fs::read_to_string(rules_path(app)).expect("rules.ron is on disk");
+    let text = std::fs::read_to_string(rules_path(app)).expect("rules.yaml is on disk");
     bevy_grimoire_core::rules::Rules::parse(&text)
-        .expect("rules.ron still parses")
+        .expect("rules.yaml still parses")
         .blocks[0]
         .example
         .clone()
@@ -94,16 +106,16 @@ fn a_rename_rewrites_the_rules_example_on_disk_and_in_memory() {
     assert_eq!(
         example_on_disk(&app),
         "n",
-        "rules.ron still names the map the rename left behind"
+        "rules.yaml still names the map the rename left behind"
     );
     assert_eq!(
         example_in_memory(&app),
         "n",
         "the project still holds the old example, so generate would read a missing file"
     );
-    let text = std::fs::read_to_string(rules_path(&app)).expect("rules.ron is on disk");
+    let text = std::fs::read_to_string(rules_path(&app)).expect("rules.yaml is on disk");
     assert!(
-        text.starts_with("// the block rules"),
+        text.starts_with("# the block rules"),
         "the rewrite kept the author's comment: {text}"
     );
 }
@@ -116,6 +128,6 @@ fn undoing_a_rename_puts_the_rules_example_back() {
 
     undo(&mut app);
     assert_eq!(app.world().resource::<OpenMap>().map.name, "m");
-    assert_eq!(example_on_disk(&app), "m", "undo left rules.ron naming `n`");
+    assert_eq!(example_on_disk(&app), "m", "undo left rules.yaml naming `n`");
     assert_eq!(example_in_memory(&app), "m", "undo left the project naming `n`");
 }

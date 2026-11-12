@@ -8,7 +8,7 @@
 //!
 //! # It reads; the file writes
 //!
-//! This tab does not yet author a composition — `compositions.ron` is hand-written, and that is
+//! This tab does not yet author a composition — `compositions.yaml` is hand-written, and that is
 //! deliberate rather than unfinished. Building the group-from-selection verb before anything could
 //! *read* a group would have meant an authoring surface whose output nothing validated; the order
 //! here is the same one `bevy_grimoire_core` took, where the schema and its expander shipped before the file
@@ -59,7 +59,7 @@ use crate::tiles::{ComposeRoot, Mode};
 /// # Named, never indexed
 ///
 /// A composition id, exactly as `ComposeState::armed` held it. An index would re-point the
-/// moment `compositions.ron` gained a row above it, which is the same argument
+/// moment `compositions.yaml` gained a row above it, which is the same argument
 /// [`bevy_grimoire_core::composition::Override`] makes about naming a member. A *stale* arm is also
 /// safe for the same reason: it is a name, so it either resolves against the project or the stamp
 /// is refused by name.
@@ -787,7 +787,7 @@ pub(crate) fn nothing_to_walk(c: &Composition) -> String {
         ),
         Envelope::Anchored => format!(
             "`{}` has nothing in it yet, and claims no tile — an anchored group's members come from \
-             `compositions.ron`, or from a fresh capture on the Map with {}",
+             `compositions.yaml`, or from a fresh capture on the Map with {}",
             c.id,
             keys::chord(Action::GroupFromSet)
         ),
@@ -2497,7 +2497,7 @@ fn rebuild(input: ComposeInput<'_, '_>) {
     }
     if comps.is_empty() {
         lines.push(Line::Prose(
-            "No groups. The project's `compositions.ron` defines them — one collection, so a tile \
+            "No groups. The project's `compositions.yaml` defines them — one collection, so a tile \
              may seat any bound kit's pieces. A project with none stamps nothing, which is not a \
              broken one."
                 .to_owned(),
@@ -3753,7 +3753,7 @@ mod paint_tests {
                 note: None,
             }],
         };
-        let text = set.to_ron().unwrap_or_else(|e| panic!("{e}"));
+        let text = set.to_yaml().unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(text.matches("paint:").count(), 1, "only the painted member writes it:\n{text}");
         assert!(text.contains("paint: 3"), "{text}");
         let back = Compositions::parse(&text).unwrap_or_else(|e| panic!("{e}"));
@@ -4088,7 +4088,7 @@ mod carousel_tests {
     ///
     /// `lay_out` propagated the first measurement failure with `?`, so one unmeasurable group within
     /// two slots of the focal one blanked the WHOLE stage — the group being edited, its envelope, its
-    /// lattice and its ring. `compositions.ron` is hand-authored and the schema permits a member whose
+    /// lattice and its ring. `compositions.yaml` is hand-authored and the schema permits a member whose
     /// descriptor the library does not define, so this is reachable by editing a file, not by a bug.
     #[test]
     fn an_unmeasurable_neighbour_is_left_off_rather_than_blanking_the_stage() {

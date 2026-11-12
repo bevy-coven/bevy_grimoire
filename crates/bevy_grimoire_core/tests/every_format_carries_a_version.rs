@@ -16,7 +16,7 @@
 //!   the commit that gives its type a `version` (with `#[serde(default)]` so the files already on disk,
 //!   frozen in `tests/old_data/`, keep reading);
 //! - **owned elsewhere**: the file's format is somebody else's to version (an image's own header, a
-//!   game's own RON, a family crate's own settings), and the entry says whose.
+//!   game's own data, a family crate's own settings), and the entry says whose.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -59,7 +59,7 @@ const VERSIONED_ABOVE: &[(&str, &str, &str)] = &[
 /// **Kinds whose format is not the editor's to version**, and whose it is.
 const OWNED_ELSEWHERE: &[(&str, &str)] = &[
     ("reference_images", "an image file: the image format's own header says what it is"),
-    ("game_data", "the game's own RON: the game owns the shape, `data.ron` only lists the files"),
+    ("game_data", "the game's own data: the game owns the shape, `data.yaml` only lists the files"),
     ("family", "one file per family crate, in that crate's own serde type: the crate versions it"),
     ("trees", "a family crate's own species type: the crate versions it"),
     ("schema", "a JSON Schema generated from the type on every write: it is derived, so a version of it is the type's"),
@@ -84,51 +84,68 @@ fn fixture(rel: &str) -> String {
 fn versioned() -> Vec<(&'static str, &'static str, String)> {
     let s = |id, file, text: String| (id, file, text);
     vec![
-        s("kits", "kits.ron", fixture("kits.ron")),
-        s("library", "site/library.ron", fixture("site/library.ron")),
-        s("policy", "site/project.ron", fixture("site/project.ron")),
-        s("rules", "rules.ron", format!("(version: {}, blocks: [])", bevy_grimoire_core::rules::RULES_VERSION)),
-        s("compositions", "compositions.ron", fixture("compositions.ron")),
-        s("standards", "standards.ron", Standards::default().to_ron().unwrap()),
-        s("rigs", "rigs.ron", fixture("rigs.ron")),
-        s("map", "maps/yard.map.ron", Map { version: MAP_VERSION, name: "yard".to_owned(), bounds: (10.0, 4.0, 10.0), ..Map::default() }.to_ron().unwrap()),
-        s("notes", "maps/yard.notes.ron", Notes::default().to_ron().unwrap()),
-        s("plan", "maps/yard.plan.ron", Plan::default().to_ron().unwrap()),
-        s("references", "maps/yard.references.ron", References::default().to_ron().unwrap()),
-        s("relations", "maps/yard.relations.ron", Relations::default().to_ron().unwrap()),
-        s("data_registry", "site/data.ron", format!("(version: {}, files: [])", bevy_grimoire_core::data_files::REGISTRY_VERSION)),
-        s("family_list", "family.ron", format!("(version: {}, crates: [])", bevy_grimoire_core::family::FAMILY_VERSION)),
-        s("agent", "agent.ron", format!("(version: {})", bevy_grimoire_core::note_agent::AGENT_VERSION)),
-        s("play", "play.ron", format!("(version: {}, command: [\"game\"])", bevy_grimoire_core::play::PLAY_VERSION)),
-        s("destructible_marks", "destructible.ron", ron::to_string(&Marks { version: DESTRUCTIBLE_VERSION, pieces: vec!["site/cart".to_owned()] }).unwrap()),
+        s("kits", "kits.yaml", fixture("kits.yaml")),
+        s("library", "site/library.yaml", fixture("site/library.yaml")),
+        s("policy", "site/project.yaml", fixture("site/project.yaml")),
+        s("rules", "rules.yaml", format!("version: {}\nblocks: []\n", bevy_grimoire_core::rules::RULES_VERSION)),
+        s("compositions", "compositions.yaml", fixture("compositions.yaml")),
+        s("standards", "standards.yaml", Standards::default().to_yaml().unwrap()),
+        s("rigs", "rigs.yaml", fixture("rigs.yaml")),
+        s("map", "maps/yard.map.yaml", Map { version: MAP_VERSION, name: "yard".to_owned(), bounds: (10.0, 4.0, 10.0), ..Map::default() }.to_yaml().unwrap()),
+        s("notes", "maps/yard.notes.yaml", Notes::default().to_yaml().unwrap()),
+        s("plan", "maps/yard.plan.yaml", Plan::default().to_yaml().unwrap()),
+        s("references", "maps/yard.references.yaml", References::default().to_yaml().unwrap()),
+        s("relations", "maps/yard.relations.yaml", Relations::default().to_yaml().unwrap()),
+        s("data_registry", "site/data.yaml", format!("version: {}\nfiles: []\n", bevy_grimoire_core::data_files::REGISTRY_VERSION)),
+        s("family_list", "family.yaml", format!("version: {}\ncrates: []\n", bevy_grimoire_core::family::FAMILY_VERSION)),
+        s("agent", "agent.yaml", format!("version: {}\n", bevy_grimoire_core::note_agent::AGENT_VERSION)),
+        s("play", "play.yaml", format!("version: {}\ncommand: [\"game\"]\n", bevy_grimoire_core::play::PLAY_VERSION)),
+        s("destructible_marks", "destructible.yaml", bevy_grimoire_core::yaml::to_string(&Marks { version: DESTRUCTIBLE_VERSION, pieces: vec!["site/cart".to_owned()] }).unwrap_or_else(|p| panic!("{}", p.line()))),
         s(
             "destructible_bake",
-            "destructible/site__cart.bake.ron",
-            ron::to_string(&Bake { version: DESTRUCTIBLE_VERSION, key: 7, chunks: vec![Chunk { points: vec![[0.0, 0.0, 0.0]], faces: vec![vec![0, 0, 0]] }] }).unwrap(),
+            "destructible/site__cart.bake.yaml",
+            bevy_grimoire_core::yaml::to_string(&Bake { version: DESTRUCTIBLE_VERSION, key: 7, chunks: vec![Chunk { points: vec![[0.0, 0.0, 0.0]], faces: vec![vec![0, 0, 0]] }] }).unwrap_or_else(|p| panic!("{}", p.line())),
         ),
         // The six kinds core parses that carried no version until #202 slice 2: each is written by the
         // type itself, so the sample is what this build writes, and `version:` is the root's first field.
-        s("vocab", "vocab.ron", ron::to_string(&Vocabularies::default()).unwrap()),
-        s("repetition", "repetition.ron", ron::to_string(&RepetitionRules::default()).unwrap()),
-        s("terrain", "site/terrain/yard.ron", ron::to_string(&Heightfield::flat((0.0, 0.0), 1.0, 2, 2, 0.0)).unwrap()),
-        s("water_plan", "site/water/yard.ron", ron::to_string(&WaterPlan::default()).unwrap()),
+        s("vocab", "vocab.yaml", bevy_grimoire_core::yaml::to_string(&Vocabularies::default()).unwrap_or_else(|p| panic!("{}", p.line()))),
+        s("repetition", "repetition.yaml", bevy_grimoire_core::yaml::to_string(&RepetitionRules::default()).unwrap_or_else(|p| panic!("{}", p.line()))),
+        s("terrain", "site/terrain/yard.yaml", bevy_grimoire_core::yaml::to_string(&Heightfield::flat((0.0, 0.0), 1.0, 2, 2, 0.0)).unwrap_or_else(|p| panic!("{}", p.line()))),
+        s("water_plan", "site/water/yard.yaml", bevy_grimoire_core::yaml::to_string(&WaterPlan::default()).unwrap_or_else(|p| panic!("{}", p.line()))),
         s(
             "water_field",
-            "site/water/yard.field.ron",
-            ron::to_string(&WaterField { version: WATER_FIELD_VERSION, origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: vec![0.0; 4], settled: true, steps: 1 }).unwrap(),
+            "site/water/yard.field.yaml",
+            bevy_grimoire_core::yaml::to_string(&WaterField { version: WATER_FIELD_VERSION, origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: vec![0.0; 4], settled: true, steps: 1 }).unwrap_or_else(|p| panic!("{}", p.line())),
         ),
-        s("volume", "site/volume/yard.ron", ron::to_string(&Volume::default()).unwrap()),
+        s("volume", "site/volume/yard.yaml", bevy_grimoire_core::yaml::to_string(&Volume::default()).unwrap_or_else(|p| panic!("{}", p.line()))),
     ]
 }
 
-/// The span of the digits of the root struct's `version: N`, found as the first `version:` whose
-/// previous token is the root's opening parenthesis (so a comment that says "version" is not it, and
-/// neither is a nested struct's own).
+/// The span of the digits of the root value's `version: N`, in either spelling a project file has had:
+/// a RON struct (`(version: 1, …`), where it is the first `version:` whose previous token is the root's
+/// opening parenthesis, or a YAML document (`version: 1`), where it is the first line that opens at the
+/// left margin with `version:`. A nested struct's own, and a comment that says "version", are neither.
 fn version_span(text: &str) -> Option<(usize, usize)> {
     let mut from = 0;
     while let Some(found) = text[from..].find("version:") {
         let at = from + found;
-        if text[..at].trim_end().ends_with('(') {
+        // **The first `version:` that belongs to the root value**, in either spelling:
+        //
+        // - a RON struct's: the token before it, trimmed, ends with the root's `(`;
+        // - a YAML document's: it opens at column 0, and every line above it is a comment or blank — which
+        //   every shipped file is, since the header comment block sits above `version:`.
+        //
+        // A nested value's own `version:` is indented, and a comment naming the word is skipped here.
+        let line_start = text[..at].rfind('\n').map_or(0, |n| n + 1);
+        let column = at - line_start;
+        let ron_root = text[..at].trim_end().ends_with('(');
+        let yaml_root = column == 0
+            && !text[line_start..at].trim_start().starts_with('#')
+            && text[..line_start]
+                .lines()
+                .all(|l| l.trim().is_empty() || l.trim_start().starts_with('#'));
+        let opens_the_root = ron_root || yaml_root;
+        if opens_the_root {
             let digits = at + "version:".len();
             let start = digits + text[digits..].len() - text[digits..].trim_start().len();
             let end = start + text[start..].chars().take_while(char::is_ascii_digit).count();

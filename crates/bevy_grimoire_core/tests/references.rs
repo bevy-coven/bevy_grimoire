@@ -32,8 +32,8 @@ fn saved_beside_the_map_and_missing_files_are_reported() {
     let dir = std::env::temp_dir().join(format!("refs_{}", std::process::id()));
     std::fs::create_dir_all(dir.join("refs")).unwrap();
     std::fs::write(dir.join("refs/here.png"), b"x").unwrap();
-    let file = path_for_map(&dir.join("maps/town.map.ron"));
-    assert_eq!(file, dir.join("maps/town.references.ron"));
+    let file = path_for_map(&dir.join("maps/town.map.yaml"));
+    assert_eq!(file, dir.join("maps/town.references.yaml"));
 
     let mut r = References::default();
     r.add("refs/here.png", "present").unwrap();
@@ -44,7 +44,7 @@ fn saved_beside_the_map_and_missing_files_are_reported() {
     assert_eq!(back, r);
     assert_eq!(back.missing(&dir), vec![("r2".to_owned(), "refs/gone.png".to_owned())]);
     // no references and no file writes nothing
-    let none = dir.join("maps/none.references.ron");
+    let none = dir.join("maps/none.references.yaml");
     References::default().save(&none).unwrap();
     assert!(!none.exists());
     std::fs::remove_dir_all(&dir).unwrap();

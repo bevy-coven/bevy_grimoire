@@ -134,8 +134,8 @@ fn a_record_a_person_confirmed_in_full_is_not_drawn_unchecked() {
         fixtures::Fixture::new("labels_all_confirmed").labelled_by(
             "fence",
             "alpha",
-            "(kind: Some(Human), effects: Some(Human), look: Some(Human))",
-            r#"model: Some("gemma-x"), at: "2026-10-21", confidence: Some(High)"#,
+            "{kind: Human, effects: Human, look: Human}",
+            r#"{model: "gemma-x", at: "2026-10-21", confidence: High}"#,
         ),
     );
     let (text, ink) = labels_row(&mut app).expect("the labels row should be drawn");
@@ -157,8 +157,8 @@ fn an_open_model_axis_keeps_the_models_date_and_names_who_wrote_the_rest() {
     let mut app = open(fixtures::Fixture::new("labels_mixed").labelled_by(
         "fence",
         "alpha",
-        "(kind: Some(Model), look: Some(Human))",
-        r#"model: Some("gemma-x"), model_at: Some("2026-10-20"), at: "2026-10-21", confidence: Some(High)"#,
+        "{kind: Model, look: Human}",
+        r#"{model: "gemma-x", model_at: "2026-10-20", at: "2026-10-21", confidence: High}"#,
     ));
     let (text, ink) = labels_row(&mut app).expect("the labels row should be drawn");
     assert_eq!(text, "confidence high · gemma-x · 2026-10-20 · by hand set look");
@@ -172,8 +172,8 @@ fn the_labels_row_shows_the_models_file_stem_not_its_path() {
     let mut app = open(fixtures::Fixture::new("labels_model_path").labelled_by(
         "fence",
         "alpha",
-        "(kind: Some(Model), effects: Some(Model), look: Some(Model))",
-        r#"model: Some("/Users/me/models/Qwen3-VL-8B-Instruct-Q4_K_M.gguf"), at: "2026-10-20", confidence: Some(High)"#,
+        "{kind: Model, effects: Model, look: Model}",
+        r#"{model: "/Users/me/models/Qwen3-VL-8B-Instruct-Q4_K_M.gguf", at: "2026-10-20", confidence: High}"#,
     ));
     let (text, _) = labels_row(&mut app).expect("the labels row should be drawn");
     assert_eq!(text, "confidence high · Qwen3-VL-8B-Instruct-Q4_K_M · 2026-10-20");
@@ -277,8 +277,8 @@ fn an_agent_write_on_a_legacy_model_record_keeps_the_models_date() {
         fixtures::Fixture::new("labels_agent_legacy").look_tokens(&["worn"]).labelled_by(
             "fence",
             "alpha",
-            "(kind: Some(Model), look: Some(Model))",
-            r#"model: Some("gemma-x"), at: "2026-10-11", confidence: Some(High)"#,
+            "{kind: Model, look: Model}",
+            r#"{model: "gemma-x", at: "2026-10-11", confidence: High}"#,
         ),
     );
     let answer = call(
@@ -303,8 +303,8 @@ fn an_agent_write_that_leaves_no_model_axis_names_no_model() {
         fixtures::Fixture::new("labels_agent_no_model_left").look_tokens(&["worn"]).labelled_by(
             "fence",
             "alpha",
-            "(look: Some(Model))",
-            r#"model: Some("gemma-x"), at: "2026-10-11", confidence: Some(High)"#,
+            "{look: Model}",
+            r#"{model: "gemma-x", at: "2026-10-11", confidence: High}"#,
         ),
     );
     let answer = call(
@@ -326,8 +326,8 @@ fn an_agent_write_on_a_hand_labelled_record_is_not_called_by_hand() {
         fixtures::Fixture::new("labels_agent_by_hand").look_tokens(&["worn"]).labelled_by(
             "fence",
             "alpha",
-            "(look: Some(Human))",
-            r#"at: "2026-10-11""#,
+            "{look: Human}",
+            r#"{at: "2026-10-11"}"#,
         ),
     );
     let answer = call(

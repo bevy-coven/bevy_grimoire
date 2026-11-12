@@ -1,7 +1,7 @@
 //! **PROBLEMS: each broken relation is a row, with a Go to that selects the pieces it names** (UI-54, #240).
 //!
 //! The inspector's RELATIONS row says how many relations the open map breaks and the first one in words. This is the rest of them:
-//! a section after PLAN with a row per unmet or missing relation in `<map>.relations.ron`, worded as that row words it
+//! a section after PLAN with a row per unmet or missing relation in `<map>.relations.yaml`, worded as that row words it
 //! ([`relation_words`] is the one place), and a Go to button that selects the pieces the relation names, the one it is about
 //! first, and frames them. With nothing broken the section says `no problems`.
 //!

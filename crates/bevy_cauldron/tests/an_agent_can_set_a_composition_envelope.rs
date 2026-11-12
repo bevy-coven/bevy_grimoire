@@ -54,7 +54,7 @@ fn place(app: &mut App, piece: &str, at: [f32; 2]) -> String {
 }
 
 fn comps(root: &std::path::Path) -> String {
-    std::fs::read_to_string(root.join("assets/grimoire/compositions.ron")).unwrap_or_default()
+    std::fs::read_to_string(root.join("assets/grimoire/compositions.yaml")).unwrap_or_default()
 }
 
 fn id_of(a: &serde_json::Value) -> String {

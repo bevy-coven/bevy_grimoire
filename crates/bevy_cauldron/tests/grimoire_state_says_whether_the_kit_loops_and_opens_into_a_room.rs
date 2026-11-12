@@ -23,15 +23,13 @@ fn cell(face: char) -> (u32, u32, u32) {
     }
 }
 
-fn subgrid(faces: &str) -> String {
-    let cells: Vec<String> = faces
-        .chars()
-        .map(|f| {
-            let (x, y, z) = cell(f);
-            format!(r#"( at: ({x}, {y}, {z}), edge: Some("hall") )"#)
-        })
-        .collect();
-    format!("subgrid: Some(( cells: [{}] ))", cells.join(", "))
+fn subgrid(faces: &str) -> bevy_grimoire_core::descriptor::Subgrid {
+    bevy_grimoire_core::descriptor::Subgrid {
+        cells: faces
+            .chars()
+            .map(|f| bevy_grimoire_core::descriptor::SubCell { at: cell(f), edge: Some("hall".to_owned()), ..Default::default() })
+            .collect(),
+    }
 }
 
 /// A project whose kit is `pieces`, each `(id, faces open to a neighbour)`; `""` declares nothing.
@@ -51,22 +49,15 @@ fn project(name: &str, pieces: &[(&str, &str)]) -> PathBuf {
 }
 
 fn library_path(root: &std::path::Path) -> PathBuf {
-    root.join("assets/grimoire/furniture/library.ron")
+    root.join("assets/grimoire/furniture/library.yaml")
 }
 
 /// Rewrite piece `id`'s lattice in the project's library file to `hall` on `faces`.
 fn set_faces(root: &std::path::Path, id: &str, faces: &str) {
-    let lib = library_path(root);
-    let text = std::fs::read_to_string(&lib).unwrap_or_else(|e| panic!("{lib:?}: {e}"));
-    let at = text
-        .find(&format!("id: \"{id}\""))
-        .unwrap_or_else(|| panic!("no {id} row: {text}"));
-    let (head, tail) = text.split_at(at);
-    let end = tail.find("note:").unwrap_or_else(|| panic!("{id} has no note: {tail}"));
-    let (row, rest) = tail.split_at(end);
-    let start = row.find("subgrid:").unwrap_or_else(|| panic!("{id} has no subgrid: {row}"));
-    let row = format!("{}{},\n            ", &row[..start], subgrid(faces));
-    std::fs::write(&lib, format!("{head}{row}{rest}")).unwrap_or_else(|e| panic!("{e}"));
+    fixtures::edit_library(&library_path(root), |library| {
+        let row = library.descriptors.iter_mut().find(|d| d.id == id).unwrap_or_else(|| panic!("no {id} row"));
+        row.subgrid = Some(subgrid(faces));
+    });
 }
 
 fn editor(root: &std::path::Path) -> App {

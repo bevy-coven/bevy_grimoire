@@ -15,7 +15,7 @@
 //!
 //! # Stored as `keymap`, per command
 //!
-//! A rebinding is one entry of the `keymap` table in the file being edited (`settings.ron` or `editor.ron`,
+//! A rebinding is one entry of the `keymap` table in the file being edited (`settings.yaml` or `editor.yaml`,
 //! chosen as on the settings screen), keyed by the command's stable id (`file.save`), so it survives a
 //! title being reworded. Per command the project's chord wins over the user's, which wins over the default.
 //!

@@ -1087,10 +1087,10 @@ fn grimoire_present_is_listed_and_refuses_readably_with_no_editor() {
     );
 }
 
-/// **A project with a `rules.ron` in it, and the path that holds it.**
+/// **A project with a `rules.yaml` in it, and the path that holds it.**
 ///
-/// The rules a layout is generated from are project data at `<root>/assets/grimoire/rules.ron`, beside
-/// `kits.ron`. The editor is not needed to read them: they are a file, so the server answers with the
+/// The rules a layout is generated from are project data at `<root>/assets/grimoire/rules.yaml`, beside
+/// `kits.yaml`. The editor is not needed to read them: they are a file, so the server answers with the
 /// editor closed, as `grimoire_list_snips` does.
 fn project_with_rules(name: &str, rules: &str) -> (std::path::PathBuf, std::path::PathBuf) {
     let nanos = std::time::SystemTime::now()
@@ -1103,7 +1103,7 @@ fn project_with_rules(name: &str, rules: &str) -> (std::path::PathBuf, std::path
     ));
     let dir = root.join("assets/grimoire");
     std::fs::create_dir_all(&dir).expect("the grimoire folder can be made");
-    std::fs::write(dir.join("rules.ron"), rules).expect("the rules file is written");
+    std::fs::write(dir.join("rules.yaml"), rules).expect("the rules file is written");
     (root, dir)
 }
 
@@ -1120,22 +1120,20 @@ fn project_with_rules(name: &str, rules: &str) -> (std::path::PathBuf, std::path
 /// disk, which is the parity gap this tool closes.
 #[test]
 fn an_agent_can_read_the_rules_a_layout_is_generated_from() {
-    let rules = r#"(
-    version: 1,
-    blocks: [
-        (
-            example: "town_block",
-            regions: ["town/houses_brick"],
-            cell: 2.0,
-            size: (16, 16),
-            border: Some("town/wall_segment"),
-            no_empty: true,
-            weights: [ ( prefix: "town/road", times: 2.5 ) ],
-            attempts: 40,
-            seed: 1234,
-        ),
-    ],
-)"#;
+    let rules = r#"version: 1
+blocks:
+- example: town_block
+  regions: [town/houses_brick]
+  cell: 2.0
+  size: [16, 16]
+  border: town/wall_segment
+  no_empty: true
+  weights:
+  - prefix: town/road
+    times: 2.5
+  attempts: 40
+  seed: 1234
+"#;
     let (root, _dir) = project_with_rules("read", rules);
     let mut server = Server::start_with(&["--project", root.to_str().expect("a UTF-8 path")]);
 
@@ -1158,7 +1156,7 @@ fn an_agent_can_read_the_rules_a_layout_is_generated_from() {
     assert_eq!(block["attempts"], 40, "{body}");
     // **The path is in the answer**, so an agent can cite the file it read and the person can open it.
     assert!(
-        body["path"].as_str().unwrap_or_default().ends_with("rules.ron"),
+        body["path"].as_str().unwrap_or_default().ends_with("rules.yaml"),
         "the answer does not name the file it read: {body}"
     );
 
@@ -1176,7 +1174,7 @@ fn an_agent_can_read_the_rules_a_layout_is_generated_from() {
     // the same rule `Project::open` applies — and an agent that asks must not get a refusal that
     // reads like a broken project.
     let (bare, _) = project_with_rules("absent", "");
-    std::fs::remove_file(bare.join("assets/grimoire/rules.ron")).expect("the file is removed");
+    std::fs::remove_file(bare.join("assets/grimoire/rules.yaml")).expect("the file is removed");
     let mut server = Server::start_with(&["--project", bare.to_str().expect("a UTF-8 path")]);
     let answer = server.call("grimoire_list_rules", json!({}));
     let body = answer_text(answer["result"]["content"].as_array().expect("content"));
@@ -1200,32 +1198,30 @@ fn rules_the_editor_would_refuse_are_refused_here() {
     // separates: a parse error, a version, a number, and a shape.
     let cases: &[(&str, &str, &str)] = &[
         // (name, the file, a word the refusal must carry)
-        ("blank", "", "rules.ron"),
+        ("blank", "", "rules.yaml"),
         (
             "version",
-            r#"( version: 99, blocks: [] )"#,
+            "version: 99\nblocks: []\n",
             "version 99",
         ),
         (
             "attempts",
-            r#"( version: 1, blocks: [ ( example: "m", cell: 2.0, size: (4, 4), attempts: 0, seed: 1 ) ] )"#,
+            "version: 1\nblocks:\n- example: m\n  cell: 2.0\n  size: [4, 4]\n  attempts: 0\n  seed: 1\n",
             "at least one attempt",
         ),
         (
             "cell",
-            r#"( version: 1, blocks: [ ( example: "m", cell: 0.0, size: (4, 4), attempts: 1, seed: 1 ) ] )"#,
+            "version: 1\nblocks:\n- example: m\n  cell: 0.0\n  size: [4, 4]\n  attempts: 1\n  seed: 1\n",
             "not a usable step",
         ),
         (
             "footprint",
-            r#"( version: 1, blocks: [ ( example: "m", cell: 2.0, size: (4, 4), attempts: 1, seed: 1,
-                footprints: [ ( prefix: "p", sizes: [(1, 2)], yaws: [0.0], gap: 0, min_count: 1 ) ] ) ] )"#,
+            "version: 1\nblocks:\n- example: m\n  cell: 2.0\n  size: [4, 4]\n  attempts: 1\n  seed: 1\n  footprints:\n  - prefix: p\n    sizes: [[1, 2]]\n    yaws: [0.0]\n    gap: 0\n    min_count: 1\n",
             "at least 2x2",
         ),
         (
             "yaw",
-            r#"( version: 1, blocks: [ ( example: "m", cell: 2.0, size: (4, 4), attempts: 1, seed: 1,
-                footprints: [ ( prefix: "p", sizes: [(2, 2)], yaws: [90.0], gap: 0, min_count: 1 ) ] ) ] )"#,
+            "version: 1\nblocks:\n- example: m\n  cell: 2.0\n  size: [4, 4]\n  attempts: 1\n  seed: 1\n  footprints:\n  - prefix: p\n    sizes: [[2, 2]]\n    yaws: [90.0]\n    gap: 0\n    min_count: 1\n",
             "0 or 180",
         ),
     ];
@@ -1253,7 +1249,7 @@ fn rules_the_editor_would_refuse_are_refused_here() {
 /// that had nothing to do with what the person wrote.
 #[test]
 fn a_broken_rules_file_is_refused_by_name() {
-    let (root, dir) = project_with_rules("broken", "( version: 1, blocks: [ oops");
+    let (root, dir) = project_with_rules("broken", "version: 1\nblocks: [oops\n");
     let mut server = Server::start_with(&["--project", root.to_str().expect("a UTF-8 path")]);
     let answer = server.call("grimoire_list_rules", json!({}));
     let body = answer_text(answer["result"]["content"].as_array().expect("content"));
@@ -1263,11 +1259,11 @@ fn a_broken_rules_file_is_refused_by_name() {
     );
     let text = serde_json::to_string(&body).unwrap_or_default();
     assert!(
-        text.contains("rules.ron"),
+        text.contains("rules.yaml"),
         "the refusal does not name the file, so an agent cannot tell which data is wrong: {body}"
     );
     assert!(
-        dir.join("rules.ron").is_file(),
+        dir.join("rules.yaml").is_file(),
         "the refused file must be left exactly as it was"
     );
 }

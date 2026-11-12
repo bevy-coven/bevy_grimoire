@@ -103,7 +103,7 @@ fn the_wish_is_written_to_the_maps_file_and_reads_back() {
         "the map's file does not carry the wish, so it exists only in memory: {path:?}"
     );
     let reread: bevy_grimoire_core::map::Map =
-        ron::from_str(&text).unwrap_or_else(|e| panic!("the file does not read back: {e}"));
+        bevy_grimoire_core::yaml::from_str(&text, "test").unwrap_or_else(|e| panic!("the file does not read back: {e}"));
     assert_eq!(
         reread.enclosure,
         Enclosure { wish: 0.6, weight: 200 },
@@ -117,17 +117,9 @@ fn the_wish_is_written_to_the_maps_file_and_reads_back() {
 /// anything but `0.25 / 200`, opening an old map would silently generate a different world.
 #[test]
 fn a_map_from_before_the_field_keeps_the_shipped_pair() {
-    let old = r#"(
-        version: 6,
-        name: "old",
-        origin: (0.0, 0.0, 0.0),
-        bounds: (32.0, 8.0, 32.0),
-        bash: None,
-        placements: [],
-        note: None,
-    )"#;
+    let old = r#"{version: 6, name: "old", origin: [0.0, 0.0, 0.0], bounds: [32.0, 8.0, 32.0], bash: null, placements: [], note: null}"#;
     let map: bevy_grimoire_core::map::Map =
-        ron::from_str(old).unwrap_or_else(|e| panic!("a v6 map must still read: {e}"));
+        bevy_grimoire_core::yaml::from_str(old, "test").unwrap_or_else(|e| panic!("a v6 map must still read: {e}"));
     assert_eq!(
         map.enclosure,
         Enclosure { wish: 0.25, weight: 200 },

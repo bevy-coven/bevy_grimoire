@@ -1,6 +1,6 @@
 //! **Carving and adding volume, as one registered operation** (#101): `volume_edit`.
 //!
-//! The volume is `<grimoire_dir>/volume/<map>.ron`, the engine-free `bevy_grimoire_core::volume::Volume`
+//! The volume is `<grimoire_dir>/volume/<map>.yaml`, the engine-free `bevy_grimoire_core::volume::Volume`
 //! (its edit list, not voxels) as RON, saved beside the map. One call adds or carves one primitive,
 //! or clears the list; either is one undo. The inverse is the same operation carrying the file as it was.
 
@@ -65,7 +65,7 @@ fn path_of(ctx: &Ctx, map: &str) -> Result<std::path::PathBuf, Refusal> {
     if map.is_empty() || map.contains(['/', '\\', '.']) {
         return Err(Refusal::new(format!("`{map}` is not a map name. Nothing was written.")));
     }
-    Ok(project.grimoire_dir.join("volume").join(format!("{map}.ron")))
+    Ok(project.grimoire_dir.join("volume").join(format!("{map}.yaml")))
 }
 
 fn read(ctx: &Ctx, map: &str) -> Option<String> {
@@ -74,8 +74,8 @@ fn read(ctx: &Ctx, map: &str) -> Option<String> {
 
 /// **The saved volume of the open map**, or `None` when it has none.
 pub fn volume_of(project: &crate::project::Project, open: &crate::project::OpenMap) -> Option<Volume> {
-    let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.ron")?;
-    ron::from_str(&std::fs::read_to_string(project.grimoire_dir.join("volume").join(format!("{name}.ron"))).ok()?).ok()
+    let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.yaml")?;
+    Volume::parse(&std::fs::read_to_string(project.grimoire_dir.join("volume").join(format!("{name}.yaml"))).ok()?).ok()
 }
 
 /// **Add or carve one primitive, or clear the map's volume.**
@@ -93,11 +93,11 @@ impl VolumeEdit {
             (None, 0)
         } else {
             let mut volume: Volume = match &before {
-                Some(t) => ron::from_str(t).map_err(|e| Refusal::new(format!("{} is not a volume: {e}", path.display())))?,
+                Some(t) => Volume::parse(t).map_err(|e| Refusal::new(format!("{} is not a volume: {e}", path.display())))?,
                 None => Volume::default(),
             };
             volume.push(p.edit.expect("parse needs an edit, a clear or a put_back")).map_err(|e| Refusal::new(format!("{e}. Nothing was changed.")))?;
-            let t = ron::ser::to_string_pretty(&volume, ron::ser::PrettyConfig::default())
+            let t = bevy_grimoire_core::yaml::to_string(&volume)
                 .map_err(|e| Refusal::new(format!("the volume could not be written: {e}")))?;
             (Some(t), 1)
         };

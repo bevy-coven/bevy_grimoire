@@ -134,7 +134,7 @@ fn a_clean_editor_takes_a_file_that_says_something_new() {
     let mut fresh: bevy_grimoire_core::map::Map =
         bevy_grimoire_core::map::Map::parse(&text).unwrap_or_else(|e| panic!("{e}"));
     fresh.note = Some("edited outside".into());
-    let written = ron::ser::to_string_pretty(&fresh, ron::ser::PrettyConfig::default())
+    let written = bevy_grimoire_core::yaml::to_string(&fresh)
         .unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(&path, &written).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
 
@@ -208,7 +208,7 @@ fn a_file_edit_over_unsaved_work_keeps_the_work_and_says_so() {
     let mut fresh: bevy_grimoire_core::map::Map =
         bevy_grimoire_core::map::Map::parse(&text).unwrap_or_else(|e| panic!("{e}"));
     fresh.note = Some("edited outside".into());
-    let written = ron::ser::to_string_pretty(&fresh, ron::ser::PrettyConfig::default())
+    let written = bevy_grimoire_core::yaml::to_string(&fresh)
         .unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(&path, written).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
 

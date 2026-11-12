@@ -18,7 +18,7 @@
 //! shipped tools:
 //!
 //! * **A fixed, documented strength order**, so where an opinion wins is answerable rather than
-//!   discovered: `library.ron` < `project.ron` patch < [`Member`] patch < [`Override`]. Nothing here
+//!   discovered: `library.yaml` < `project.yaml` patch < [`Member`] patch < [`Override`]. Nothing here
 //!   applies those layers itself — the two patch layers are merged into the one
 //!   [`crate::map::Placed::patch`] the map schema already has, so there is exactly one place a patch is
 //!   ever applied.
@@ -1819,7 +1819,8 @@ pub struct Compositions {
 
 impl Compositions {
     pub fn parse(text: &str) -> Result<Compositions, String> {
-        let set: Compositions = ron::from_str(text).map_err(|e| format!("compositions: {e}"))?;
+        let set: Compositions = crate::yaml::from_str(text, Compositions::FILE)
+            .map_err(|p| format!("compositions: {}", p.line()))?;
         if set.version > COMPOSITIONS_VERSION {
             return Err(format!(
                 "compositions: version {} but this build reads {COMPOSITIONS_VERSION} — refusing a \
@@ -1830,13 +1831,13 @@ impl Compositions {
         Ok(set)
     }
 
-    pub fn to_ron(&self) -> Result<String, String> {
-        ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())
-            .map_err(|e| format!("compositions: serialize: {e}"))
+    /// **The file as the one YAML writer writes it.**
+    pub fn to_yaml(&self) -> Result<String, String> {
+        crate::yaml::to_string(self).map_err(|p| format!("compositions: {}", p.line()))
     }
 
-    /// The file's own name, beside `library.ron` and `project.ron` in a project directory.
-    pub const FILE: &'static str = "compositions.ron";
+    /// The file's own name, beside a kit's `library.yaml` and `project.yaml` in a project directory.
+    pub const FILE: &'static str = "compositions.yaml";
 }
 
 /// **Write down what every member currently presents**, so later drift is measurable.
@@ -1866,7 +1867,7 @@ pub fn record_fingerprints(
 ///
 /// | | |
 /// |---|---|
-/// | `compositions.ron` | the composition's own `id` |
+/// | `compositions.yaml` | the composition's own `id` |
 /// | every map that stamps it | that stamp's `of` |
 /// | the composition's **members** | **nothing** — a member's id is its own name |
 /// | the members' `of_fingerprint` | **nothing** — those record the *descriptor's* fingerprint, and the descriptors did not change |
@@ -1881,7 +1882,7 @@ pub fn record_fingerprints(
 /// # Why the maps are edited and not rewritten
 ///
 /// A map's writer **expands every one-line placement into six lines** — measured on Sanctuary's
-/// `town.map.ron`, 75,089 bytes becomes 228,856. That is the editor's existing save behaviour, so it
+/// `town.map.yaml`, 75,089 bytes becomes 228,856. That is the editor's existing save behaviour, so it
 /// is not a regression; but a *rename* that reformats 229 KB of a hand-authored map is a large
 /// diff for a one-word change, and the map is the author's. **So the maps are edited in place**, one
 /// leaf at a time, and everything around the leaf is left exactly as it was.
@@ -1898,7 +1899,7 @@ pub fn record_fingerprints(
 /// succeeded. A rename that updates the composition and leaves one map behind is a **partial
 /// rename**, and a partial rename is a project that will not open.
 pub fn rename_composition(
-    // The text of `compositions.ron`.
+    // The text of `compositions.yaml`.
     compositions_text: &str,
     // The texts of every map, paired with the name the caller knows them by.
     map_texts: &[(String, String)],
@@ -1973,18 +1974,19 @@ pub fn rename_composition(
                      than editing forever."
                 ));
             }
-            let leaves = crate::ron_surgery::scan_ron_leaves(&edited)?;
-            // **The leaf's text carries its quotes** — `ron_surgery` documents a string leaf as
-            // `"bathroom"`, quotes and all — so the comparison is against the *quoted* form.
-            let wanted = ron_string(from);
-            let Some(leaf) = leaves.iter().find(|l| {
-                l.path.starts_with("stamps[") && l.path.ends_with(".of") && l.text == wanted
-            }) else {
-                break;
-            };
-            let start = leaf.span.start;
-            let end = leaf.span.end;
-            edited = format!("{}{}{}", &edited[..start], ron_string(to), &edited[end..]);
+            // **The one YAML surgery does the write**, so the file keeps its comments and its layout and
+            // the value it holds is checked by the reader rather than by this loop.
+            let target = crate::yaml::leaves(&edited).into_iter().find(|(path, token)| {
+                path.starts_with("stamps[") && path.ends_with(".of") && *unquoted(token) == *from
+            });
+            let Some((path, _)) = target else { break };
+            edited = crate::yaml_surgery::set(
+                &edited,
+                &path,
+                crate::yaml_surgery::Value::Str(to.to_owned()),
+                None,
+            )
+            .map_err(|p| p.line())?;
         }
         maps.push((name.clone(), edited));
     }
@@ -2003,7 +2005,7 @@ pub fn rename_composition(
 /// rename is a project that will not open.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RenamedComposition {
-    /// The new text of `compositions.ron`.
+    /// The new text of `compositions.yaml`.
     pub compositions: String,
     /// The new text of every map, paired with the name the caller knows it by.
     pub maps: Vec<(String, String)>,
@@ -2025,39 +2027,42 @@ fn replace_leaf(
     value: &str,
     what: &str,
 ) -> Result<String, String> {
-    let leaves = crate::ron_surgery::scan_ron_leaves(text)?;
-    let leaf = leaves
-        .iter()
-        .find(|l| l.path == path)
-        .ok_or_else(|| format!("the file has no `{path}` — so {what} is not there to rename."))?;
+    let leaves = crate::yaml::leaves(text);
+    let Some((_, token)) = leaves.iter().find(|(p, _)| p == path) else {
+        return Err(format!("the file has no `{path}` — so {what} is not there to rename."));
+    };
     // **The leaf must be the one we mean.** A path says *which* value, and a file with two `id`
     // fields — the composition's and every member's — has the right one only by its path. So the
     // leaf's own value is checked too, and a file that has been edited under us is refused rather
     // than written over.
-    let expected = ron_string(expect);
-    if leaf.text != expected {
+    let held = unquoted(token);
+    if *held != *expect {
         return Err(format!(
-            "the file's `{path}` says `{}` and not `{expect}` — so it is not the thing being \
-             renamed. Nothing was changed.",
-            leaf.text
+            "the file's `{path}` says `{held}` and not `{expect}` — so it is not the thing being \
+             renamed. Nothing was changed."
         ));
     }
-    let start = leaf.span.start;
-    let end = leaf.span.end;
-    Ok(format!(
-        "{}{}{}",
-        &text[..start],
-        ron_string(value),
-        &text[end..]
-    ))
+    crate::yaml_surgery::set(text, path, crate::yaml_surgery::Value::Str(value.to_owned()), None)
+        .map_err(|p| p.line())
 }
 
-/// **A RON string literal, quoted and escaped.**
-///
-/// The crate's own escape, so a name with a quote in it cannot break the file. `ron::ser` is the
-/// authority, and it is already a dependency.
-fn ron_string(value: &str) -> String {
-    ron::ser::to_string(value).unwrap_or_else(|_| format!("\"{value}\""))
+/// **A scalar's text without the quotes a YAML writer put round it.** A string a file holds may be plain
+/// (`yard`) or quoted (`'a: b'`), and both are the same value, so a comparison reads the value.
+fn unquoted(token: &str) -> std::borrow::Cow<'_, str> {
+    let token = token.trim();
+    if let Some(inner) = token.strip_prefix('\'').and_then(|t| t.strip_suffix('\'')) {
+        // A single-quoted scalar escapes a quote by doubling it, which is the only escape it has.
+        return std::borrow::Cow::Owned(inner.replace("''", "'"));
+    }
+    match token.strip_prefix('"').and_then(|t| t.strip_suffix('"')) {
+        // A double-quoted scalar may hold escapes, and the YAML reader is what knows them: this answers the
+        // value the file holds, not a guess at what the bytes mean.
+        Some(inner) => match serde_yaml_ng::from_str::<String>(token) {
+            Ok(value) => std::borrow::Cow::Owned(value),
+            Err(_) => std::borrow::Cow::Borrowed(inner),
+        },
+        None => std::borrow::Cow::Borrowed(token),
+    }
 }
 
 #[cfg(test)]

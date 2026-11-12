@@ -97,10 +97,12 @@ fn the_rules_are_data() {
     let report = repeats(&yard(), &library(), &rules);
     assert_eq!(report[0].descriptor, "fence", "{report:?}");
 
-    let text = ron::to_string(&RepetitionRules::default()).unwrap();
-    let back: RepetitionRules = ron::from_str(&text).unwrap();
+    // **The file's own writer and its own reader** (GD-03, #365): `repetition.yaml` is read as YAML now, so
+    // what an author's file holds is what these two produce.
+    let text = bevy_grimoire_core::yaml::to_string(&RepetitionRules::default()).unwrap();
+    let back = RepetitionRules::parse(&text).unwrap();
     assert_eq!(back, RepetitionRules::default());
-    let partial: RepetitionRules = ron::from_str("(radius_m: 2.0)").unwrap();
+    let partial = RepetitionRules::parse("radius_m: 2.0\n").unwrap();
     assert_eq!(partial.radius_m, 2.0);
     assert_eq!(partial.structure, RepetitionRules::default().structure);
 }

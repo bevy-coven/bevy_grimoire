@@ -44,7 +44,7 @@ fn the_warm_triangle_has_the_vertex_layout_of_a_carved_chunk() {
     }
     let project = app.world().resource::<bevy_cauldron::project::Project>().clone();
     std::fs::create_dir_all(project.grimoire_dir.join("terrain")).unwrap();
-    std::fs::write(project.grimoire_dir.join("terrain/m.ron"), ron::to_string(&Heightfield::flat((0.0, 0.0), 1.0, 33, 33, 0.3)).unwrap()).unwrap();
+    std::fs::write(project.grimoire_dir.join("terrain/m.yaml"), bevy_grimoire_core::yaml::to_string(&Heightfield::flat((0.0, 0.0), 1.0, 33, 33, 0.3)).unwrap()).unwrap();
     let mut ctx = Ctx { project: Some(project), session: "test".to_owned(), ..Ctx::default() };
     let carve = json!({"map": "m", "edit": {"shape": {"Sphere": {"center": [16.0, 0.3, 16.0], "radius_m": 5.0}}, "mode": "Carve"}});
     match ops::dispatch(&mut ctx, "volume_edit", &carve).unwrap() {

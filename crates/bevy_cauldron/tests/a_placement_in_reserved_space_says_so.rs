@@ -69,32 +69,12 @@ fn a_reserved_band(name: &str) -> std::path::PathBuf {
         .sized_descriptor("crate", "alpha", 0.5, 0.5)
         .build("m");
 
-    let at = root.join("assets/grimoire/furniture/library.ron");
-    let was = std::fs::read_to_string(&at).unwrap_or_else(|e| panic!("cannot read {at:?}: {e}"));
-    let wrote = band_on(&was, "boulder", "clearance: [ ( dir: Around, dist: 0.91 ) ],");
-    assert!(
-        wrote != was,
-        "the rewrite missed the boulder row — the fixture's descriptor shape changed:\n{was}"
-    );
-    std::fs::write(&at, wrote).unwrap_or_else(|e| panic!("cannot write {at:?}: {e}"));
+    let at = root.join("assets/grimoire/furniture/library.yaml");
+    fixtures::edit_library(&at, |library| {
+        let boulder = library.descriptors.iter_mut().find(|d| d.id == "boulder").unwrap_or_else(|| panic!("the fixture has no boulder row"));
+        boulder.clearance = vec![bevy_grimoire_core::descriptor::Clearance { dir: bevy_grimoire_core::descriptor::Dir::Around, dist: 0.91 }];
+    });
     root
-}
-
-/// Replace the `clearance` line of the one row whose `id` is `id`, leaving every other row alone.
-fn band_on(library: &str, id: &str, clearance: &str) -> String {
-    let row = format!(r#"            id: "{id}","#);
-    let Some(start) = library.find(&row) else {
-        return library.to_owned();
-    };
-    let rest = &library[start..];
-    let Some(line) = rest.find("            clearance: [],") else {
-        return library.to_owned();
-    };
-    let mut out = String::with_capacity(library.len() + clearance.len());
-    out.push_str(&library[..start + line]);
-    out.push_str(clearance);
-    out.push_str(&library[start + line + "            clearance: [],".len()..]);
-    out
 }
 
 /// **A chair inside the band is named; one outside it is not.**

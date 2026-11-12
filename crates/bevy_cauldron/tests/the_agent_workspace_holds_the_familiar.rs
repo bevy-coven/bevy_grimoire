@@ -64,7 +64,7 @@ fn editor(name: &str) -> (App, SettingsFile) {
     // **The editor does not follow the agent in these tests** (the `follow_agent` setting off, in a user settings file of the test's own): a
     // followed change would carry the person to the Map under the history being measured. Look is the person's own ask and goes there
     // whatever the setting (`look_now`).
-    let file = std::env::temp_dir().join(format!("agent_ws_settings_{name}_{}.ron", std::process::id()));
+    let file = std::env::temp_dir().join(format!("agent_ws_settings_{name}_{}.yaml", std::process::id()));
     app.insert_resource(bevy_cauldron::settings::UserSettingsFile(file.clone()));
     bevy_cauldron::setting_catalogue::write_key(&file, "follow_agent", Some(bevy_cauldron::setting_catalogue::Value::On(false))).unwrap_or_else(|e| panic!("{e}"));
     updates(&mut app, 8);

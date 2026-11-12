@@ -42,103 +42,123 @@ fn fixture(rel: &str) -> String {
 fn samples() -> Vec<Sample> {
     let s = |id, file, text: String, field, required| Sample { id, file, text, field, required };
     vec![
-        s("kits", "kits.ron", fixture("kits.ron"), "version", true),
-        s("vocab", "vocab.ron", fixture("vocab.ron"), "kind", true),
-        s("library", "site/library.ron", fixture("site/library.ron"), "version", true),
-        s("policy", "site/project.ron", fixture("site/project.ron"), "version", true),
-        s("rules", "rules.ron", format!("(version: {}, blocks: [])", bevy_grimoire_core::rules::RULES_VERSION), "version", true),
-        s("compositions", "compositions.ron", fixture("compositions.ron"), "version", true),
-        s("standards", "standards.ron", Standards::default().to_ron().unwrap(), "version", true),
-        s("repetition", "repetition.ron", "(radius_m: 3.0)".to_owned(), "radius_m", false),
-        s("rigs", "rigs.ron", fixture("rigs.ron"), "version", true),
-        s("map", "maps/yard.map.ron", Map { version: MAP_VERSION, name: "yard".to_owned(), bounds: (10.0, 4.0, 10.0), ..Map::default() }.to_ron().unwrap(), "version", true),
-        s("notes", "maps/yard.notes.ron", Notes::default().to_ron().unwrap(), "version", true),
-        s("plan", "maps/yard.plan.ron", Plan::default().to_ron().unwrap(), "version", true),
-        s("references", "maps/yard.references.ron", References::default().to_ron().unwrap(), "version", true),
-        s("relations", "maps/yard.relations.ron", Relations::default().to_ron().unwrap(), "version", true),
-        s("terrain", "site/terrain/yard.ron", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, heights: [0.0, 0.0, 0.0, 0.0])".to_owned(), "cell_m", true),
-        s("family_list", "family.ron", format!("(version: {}, crates: [])", bevy_grimoire_core::family::FAMILY_VERSION), "version", true),
-        s("agent", "agent.ron", format!("(version: {})", bevy_grimoire_core::note_agent::AGENT_VERSION), "version", true),
-        s("play", "play.ron", format!("(version: {}, command: [\"game\"])", bevy_grimoire_core::play::PLAY_VERSION), "version", true),
-        s("water_plan", "site/water/yard.ron", "(springs: [], sinks: [], lakes: [])".to_owned(), "springs", false),
-        s("water_field", "site/water/yard.field.ron", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: [0.0, 0.0, 0.0, 0.0], settled: true, steps: 3)".to_owned(), "steps", true),
-        s("volume", "site/volume/yard.ron", "(edits: [])".to_owned(), "edits", false),
-        s("data_registry", "site/data.ron", format!("(version: {}, files: [])", bevy_grimoire_core::data_files::REGISTRY_VERSION), "version", true),
-        s("destructible_marks", "destructible.ron", ron::to_string(&Marks { version: DESTRUCTIBLE_VERSION, pieces: vec!["site/cart".to_owned()] }).unwrap(), "version", true),
-        s("destructible_bake", "destructible/site__cart.bake.ron", ron::to_string(&Bake { version: DESTRUCTIBLE_VERSION, key: 7, chunks: vec![Chunk { points: vec![[0.0, 0.0, 0.0]], faces: vec![vec![0, 0, 0]] }] }).unwrap(), "key", true),
+        s("kits", "kits.yaml", fixture("kits.yaml"), "version", true),
+        s("vocab", "vocab.yaml", fixture("vocab.yaml"), "kind", true),
+        s("library", "site/library.yaml", fixture("site/library.yaml"), "version", true),
+        s("policy", "site/project.yaml", fixture("site/project.yaml"), "version", true),
+        s("rules", "rules.yaml", format!("version: {}\nblocks: []\n", bevy_grimoire_core::rules::RULES_VERSION), "version", true),
+        s("compositions", "compositions.yaml", fixture("compositions.yaml"), "version", true),
+        s("standards", "standards.yaml", Standards::default().to_yaml().unwrap(), "version", true),
+        s("repetition", "repetition.yaml", "radius_m: 3.0\n".to_owned(), "radius_m", false),
+        s("rigs", "rigs.yaml", fixture("rigs.yaml"), "version", true),
+        s("map", "maps/yard.map.yaml", Map { version: MAP_VERSION, name: "yard".to_owned(), bounds: (10.0, 4.0, 10.0), ..Map::default() }.to_yaml().unwrap(), "version", true),
+        s("notes", "maps/yard.notes.yaml", Notes::default().to_yaml().unwrap(), "version", true),
+        s("plan", "maps/yard.plan.yaml", Plan::default().to_yaml().unwrap(), "version", true),
+        s("references", "maps/yard.references.yaml", References::default().to_yaml().unwrap(), "version", true),
+        s("relations", "maps/yard.relations.yaml", Relations::default().to_yaml().unwrap(), "version", true),
+        s("terrain", "site/terrain/yard.yaml", "origin: [0.0, 0.0]\ncell_m: 1.0\nwidth: 2\ndepth: 2\nheights: [0.0, 0.0, 0.0, 0.0]\n".to_owned(), "cell_m", true),
+        s("family_list", "family.yaml", format!("version: {}\ncrates: []\n", bevy_grimoire_core::family::FAMILY_VERSION), "version", true),
+        s("agent", "agent.yaml", format!("version: {}\n", bevy_grimoire_core::note_agent::AGENT_VERSION), "version", true),
+        s("play", "play.yaml", format!("version: {}\ncommand: [\"game\"]\n", bevy_grimoire_core::play::PLAY_VERSION), "version", true),
+        s("water_plan", "site/water/yard.yaml", "springs: []\nsinks: []\nlakes: []\n".to_owned(), "springs", false),
+        s("water_field", "site/water/yard.field.yaml", "origin: [0.0, 0.0]\ncell_m: 1.0\nwidth: 2\ndepth: 2\ndepth_m: [0.0, 0.0, 0.0, 0.0]\nsettled: true\nsteps: 3\n".to_owned(), "steps", true),
+        s("volume", "site/volume/yard.yaml", "edits: []\n".to_owned(), "edits", false),
+        s("data_registry", "site/data.yaml", format!("version: {}\nfiles: []\n", bevy_grimoire_core::data_files::REGISTRY_VERSION), "version", true),
+        s("destructible_marks", "destructible.yaml", bevy_grimoire_core::yaml::to_string(&Marks { version: DESTRUCTIBLE_VERSION, pieces: vec!["site/cart".to_owned()] }).unwrap_or_else(|p| panic!("{}", p.line())), "version", true),
+        s("destructible_bake", "destructible/site__cart.bake.yaml", bevy_grimoire_core::yaml::to_string(&Bake { version: DESTRUCTIBLE_VERSION, key: 7, chunks: vec![Chunk { points: vec![[0.0, 0.0, 0.0]], faces: vec![vec![0, 0, 0]] }] }).unwrap_or_else(|p| panic!("{}", p.line())), "key", true),
     ]
 }
 
-/// The byte range of `field: value` (and its trailing comma) in the root struct of `text`. Skips
+/// The byte range of `field: value` (and its trailing comma) in the root value of `text`. Skips
 /// comments and strings, and only matches at the root's own depth, so a nested `version` is not it.
+///
+/// **Two spellings**, because a project file is YAML now and its sample may be either: a RON struct
+/// member (`(version: 1, …`) at the struct's own depth, or a YAML key at the document's left margin
+/// (`version: 1`), whose value runs to the end of its line. A YAML value is never followed by a comma, so
+/// the third element is 0 there and the callers' trimming of one is a no-op.
 fn field_span(text: &str, field: &str) -> (usize, usize, usize) {
-    let b = text.as_bytes();
-    let (mut depth, mut i) = (0usize, 0usize);
-    while i < b.len() {
-        match b[i] {
-            b'/' if b.get(i + 1) == Some(&b'/') => {
-                while i < b.len() && b[i] != b'\n' {
-                    i += 1;
-                }
-                continue;
-            }
-            b'"' => {
-                i += 1;
-                while i < b.len() && b[i] != b'"' {
-                    i += if b[i] == b'\\' { 2 } else { 1 };
-                }
-            }
-            b'(' | b'[' | b'{' => depth += 1,
-            b')' | b']' | b'}' => depth -= 1,
-            _ if depth == 1
-                && text[i..].starts_with(field)
-                && (i == 0 || !(b[i - 1].is_ascii_alphanumeric() || b[i - 1] == b'_'))
-                && text[i + field.len()..].trim_start().starts_with(':') =>
-            {
-                let colon = i + field.len() + text[i + field.len()..].find(':').unwrap();
-                let value = colon + 1 + text[colon + 1..].len() - text[colon + 1..].trim_start().len();
-                let (mut j, mut d) = (value, 0i32);
-                while j < b.len() {
-                    match b[j] {
-                        b'"' => {
-                            j += 1;
-                            while j < b.len() && b[j] != b'"' {
-                                j += if b[j] == b'\\' { 2 } else { 1 };
-                            }
-                        }
-                        b'(' | b'[' | b'{' => d += 1,
-                        b')' | b']' | b'}' if d == 0 => break,
-                        b')' | b']' | b'}' => d -= 1,
-                        b',' if d == 0 => break,
-                        _ => {}
-                    }
-                    j += 1;
-                }
-                let end = if b.get(j) == Some(&b',') { j + 1 } else { j };
-                return (i, value, end.min(b.len()));
-            }
-            _ => {}
+    // **A YAML key at the document's left margin**, whose value runs to the end of its line. A nested `version`
+    // is indented and so is never the root's, which is what this must not mistake.
+    let mut at = 0usize;
+    for line in text.split_inclusive('\n') {
+        let opening = format!("{field}:");
+        if let Some(rest) = line.strip_prefix(&opening) {
+            let value = at + opening.len() + (rest.len() - rest.trim_start().len());
+            let end = at + line.trim_end_matches('\n').len();
+            return (at, value, end);
         }
-        i += 1;
+        at += line.len();
     }
     panic!("no root field `{field}` in the sample");
 }
 
-fn corrupt(text: &str) -> String {
-    let half = (0..=text.len() / 2).rev().find(|&i| text.is_char_boundary(i)).unwrap();
-    text[..half].to_owned()
+
+/// **A damaged file**, which is what a half-finished write leaves: its root `version:` key is **unterminated**,
+/// `version` with no `:`. That is a syntax fault in every spelling of the file — RON refuses it and so does
+/// YAML — where cutting a document at a line boundary is no fault at all in YAML, and cutting inside a quoted
+/// string leaves a string that reads.
+///
+/// A file whose first root key cannot be read is refused before anything else about it is decided, which is
+/// exactly what this test is for: the verdict says `refused` and names the file.
+fn damaged(text: &str) -> String {
+    let mut at = 0usize;
+    for line in text.split_inclusive('\n') {
+        let trimmed = line.trim_start();
+        if trimmed.strip_prefix("version:").is_some() {
+            let key_at = at + (line.len() - trimmed.len());
+            // The colon goes, leaving `version 2` — a key with no separator.
+            return format!("{}{}", &text[..key_at], &text[key_at + "version:".len()..]);
+        }
+        if !trimmed.is_empty() && !trimmed.starts_with('#') && at == 0 {
+            // The first field is not `version`: break its colon anyway, so every sample is damaged the same way.
+            if let Some(colon) = trimmed.find(':') {
+                let at_key = at + (line.len() - trimmed.len()) + colon;
+                return format!("{}{}", &text[..at_key], &text[at_key + 1..]);
+            }
+        }
+        at += line.len();
+    }
+    text.to_owned()
 }
 
 fn wrong_type(text: &str, field: &str) -> String {
-    let (_, value, end) = field_span(text, field);
+    let (_, value, mut end) = field_span(text, field);
+    // **A key whose value starts on the next line** (`kind:` then `  tokens: []`) has nothing on its own line,
+    // so the value's range is empty and lands one byte before itself. The replacement then fills the key's line,
+    // which is the edit that makes the value the wrong type.
+    if end < value {
+        end = value;
+    }
     let was = text[value..end].trim_end_matches(',').trim();
     // A number becomes a string; anything else becomes a number, which no struct, list or string takes.
     let wrong = if was.starts_with(|c: char| c.is_ascii_digit() || c == '-') { "\"wrong\"" } else { "7" };
-    format!("{}{wrong}{}", &text[..value], &text[end - usize::from(text[..end].ends_with(',')) ..])
+    // **A YAML value's range ends where it starts** when the line carries nothing after the key, so the
+    // replacement is an insert at `value` and the end is clamped to it: a slice that ends before it starts is
+    // not a slice at all.
+    let end = end.max(value);
+    format!("{}{wrong}{}", &text[..value], &text[end - usize::from(text[..end].ends_with(','))..])
 }
 
 fn missing(text: &str, field: &str) -> String {
-    let (start, _, end) = field_span(text, field);
+    let (start, _, _) = field_span(text, field);
+    // **A field's removal takes its whole block with it.** The value may be on the key's line (`version: 2`) or
+    // a block under it (`kind:` then `  tokens: []`), and deleting only the key's own line would leave the
+    // block's lines behind — an indented run with no key, which is a *syntax* fault rather than a missing field,
+    // so the test would measure the wrong thing. The block runs to the first line that starts at column 0 and
+    // is neither blank nor a comment, which is the next root key.
+    let mut end = start;
+    let mut first = true;
+    for line in text[start..].split_inclusive('\n') {
+        if !first {
+            let trimmed = line.trim();
+            let at_column_0 = !line.starts_with(' ') && !line.starts_with('\t');
+            if !trimmed.is_empty() && !trimmed.starts_with('#') && at_column_0 {
+                break;
+            }
+        }
+        first = false;
+        end += line.len();
+    }
     format!("{}{}", &text[..start], &text[end..])
 }
 
@@ -162,7 +182,7 @@ fn a_valid_file_of_every_checked_kind_is_valid() {
 #[test]
 fn a_corrupt_file_is_refused_and_the_file_is_named() {
     for sample in samples() {
-        let r = refused(&sample, &corrupt(&sample.text));
+        let r = refused(&sample, &damaged(&sample.text));
         assert_eq!((r.kind, r.file.as_str()), (sample.id, sample.file));
         assert!(!r.reason.is_empty(), "`{}` refused with no reason", sample.id);
     }
@@ -196,8 +216,8 @@ fn a_missing_required_field_is_refused_and_named_and_an_optional_one_is_not() {
 
 #[test]
 fn a_nested_field_is_named_by_its_path() {
-    let sample = Sample { id: "terrain", file: "site/terrain/yard.ron", text: String::new(), field: "heights", required: true };
-    let text = "(origin: (0.0, \"x\"), cell_m: 1.0, width: 2, depth: 2, heights: [0.0, 0.0, 0.0, 0.0])";
+    let sample = Sample { id: "terrain", file: "site/terrain/yard.yaml", text: String::new(), field: "heights", required: true };
+    let text = "origin: [0.0, \"x\"]\ncell_m: 1.0\nwidth: 2\ndepth: 2\nheights: [0.0, 0.0, 0.0, 0.0]\n";
     assert_eq!(refused(&sample, text).field.as_deref(), Some("origin[1]"));
 }
 
@@ -209,14 +229,14 @@ fn a_file_that_parses_but_is_not_valid_is_refused_and_says_why() {
     use bevy_grimoire_core::volume::{Edit, Mode, Shape, Volume};
     let carve = Edit { shape: Shape::Sphere { center: [0.0; 3], radius_m: 0.0 }, mode: Mode::Carve, smooth_m: 0.0 };
     let cases = [
-        ("water_field", "site/water/yard.field.ron", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: [0.0, 0.0, 0.0], settled: true, steps: 3)".to_owned(), "3 depths for 2x2"),
-        ("water_field", "site/water/yard.field.ron", "(origin: (0.0, 0.0), cell_m: 0.0, width: 2, depth: 2, depth_m: [0.0, 0.0, 0.0, 0.0], settled: true, steps: 3)".to_owned(), "cell_m"),
-        ("volume", "site/volume/yard.ron", ron::to_string(&Volume { edits: vec![carve], ..Volume::default() }).unwrap(), "above zero"),
-        ("data_registry", "site/data.ron", "(version: 99, files: [])".to_owned(), "version 99"),
+        ("water_field", "site/water/yard.field.yaml", "origin: [0.0, 0.0]\ncell_m: 1.0\nwidth: 2\ndepth: 2\ndepth_m: [0.0, 0.0, 0.0]\nsettled: true\nsteps: 3\n".to_owned(), "3 depths for 2x2"),
+        ("water_field", "site/water/yard.field.yaml", "origin: [0.0, 0.0]\ncell_m: 0.0\nwidth: 2\ndepth: 2\ndepth_m: [0.0, 0.0, 0.0, 0.0]\nsettled: true\nsteps: 3\n".to_owned(), "cell_m"),
+        ("volume", "site/volume/yard.yaml", bevy_grimoire_core::yaml::to_string(&Volume { edits: vec![carve], ..Volume::default() }).unwrap_or_else(|p| panic!("{}", p.line())), "above zero"),
+        ("data_registry", "site/data.yaml", "version: 99\nfiles: []\n".to_owned(), "version 99"),
         (
             "data_registry",
-            "site/data.ron",
-            format!("(version: {}, files: [(id: \"a\", path: \"a.ron\"), (id: \"a\", path: \"b.ron\")])", bevy_grimoire_core::data_files::REGISTRY_VERSION),
+            "site/data.yaml",
+            format!("version: {}\nfiles:\n- id: a\n  path: a.yaml\n- id: a\n  path: b.yaml\n", bevy_grimoire_core::data_files::REGISTRY_VERSION),
             "`a` is registered twice",
         ),
     ];

@@ -9,15 +9,15 @@
 //!
 //! # Files and where they live
 //!
-//! Relative to the project directory (`assets/grimoire`, the one holding `kits.ron`):
+//! Relative to the project directory (`assets/grimoire`, the one holding `kits.yaml`):
 //!
 //! | file | required | read by |
 //! |---|---|---|
-//! | `kits.ron` | yes | [`Kits::parse`], then [`kits::bound_library`] reads each kit's own files |
-//! | `vocab.ron` | yes | [`Vocabularies::parse`] |
-//! | `rules.ron` | no — absent means no rules | [`Rules::parse`] |
-//! | `compositions.ron` | no — absent means none | [`kits::bound_library`] |
-//! | `maps/<name>.map.ron` | only the maps asked for | [`Map::parse`] |
+//! | `kits.yaml` | yes | [`Kits::parse`], then [`kits::bound_library`] reads each kit's own files |
+//! | `vocab.yaml` | yes | [`Vocabularies::parse`] |
+//! | `rules.yaml` | no — absent means no rules | [`Rules::parse`] |
+//! | `compositions.yaml` | no — absent means none | [`kits::bound_library`] |
+//! | `maps/<name>.map.yaml` | only the maps asked for | [`Map::parse`] |
 //!
 //! # What is refused, and when
 //!
@@ -38,8 +38,8 @@ use crate::live::{KindVerdict, Outcome};
 use crate::reload::{self, Base};
 use crate::reload_check::{self, Check};
 
-/// The project's vocabulary file, beside `kits.ron`.
-pub const VOCAB_FILE: &str = "vocab.ron";
+/// The project's vocabulary file, beside `kits.yaml`.
+pub const VOCAB_FILE: &str = "vocab.yaml";
 
 /// Where maps live under the project directory. The editor writes them here too.
 pub const MAPS_DIR: &str = "maps";
@@ -71,16 +71,16 @@ pub fn migrate_legacy_data_dir(root: &Path) -> Result<Option<String>, String> {
 /// Everything a game needs from `assets/grimoire`, loaded and cross-checked.
 #[derive(Clone, Debug)]
 pub struct ProjectData {
-    /// `kits.ron`: the binding, the lattice, the bashes.
+    /// `kits.yaml`: the binding, the lattice, the bashes.
     pub kits: Kits,
     /// Every bound kit, layered, and the **merged library** a map resolves against
     /// (`bound.library`).
     pub bound: Bound,
-    /// `vocab.ron`.
+    /// `vocab.yaml`.
     pub vocab: Vocabularies,
-    /// `rules.ron`, or no rules when the file is absent.
+    /// `rules.yaml`, or no rules when the file is absent.
     pub rules: Rules,
-    /// `compositions.ron`, validated against [`Self::bound`]'s library; empty when absent. The same
+    /// `compositions.yaml`, validated against [`Self::bound`]'s library; empty when absent. The same
     /// value as `bound.compositions`, held here so a reader need not know it travels with the bind.
     pub compositions: Compositions,
     /// The maps asked for, by name.
@@ -94,24 +94,19 @@ impl ProjectData {
     }
 }
 
-fn read(path: &Path) -> Result<String, String> {
-    std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))
-}
-
 /// Load the project in `grimoire_dir` (`assets/grimoire`) and the named `maps`.
 ///
-/// Order: `kits.ron`, the bound kits, `vocab.ron` (resolved against the merged library so an unknown
-/// token fails here), `rules.ron`, then each map. A map named here must exist — a game that asks for
+/// Order: `kits.yaml`, the bound kits, `vocab.yaml` (resolved against the merged library so an unknown
+/// token fails here), `rules.yaml`, then each map. A map named here must exist — a game that asks for
 /// `town` and gets nothing has a bug to hear about, not a default to continue with.
 pub fn load(grimoire_dir: &Path, maps: &[&str]) -> Result<ProjectData, String> {
     let kits_path = grimoire_dir.join(kits::KITS_FILE);
-    let kits = Kits::parse(&read(&kits_path)?).map_err(|e| format!("{}: {e}", kits_path.display()))?;
+    let kits: Kits = crate::load::parsed(&kits_path)?;
 
     let bound = kits::bound_library(grimoire_dir, &kits)?;
 
     let vocab_path = grimoire_dir.join(VOCAB_FILE);
-    let vocab =
-        Vocabularies::parse(&read(&vocab_path)?).map_err(|e| format!("{}: {e}", vocab_path.display()))?;
+    let vocab: Vocabularies = crate::load::parsed(&vocab_path)?;
 
     // The lattice check the game's own map loader applies, on the layered merge — what is placed.
     bound
@@ -131,9 +126,8 @@ pub fn load(grimoire_dir: &Path, maps: &[&str]) -> Result<ProjectData, String> {
         .map_err(|e| format!("{}: {e}", compositions_path.display()))?;
 
     let rules_path = grimoire_dir.join(rules::FILE);
-    let rules = if rules_path.is_file() {
-        let parsed =
-            Rules::parse(&read(&rules_path)?).map_err(|e| format!("{}: {e}", rules_path.display()))?;
+    let rules = if crate::load::exists(&rules_path) {
+        let parsed: Rules = crate::load::parsed(&rules_path)?;
         parsed
             .validate_against(&bound.library)
             .map_err(|e| format!("{}: {e}", rules_path.display()))?;
@@ -151,7 +145,7 @@ pub fn load(grimoire_dir: &Path, maps: &[&str]) -> Result<ProjectData, String> {
         let path = grimoire_dir
             .join(MAPS_DIR)
             .join(crate::naming::map_file_name(name));
-        let map = Map::parse(&read(&path)?).map_err(|e| format!("{}: {e}", path.display()))?;
+        let map: Map = crate::load::parsed(&path)?;
         if map.name != *name {
             return Err(format!(
                 "{}: calls itself `{}`. A map's name IS its file.",
@@ -165,7 +159,7 @@ pub fn load(grimoire_dir: &Path, maps: &[&str]) -> Result<ProjectData, String> {
         // `placements` — they are derived, and somebody has to derive them. When that somebody
         // was the editor only, the game got a level missing whatever the groups brought: the
         // editor drew a house, the game had no house, and nothing said so. Measured on
-        // Sanctuary's `town.map.ron` — 728 rows reached the game where the editor had 746.
+        // Sanctuary's `town.map.yaml` — 728 rows reached the game where the editor had 746.
         //
         // So the loader is that somebody. It is the one door every consumer goes through, which
         // makes "forgot to expand" impossible rather than merely discouraged, and it is the same
@@ -206,8 +200,8 @@ pub fn load(grimoire_dir: &Path, maps: &[&str]) -> Result<ProjectData, String> {
 /// together (an unknown vocabulary token) and goes to a `project` entry. An error whose file is
 /// already refused adds nothing: its own check said why.
 ///
-/// The files are the ones `load` would read: `kits.ron`, each bound kit's library and policy,
-/// `vocab.ron`, `rules.ron` and `compositions.ron` when present, and each map asked for. Paths are
+/// The files are the ones `load` would read: `kits.yaml`, each bound kit's library and policy,
+/// `vocab.yaml`, `rules.yaml` and `compositions.yaml` when present, and each map asked for. Paths are
 /// relative to `grimoire_dir`.
 pub fn verdicts(grimoire_dir: &Path, maps: &[&str], load_error: Option<&str>) -> Vec<KindVerdict> {
     let mut files = vec![kits::KITS_FILE.to_owned()];
@@ -261,14 +255,14 @@ mod tests {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/grimoire")
     }
 
-    /// The shipped fixture binds two kits, has no `rules.ron` and no maps directory.
+    /// The shipped fixture binds two kits, has no `rules.yaml` and no maps directory.
     #[test]
     fn the_fixture_project_loads_whole() {
         let data = load(&fixture(), &[]).unwrap_or_else(|e| panic!("{e}"));
         assert!(!data.kits.bind.is_empty(), "the fixture binds kits");
         assert_eq!(data.bound.kits.len(), data.kits.bind.len());
         assert!(!data.bound.library.descriptors.is_empty(), "the merged library has pieces");
-        assert!(data.rules.blocks.is_empty(), "no rules.ron means no block rules");
+        assert!(data.rules.blocks.is_empty(), "no rules.yaml means no block rules");
         assert_eq!(data.rules.version, rules::RULES_VERSION);
         assert_eq!(data.compositions, data.bound.compositions);
         assert!(data.maps.is_empty());
@@ -296,17 +290,17 @@ mod tests {
         };
         std::fs::write(
             dir.join(kits::KITS_FILE),
-            kits.to_ron().unwrap_or_else(|e| panic!("{e}")),
+            kits.to_yaml().unwrap_or_else(|e| panic!("{e}")),
         )
         .unwrap_or_else(|e| panic!("{e}"));
-        let vocab = ron::to_string(&Vocabularies::default()).unwrap_or_else(|e| panic!("{e}"));
+        let vocab = Vocabularies::default().to_yaml().unwrap_or_else(|e| panic!("{e}"));
         std::fs::write(dir.join(VOCAB_FILE), vocab).unwrap_or_else(|e| panic!("{e}"));
 
         let loaded = load(&dir, &[]).unwrap_or_else(|e| panic!("an empty project loads: {e}"));
         assert!(loaded.bound.library.descriptors.is_empty());
 
         let err = load(&dir, &["town"]).expect_err("the map does not exist");
-        let want = dir.join("maps").join("town.map.ron");
+        let want = dir.join("maps").join("town.map.yaml");
         assert!(
             err.starts_with(&want.display().to_string()),
             "the error must lead with the map's path {}: {err}",
@@ -315,11 +309,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// A missing `kits.ron` is refused by its path too, not with a bare io error.
+    /// A missing `kits.yaml` is refused by its path too, not with a bare io error.
     #[test]
     fn a_missing_kits_file_names_its_path() {
         let dir = scratch("missing_kits");
-        let err = load(&dir, &[]).expect_err("no kits.ron");
+        let err = load(&dir, &[]).expect_err("no kits.yaml");
         assert!(err.starts_with(&dir.join(kits::KITS_FILE).display().to_string()), "{err}");
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -35,7 +35,7 @@ fn editor(tag: &str) -> (App, std::path::PathBuf, std::path::PathBuf) {
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.insert_resource(bevy_cauldron::agent_guide::UserGuideFile(home.join(agent_guide::USER_FILE)));
     // **A store of the test's own**, as the settings file is: no test reads or writes the real one.
-    let store = root.join("trusted.ron");
+    let store = root.join("trusted.yaml");
     TrustStore::default().save(&store).expect("an empty store");
     app.world_mut().resource_mut::<bevy_cauldron::editor::EditorState>().trust.file = Some(store.clone());
     app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());

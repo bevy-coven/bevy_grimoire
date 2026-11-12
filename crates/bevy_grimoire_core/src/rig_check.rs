@@ -310,7 +310,7 @@ pub fn check_rig(glb: &Glb, rig: &Rig, provenance_current: bool) -> RigCheck {
             findings.push(Finding::bad(format!(
                 "declares {gaits} gait slot(s) but the asset has no node named '{root_name}' — the \
                  in-place check cannot run; export the rig with its root bone named {root_name}, \
-                 or set `root_node:` on the rig in rigs.ron"
+                 or set `root_node:` on the rig in rigs.yaml"
             )));
         }
         if !missing.is_empty() {
@@ -343,7 +343,7 @@ pub fn check_rig(glb: &Glb, rig: &Rig, provenance_current: bool) -> RigCheck {
             findings.push(Finding::bad(format!(
                 "declares {gaits} gait slot(s) but the asset has no node named '{listed}' — \
                  {consequence}; export the rig with its contact feet under these names, or fix \
-                 `contact_joints:` on the rig in rigs.ron{suggestion}"
+                 `contact_joints:` on the rig in rigs.yaml{suggestion}"
             )));
         }
     }
@@ -353,7 +353,7 @@ pub fn check_rig(glb: &Glb, rig: &Rig, provenance_current: bool) -> RigCheck {
             findings.push(
                 Finding::bad(format!(
                     "slot {i} names clip {} but the asset has {}: {} — it was re-exported; \
-                     re-measure and update rigs.ron",
+                     re-measure and update rigs.yaml",
                     slot.clip,
                     found.len(),
                     roster(&found),
@@ -699,7 +699,7 @@ pub fn check_rig(glb: &Glb, rig: &Rig, provenance_current: bool) -> RigCheck {
                 match clips::phase_match_joints(glb, ref_clip, clip, &resolved) {
                     Some(m) => {
                         // The slot's implied ABSOLUTE offset, in the frame where the reference
-                        // sits at its declared value — directly comparable with what rigs.ron says.
+                        // sits at its declared value — directly comparable with what rigs.yaml says.
                         let measured = clips::signed_offset(wrap01(ref_declared + m.offset));
                         let diff = clips::signed_offset(wrap01(measured - declared)).abs();
                         if let Some(sm) = slots.iter_mut().find(|sm| sm.slot == i) {
@@ -1012,8 +1012,8 @@ mod tests {
             .join("../..")
             .canonicalize()
             .unwrap_or_else(|e| panic!("workspace root: {e}"));
-        let text = std::fs::read_to_string(root.join("assets/grimoire/rigs.ron"))
-            .unwrap_or_else(|e| panic!("rigs.ron: {e}"));
+        let text = std::fs::read_to_string(root.join("assets/grimoire/rigs.yaml"))
+            .unwrap_or_else(|e| panic!("rigs.yaml: {e}"));
         let rigs = crate::rigs::Rigs::parse(&text).unwrap_or_else(|e| panic!("{e}"));
         let valk = rigs
             .get("valkyrie")

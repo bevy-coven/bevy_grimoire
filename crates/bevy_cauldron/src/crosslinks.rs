@@ -9,7 +9,7 @@
 //! |---|---|---|
 //! | a piece's **Used by** | the maps that place it | the Kit's Meshes pane and the inspector ([`used_by_line`], from `Project::maps_that_place`) |
 //! | a placement's **Open file** | its map's file, at that row | the Map inspector ([`OpenFileButton`]), through [`open_in_files`] |
-//! | a piece's **Open piece file** | `library.ron`, at that entry | the Map inspector ([`OpenPieceFileButton`]) |
+//! | a piece's **Open piece file** | `library.yaml`, at that entry | the Map inspector ([`OpenPieceFileButton`]) |
 //! | a cue's **Used by** in Sound | the files that name it | [`crate::world_lists::cue_use_rows`], from [`crate::goto::GotoIndex::used_by`] |
 //! | Cmd/Ctrl+click or F12 on a value that names something | what it names | [`crate::files`]'s editor, through [`follow_reference`] |
 //!
@@ -56,7 +56,7 @@ pub const SCAN_MAX_BYTES: u64 = crate::files::MAX_FILE_BYTES;
 /// **The map file's list of placements**, whose rows a placement's line is found among: a stamp or a note can carry the same word.
 pub const PLACEMENTS_KEY: &str = "placements";
 
-/// **The library file's list of descriptors** (`library.ron`'s `descriptors:`), for the same reason: a stamp or a note can
+/// **The library file's list of descriptors** (`library.yaml`'s `descriptors:`), for the same reason: a stamp or a note can
 /// carry a piece's word too.
 pub const PIECES_KEY: &str = "descriptors";
 
@@ -114,7 +114,7 @@ pub fn scan(root: &Path, last: Option<u64>) -> Option<Scan> {
         }
         let Ok(text) = std::fs::read_to_string(root.join(rel)) else { continue };
         let schema = bevy_grimoire_core::reload_check::kind_of_path(rel)
-            .and_then(|(kind, _)| schemas.entry(kind.id).or_insert_with(|| bevy_grimoire_core::schema::for_kind(kind.id).ok()).as_ref());
+            .and_then(|kind| schemas.entry(kind.id).or_insert_with(|| bevy_grimoire_core::schema::for_kind(kind.id).ok()).as_ref());
         for found in files_lang::references(Lang::Yaml, &text, schema) {
             refs.push(Named { kind: found.kind, name: found.name, file: rel.clone(), line: found.line });
         }

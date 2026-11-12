@@ -43,24 +43,24 @@ use crate::fixtures;
 
 /// **A rules file with real numbers**, so `rules_set` has a block to write and the no-page test is
 /// about the page rather than about the refusal that precedes it. `alpha` is the fixture's piece.
-const RULES: &str = "// the block rules\n\
-(\n\
-    version: 1,\n\
-    blocks: [\n\
-        (\n\
-            example: \"m\",\n\
-            regions: [],\n\
-            cell: 2.0,\n\
-            size: (4, 4),\n\
-            border: None,\n\
-            no_empty: true,\n\
-            weights: [(prefix: \"alpha\", times: 2.0)],\n\
-            footprints: [],\n\
-            attempts: 8,\n\
-            seed: 7,\n\
-        ),\n\
-    ],\n\
-)\n";
+const RULES: &str = r"# the block rules
+version: 1
+blocks:
+- example: m
+  regions: []
+  cell: 2.0
+  size:
+  - 4
+  - 4
+  border: null
+  no_empty: true
+  weights:
+  - prefix: alpha
+    times: 2.0
+  footprints: []
+  attempts: 8
+  seed: 7
+";
 
 /// **One frame of the test clock.** The reveal is a queue carried out a frame at a time, and a
 /// crossing is `PreUpdate` + a state transition, so a test that stepped real frames would be reading
@@ -76,7 +76,7 @@ const SETTLE: usize = 40;
 /// one subject per off-map `Shown` variant, so each test can name the operation that changes it.
 ///
 /// The rigs manifest and the character it measures come from the workspace's own `assets`, the way
-/// `rig_adopt_measured_is_an_operation` gets them: a fixture rigs.ron would have to invent a GLB.
+/// `rig_adopt_measured_is_an_operation` gets them: a fixture rigs.yaml would have to invent a GLB.
 fn project(tag: &str) -> std::path::PathBuf {
     let root = fixtures::Fixture::new(&format!("{tag}_{}", std::process::id()))
         .descriptor("lamp_tall", "alpha")
@@ -84,24 +84,24 @@ fn project(tag: &str) -> std::path::PathBuf {
         .place("bed", (2.0, 2.0))
         .composition("nook", &[("seat", "bed", (2.0, 2.0))])
         .side(64.0)
-        .rules(RULES)
+        .rules_text(RULES)
         .build("m");
     let grimoire = root.join("assets/grimoire");
     // The rig manifest and the mesh it measures, from the workspace.
-    std::fs::copy(workspace_asset("grimoire/rigs.ron"), grimoire.join("rigs.ron")).expect("rigs.ron");
+    std::fs::copy(workspace_asset("grimoire/rigs.yaml"), grimoire.join("rigs.yaml")).expect("rigs.yaml");
     std::fs::create_dir_all(root.join("assets/characters")).expect("characters dir");
     std::fs::copy(workspace_asset("characters/valkyrie.glb"), root.join("assets/characters/valkyrie.glb"))
         .expect("valkyrie.glb");
     // A registered data file with two leaves, so the DATA table has rows to select.
     let kit = root.join("assets/grimoire/furniture");
-    std::fs::write(kit.join("mob.ron"), "// tuning\n(mob: (speed: 1.50, name: \"orc\"))\n").expect("mob.ron");
+    std::fs::write(kit.join("mob.yaml"), "# tuning\nmob:\n  speed: 1.50\n  name: orc\n").expect("mob.yaml");
     std::fs::write(
-        kit.join("data.ron"),
-        "(version: 1, files: [(id: \"tuning/mob\", path: \"mob.ron\", bounds: {\"mob.speed\": (min: 0.0, max: 9.0)})])",
+        kit.join("data.yaml"),
+        "{version: 1, files: [{id: \"tuning/mob\", path: \"mob.yaml\", bounds: {\"mob.speed\": {min: 0.0, max: 9.0}}}]}",
     )
-    .expect("data.ron");
+    .expect("data.yaml");
     // A note on the open map, so `Note` has one to select.
-    let notes = bevy_grimoire_core::notes::path_for_map(&grimoire.join("maps/m.map.ron"));
+    let notes = bevy_grimoire_core::notes::path_for_map(&grimoire.join("maps/m.map.yaml"));
     let note = bevy_grimoire_core::notes::Notes {
         version: bevy_grimoire_core::notes::NOTES_VERSION,
         notes: vec![bevy_grimoire_core::notes::Note {
@@ -122,7 +122,7 @@ fn project(tag: &str) -> std::path::PathBuf {
 /// **A value as RON**, through the crate that owns the type — a hand-written note row drifted from the
 /// schema the first time, which is what `status: None` was.
 fn ron_string<T: serde::Serialize>(value: &T) -> String {
-    ron::ser::to_string(value).unwrap_or_else(|e| panic!("the note does not serialize: {e}"))
+    bevy_grimoire_core::yaml::to_string(value).unwrap_or_else(|e| panic!("the note does not serialize: {e}"))
 }
 
 fn workspace_asset(rel: &str) -> std::path::PathBuf {
@@ -384,16 +384,18 @@ fn a_rigs_page_opens_on_the_rig_bench_with_that_rig_selected() {
         .world()
         .resource::<Project>()
         .root
-        .join("assets/grimoire/rigs.ron");
-    let text = std::fs::read_to_string(&rig).expect("the fixture copied rigs.ron");
-    let name = text
-        .lines()
-        .find_map(|l| {
-            let line = l.trim();
-            let (key, rest) = line.split_once(":")?;
-            (rest.trim_start().starts_with('(') && key.starts_with('"')).then(|| key.trim_matches('"').to_owned())
+        .join("assets/grimoire/rigs.yaml");
+    let text = std::fs::read_to_string(&rig).expect("the fixture copied rigs.yaml");
+    let name = bevy_grimoire_core::yaml::to_json(&text, "rigs.yaml")
+        .ok()
+        .and_then(|rigs| {
+            rigs["rigs"].as_object().and_then(|rigs| {
+                rigs.iter()
+                    .find(|(_, rig)| rig["slots"].as_array().is_some_and(|slots| slots.iter().any(|slot| slot["playback"].get("Gait").is_some())))
+                    .map(|(name, _)| name.clone())
+            })
         })
-        .expect("rigs.ron names one rig a line");
+        .expect("rigs.yaml names a rig");
     let rig = name;
     let answer = apply(
         &mut app,
@@ -500,7 +502,7 @@ fn a_notes_page_opens_on_the_notes_panel_with_that_note_selected() {
 /// **Owner exception (2026-11-12): tests/the_follow_opens_the_page_a_change_is_on.rs::
 /// a_change_the_editor_has_no_page_for_raises_a_problem_naming_it: the "no page" this asserted was the
 /// Files workspace being unbuilt (GD-11, #373), and it is now built** (review M1). `rules_set` rewrites
-/// `assets/grimoire/rules.ron`; the follow opens it there instead of raising a problem, which is the same
+/// `assets/grimoire/rules.yaml`; the follow opens it there instead of raising a problem, which is the same
 /// intent the test held — a change takes the person to where it is seen — with the page the refusal stood
 /// in for. The name changed with it so no line is left claiming a page is missing.
 #[test]
@@ -519,7 +521,7 @@ fn a_project_files_change_opens_the_files_workspace_on_that_file() {
     assert_eq!(*app.world().resource::<Workspace>(), Workspace::Files, "a rules change is shown in the Files workspace");
     assert_eq!(
         bevy_cauldron::files::active_file(app.world().resource::<bevy_cauldron::session::Session>()).as_deref(),
-        Some("assets/grimoire/rules.ron"),
+        Some("assets/grimoire/rules.yaml"),
         "on the file the operation wrote"
     );
     let status = &app.world().resource::<EditorState>().status;

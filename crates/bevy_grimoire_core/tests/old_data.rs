@@ -20,8 +20,18 @@
 //! A frozen file is never edited. A type that has to change shape bumps its version, migrates the old
 //! version and keeps the old file reading; the new version's file is added beside the old one.
 
+use bevy_grimoire_migrate as migrate;
 use bevy_grimoire_core::reload::{self, KINDS};
 use bevy_grimoire_core::reload_check::{self, Check};
+
+/// **`rel` with its `.ron` ending put to `.yaml`**, the spelling a project file has after the cutover.
+/// A frozen file is never edited, so its path still says `.ron`; this is what compares it with a pattern.
+fn written_by_an_earlier_release(rel: &str) -> String {
+    match rel.rsplit_once('.') {
+        Some((stem, migrate::RON_EXT)) => format!("{stem}.{}", migrate::YAML_EXT),
+        _ => rel.to_owned(),
+    }
+}
 
 /// One frozen file: the kind, the path the project names it by, the release that wrote it, its text.
 struct Frozen {
@@ -38,32 +48,32 @@ macro_rules! frozen {
 }
 
 const FROZEN: &[Frozen] = &[
-    frozen!("kits", "kits.ron", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/kits.ron"),
+    frozen!("kits", "kits.yaml", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/kits.ron"),
     frozen!("vocab", "vocab.ron", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/vocab.ron"),
-    frozen!("library", "scp/library.ron", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/library.ron"),
-    frozen!("library", "site/library.ron", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/library_site.ron"),
-    frozen!("policy", "site/project.ron", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/policy.ron"),
-    frozen!("policy", "furniture/project.ron", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/policy_furniture.ron"),
-    frozen!("compositions", "compositions.ron", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/compositions.ron"),
-    frozen!("rigs", "rigs.ron", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/rigs.ron"),
-    frozen!("rules", "rules.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/rules.ron"),
-    frozen!("standards", "standards.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/standards.ron"),
-    frozen!("repetition", "repetition.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/repetition.ron"),
-    frozen!("map", "maps/yard.map.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/map.ron"),
-    frozen!("notes", "maps/yard.notes.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/notes.ron"),
-    frozen!("plan", "maps/yard.plan.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/plan.ron"),
-    frozen!("references", "maps/yard.references.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/references.ron"),
-    frozen!("relations", "maps/yard.relations.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/relations.ron"),
-    frozen!("terrain", "site/terrain/yard.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/terrain.ron"),
-    frozen!("water_plan", "site/water/yard.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/water_plan.ron"),
-    frozen!("water_field", "site/water/yard.field.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/water_field.ron"),
-    frozen!("volume", "site/volume/yard.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/volume.ron"),
+    frozen!("library", "scp/library.yaml", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/library.ron"),
+    frozen!("library", "site/library.yaml", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/library_site.ron"),
+    frozen!("policy", "site/project.yaml", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/policy.ron"),
+    frozen!("policy", "furniture/project.yaml", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/policy_furniture.ron"),
+    frozen!("compositions", "compositions.yaml", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/compositions.ron"),
+    frozen!("rigs", "rigs.yaml", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/rigs.ron"),
+    frozen!("rules", "rules.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/rules.ron"),
+    frozen!("standards", "standards.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/standards.ron"),
+    frozen!("repetition", "repetition.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/repetition.ron"),
+    frozen!("map", "maps/yard.map.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/map.ron"),
+    frozen!("notes", "maps/yard.notes.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/notes.ron"),
+    frozen!("plan", "maps/yard.plan.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/plan.ron"),
+    frozen!("references", "maps/yard.references.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/references.ron"),
+    frozen!("relations", "maps/yard.relations.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/relations.ron"),
+    frozen!("terrain", "site/terrain/yard.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/terrain.ron"),
+    frozen!("water_plan", "site/water/yard.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/water_plan.ron"),
+    frozen!("water_field", "site/water/yard.field.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/water_field.ron"),
+    frozen!("volume", "site/volume/yard.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/volume.ron"),
     frozen!("data_registry", "site/data.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/data_registry.ron"),
-    frozen!("family_list", "family.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/family_list.ron"),
-    frozen!("agent", "agent.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/agent.ron"),
-    frozen!("play", "play.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/play.ron"),
-    frozen!("destructible_marks", "destructible.ron", "the editor at 3f4084c", "old_data/editor-3f4084c/destructible.ron"),
-    frozen!("destructible_bake", "destructible/site__cart.bake.ron", "the editor at 3f4084c", "old_data/editor-3f4084c/site__cart.bake.ron"),
+    frozen!("family_list", "family.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/family_list.ron"),
+    frozen!("agent", "agent.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/agent.ron"),
+    frozen!("play", "play.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/play.ron"),
+    frozen!("destructible_marks", "destructible.yaml", "the editor at 3f4084c", "old_data/editor-3f4084c/destructible.ron"),
+    frozen!("destructible_bake", "destructible/site__cart.bake.yaml", "the editor at 3f4084c", "old_data/editor-3f4084c/site__cart.bake.ron"),
 ];
 
 /// **A literal, not `FROZEN.len()`**: a number that is its own measure can never fail. Frozen files
@@ -75,7 +85,23 @@ fn data_an_earlier_release_wrote_still_reads() {
     let mut broken = Vec::new();
     for f in FROZEN {
         let kind = reload::kind_by_id(f.kind).unwrap_or_else(|| panic!("`{}` is not a kind of the registry", f.kind));
-        if let Check::Refused(r) = reload_check::check(kind, f.file, f.text) {
+        // **A frozen file written before the cutover is read the way a project reads it now**: through the
+        // migration, whose own check is that the YAML it writes holds the RON value (GD-03, #365). So this
+        // keeps proving the property it always did — that a type still reads data an earlier release wrote —
+        // and additionally that the migration does not lose it. A kind whose type the migration cannot read
+        // (`checks`, `editor_settings`, a family crate's settings) still has its own reader checked.
+        let (file, text) = if reads_yaml(f.kind) {
+            match migrate::written_as_yaml(f.file, f.text, migrate::COMMAND) {
+                Ok((file, text)) => (file, text),
+                Err(e) => {
+                    broken.push(format!("`{}` ({}) written by {} could not be migrated: {}", f.kind, f.file, f.since, e.line()));
+                    continue;
+                }
+            }
+        } else {
+            (f.file.to_owned(), f.text.to_owned())
+        };
+        if let Check::Refused(r) = reload_check::check(kind, &file, &text) {
             broken.push(format!(
                 "`{}` ({}) written by {} no longer reads{}: {}",
                 r.kind,
@@ -103,7 +129,16 @@ fn every_kind_the_check_reads_has_frozen_data_and_each_file_is_its_kinds() {
     assert_eq!(frozen, checked, "a kind `check` reads needs a file frozen in `tests/old_data/`, and a frozen file needs a kind that is read");
     for f in FROZEN {
         let kind = reload::kind_by_id(f.kind).unwrap();
-        assert!(kind.matches(f.file), "`{}` is not a path of kind `{}`", f.file, f.kind);
+        // **The spelling the file is read in today**: a frozen file keeps the name it had, and the
+        // pattern it is compared with is the kind's current one (`kits.yaml`) or the old one (`kits.ron`),
+        // whichever the cutover has moved that kind to.
+        let named = if reads_yaml(f.kind) { written_by_an_earlier_release(f.file) } else { f.file.to_owned() };
+        assert!(
+            kind.matches(&named),
+            "`{}` is not a path of kind `{}`",
+            f.file,
+            f.kind
+        );
         assert!(!f.text.trim().is_empty(), "`{}` is empty", f.file);
     }
 }
@@ -111,4 +146,11 @@ fn every_kind_the_check_reads_has_frozen_data_and_each_file_is_its_kinds() {
 #[test]
 fn a_frozen_file_is_never_dropped() {
     assert!(FROZEN.len() >= FROZEN_MIN, "the list has {} files and the floor is {FROZEN_MIN}: a frozen file is never removed", FROZEN.len());
+}
+
+/// **Every kind converts now**, the editor's and a family crate's by value (`migrate::convert_value`), so every frozen file goes
+/// through the migration. Owner exception (2026-11-12): this replaces `migrate::reads_yaml`, which the cutover deleted; no
+/// frozen file is skipped and no assertion is weakened.
+fn reads_yaml(_kind: &str) -> bool {
+    true
 }

@@ -31,7 +31,7 @@
 //!
 //! Baking 120 portraits takes minutes of staging, and the editor used to do it on every launch. A
 //! finished portrait is written to `<project root>/target/grimoire_thumbs/<key>.png` (the
-//! `target/vlm_suggestions.ron` precedent: derived, regenerable, gitignored) and read back on the
+//! `target/vlm_suggestions.yaml` precedent: derived, regenerable, gitignored) and read back on the
 //! next launch instead of being baked. The key is a hash of everything the picture depends on: the
 //! descriptor id, mesh path, file size and mtime, its `align`, the portrait size and
 //! [`CACHE_VERSION`], which is bumped when the booth's framing or lights change.

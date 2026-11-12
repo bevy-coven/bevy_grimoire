@@ -11,7 +11,7 @@
 
 use std::path::Path;
 
-use bevy_grimoire_core::ron_surgery::save_atomic_no_replace;
+use bevy_grimoire_core::save::save_atomic_no_replace;
 
 /// A directory under the OS's temp, removed when it goes out of scope.
 struct Temp(std::path::PathBuf);
@@ -40,7 +40,7 @@ impl Drop for Temp {
 #[test]
 fn a_write_to_a_free_path_lands() {
     let tmp = Temp::new("lands");
-    let path = tmp.path("map.map.ron");
+    let path = tmp.path("map.map.yaml");
     save_atomic_no_replace(&path, "the map").expect("the write must succeed");
     assert_eq!(
         std::fs::read_to_string(&path).expect("the file is there"),
@@ -57,7 +57,7 @@ fn a_write_to_a_free_path_lands() {
 #[test]
 fn a_write_onto_an_existing_file_is_refused_and_changes_nothing() {
     let tmp = Temp::new("refused");
-    let path = tmp.path("map.map.ron");
+    let path = tmp.path("map.map.yaml");
     std::fs::write(&path, "the original map").expect("the file is there");
 
     let refused = save_atomic_no_replace(&path, "the new map");
@@ -86,7 +86,7 @@ fn a_write_onto_an_existing_file_is_refused_and_changes_nothing() {
 #[test]
 fn a_file_that_appears_before_the_write_is_still_refused() {
     let tmp = Temp::new("race");
-    let path = tmp.path("map.map.ron");
+    let path = tmp.path("map.map.yaml");
 
     // **The target exists by the time the write happens.** There is no window in this test to put
     // a file into — the whole point is that the implementation must not depend on one.
@@ -111,7 +111,7 @@ fn a_file_that_appears_before_the_write_is_still_refused() {
 #[test]
 fn a_refused_write_leaves_no_tmp_file() {
     let tmp = Temp::new("no-tmp");
-    let path = tmp.path("map.map.ron");
+    let path = tmp.path("map.map.yaml");
     std::fs::write(&path, "the original map").expect("the file is there");
 
     let _ = save_atomic_no_replace(&path, "the new map");
@@ -133,7 +133,7 @@ fn a_refused_write_leaves_no_tmp_file() {
 #[test]
 fn a_successful_write_leaves_no_tmp_file() {
     let tmp = Temp::new("no-tmp-ok");
-    let path = tmp.path("map.map.ron");
+    let path = tmp.path("map.map.yaml");
     save_atomic_no_replace(&path, "the map").expect("the write must succeed");
 
     let leftovers: Vec<String> = std::fs::read_dir(&tmp.0)
@@ -152,13 +152,13 @@ fn a_successful_write_leaves_no_tmp_file() {
 #[test]
 fn the_refusal_names_the_path() {
     let tmp = Temp::new("named");
-    let path = tmp.path("map.map.ron");
+    let path = tmp.path("map.map.yaml");
     std::fs::write(&path, "the original map").expect("the file is there");
 
     let said = save_atomic_no_replace(&path, "the new map")
         .expect_err("the write must be refused");
     assert!(
-        said.contains("map.map.ron"),
+        said.contains("map.map.yaml"),
         "the refusal must name the file that is in the way, so the author knows which one to \\
          change. It said `{said}`"
     );
@@ -169,7 +169,7 @@ fn the_refusal_names_the_path() {
 #[test]
 fn the_parent_directory_is_made() {
     let tmp = Temp::new("parent");
-    let path = tmp.path("maps").join("map.map.ron");
+    let path = tmp.path("maps").join("map.map.yaml");
     save_atomic_no_replace(&path, "the map").expect("the write must succeed");
     assert!(Path::new(&path).exists(), "the file is there");
 }

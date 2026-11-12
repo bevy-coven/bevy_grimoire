@@ -7,7 +7,7 @@
 //!
 //! - **`no_game_connected`**: no game verdict has reached the editor, so nothing has answered any file.
 //!   Every row says it, whatever the editor itself made of the file. The editor reads
-//!   `<project>/.live/game.ron` only when it runs with `--live`, and `game.watching` says whether it does,
+//!   `<project>/.live/game.yaml` only when it runs with `--live`, and `game.watching` says whether it does,
 //!   so a person is told to start it that way rather than that no game runs.
 //! - **`pending`**: a game answered, but the file was written after its decision, so its answer is
 //!   about an earlier text. The row keeps that decision's time, so "applied before this edit" is
@@ -30,7 +30,7 @@
 //!
 //! The files are every file of the open project that [`bevy_grimoire_core::reload::KINDS`] names, found
 //! on disk, plus any file a verdict names that is not there (a refused file that was deleted, a file
-//! `data.ron` registers). Nothing here reads a file's text: it stats it.
+//! `data.yaml` registers). Nothing here reads a file's text: it stats it.
 
 use std::path::Path;
 use std::time::UNIX_EPOCH;
@@ -69,7 +69,7 @@ impl GameState {
 pub struct FileReload {
     pub kind: String,
     /// Relative to the project directory for the project's files, to the game's root for a kind that
-    /// lives there (`family/bevy_lights.ron`), as the verdicts name them.
+    /// lives there (`family/bevy_lights.yaml`), as the verdicts name them.
     pub file: String,
     pub state: GameState,
     /// The field a refusal names, from the game's verdict, or the editor's for `needs_restart`.
@@ -162,14 +162,14 @@ fn modified_of(project_dir: &Path, root: &Path, kind: &str, file: &str) -> Optio
 
 /// **Every file of the open project with what became of its latest edit**, in file order.
 ///
-/// `game` is the newest verdict read from `<project>/.live/game.ron`, `None` while no game has written
+/// `game` is the newest verdict read from `<project>/.live/game.yaml`, `None` while no game has written
 /// one; `editor` is the editor's own decisions ([`crate::live::EditorReloads::kinds`]).
 pub fn files(project_dir: &Path, root: &Path, game: Option<&Verdict>, editor: &[KindVerdict]) -> Vec<FileReload> {
     let mut listed = Vec::new();
     walk(project_dir, "", Base::Grimoire, depth_of(Base::Grimoire), &mut listed);
     walk(root, "", Base::Root, depth_of(Base::Root), &mut listed);
     // A file a verdict names is a row even when it is not on disk or no kind's path matches it: a
-    // refused file that was then deleted, a file `data.ron` registers, the `project` entry.
+    // refused file that was then deleted, a file `data.yaml` registers, the `project` entry.
     let named = game.into_iter().flat_map(|v| v.kinds.iter()).chain(editor.iter());
     for k in named {
         if !listed.iter().any(|l| l.file == k.file) {

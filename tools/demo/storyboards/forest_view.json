@@ -80,7 +80,7 @@
     "parameters": {
      "map": "grove",
      "place": {
-      "species": "trees/tall.tree.ron",
+      "species": "trees/tall.tree.yaml",
       "at": [
        0.0,
        2.0
@@ -126,7 +126,7 @@
   },
   {
    "at": 10.7,
-   "caption": "forest/grove.ron and trees/tall.tree.ron; each edit is one undo"
+   "caption": "forest/grove.yaml and trees/tall.tree.yaml; each edit is one undo"
   }
  ]
 }

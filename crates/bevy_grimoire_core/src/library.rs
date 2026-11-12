@@ -106,14 +106,15 @@ impl Library {
     }
 
     pub fn parse(text: &str) -> Result<Library, String> {
-        let lib: Library = ron::from_str(text).map_err(|e| format!("library: {e}"))?;
+        let lib: Library =
+            crate::yaml::from_str(text, crate::policy::LIBRARY_FILE).map_err(|p| format!("library: {}", p.line()))?;
         lib.validate()?;
         Ok(lib)
     }
 
-    pub fn to_ron(&self) -> Result<String, String> {
-        ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())
-            .map_err(|e| format!("library: serialize: {e}"))
+    /// **The file as the one YAML writer writes it.**
+    pub fn to_yaml(&self) -> Result<String, String> {
+        crate::yaml::to_string(self).map_err(|p| format!("library: {}", p.line()))
     }
 
     /// Structural checks that need no vocabulary: the version, and that ids identify.
@@ -141,7 +142,7 @@ impl Library {
                 ));
             }
             // The lattice is **not** checked here: a cell is in range or not depending on the
-            // project's divisions-per-tile, which lives in `project.ron` and is not knowable from
+            // project's divisions-per-tile, which lives in `project.yaml` and is not knowable from
             // this file alone. `policy::layered_library` runs `validate_lattices` once both layers
             // are parsed — it is the one loader, so there is no path on which the check is skipped.
             if let Some(j) = self.descriptors.iter().position(|o| o.id == d.id)
@@ -194,9 +195,9 @@ impl Library {
 
     /// **Every lattice against the project's divisions.**
     ///
-    /// Separate from [`Self::validate`] because it needs a number `library.ron` does not carry: a
+    /// Separate from [`Self::validate`] because it needs a number `library.yaml` does not carry: a
     /// cell at `(5, 0, 0)` is in range on a 3 m wall and outside a 0.5 m crate, and which it is
-    /// depends on `project.ron`'s `divisions`. Called from `policy::layered_library`, the one place
+    /// depends on `project.yaml`'s `divisions`. Called from `policy::layered_library`, the one place
     /// both layers exist at once.
     ///
     /// Refuses on the same grounds the per-lattice check always did — an out-of-range cell is a
@@ -283,7 +284,7 @@ mod tests {
     ///
     /// The bug this replaces read `descriptors.first()`, so the answer depended on sort order — and
     /// on an empty or unnamespaced library it substituted the literal `"kit"`, which is a namespace
-    /// nobody chose and which collides across every kit that ever hit it. `assets/grimoire/compositions.ron`
+    /// nobody chose and which collides across every kit that ever hit it. `assets/grimoire/compositions.yaml`
     /// carries a `kit/tile_1` from exactly that.
     #[test]
     fn a_librarys_namespace_is_what_every_id_agrees_on() {
@@ -338,7 +339,7 @@ mod tests {
     fn a_library_round_trips() {
         let l = lib(vec![d("a"), d("b")]);
         assert_eq!(
-            Library::parse(&l.to_ron().unwrap_or_else(|e| panic!("{e}"))).unwrap_or_else(|e| panic!("{e}")),
+            Library::parse(&l.to_yaml().unwrap_or_else(|e| panic!("{e}"))).unwrap_or_else(|e| panic!("{e}")),
             l
         );
     }

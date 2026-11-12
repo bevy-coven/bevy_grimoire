@@ -1,6 +1,6 @@
 //! **Sculpting the map's ground, as one registered operation** (#99): `terrain_stroke`.
 //!
-//! The heightfield is `<grimoire_dir>/terrain/<map>.ron`, the engine-free `bevy_grimoire_core::heightfield`
+//! The heightfield is `<grimoire_dir>/terrain/<map>.yaml`, the engine-free `bevy_grimoire_core::heightfield`
 //! type as RON, saved beside the map. A stroke is a gesture: its points arrive whole and make one
 //! change and one undo. The inverse is the same operation carrying the heights the stroke replaced
 //! (`restore`), which only an undo may send.
@@ -69,7 +69,7 @@ fn path_of(ctx: &Ctx, map: &str) -> Result<std::path::PathBuf, Refusal> {
     if map.is_empty() || map.contains(['/', '\\', '.']) {
         return Err(Refusal::new(format!("`{map}` is not a map name. Nothing was written.")));
     }
-    Ok(project.grimoire_dir.join("terrain").join(format!("{map}.ron")))
+    Ok(project.grimoire_dir.join("terrain").join(format!("{map}.yaml")))
 }
 
 fn read(ctx: &Ctx, map: &str) -> Option<String> {
@@ -77,15 +77,15 @@ fn read(ctx: &Ctx, map: &str) -> Option<String> {
 }
 
 fn to_text(field: &Heightfield) -> Result<String, Refusal> {
-    ron::ser::to_string_pretty(field, ron::ser::PrettyConfig::default()).map_err(|e| Refusal::new(format!("the terrain could not be written: {e}")))
+    bevy_grimoire_core::yaml::to_string(field).map_err(|p| Refusal::new(format!("the terrain could not be written: {}", p.line())))
 }
 
 /// **The saved terrain of the open map**, or `None` for flat ground (no file, or one
 /// [`Heightfield::parse`] refuses: not a heightfield, or heights that do not fill its shape). The
-/// map's name is its file name without `.map.ron`, the name `terrain_stroke` takes.
+/// map's name is its file name without `.map.yaml`, the name `terrain_stroke` takes.
 pub fn ground_of(project: &crate::project::Project, open: &crate::project::OpenMap) -> Option<Heightfield> {
-    let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.ron")?;
-    let text = std::fs::read_to_string(project.grimoire_dir.join("terrain").join(format!("{name}.ron"))).ok()?;
+    let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.yaml")?;
+    let text = std::fs::read_to_string(project.grimoire_dir.join("terrain").join(format!("{name}.yaml"))).ok()?;
     Heightfield::parse(&text).ok()
 }
 

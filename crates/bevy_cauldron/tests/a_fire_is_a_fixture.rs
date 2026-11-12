@@ -13,7 +13,7 @@ use crate::fixtures;
 
 fn editor(name: &str) -> (bevy::prelude::App, Ctx) {
     let root = fixtures::Fixture::new(name).descriptor("site/torch", "alpha").place("site/torch", (0.0, 0.0)).place("site/torch", (6.0, 6.0)).build("m");
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_lights\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "version: 1\ncrates: [bevy_lights]\n").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
         app.update();
@@ -31,11 +31,11 @@ fn set(ctx: &mut Ctx, nth: usize, value: &str) -> Result<Applied, ops::Refusal> 
 #[test]
 fn a_fire_is_read_as_a_fire_and_a_misspelt_kind_is_refused_not_read_as_a_default_flicker() {
     let (_app, mut ctx) = editor("fire_fixture_refuse");
-    assert!(matches!(set(&mut ctx, 0, "(kind: Campfire)"), Ok(Applied::Done { .. })));
+    assert!(matches!(set(&mut ctx, 0, "{kind: Campfire}"), Ok(Applied::Done { .. })));
     let saved = ctx.open.as_ref().unwrap().map.placements[0].family.get("bevy_lights").cloned();
-    assert_eq!(saved.as_deref(), Some("(kind: Campfire)"));
+    assert_eq!(saved.as_deref(), Some("{kind: Campfire}"));
 
-    let refused = set(&mut ctx, 1, "(kind: Campfir)");
+    let refused = set(&mut ctx, 1, "{kind: Campfir}");
     let said = match refused {
         Ok(Applied::Refused(e)) | Err(e) => e.0,
         other => panic!("a kind the crate does not have must be refused, got {other:?}"),
@@ -49,7 +49,7 @@ fn a_placement_carrying_a_fire_holds_that_fire_and_no_bare_light() {
     let (mut app, _) = editor("fire_fixture_view");
     {
         let mut open = app.world_mut().resource_mut::<bevy_cauldron::project::OpenMap>();
-        open.map.placements[0].family.insert("bevy_lights".to_owned(), "(kind: Brazier, lumens: Some(4000.0))".to_owned());
+        open.map.placements[0].family.insert("bevy_lights".to_owned(), "{kind: Brazier, lumens: 4000.0}".to_owned());
     }
     for _ in 0..3 {
         app.update();
@@ -87,8 +87,8 @@ mod light_map {
     #[test]
     fn a_fires_own_lumens_light_the_map_like_a_flicker_of_that_base() {
         let (_app, mut ctx) = editor("fire_fixture_map");
-        set(&mut ctx, 0, "(kind: Campfire, lumens: Some(5000.0))").unwrap();
-        set(&mut ctx, 1, "(base: 5000.0)").unwrap();
+        set(&mut ctx, 0, "{kind: Campfire, lumens: 5000.0}").unwrap();
+        set(&mut ctx, 1, "{base: 5000.0}").unwrap();
         let fire = lux(&mut ctx, (0.0, 0.0));
         let flicker = lux(&mut ctx, (6.0, 6.0));
         assert!((fire - flicker).abs() < 1e-6, "a fire of 5000 lumens and a flicker of base 5000 read alike: {fire} vs {flicker}");
@@ -98,8 +98,8 @@ mod light_map {
     #[test]
     fn a_fire_with_no_lumens_is_sized_by_its_kind() {
         let (_app, mut ctx) = editor("fire_fixture_kind");
-        set(&mut ctx, 0, "(kind: Bonfire)").unwrap();
-        set(&mut ctx, 1, "(kind: Candle)").unwrap();
+        set(&mut ctx, 0, "{kind: Bonfire}").unwrap();
+        set(&mut ctx, 1, "{kind: Candle}").unwrap();
         let (bonfire, candle) = (lux(&mut ctx, (0.0, 0.0)), lux(&mut ctx, (6.0, 6.0)));
         assert!(bonfire > candle, "a bonfire lights more than a candle: {bonfire} vs {candle}");
     }

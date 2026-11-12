@@ -18,7 +18,7 @@ fn editor(name: &str) -> App {
         .place("site/torch", (0.0, 0.0))
         .place("site/torch", (6.0, 0.0))
         .build("m");
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_lights\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_lights\"]}").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(40)));
     for _ in 0..4 {
@@ -51,7 +51,7 @@ fn lights(app: &mut App) -> Vec<(String, f32, Flicker)> {
 fn a_placement_carrying_a_flicker_holds_a_light_and_one_without_holds_none() {
     let mut app = editor("light_view_holds");
     assert!(lights(&mut app).is_empty(), "no placement carries a flicker yet");
-    let id = set_family(&mut app, 0, Some("(base: 1200.0, phase: 0.4)"));
+    let id = set_family(&mut app, 0, Some("{base: 1200.0, phase: 0.4}"));
     for _ in 0..3 {
         app.update();
     }
@@ -64,7 +64,7 @@ fn a_placement_carrying_a_flicker_holds_a_light_and_one_without_holds_none() {
 #[test]
 fn the_light_flickers_between_the_crates_own_bounds_as_frames_pass() {
     let mut app = editor("light_view_flickers");
-    set_family(&mut app, 0, Some("(base: 1000.0, depth: 0.15)"));
+    set_family(&mut app, 0, Some("{base: 1000.0, depth: 0.15}"));
     let mut seen = Vec::new();
     for _ in 0..120 {
         app.update();
@@ -81,12 +81,12 @@ fn the_light_flickers_between_the_crates_own_bounds_as_frames_pass() {
 #[test]
 fn editing_the_value_retunes_the_light_and_removing_it_takes_the_light_down() {
     let mut app = editor("light_view_edits");
-    set_family(&mut app, 0, Some("(base: 1000.0)"));
+    set_family(&mut app, 0, Some("{base: 1000.0}"));
     for _ in 0..3 {
         app.update();
     }
     assert_eq!(lights(&mut app).len(), 1);
-    set_family(&mut app, 0, Some("(base: 400.0, depth: 0.0)"));
+    set_family(&mut app, 0, Some("{base: 400.0, depth: 0.0}"));
     for _ in 0..3 {
         app.update();
     }

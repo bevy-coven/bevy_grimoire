@@ -1,7 +1,7 @@
 //! **The planted forest, drawn in the viewport with the crate's own trees** (#102).
 //!
-//! `forest_scatter` writes `<grimoire_dir>/forest/<map>.ron` and `tree_edit` writes
-//! `<grimoire_dir>/trees/<name>.tree.ron`; until now nothing showed either, so an author planted blind.
+//! `forest_scatter` writes `<grimoire_dir>/forest/<map>.yaml` and `tree_edit` writes
+//! `<grimoire_dir>/trees/<name>.tree.yaml`; until now nothing showed either, so an author planted blind.
 //! This draws the forest from those files, the way a game reads them, and follows them when they
 //! change on disk (a stroke, a placed tree, a tree edit, an undo, an agent's edit): they are polled
 //! twice a second, like [`crate::terrain_view`], and the trees respawned only when a file's
@@ -13,12 +13,12 @@
 //! - a tree **placed by hand** (an age and a seed) is a [`ProceduralTree`] grown from its species with
 //!   that seed, at that [`TreeAge`]: the same seed grows the same tree here and in the game.
 //!
-//! A species is a preset name (`oak`) or a `.tree.ron` path under the project's grimoire folder
-//! (`trees/old_oak.tree.ron`, what `tree_edit` writes); editing that file regrows every tree of it,
+//! A species is a preset name (`oak`) or a `.tree.yaml` path under the project's grimoire folder
+//! (`trees/old_oak.tree.yaml`, what `tree_edit` writes); editing that file regrows every tree of it,
 //! placed or pooled. A tree stands on the drawn ground, which sits [`crate::editor::ground_drop`]
 //! under the datum.
 //!
-//! **A tree file that does not read keeps its trees** (#200, H3). Each edit of a `.tree.ron` is decided
+//! **A tree file that does not read keeps its trees** (#200, H3). Each edit of a `.tree.yaml` is decided
 //! once, with the crate's own reader, and the view holds the last good value in memory: a refusal
 //! leaves the trees standing as that value drew them and is reported in `grimoire_state.reloads` as
 //! kind `trees`, with the file and the field. A file that is gone is not a refusal; its trees are not
@@ -63,18 +63,18 @@ impl Plugin for ForestViewPlugin {
     }
 }
 
-/// The `.tree.ron` a species names, under the grimoire folder: `None` for a name that is not such a
+/// The `.tree.yaml` a species names, under the grimoire folder: `None` for a name that is not such a
 /// path, or one that would leave the folder.
 fn species_file(project: &Project, species: &str) -> Option<PathBuf> {
     let rel = Path::new(species);
-    (species.ends_with(".tree.ron") && rel.components().all(|c| matches!(c, PathPart::Normal(_)))).then(|| project.grimoire_dir.join(rel))
+    (species.ends_with(".tree.yaml") && rel.components().all(|c| matches!(c, PathPart::Normal(_)))).then(|| project.grimoire_dir.join(rel))
 }
 
 fn modified(path: &Path) -> Option<SystemTime> {
     std::fs::metadata(path).and_then(|m| m.modified()).ok()
 }
 
-/// What the view holds of one `.tree.ron` a drawn species is read from.
+/// What the view holds of one `.tree.yaml` a drawn species is read from.
 struct HeldTree {
     /// The modification time the file had when it was last decided, so an edit is decided once.
     read: Option<SystemTime>,
@@ -105,7 +105,7 @@ fn decide_tree(project: &Project, path: &Path, held: &mut HashMap<PathBuf, HeldT
             warn!("forest view: {file} cannot be read: {e}; the trees drawn from it are kept");
             entry.verdict = Some(KindVerdict::refused("trees", file, None, e.to_string()));
         }
-        Ok(text) => match reload_check::read::<TreeParams>("trees", &file, &text) {
+        Ok(text) => match reload_check::read::<TreeParams>("trees", &file, &text, |t| bevy_grimoire_core::yaml::from_str(t, "tree").map_err(|p| p.line())) {
             Ok(params) => {
                 entry.good = Some((params, stamp));
                 entry.verdict = Some(KindVerdict::applied("trees", file));
@@ -124,7 +124,7 @@ fn decide_tree(project: &Project, path: &Path, held: &mut HashMap<PathBuf, HeldT
 struct Seen {
     map_path: PathBuf,
     forest: Option<SystemTime>,
-    /// Each `.tree.ron` the drawn forest's species were read from, with the modification time of the
+    /// Each `.tree.yaml` the drawn forest's species were read from, with the modification time of the
     /// last good read (`None`: no good read). A refused edit does not move it, so it redraws nothing.
     files: Vec<(PathBuf, Option<SystemTime>)>,
     origin: [u32; 3],
@@ -185,8 +185,8 @@ pub fn sync_forest_view(
         return;
     }
     state.since = 0.0;
-    let name = open.map_path.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_suffix(".map.ron")).unwrap_or_default();
-    let forest_path = project.grimoire_dir.join("forest").join(format!("{name}.ron"));
+    let name = open.map_path.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_suffix(".map.yaml")).unwrap_or_default();
+    let forest_path = project.grimoire_dir.join("forest").join(format!("{name}.yaml"));
     let drop = crate::editor::ground_drop(&project);
     let origin = open.map.origin;
     // Each tree file the drawn forest reads is decided once per edit whether or not the trees are
@@ -225,7 +225,7 @@ pub fn sync_forest_view(
             }
             Forest::default()
         }
-        Ok(text) => match reload_check::read::<Forest>("forest", &file, &text) {
+        Ok(text) => match reload_check::read::<Forest>("forest", &file, &text, |t| bevy_grimoire_core::yaml::from_str(t, "forest").map_err(|p| p.line())) {
             Ok(forest) => {
                 if edited {
                     verdicts.forget.push("forest");
@@ -259,7 +259,7 @@ pub fn sync_forest_view(
                 return Some((preset.params(), None));
             }
             let Some(file) = species_file(&project, &tree.species) else {
-                warn!("forest view: `{}` is neither a bevy_flora preset nor a .tree.ron path in the project; its trees are not drawn", tree.species);
+                warn!("forest view: `{}` is neither a bevy_flora preset nor a .tree.yaml path in the project; its trees are not drawn", tree.species);
                 return None;
             };
             trees_decided |= decide_tree(&project, &file, &mut state.trees);

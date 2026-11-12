@@ -2,11 +2,11 @@ use crate::{Calibration, Error, Question, Request, Transport, ask};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-/// The editor's own checks, as shipped (`fixtures/checks.ron`). A project's `checks.ron` has the same shape.
-pub const BUILTIN_CHECKS_RON: &str = include_str!("../fixtures/checks.ron");
+/// The editor's own checks, as shipped (`fixtures/checks.yaml`). A project's `checks.yaml` has the same shape.
+pub const BUILTIN_CHECKS_YAML: &str = include_str!("../fixtures/checks.yaml");
 
-/// The project's own checks, beside `kits.ron` and `rules.ron`.
-pub const PROJECT_CHECKS_FILE: &str = "checks.ron";
+/// The project's own checks, beside `kits.yaml` and `rules.yaml`.
+pub const PROJECT_CHECKS_FILE: &str = "checks.yaml";
 
 /// A named yes/no question about what an operation changed, with what it needs and what it earned.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -30,7 +30,7 @@ pub struct Check {
     pub calibration: Option<Calibration>,
 }
 
-/// The format version of `checks.ron` (#202). A file with no `version` is the first.
+/// The format version of `checks.yaml` (#202). A file with no `version` is the first.
 ///
 /// This crate has no `bevy_grimoire_core` dependency (it is engine-free and no game links it), so the two
 /// small functions below say what `bevy_grimoire_core::format_version` says for the formats core owns.
@@ -52,7 +52,7 @@ fn read_version<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<u32
     }
 }
 
-/// The `checks.ron` file: checks by name.
+/// The `checks.yaml` file: checks by name.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Checks {
     /// The format version: [`CHECKS_VERSION`]. A file from before it existed has none and reads as the
@@ -69,8 +69,9 @@ impl Default for Checks {
 }
 
 impl Checks {
-    pub fn from_ron(text: &str) -> Result<Self, Error> {
-        let c: Checks = ron::from_str(text).map_err(|e| Error::Checks(e.to_string()))?;
+    /// **Read a `checks.yaml`**, the one reader this kind has since the cutover (GD-03, #365).
+    pub fn from_yaml(text: &str) -> Result<Self, Error> {
+        let c: Checks = serde_yaml_ng::from_str(text).map_err(|e| Error::Checks(e.to_string()))?;
         let mut seen = std::collections::BTreeSet::new();
         for check in &c.checks {
             if !seen.insert(check.name.as_str()) {
@@ -86,22 +87,23 @@ impl Checks {
         Ok(c)
     }
 
-    pub fn to_ron(&self) -> Result<String, Error> {
-        ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default()).map_err(|e| Error::Checks(e.to_string()))
+    /// The file as the one YAML writer writes it.
+    pub fn to_yaml(&self) -> Result<String, Error> {
+        serde_yaml_ng::to_string(self).map_err(|e| Error::Checks(e.to_string()))
     }
 
     /// The editor's own checks.
     pub fn builtin() -> Self {
-        Self::from_ron(BUILTIN_CHECKS_RON).expect("fixtures/checks.ron parses (a test reads it)")
+        Self::from_yaml(BUILTIN_CHECKS_YAML).expect("fixtures/checks.yaml parses (a test reads it)")
     }
 
-    /// The editor's checks with the project's own `assets/grimoire/checks.ron` over them, read fresh so an
+    /// The editor's checks with the project's own `assets/grimoire/checks.yaml` over them, read fresh so an
     /// edit takes effect at once. No file is the editor's checks alone; an unreadable or invalid one is an error
     /// naming the path.
     pub fn for_project(project: &std::path::Path) -> Result<Self, String> {
         let path = project.join("assets").join("grimoire").join(PROJECT_CHECKS_FILE);
         match std::fs::read_to_string(&path) {
-            Ok(text) => Ok(Self::builtin().merged(Self::from_ron(&text).map_err(|e| format!("{}: {e}", path.display()))?)),
+            Ok(text) => Ok(Self::builtin().merged(Self::from_yaml(&text).map_err(|e| format!("{}: {e}", path.display()))?)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::builtin()),
             Err(e) => Err(format!("{}: {e}", path.display())),
         }

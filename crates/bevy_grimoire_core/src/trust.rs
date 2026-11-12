@@ -1,6 +1,6 @@
 //! **What a person has allowed a project to run.**
 //!
-//! `agent.ron` and `play.ron` name programs, and the editor used to start whatever they named the moment
+//! `agent.yaml` and `play.yaml` name programs, and the editor used to start whatever they named the moment
 //! a person pressed Send or Play. A project cloned from somewhere else could therefore run its author's
 //! command on a single key press (the review of 2026-11-02, risk 1; the same hole as an editor opening an
 //! untrusted workspace). Nothing here starts a program. This module only answers one question, "has a
@@ -13,7 +13,7 @@
 //!   which is what stops a command planted *after* the person looked, by an agent that can write files
 //!   or by a hot-reloaded edit.
 //! - **The whole project** ([`Scope::Project`]): every command of that directory. For a person iterating
-//!   on their own game, who would otherwise be asked after every edit of `play.ron`.
+//!   on their own game, who would otherwise be asked after every edit of `play.yaml`.
 //!
 //! # The rules
 //!
@@ -46,19 +46,19 @@ pub const TRUST_VERSION_READS_FROM: u32 = 1;
 ///
 /// `AGENTS.md` is here because `data_set` edits a registered file's values: a guide registered as a data
 /// file would let an agent edit the very rules it is being asked to follow.
-pub const COMMAND_FILES: [&str; 3] = ["agent.ron", "play.ron", "AGENTS.md"];
+pub const COMMAND_FILES: [&str; 3] = ["agent.yaml", "play.yaml", "AGENTS.md"];
 
 /// The store's file name, inside the editor's own folder of the user's data directory.
-pub const STORE_FILE: &str = "trusted.ron";
+pub const STORE_FILE: &str = "trusted.yaml";
 
 /// **Which command of a project.** The same words in two kinds are two commands.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CommandKind {
-    /// The notes agent `agent.ron` names, started by Send.
+    /// The notes agent `agent.yaml` names, started by Send.
     Notes,
-    /// The game `play.ron` names, started by Play.
+    /// The game `play.yaml` names, started by Play.
     Play,
-    /// **The build `play.ron` names** (GD-09, #371), run by Build before a change that needs Rust can
+    /// **The build `play.yaml` names** (GD-09, #371), run by Build before a change that needs Rust can
     /// be seen. A kind of its own, because a person allows the game and the rebuild separately: the
     /// game is what they watch, and the rebuild is a compiler.
     Build,
@@ -176,8 +176,13 @@ impl TrustStore {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(TrustStore::default()),
             Err(e) => return Err(format!("trust: {}: {e}", file.display())),
         };
-        let mut store: TrustStore =
-            ron::from_str(&text).map_err(|e| format!("trust: {} does not read ({e}). Fix or delete it: nothing is trusted until it does.", file.display()))?;
+        let mut store: TrustStore = crate::yaml::from_str(&text, &file.display().to_string()).map_err(|p| {
+            format!(
+                "trust: {} does not read ({}). Fix or delete it: nothing is trusted until it does.",
+                file.display(),
+                p.line()
+            )
+        })?;
         if store.version < TRUST_VERSION_READS_FROM || store.version > TRUST_VERSION {
             return Err(format!(
                 "trust: {} is version {}, and this build reads versions {TRUST_VERSION_READS_FROM} to {TRUST_VERSION}. Nothing is trusted until it does.",
@@ -194,9 +199,9 @@ impl TrustStore {
 
     /// Writes the store all or nothing, creating its folder.
     pub fn save(&self, file: &Path) -> Result<(), String> {
-        let text = ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())
-            .map_err(|e| format!("trust: cannot write {}: {e}", file.display()))?;
-        crate::atomic_file::write(file, text).map_err(|e| format!("trust: {}: {e}", file.display()))
+        let text = crate::yaml::to_string(self)
+            .map_err(|p| format!("trust: cannot write {}: {}", file.display(), p.line()))?;
+        crate::yaml::save(file, &text)
     }
 
     /// **Has a person allowed this command in this project?** An `Err` when the project folder cannot

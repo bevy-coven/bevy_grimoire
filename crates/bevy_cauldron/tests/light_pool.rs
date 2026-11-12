@@ -13,7 +13,7 @@ fn editor(name: &str) -> Ctx {
         .place("site/torch", (0.0, 0.0))
         .place("site/torch", (30.0, 0.0))
         .build("m");
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_lights\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_lights\"]}").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
         app.update();
@@ -23,7 +23,7 @@ fn editor(name: &str) -> Ctx {
     let mut ctx = Ctx { project: Some(project), open: Some(open), session: name.to_owned(), ..Ctx::default() };
     let ids: Vec<String> = ctx.open.as_ref().unwrap().map.placements.iter().map(|p| p.id.clone()).collect();
     for id in ids {
-        let done = ops::dispatch(&mut ctx, "placement_set_family", &json!({"id": id, "crate": "bevy_lights", "value": "(base: 1000.0)"})).unwrap();
+        let done = ops::dispatch(&mut ctx, "placement_set_family", &json!({"id": id, "crate": "bevy_lights", "value": "{base: 1000.0}"})).unwrap();
         assert!(matches!(done, Applied::Done { .. }), "{done:?}");
     }
     ctx

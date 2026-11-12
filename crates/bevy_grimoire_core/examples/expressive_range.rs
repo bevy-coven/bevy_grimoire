@@ -117,16 +117,16 @@ fn main() {
     };
     let show: Option<u64> = rest.first().and_then(|a| a.parse().ok());
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/grimoire/site");
-    let library: Library = match std::fs::read_to_string(root.join("library.ron"))
+    let library: Library = match std::fs::read_to_string(root.join("library.yaml"))
         .map_err(|e| e.to_string())
-        .and_then(|t| ron::from_str(&t).map_err(|e| e.to_string()))
+        .and_then(|t| Library::parse(&t))
     {
         Ok(l) => l,
         Err(e) => return eprintln!("cannot read the site library: {e}"),
     };
-    let comps: Compositions = match std::fs::read_to_string(root.join("compositions.ron"))
+    let comps: Compositions = match std::fs::read_to_string(root.join("compositions.yaml"))
         .map_err(|e| e.to_string())
-        .and_then(|t| ron::from_str(&t).map_err(|e| e.to_string()))
+        .and_then(|t| Compositions::parse(&t))
     {
         Ok(c) => c,
         Err(e) => return eprintln!("cannot read the site compositions: {e}"),
@@ -598,9 +598,9 @@ fn dump(run: &Run, source: Generator) {
     // DID silently overwrite it (restored from git). A judged run copies its file beside its dated
     // report by hand, which is the editorial act committing evidence should be.
     let name = match source {
-        Generator::Wfc => "expressive_range.wfc.bins.ron",
-        Generator::Constraint => "expressive_range.constraint.bins.ron",
-        Generator::Rooms => "expressive_range.rooms.bins.ron",
+        Generator::Wfc => "expressive_range.wfc.bins.yaml",
+        Generator::Constraint => "expressive_range.constraint.bins.yaml",
+        Generator::Rooms => "expressive_range.rooms.bins.yaml",
     };
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target")

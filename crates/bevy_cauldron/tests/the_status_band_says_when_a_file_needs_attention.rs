@@ -66,7 +66,7 @@ fn record(app: &mut App, verdict: KindVerdict) {
 #[test]
 fn a_band_with_nothing_wrong_says_nothing() {
     let (_root, mut app) = editor("problems-clean");
-    record(&mut app, KindVerdict::applied("kit", "kit.ron"));
+    record(&mut app, KindVerdict::applied("kit", "kit.yaml"));
     let (text, kind, ink) = said(&mut app).expect("the band must carry the readout even when it is empty");
     assert_eq!(
         text, "",
@@ -86,7 +86,7 @@ fn a_refused_file_turns_the_item_to_the_warning_kind() {
     let (_root, mut app) = editor("problems-refused");
     record(
         &mut app,
-        KindVerdict::refused("kit", "kit.ron", Some("pieces[3].yaw".to_owned()), "not a number"),
+        KindVerdict::refused("kit", "kit.yaml", Some("pieces[3].yaw".to_owned()), "not a number"),
     );
     let (text, kind, ink) = said(&mut app).expect("the band must carry the readout");
     assert_eq!(
@@ -112,7 +112,7 @@ fn a_file_needing_a_restart_is_a_warning_under_a_refusal() {
     let (_root, mut app) = editor("problems-restart");
     record(
         &mut app,
-        KindVerdict::needs_restart("rigs", "rigs.ron", "restart to load the rigs"),
+        KindVerdict::needs_restart("rigs", "rigs.yaml", "restart to load the rigs"),
     );
     let (text, kind, ink) = said(&mut app).expect("the band must carry the readout");
     assert_eq!(text, "1 needs a restart");
@@ -126,7 +126,7 @@ fn a_file_needing_a_restart_is_a_warning_under_a_refusal() {
     // A refusal beside it is the graver fact, so the item says the error and names both counts.
     record(
         &mut app,
-        KindVerdict::refused("kit", "kit.ron", None, "does not parse"),
+        KindVerdict::refused("kit", "kit.yaml", None, "does not parse"),
     );
     let (text, kind, ink) = said(&mut app).expect("the band must carry the readout");
     assert_eq!(

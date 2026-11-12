@@ -29,6 +29,6 @@
     {"at": 12.0, "key": "Tab"},
     {"at": 12.3, "key": "Enter"},
     {"at": 12.9, "key": "KeyS", "mods": ["ControlLeft"]},
-    {"at": 13.4, "caption": "Ctrl+S is free now: Undo takes it, and keymap lands in settings.ron"}
+    {"at": 13.4, "caption": "Ctrl+S is free now: Undo takes it, and keymap lands in settings.yaml"}
   ]
 }

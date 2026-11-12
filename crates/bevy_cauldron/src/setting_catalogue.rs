@@ -173,7 +173,7 @@ pub const CATALOGUE: &[Setting] = &[
         key: "terminal_agent",
         label: "Terminal agent",
         category: "Terminal",
-        description: "The agent the terminal's Invoke Agent button starts, connected to the editor's tools and checked with a self test. The terminal starts no agent by itself: a session costs tokens to warm up. Custom command runs terminal_agent_command from settings.ron.",
+        description: "The agent the terminal's Invoke Agent button starts, connected to the editor's tools and checked with a self test. The terminal starts no agent by itself: a session costs tokens to warm up. Custom command runs terminal_agent_command from settings.yaml.",
         kind: Kind::Options(TERMINAL_AGENTS),
     },
 ];
@@ -402,7 +402,7 @@ pub fn edit_layer(path: &Path, change: impl FnOnce(&mut SettingsLayer) -> Result
     };
     change(&mut layer)?;
     // Refuse a value the next read would refuse: the file must read back.
-    let text = ron::ser::to_string_pretty(&layer, ron::ser::PrettyConfig::default()).map_err(|e| e.to_string())?;
+    let text = bevy_grimoire_core::yaml::to_string(&layer).map_err(|p| p.line())?;
     SettingsLayer::read(&file, &text).map_err(|r| r.reason)?;
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;

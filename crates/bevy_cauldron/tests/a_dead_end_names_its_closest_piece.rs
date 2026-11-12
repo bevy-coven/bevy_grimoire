@@ -17,23 +17,27 @@ fn project(name: &str) -> PathBuf {
         .descriptor("jamb", "alpha")
         .descriptor("b_near", "alpha")
         .build("m");
-    let lib = root.join("assets/grimoire/furniture/library.ron");
+    let lib = root.join("assets/grimoire/furniture/library.yaml");
     let mut text = std::fs::read_to_string(&lib).unwrap_or_else(|e| panic!("{lib:?}: {e}"));
     for (id, cells) in [
         (
             "jamb",
-            r#"subgrid: Some(( cells: [( at: (1, 0, 0), edge: Some("jamb_l") ), ( at: (1, 0, 1), edge: Some("jamb_r") )] ))"#,
+            // **A YAML lattice**: `subgrid` is a mapping whose `cells` are items, each with `at`, `solid` and an
+            // optional `edge`. The line the fixture replaces is `subgrid: null`.
+            "subgrid:\n      cells:\n      - at: [1, 0, 0]\n        solid: true\n        edge: jamb_l\n      - at: [1, 0, 1]\n        solid: true\n        edge: jamb_r",
         ),
         (
             "b_near",
-            r#"subgrid: Some(( cells: [( at: (0, 0, 0), edge: Some("jamb_l") ), ( at: (0, 0, 1), edge: Some("jamb_x") )] ))"#,
+            "subgrid:\n      cells:\n      - at: [0, 0, 0]\n        solid: true\n        edge: jamb_l\n      - at: [0, 0, 1]\n        solid: true\n        edge: jamb_x",
         ),
     ] {
+        // A YAML library writes the id plain, and a piece with no lattice writes `subgrid: null`.
         let at = text
-            .find(&format!("id: \"{id}\""))
+            .find(&format!("id: {id}\n"))
             .unwrap_or_else(|| panic!("no {id} row: {text}"));
         let (head, tail) = text.split_at(at);
-        text = format!("{head}{}", tail.replacen("subgrid: None", cells, 1));
+        assert!(tail.contains("subgrid: null"), "the {id} row has no lattice line: {tail}");
+        text = format!("{head}{}", tail.replacen("subgrid: null", cells, 1));
     }
     std::fs::write(&lib, text).unwrap_or_else(|e| panic!("{e}"));
     root

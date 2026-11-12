@@ -4,7 +4,7 @@ A kit is the set of meshes a map draws from. You bring meshes into a kit, label 
 
 ## What a kit is
 
-A **kit** is a folder of meshes and the `library.ron` file that lists them. Each entry in that file is a **piece**: one mesh, its size, and its labels. The file lives beside the meshes, for example at `assets/grimoire/kit/library.ron`.
+A **kit** is a folder of meshes and the `library.yaml` file that lists them. Each entry in that file is a **piece**: one mesh, its size, and its labels. The file lives beside the meshes, for example at `assets/grimoire/kit/library.yaml`.
 
 A **workspace** is one of the editor's jobs: Map, Kit, Animation and more. Press `Cmd+4` (`Ctrl+4` on Windows and Linux) to go to the Kit workspace. It has three panels, and you switch between them by clicking their chips on the strip:
 
@@ -38,7 +38,7 @@ Goal: add every `.glb` under a directory to a library in one step, then label th
 1. Run the importer from the repository root, with three arguments: the asset root, a directory under it, and the library file.
 
    ```
-   cargo run -p bevy_grimoire_core --example import_dir -- /path/to/game/assets models/kit /path/to/game/assets/grimoire/kit/library.ron
+   cargo run -p bevy_grimoire_core --example import_dir -- /path/to/game/assets models/kit /path/to/game/assets/grimoire/kit/library.yaml
    ```
 
 2. Open the kit in the editor and check the Meshes panel.
@@ -65,7 +65,7 @@ A piece has six label axes:
 - `mount`: where the piece attaches. A piece may also declare **two**: `OnSurfaceOrFloor { class }` says it rests on a piece offering `class` when dropped on one, and stands on the floor when dropped anywhere else. The placement records which of the two it took, so a reload reproduces it.
 - `note`: a description in your own words.
 
-The first four are **tokens**: words from the vocabulary in `assets/grimoire/vocab.ron`. A token that is not in the vocabulary is refused.
+The first four are **tokens**: words from the vocabulary in `assets/grimoire/vocab.yaml`. A token that is not in the vocabulary is refused.
 
 Each piece shows its labels on the Meshes panel as chips, grouped under `KIND`, `DOES`, `LOOKS` and `OFFERS`. The chip colour says who set the value. A value you set reads in the normal text colour. A value a model or an agent set, and you have not changed, reads in the unchecked colour.
 
@@ -119,7 +119,7 @@ What you see: the labels row reads `confidence <level> · <model> · <date>` in 
 If it goes wrong:
 
 - The editor dials a local or LAN endpoint before it starts a walk. A remote endpoint is not dialled in advance, so a failure shows only when the request runs.
-- Every token suggested is one the project's vocabulary has, because the questions are built from it. To allow a word the vocabulary lacks, add it to `assets/grimoire/vocab.ron` by hand, and it becomes a question.
+- Every token suggested is one the project's vocabulary has, because the questions are built from it. To allow a word the vocabulary lacks, add it to `assets/grimoire/vocab.yaml` by hand, and it becomes a question.
 - An answer that names no model is refused.
 - A mesh that lies on its side is not turned for you. Turn it with `N` (X), `O` (Y) or `P` (Z) on the Meshes panel, then press `L` again.
 
@@ -177,7 +177,7 @@ Steps:
 1. Find the pieces a model labelled. Call `grimoire_list_pieces` with `{"by_model": true}`. The reply has `total` and a page of up to 50 pieces. Pass `pieces_from`, with the value of `pieces_next`, to read the next page.
 2. Open the kit's Meshes panel. Call `grimoire_apply_operation` with `{"operation": "door_open", "parameters": {"door": "kit", "tab": "meshes"}, "dry_run": false}`.
 3. Select the piece. Call `grimoire_apply_operation` with `{"operation": "piece_select", "parameters": {"id": "<piece id>"}, "dry_run": false}`. The editor refuses a piece the shelf filter hides.
-4. Set a label. Call `grimoire_apply_operation` with `{"operation": "label_set", "parameters": {"id": "<piece id>", "axis": "look", "tokens": ["<word from vocab.ron>"]}, "dry_run": false}`. `axis` is one of `kind`, `effects`, `look` or `surfaces`. The tokens replace the whole axis.
+4. Set a label. Call `grimoire_apply_operation` with `{"operation": "label_set", "parameters": {"id": "<piece id>", "axis": "look", "tokens": ["<word from vocab.yaml>"]}, "dry_run": false}`. `axis` is one of `kind`, `effects`, `look` or `surfaces`. The tokens replace the whole axis.
 
 What you see: the labels row reads `agent set look`, in the unchecked colour, until you change that axis. To take the change back, call `grimoire_undo_operation` with the `operation_id` that step 4 returned.
 

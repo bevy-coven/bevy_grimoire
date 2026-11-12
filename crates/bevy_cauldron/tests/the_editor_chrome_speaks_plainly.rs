@@ -19,9 +19,9 @@ fn editor(tag: &str) -> App {
 
 /// Turns Show statistics on the way a person does: the user's settings file says so, and the editor reads it.
 fn statistics_on(app: &mut App, tag: &str) {
-    let file = std::env::temp_dir().join(format!("grimoire_stats_{tag}_{}/settings.ron", std::process::id()));
+    let file = std::env::temp_dir().join(format!("grimoire_stats_{tag}_{}/settings.yaml", std::process::id()));
     std::fs::create_dir_all(file.parent().expect("a folder")).expect("a scratch folder");
-    std::fs::write(&file, "(version: 1, show_statistics: Some(true))").expect("a settings file");
+    std::fs::write(&file, "{version: 1, show_statistics: true}").expect("a settings file");
     app.insert_resource(bevy_cauldron::settings::UserSettingsFile(file));
     for _ in 0..80 {
         app.update();
@@ -86,9 +86,9 @@ fn says_tris_drawn(app: &mut App) -> bool {
 #[test]
 fn choosing_show_statistics_toggles_the_triangle_readout() {
     let mut app = editor("plain_toggle");
-    let file = std::env::temp_dir().join(format!("grimoire_stats_toggle_{}/settings.ron", std::process::id()));
+    let file = std::env::temp_dir().join(format!("grimoire_stats_toggle_{}/settings.yaml", std::process::id()));
     std::fs::create_dir_all(file.parent().expect("a folder")).expect("a scratch folder");
-    std::fs::write(&file, "(version: 1)").expect("a settings file");
+    std::fs::write(&file, "{version: 1}").expect("a settings file");
     app.insert_resource(bevy_cauldron::settings::UserSettingsFile(file));
     for _ in 0..3 {
         app.update();
@@ -215,7 +215,7 @@ fn a_receipt_names_a_piece_in_words_and_leaves_other_words_alone() {
     assert_eq!(named_receipt("wrote my_notes.txt", &library), "wrote my_notes.txt", "a word the library does not know is left alone");
     assert_eq!(named_receipt("added `bath` \u{2014} it is in the palette", &library), "added Bath \u{2014} it is in the palette", "a quoted id is the palette's name, unquoted");
     assert_eq!(named_receipt("added `lamp_tall`", &library), "added Lamp tall");
-    assert_eq!(named_receipt("wrote `kits.ron`, undo with `Ctrl+Z`", &library), "wrote `kits.ron`, undo with `Ctrl+Z`", "a quoted file or chord is not a name");
+    assert_eq!(named_receipt("wrote `kits.yaml`, undo with `Ctrl+Z`", &library), "wrote `kits.yaml`, undo with `Ctrl+Z`", "a quoted file or chord is not a name");
     assert_eq!(named_receipt("a stray ` tick", &library), "a stray ` tick", "an odd number of ticks is not a quoting");
 }
 

@@ -182,7 +182,7 @@ impl Drop for Scratch {
 fn the_home(tag: &str, scratch: &Scratch, projects: &[&str]) -> App {
     let root = fixtures::Fixture::new(tag).descriptor("floor", "alpha").build("m");
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
-    let file = scratch.0.join("recent.ron");
+    let file = scratch.0.join("recent.yaml");
     for name in projects {
         let folder = scratch.0.join(name);
         std::fs::create_dir_all(folder.join("assets/grimoire")).expect("a project folder");

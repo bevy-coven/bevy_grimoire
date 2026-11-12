@@ -21,7 +21,7 @@ fn editor(name: &str) -> App {
         .place("site/torch", (0.0, 0.0))
         .place("site/torch", (30.0, 0.0))
         .build("m");
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_lights\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_lights\"]}").unwrap();
     // Owner exception (2026-11-12, NV-08 #385): opened on the World workspace, where the pool and light map buttons live now.
     let mut app = bevy_cauldron::harness::build_headless_at(&root, "m", None, bevy_cauldron::tiles::Mode::World).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
@@ -29,7 +29,7 @@ fn editor(name: &str) -> App {
     }
     let mut open = app.world_mut().resource_mut::<bevy_cauldron::project::OpenMap>();
     for p in open.map.placements.iter_mut() {
-        p.family.insert("bevy_lights".to_owned(), "(base: 1000.0)".to_owned());
+        p.family.insert("bevy_lights".to_owned(), "{base: 1000.0}".to_owned());
     }
     app
 }

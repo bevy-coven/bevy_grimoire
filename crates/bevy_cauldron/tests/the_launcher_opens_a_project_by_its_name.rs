@@ -50,7 +50,7 @@ fn project(dir: &Path, name: &str) -> PathBuf {
 fn on_the_launcher(tag: &str, scratch: &Scratch, projects: &[&Path], gone: &[&Path]) -> App {
     let root = fixtures::Fixture::new(&format!("launcher_{tag}_{}", std::process::id())).descriptor("site/wall", "alpha").build("m");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
-    let file = scratch.0.join("recent.ron");
+    let file = scratch.0.join("recent.yaml");
     for p in projects {
         recent::record(&file, p).unwrap();
     }
@@ -136,7 +136,7 @@ fn the_home_lists_two_recent_projects_as_cards_and_opens_the_second_by_its_name(
     press(&mut app, "alpha");
     assert_eq!(pointed_at(&app), (Some(alpha.clone()), alpha.clone()), "the window opens that folder, in this process");
     assert_eq!(screen_of(&app), Screen::Project, "and goes on to its kits and maps");
-    let again = recent::Recent::load(&s.0.join("recent.ron")).unwrap().listing();
+    let again = recent::Recent::load(&s.0.join("recent.yaml")).unwrap().listing();
     assert_eq!(again[0].project.path, alpha, "opening a project moves it to the top of the list");
 }
 
@@ -165,7 +165,7 @@ fn a_missing_projects_card_does_not_open_and_offers_locate_and_remove() {
 
     // Remove takes it out of the list, and the folder is not touched.
     press(&mut app, "Remove");
-    let list = recent::Recent::load(&s.0.join("recent.ron")).unwrap().listing();
+    let list = recent::Recent::load(&s.0.join("recent.yaml")).unwrap().listing();
     assert_eq!(list.iter().map(|r| r.project.path.clone()).collect::<Vec<_>>(), std::slice::from_ref(&beta));
     let mut missing = app.world_mut().query::<&MissingCard>();
     assert_eq!(missing.iter(app.world()).count(), 0, "and its card is gone");
@@ -275,7 +275,7 @@ fn a_chosen_folder_that_is_not_a_project_offers_to_make_it_one_and_keeps_what_it
         app.update();
     }
     assert_eq!(std::fs::read_to_string(plain.join("notes.txt")).unwrap(), "mine", "the folder's own files stay");
-    assert!(plain.join("assets/grimoire/kits.ron").is_file() && plain.join("assets/grimoire/vocab.ron").is_file());
+    assert!(plain.join("assets/grimoire/kits.yaml").is_file() && plain.join("assets/grimoire/vocab.yaml").is_file());
     assert_eq!(pointed_at(&app).0, Some(plain.canonicalize().unwrap()), "and it opens");
 }
 
@@ -288,7 +288,7 @@ fn a_folder_chosen_with_open_folder_that_is_a_project_opens() {
     app.update();
     app.update();
     assert_eq!(pointed_at(&app), (Some(beta.clone()), beta.clone()));
-    assert_eq!(recent::Recent::load(&s.0.join("recent.ron")).unwrap().listing()[0].project.path, beta);
+    assert_eq!(recent::Recent::load(&s.0.join("recent.yaml")).unwrap().listing()[0].project.path, beta);
 }
 
 #[test]

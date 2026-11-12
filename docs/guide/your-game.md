@@ -4,7 +4,7 @@ bevy_grimoire keeps a world in data files. The editor writes those files, and yo
 
 Some terms used on this page:
 
-- A **kit** is a folder of pieces, with its own `library.ron` and `project.ron`.
+- A **kit** is a folder of pieces, with its own `library.yaml` and `project.yaml`.
 - A **piece** is one thing a map can place, such as a table, a wall or a chair. It is one entry in a kit's library.
 - A **placement** is one piece at one spot on a map.
 - A **composition** is a named group of pieces that belong together, such as a wall with its door and lamp.
@@ -18,26 +18,31 @@ Your game keeps its bevy_grimoire data in one folder, `assets/grimoire/`, inside
 
 ```text
 <game root>/
+  play.yaml            how to run the game (optional)
+  agent.yaml           the command Send starts (optional)
+  family.yaml           which family crates the project uses (optional)
   assets/
     grimoire/
-      kits.ron           which kits the project uses, and the lattice
-      vocab.ron          the tokens every piece is described with
-      compositions.ron   named groups of pieces (optional)
-      rules.ron          rules the editor checks (optional)
-      rigs.ron           animation rigs (optional)
+      kits.yaml           which kits the project uses, and the lattice
+      vocab.yaml          the tokens every piece is described with
+      compositions.yaml   named groups of pieces (optional)
+      rules.yaml          rules the editor checks (optional)
+      rigs.yaml           animation rigs (optional)
       oplog.jsonl        the editor's history of changes (written by the editor)
       maps/
-        town.map.ron     one file per map
+        town.map.yaml     one file per map
       <kit>/
-        library.ron      the pieces this kit defines
-        project.ron      how this project uses the kit
+        library.yaml      the pieces this kit defines
+        project.yaml      how this project uses the kit
 ```
 
-A kit folder must be bound in `kits.ron` before the game can load it. See the data file reference for every file's format.
+A kit folder must be bound in `kits.yaml` before the game can load it. See the data file reference for every file's format.
+
+**A project written before the cutover holds `.ron` files, and it is refused at open** rather than opened half-read. Run `bevy_cauldron migrate <project folder>` once: it converts every project file, and the data files a game registers in its `data.yaml`, leaves the RON originals in `<project>/.dark_factory/migrated-ron/`, and prints one line per converted file and every comment it could not place. A project it refuses is left byte for byte as it was. See [Moving a project to YAML](#moving-a-project-to-yaml).
 
 ### The rules a project file is read by
 
-The project's files are moving from RON to YAML, one kind at a time, and every one that has moved is read by
+The project's files are YAML, and every one is read by
 `bevy_grimoire_core::yaml` — the only place a project file is parsed or written as YAML, so every file the editor
 and an agent see is held to the same rules.
 
@@ -56,6 +61,40 @@ agent receives the same parts as JSON, so neither can drop something the other h
 
 What the reader writes is what it reads: block style, two spaces per level, the type's field order, a trailing
 newline, and a string quoted only where YAML needs it.
+
+### Moving a project to YAML
+
+A project written before the cutover holds `.ron` files, and this build reads none of them. It is refused at open,
+naming the file it met and the command that fixes it, because opening one half-read and saving would write fresh
+YAML beside files a person still has — the one state nobody can read off the disk.
+
+```sh
+bevy_cauldron migrate <project folder>
+```
+
+The command, in order:
+
+- **converts every project file**, of every kind: the kinds this crate has a type for are read as that type, and
+  the rest — the editor's settings, the checks, a family crate's, a kit's forests, people, scripts and trees, and a
+  game's own data files — are converted by value, from the RON into a tree and back, and compared;
+- **follows a game's own data files through its `data.yaml`**: each `.ron` file a registry names is converted beside
+  it and the registry's `path:` line is rewritten to the YAML, so the registry and its files always agree;
+- **proves each one first.** A file is parsed as RON, written as YAML, and read back with the type's YAML reader.
+  A value that would come back different stops the whole run, names the file, and **writes nothing at all** — not
+  that file, not the ones before it;
+- **carries the comments.** A RON comment is written as a YAML comment above the same key wherever it has a place.
+  A trailing `//` after a value and a `/* … */` block are carried too. One that has no place — a file header, or a
+  key the writer does not emit — is printed in the report, never dropped quietly;
+- **moves the old files, never deletes them**, to `<project>/.dark_factory/migrated-ron/`, keeping their paths, so
+  you can diff what it did and go back if you must;
+- **refuses to replace.** A `kits.yaml` already beside its `kits.ron` is a file a person made, and the run stops
+  before writing over it.
+
+It prints one line per converted file, then every comment it could not place, then where the originals went. A
+project with nothing left to convert prints that instead of nothing.
+
+Every file it writes is YAML in the style above, and every one names its schema on its first line, so an outside
+editor's YAML extension offers completion and hover from the same types the editor uses.
 
 ## Load a project in your game
 
@@ -125,7 +164,7 @@ cargo run -p bevy_cauldron -- <game root> <map> --kit <kit>
 
 Use `--kit` to name the kit you are working on. The editor watches the files it reads and reloads them when they change. It checks for changes four times a second.
 
-- If you save `town.map.ron` in a text editor while the editor has it open, the editor reloads the map.
+- If you save `town.map.yaml` in a text editor while the editor has it open, the editor reloads the map.
 - If the file you save does not parse, the editor refuses the change. It keeps the last good state and says why.
 - The editor ignores its own writes. A file whose content matches what the editor holds is not a change.
 
@@ -147,10 +186,10 @@ It needs an `GrimoireWorld` resource, which `GrimoirePlugin` spawns from. About 
 - What points at a piece follows it the same way. A person you spawned is not a placement, so a reload leaves it alone, but its `Home(entity)` names a placement, and a placement that is drawn again has a new entity. Say how a kind of reference reads the entity it names, once: `app.follow_respawn::<Home>(|home, respawned| home.0 = respawned.follow(home.0));`. After each reload that drew a piece again, the closure runs for every `Home`, and `respawned.follow(e)` is the entity that stands for `e` now (`e` itself when the piece was kept or removed, or is not a placement). A component is marked changed only when something moved. It takes a closure, not `MapEntities`, because you cannot implement that trait for another crate's component.
 - Editing a descriptor redraws every placement of that descriptor. `ProjectReloaded::library_changed` says so.
 - A successful reload replaces the `GrimoireWorld` resource and writes a `ProjectReloaded` message. Its `diffs` hold one `MapDiff` per map you listed, so a game can react to the ids that changed.
-- If the project does not load, the plugin logs why, keeps every entity and the last good `GrimoireWorld`, and writes no `ProjectReloaded`. The reason goes to `.live/game.ron`, where the editor shows it: which file, which field of it and why (`maps/town.map.ron (placements[3].at[1]): map: 1:47: Expected float`), with an `applied` or `refused` entry for every file the load reads and a `seq` that counts one edit once. [The reload contract](reload-contract.md) has the detail.
+- If the project does not load, the plugin logs why, keeps every entity and the last good `GrimoireWorld`, and writes no `ProjectReloaded`. The reason goes to `.live/game.yaml`, where the editor shows it: which file, which field of it and why (`maps/town.map.yaml (placements[3].at[1]): map: 1:47: Expected float`), with an `applied` or `refused` entry for every file the load reads and a `seq` that counts one edit once. [The reload contract](reload-contract.md) has the detail.
 - The map in the `GrimoireWorld` resource is the one that is redrawn. Other maps in `maps` are diffed but not drawn.
 - The game's own derived data, such as a navmesh built from the map, is yours to rebuild when `ProjectReloaded` arrives.
-- **Your own tuning files follow too.** List a file in `assets/grimoire/data.ron` (an id, its path relative to that folder, and bounds for the leaves the editor may tune), keep the file outside that folder (beside it, say `assets/data`), and register its reader once, before the first frame: `app.reload_data_file("tuning/mob", |world, text| { let tuning: MobTuning = ron::from_str(text).map_err(|e| e.to_string())?; world.insert_resource(tuning); Ok(()) });`. About a second after the file is written, it is checked against its `data.ron` entry (it reads, every bounded leaf is there, a number and in range) and handed to your reader, which is your own parse of your own type. A file that does not read, or that your reader refuses, keeps the value you had, and `.live/game.ron` says which file and which leaf; one that reads is `applied`. The first look at the file is the baseline and decides nothing, so load it yourself at start.
+- **Your own tuning files follow too.** List a file in `assets/grimoire/data.yaml` (an id, its path relative to that folder, and bounds for the leaves the editor may tune), keep the file outside that folder (beside it, say `assets/data`), and register its reader once, before the first frame: `app.reload_data_file("tuning/mob", |world, text| { let tuning: MobTuning = ron::from_str(text).map_err(|e| e.to_string())?; world.insert_resource(tuning); Ok(()) });`. About a second after the file is written, it is checked against its `data.yaml` entry (it reads, every bounded leaf is there, a number and in range) and handed to your reader, which is your own parse of your own type. A file that does not read, or that your reader refuses, keeps the value you had, and `.live/game.yaml` says which file and which leaf; one that reads is `applied`. The first look at the file is the baseline and decides nothing, so load it yourself at start.
 
 ## Generate a map
 
@@ -162,7 +201,7 @@ bevy_grimoire_core has three ways to fill a map. None of them needs the engine.
 
 A map can hold a run as itself. `Map::runs` stores each run as one `RunPlaced` (an id and a `Run`), and `Map::expanded()` lays it into rows named `<run id>/<n>`, so a fence is one entry and moving its end is one edit. The operations `run_add`, `run_set` and `run_remove` edit runs and each is undone by its `operation_id`. `placements_to_run` turns rows that `run::lay` would produce into the run that lays exactly them, and refuses, naming the first row, when one is off the pitch. In the editor, Shift-drag in run mode lays a run, dragging a run's end moves it, and Cmd-drag over rows turns them into a run.
 
-A block laid out under `rules.ron` can be offered more than one way, on request. `rules::options(alphabet, rules, pins, seed_base, count, min_differ)` tries seeds in order, at most `attempts * count` of them, and keeps up to `count` layouts that each differ from every other kept one in at least `min_differ` cells. Each `Choice` carries the seed that made it, so `rules::solve_block` with that seed rebuilds the layout the developer picked, and `nearest` says how many cells it differs from the closest other option. Fewer than `count` is an answer, not an error: `Options::too_close` and `Options::failed` say where the seeds went.
+A block laid out under `rules.yaml` can be offered more than one way, on request. `rules::options(alphabet, rules, pins, seed_base, count, min_differ)` tries seeds in order, at most `attempts * count` of them, and keeps up to `count` layouts that each differ from every other kept one in at least `min_differ` cells. Each `Choice` carries the seed that made it, so `rules::solve_block` with that seed rebuilds the layout the developer picked, and `nearest` says how many cells it differs from the closest other option. Fewer than `count` is an answer, not an error: `Options::too_close` and `Options::failed` say where the seeds went.
 
 Two supporting tools sit beside these:
 
@@ -189,26 +228,38 @@ Use `bevy_grimoire_rng::seeded(seed)` for any randomness in your game. It return
 
 ## Playing the map in your game
 
-The editor never links your game. A project says how to run it in `play.ron` beside `family.ron`:
+The editor never links your game. A project says how to run it in `play.yaml` at the project root:
 
-```ron
-(version: 1, command: ["cargo", "run", "--", "{map}"], cwd: Some("../game"), port: 15702)
+```yaml
+version: 2
+command: ["cargo", "run", "--", "{map}"]
+cwd: "../game"
+port: 15702
+build: []
 ```
 
 `{map}`, `{root}` and `{camera}` (`x,y,z`) in an argument are replaced by the open map, the project root and the editor camera's position; the game also gets them as `GRIMOIRE_PLAY_MAP`, `GRIMOIRE_PLAY_ROOT` and `GRIMOIRE_PLAY_CAMERA`. **Play** in the PLAY section of the controls panel (or the `play` operation, with `wait_s` to wait until the game's `bevy_fairy/status` says `ready: true`) starts it; **Stop** (`play_stop`) ends the process the editor started, by pid. A second Play while one runs is refused. Neither is an edit, so neither has an undo. An agent then reads the running game through `bevy_fairy`'s own MCP.
 
 ## A project's commands need your permission
 
-`play.ron` and `agent.ron` name programs, and a project you cloned brings its own. The editor starts neither until a person has allowed it, so opening a project is never one key press from running its author's command.
+`play.yaml` and `agent.yaml` name programs, and a project you cloned brings its own. The editor starts neither until a person has allowed it, so opening a project is never one key press from running its author's command.
 
 When Play or Send meets a command you have not allowed, nothing starts. The status line says which command and in which project, and a question appears with three answers:
 
-- **Y: allow this command.** The exact program, arguments and working directory you were shown. Edit `play.ron` or `agent.ron` afterwards, by hand or by an agent, and the editor asks again.
+- **Y: allow this command.** The exact program, arguments and working directory you were shown. Edit `play.yaml` or `agent.yaml` afterwards, by hand or by an agent, and the editor asks again.
 - **P: trust the whole project.** Every command in it, including later edits. Use it for your own game.
 - **N or Esc: not now.** Nothing is allowed and nothing starts.
 
-After you allow one, press Play or Send again; nothing starts on its own. What you allowed is kept in your own file, `<data dir>/Grimoire/trusted.ron` (on macOS, `~/Library/Application Support/Grimoire/trusted.ron`), and never in the project, so a project cannot ship its own permission. An agent cannot allow anything: `play` over MCP is refused with the same sentence, and no operation grants trust. If `trusted.ron` is damaged the editor says so and starts nothing; fix or delete the file.
+After you allow one, press Play or Send again; nothing starts on its own. What you allowed is kept in your own file, `<data dir>/Grimoire/trusted.yaml` (on macOS, `~/Library/Application Support/Grimoire/trusted.yaml`), and never in the project, so a project cannot ship its own permission. An agent cannot allow anything: `play` over MCP is refused with the same sentence, and no operation grants trust. If `trusted.yaml` is damaged the editor says so and starts nothing; fix or delete the file.
 
 ## Conversations over the speaker
 
-With the editor built with `--features bevy_speech_bubbles` and `bevy_speech_bubbles` listed in `family.ron`, a project's conversations are `bevy_speech_bubbles`' own `DialogueScript`, saved as `family/bevy_speech_bubbles.ron`; a graph `validate_script` refuses is not written. A placed piece carries one by name (`placement_set_family` with `"crate": "bevy_speech_bubbles"` and `"value": "\"market\""`, or `@<id> bevy_speech_bubbles "market"` in FAMILY SETTINGS). Typing `dialogue market 0` in FAMILY SETTINGS walks that conversation (`dialogue_preview`), each number picking an option at the next choice (0 is the first), and draws the lines it says as one balloon over the piece carrying it; a choice with no number left stops the walk there.
+With the editor built with `--features bevy_speech_bubbles` and `bevy_speech_bubbles` listed in `family.yaml`, a project's conversations are `bevy_speech_bubbles`' own `DialogueScript`, saved as `family/bevy_speech_bubbles.yaml`; a graph `validate_script` refuses is not written. A placed piece carries one by name (`placement_set_family` with `"crate": "bevy_speech_bubbles"` and `"value": "\"market\""`, or `@<id> bevy_speech_bubbles "market"` in FAMILY SETTINGS). Typing `dialogue market 0` in FAMILY SETTINGS walks that conversation (`dialogue_preview`), each number picking an option at the next choice (0 is the first), and draws the lines it says as one balloon over the piece carrying it; a choice with no number left stops the walk there.
+
+## Release: bake your data
+
+`bevy_cauldron bake <project folder> --out <folder>` turns every YAML file the game loads (the project's files, `game/*.entities.yaml`, the files `data.yaml` registers) into one binary each, and writes `manifest.json` with each file's kind, its format version and the SHA-256 of its YAML. **Every file is decoded again and compared with the value its YAML reads to; a file that differs fails the bake, naming it, and nothing is written.**
+
+A game built with the `baked` feature of `bevy_grimoire` reads `<root>/baked` and nothing else (`bevy_grimoire_core::load`). It refuses to start, naming the file, when the YAML it was baked from has changed since or a file was added. It never falls back to the YAML. A development build reads the YAML.
+
+`games/sample/` is a small game made of YAML and Rhai whose Rust is one line; its tests play it from the YAML and from the bake.

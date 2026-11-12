@@ -119,12 +119,12 @@ under "Use the ladvien crate family" applies to it unchanged: **fix it at the so
 repo, in its own commits with its own tests — never vendor, patch or re-implement it here.**
 
 The boundary, measured on 2026-10-25 (`grep` for `kit.yaml`/`kitbash` under `crates/`: 0 hits; for
-`bevy_grimoire`/`library.ron` under golem: 0 hits):
+`bevy_grimoire`/`library.yaml` under golem: 0 hits):
 
 | | golem | bevy_grimoire |
 |---|---|---|
 | Subject | a **folder** of `.glb` — a pack | **one** `.glb` inside a project |
-| Writes | `kit.yaml`, for kitbashing *in Blender* | `library.ron` `Descriptor`, for placing *on a map* |
+| Writes | `kit.yaml`, for kitbashing *in Blender* | `library.yaml` `Descriptor`, for placing *on a map* |
 | Frame | Blender z-up | Bevy y-up, metres on the map |
 | Validation | the gate + the Blender analyzer | `import::measure` + `vocab::validate_library` |
 

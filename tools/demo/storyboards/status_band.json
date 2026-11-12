@@ -49,8 +49,8 @@
     {
       "at": 3.4,
       "write": {
-        "path": "family/bevy_gooey.ron",
-        "text": "(accent: Srgba((red: 0.95,"
+        "path": "family/bevy_gooey.yaml",
+        "text": "accent: !Srgba {red: 0.95,"
       }
     },
     {
@@ -64,8 +64,8 @@
     {
       "at": 4.7,
       "write": {
-        "path": "family/bevy_gooey.ron",
-        "text": "(accent: Srgba((red: 0.95, green: 0.71, blue: 0.3, alpha: 1.0)))\n"
+        "path": "family/bevy_gooey.yaml",
+        "text": "accent: !Srgba\n  red: 0.95\n  green: 0.71\n  blue: 0.3\n  alpha: 1.0\n"
       }
     },
     {
@@ -79,8 +79,8 @@
     {
       "at": 6.1,
       "write": {
-        "path": "family/bevy_gooey.ron",
-        "text": "(accent: Srgba((red: 0.95, green:"
+        "path": "family/bevy_gooey.yaml",
+        "text": "accent: !Srgba {red: 0.95, green:"
       }
     },
     {

@@ -1,6 +1,6 @@
 //! **A terrain file whose heights do not fill its shape is refused, not indexed** (#187).
 //!
-//! A hand edit, a truncated write or a bad merge can leave `terrain/<map>.ron` with fewer heights
+//! A hand edit, a truncated write or a bad merge can leave `terrain/<map>.yaml` with fewer heights
 //! than `width × depth`. The editor panicked drawing the ground ("index out of bounds") and inside
 //! `terrain_stroke`'s dispatch. Now the map opens with no terrain drawn and the file named on the
 //! status line, and a stroke on it is refused.
@@ -13,7 +13,7 @@ use serde_json::json;
 
 use crate::fixtures;
 
-const SHORT: &str = "(origin: (0.0, 0.0), cell_m: 1.0, width: 4, depth: 4, heights: [0.0, 0.0, 0.0])";
+const SHORT: &str = "{origin: [0.0, 0.0], cell_m: 1.0, width: 4, depth: 4, heights: [0.0, 0.0, 0.0]}";
 
 fn problems(app: &App) -> Vec<String> {
     app.world().resource::<EditorState>().status.problems().iter().map(|p| p.text.clone()).collect()
@@ -27,10 +27,10 @@ fn open(tag: &str) -> (App, std::path::PathBuf) {
     app.update();
     let terrain = app.world().resource::<bevy_cauldron::project::Project>().grimoire_dir.join("terrain");
     std::fs::create_dir_all(&terrain).unwrap_or_else(|e| panic!("{terrain:?}: {e}"));
-    let file = terrain.join("m.ron");
+    let file = terrain.join("m.yaml");
     std::fs::write(&file, SHORT).unwrap_or_else(|e| panic!("{file:?}: {e}"));
     let start = std::time::Instant::now();
-    while start.elapsed().as_secs_f64() < 3.0 && !problems(&app).iter().any(|p| p.contains("terrain/m.ron")) {
+    while start.elapsed().as_secs_f64() < 3.0 && !problems(&app).iter().any(|p| p.contains("terrain/m.yaml")) {
         app.update();
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
@@ -42,7 +42,7 @@ fn it_draws_no_ground_and_the_status_line_names_the_file() {
     let (mut app, _) = open("terrain_short_open");
     let named = problems(&app);
     assert!(
-        named.iter().any(|p| p.contains("terrain/m.ron") && p.contains("3 heights for 4x4")),
+        named.iter().any(|p| p.contains("terrain/m.yaml") && p.contains("3 heights for 4x4")),
         "the status line names the file and its shape: {named:?}"
     );
     let world = app.world_mut();

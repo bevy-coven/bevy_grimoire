@@ -12,13 +12,13 @@
   "steps": [
     {
       "at": 0.3,
-      "caption": "a person's editor.ron moves Save to Ctrl+Shift+Y"
+      "caption": "a person's editor.yaml moves Save to Ctrl+Shift+Y"
     },
     {
       "at": 0.6,
       "write": {
-        "path": "assets/grimoire/editor.ron",
-        "text": "(version:1,keymap:{\"file.save\":(modifiers:(ctrl:true,shift:true,alt:false,meta:false),key:KeyY)})"
+        "path": "assets/grimoire/editor.yaml",
+        "text": "version: 1\nkeymap:\n  file.save:\n    modifiers:\n      ctrl: true\n      shift: true\n      alt: false\n      meta: false\n    key: KeyY\n"
       }
     },
     {

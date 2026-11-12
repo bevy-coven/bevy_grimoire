@@ -1,19 +1,19 @@
 //! **The editor's settings, in three layers that change the running editor** (UI-70, #248).
 //!
 //! 1. The built-in defaults ([`EditorSettings::default`]).
-//! 2. The user's file, `<config_dir>/Grimoire/settings.ron` ([`user_file`]).
-//! 3. The project's file, `<project>/assets/grimoire/editor.ron` (kind `editor_settings` in
+//! 2. The user's file, `<config_dir>/Grimoire/settings.yaml` ([`user_file`]).
+//! 3. The project's file, `<project>/assets/grimoire/editor.yaml` (kind `editor_settings` in
 //!    `reload::KINDS`).
 //!
 //! **Precedence is per key, and the later layer wins.** A file is a [`SettingsLayer`]: every key is an
 //! `Option`, so a file says only what it sets, and a key a layer leaves out falls through to the layer
-//! below. `(version: 1, text_scale: Some(1.5))` in the user's file and `(version: 1, reduced_motion:
-//! Some(true))` in the project's give both; the same key in both gives the project's.
+//! below. `version: 1` and `text_scale: 1.5` in the user's file and `version: 1` and `reduced_motion:
+//! true` in the project's give both; the same key in both gives the project's.
 //!
 //! **Live.** [`sync_settings`] looks at both files while the editor runs (size and modification time
 //! each frame, the text once a second regardless, as `oplog_view` does) and re-resolves
 //! [`EditorSettings`]. Deleting a key, or the file, falls back to the layer below at once. A file that
-//! does not read (not RON, an unknown key, a key of the wrong type, a value out of range, another
+//! does not read (not YAML, an unknown key, a key of the wrong type, a value out of range, another
 //! version) **keeps that layer's last good content**, is refused in `grimoire_state.reloads` with the
 //! file and the field, and is a problem on the status line, once per distinct fault.
 //!
@@ -43,9 +43,9 @@ pub const SETTINGS_VERSION: u32 = 1;
 /// The id of the reload-contract kind both layers' verdicts carry.
 pub const KIND: &str = "editor_settings";
 
-const USER_FILE: &str = "settings.ron";
+const USER_FILE: &str = "settings.yaml";
 /// The project's file, under the project directory (`assets/grimoire`).
-pub const PROJECT_FILE: &str = "editor.ron";
+pub const PROJECT_FILE: &str = "editor.yaml";
 
 /// How long a file whose size and modification time did not move goes unread.
 const RECHECK_SECS: f32 = 1.0;
@@ -390,7 +390,7 @@ pub struct SettingsLayer {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reduced_motion: Option<bool>,
     /// **View ▸ Follow the agent** (AF-04, #360). `None` means the layer leaves it alone, so an
-    /// `editor.ron` written before this key existed reads as on — the default, not a stored `false`.
+    /// `editor.yaml` written before this key existed reads as on — the default, not a stored `false`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub follow_agent: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -468,7 +468,7 @@ impl SettingsLayer {
     /// **Reads a file's text as a layer**, refusing with the file and the field when it does not read,
     /// is another version, or holds a value no editor can use.
     pub fn read(file: &str, text: &str) -> Result<SettingsLayer, Refusal> {
-        let mut layer: SettingsLayer = reload_check::read(KIND, file, text)?;
+        let mut layer: SettingsLayer = reload_check::read(KIND, file, text, |t| bevy_grimoire_core::yaml::from_str(t, "settings").map_err(|p| p.line()))?;
         if let Some(old) = layer.shell_layout.take() {
             layer.workspace_layout.entry(crate::workspace::Workspace::Map.id().to_owned()).or_insert(old);
         }

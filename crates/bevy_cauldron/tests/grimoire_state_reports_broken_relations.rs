@@ -2,7 +2,7 @@
 //!
 //! Slice 1 put `relations::check` in core, but an agent placing pieces reads `grimoire_state`, not a
 //! library function. So the state answer carries a `relations` section read from the
-//! `<map>.relations.ron` beside the open map: every relation with its outcome and what was
+//! `<map>.relations.yaml` beside the open map: every relation with its outcome and what was
 //! measured, and counts of the broken and dangling ones. The file is read on each call, so an edit
 //! to it is seen by the next `grimoire_state` with no restart, and a file that does not parse is
 //! named, never read as "no relations".
@@ -32,7 +32,7 @@ fn editor(name: &str) -> (App, PathBuf) {
     for _ in 0..8 {
         app.update();
     }
-    (app, root.join("assets/grimoire/maps/m.relations.ron"))
+    (app, root.join("assets/grimoire/maps/m.relations.yaml"))
 }
 
 fn state(app: &mut App) -> serde_json::Value {
@@ -49,15 +49,11 @@ fn state(app: &mut App) -> serde_json::Value {
 }
 
 fn write(path: &Path, relations: &str) {
-    std::fs::write(path, format!("(version: 1, relations: [{relations}])"))
+    std::fs::write(path, format!("{{version: 1, relations: [{relations}]}}"))
         .unwrap_or_else(|e| panic!("{path:?}: {e}"));
 }
 
-const FOUR: &str = r#"
-    (of: "chair", kind: Faces("table")),
-    (of: "chair", kind: Near(to: "table", within: 3.0)),
-    (of: "door", kind: ClearInFront(depth: 2.0, width: 1.0)),
-    (of: "lamp", kind: Near(to: "door", within: 2.0)),
+const FOUR: &str = r#"{of: "chair", kind: !Faces "table"}, {of: "chair", kind: !Near {to: "table", within: 3.0}}, {of: "door", kind: !ClearInFront {depth: 2.0, width: 1.0}}, {of: "lamp", kind: !Near {to: "door", within: 2.0}}
 "#;
 
 #[test]
@@ -97,17 +93,17 @@ fn an_edit_to_the_file_is_seen_by_the_next_call() {
     );
     write(&file, FOUR);
     assert_eq!(state(&mut app)["relations"]["unmet"], 2);
-    write(&file, r#"(of: "chair", kind: Near(to: "table", within: 3.0)),"#);
+    write(&file, r#"{of: "chair", kind: !Near {to: "table", within: 3.0}}"#);
     assert_eq!(state(&mut app)["relations"]["unmet"], 0);
 }
 
 #[test]
 fn a_file_that_does_not_parse_is_named_not_read_as_none() {
     let (mut app, file) = editor(&format!("relations_bad_{}", std::process::id()));
-    write(&file, r#"(of: "door", kind: ClearInFront(depth: -2.0, width: 1.0)),"#);
+    write(&file, r#"{of: "door", kind: !ClearInFront {depth: -2.0, width: 1.0}}"#);
     let rel = &state(&mut app)["relations"];
     let error = rel["error"].as_str().unwrap_or_else(|| panic!("no error named: {rel}"));
-    assert!(error.contains("m.relations.ron"), "the error names the file: {error}");
+    assert!(error.contains("m.relations.yaml"), "the error names the file: {error}");
     assert!(error.contains("-2"), "and what is wrong in it: {error}");
     assert_eq!(rel["relations"], serde_json::json!([]), "{rel}");
 }

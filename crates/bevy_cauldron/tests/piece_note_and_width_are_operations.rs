@@ -186,7 +186,7 @@ fn an_agent_resizes_a_piece_and_one_undo_puts_it_back() {
     let d = piece(&app, "site/crate");
     assert_eq!(d.extent, before.extent, "one undo puts the extent back");
     assert_eq!(d.align, before.align, "and the alignment");
-    assert!(file(&app).contains("footprint: Some((1.0, 0.5))"), "and the file holds the old footprint");
+    assert!(file(&app).contains("footprint:\n    - 1.0\n    - 0.5\n"), "and the file holds the old footprint");
 }
 
 /// **A width that is not a length, one it already stands at, a piece with no footprint, an unknown piece,

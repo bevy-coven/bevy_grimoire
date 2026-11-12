@@ -34,8 +34,11 @@
 
 pub mod behaviours;
 pub mod entities;
+pub mod game;
 pub mod game_schema;
 pub mod live;
+
+pub use game::{GameDataPlugin, GamePlugin};
 
 use std::collections::HashMap;
 
@@ -127,7 +130,7 @@ impl GrimoireWorld {
         // opens a kit for the hub's own layout and never reads an edge token.
         //
         // **Passed in rather than read off the map**, since the same day's second correction: the
-        // lattice is the *project's* (`kits.ron`), because a tile's adjacency contract cannot depend
+        // lattice is the *project's* (`kits.yaml`), because a tile's adjacency contract cannot depend
         // on which map happens to be open. See `bevy_grimoire_core::kits::Lattice`.
         library.validate_lattices(lattice.face_bands)?;
         let known: Vec<&str> = library.descriptors.iter().map(|d| d.id.as_str()).collect();
@@ -365,7 +368,7 @@ pub fn origin_of(at: (f32, f32), map_origin: (f32, f32, f32), y: f32) -> Vec3 {
 /// The yaw a piece is actually drawn at: the authored yaw plus the mesh's own `front` correction.
 ///
 /// The correction is not cosmetic. The Site kit records a 90° `front` on its chairs, and before that
-/// existed every chair in `site67.ron` was authored sideways to its table — the yaws were written
+/// existed every chair in `site67.yaml` was authored sideways to its table — the yaws were written
 /// against the engine convention while the mesh fronted somewhere else.
 pub fn draw_yaw(d: &Descriptor, authored: f32) -> f32 {
     authored + d.align.front.map_or(0.0, |f| f.yaw_degrees())
@@ -945,7 +948,7 @@ mod tests {
     }
 
     /// The mesh's own facing correction is applied on top of the authored yaw. Without it every chair
-    /// in `site67.ron` was authored sideways to its table.
+    /// in `site67.yaml` was authored sideways to its table.
     #[test]
     fn the_draw_yaw_adds_the_meshs_front_correction() {
         let mut d = descriptor("chair");

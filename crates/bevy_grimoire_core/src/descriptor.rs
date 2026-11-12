@@ -182,7 +182,7 @@ pub struct AxisOrigin {
 /// it would have had no writer. `None` already says *no record*, which is exactly and only what a
 /// manifest-generated descriptor means.
 ///
-/// **Old readers.** A file without `Agent` parses everywhere. A `library.ron` that holds `Agent`
+/// **Old readers.** A file without `Agent` parses everywhere. A `library.yaml` that holds `Agent`
 /// (written by `label_set` from an agent) does not parse in a core older than the one that added
 /// the variant, so a consumer pinned to an older core must move with the editor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -719,7 +719,7 @@ pub struct SubCell {
 pub struct Placement {
     /// Room-type tokens this piece suits — *a toilet suits a bathroom*. Cross-validated against the
     /// project's room types, the way `mycelia::validate_damp_coverage` already checks its own table
-    /// against `config.ron:dungeon.room_types`.
+    /// against `config.yaml:dungeon.room_types`.
     pub rooms: Vec<String>,
     /// Pieces sharing a token are drawn together (a toilet and a basin), as a soft relation rather
     /// than a hard constraint — a room that cannot fit both should still get one.
@@ -782,7 +782,7 @@ pub fn mount_options(surfaces: &[String]) -> Vec<Mount> {
         // They were the first class alone, on the argument that an `or the floor` entry per class
         // would double the list. That is true and it was the wrong trade: this list is a cycle an
         // author taps through with `M`, and **an entry that does not exist cannot be reached at any
-        // price**. `assets/grimoire/vocab.ron` declares three classes, so a dressing set that belongs
+        // price**. `assets/grimoire/vocab.yaml` declares three classes, so a dressing set that belongs
         // on a *shelf* or the floor had no rung, and the labeller's prompt offered the shape for one
         // class while refusing the other two — the only way through was hand-editing the file, which
         // is exactly what the cycle exists to make unnecessary. With the shipped three classes the
@@ -1099,7 +1099,7 @@ pub enum Mount {
     /// mesh's own height, since jambs and a lintel sit inside its bounding box.
     ///
     /// `None` means **nobody has measured it**, which is the honest state of the shipped
-    /// `furniture_kenney.ron` door: it carries `role: Anchor(host: Opening)` and no opening size,
+    /// `furniture_kenney.yaml` door: it carries `role: Anchor(host: Opening)` and no opening size,
     /// because the manifest schema has no field for one. The Site kit does record it
     /// (`DoorPiece::opening`, measured off the POSITION accessors), so a converted kit piece carries
     /// `Some`. Making this required would have forced the converter to invent a number for a row that
@@ -1842,9 +1842,8 @@ mod tests {
             effects: vec!["uses-electricity".into()],
             ..crate_desc()
         };
-        let text =
-            ron::ser::to_string_pretty(&d, ron::ser::PrettyConfig::default()).expect("serializes");
-        let back: Descriptor = ron::from_str(&text).expect("parses");
+        let text = crate::yaml::to_string(&d).expect("serializes");
+        let back: Descriptor = crate::yaml::from_str(&text, "a descriptor").expect("parses");
         assert_eq!(d, back);
     }
 
@@ -1858,17 +1857,16 @@ mod tests {
     /// keeps the `skip_serializing_if`.
     #[test]
     fn a_descriptor_written_before_provenance_keeps_no_record_through_a_round_trip() {
-        let d: Descriptor = ron::from_str("(id: \"crate\")").expect("parses");
+        let d: Descriptor = crate::yaml::from_str("id: crate\n", "a descriptor").expect("parses");
         assert_eq!(d.labels, None, "no record means no record");
 
-        let text =
-            ron::ser::to_string_pretty(&d, ron::ser::PrettyConfig::default()).expect("serializes");
+        let text = crate::yaml::to_string(&d).expect("serializes");
         assert!(
             !text.contains("labels"),
             "an absent record must not be written back as an empty one: {text}"
         );
 
-        let back: Descriptor = ron::from_str(&text).expect("parses");
+        let back: Descriptor = crate::yaml::from_str(&text, "a descriptor").expect("parses");
         assert_eq!(back.labels, None, "and it must still be absent on the way in");
     }
 
@@ -1886,8 +1884,9 @@ mod tests {
     /// passes when nothing was refused is the failure mode this whole step is about.
     #[test]
     fn a_provenance_record_with_no_date_is_refused_at_parse() {
-        let parsed = ron::from_str::<Descriptor>(
-            "(id: \"crate\", labels: Some(( by: ( kind: Some(Model) ), model: Some(\"qwen3-vl\") )))",
+        let parsed = crate::yaml::from_str::<Descriptor>(
+            "id: crate\nlabels:\n  by:\n    kind: Model\n  model: qwen3-vl\n",
+            "a descriptor",
         );
         let err = match parsed {
             Ok(d) => panic!(
@@ -1922,20 +1921,20 @@ mod tests {
             }),
             ..crate_desc()
         };
-        let text =
-            ron::ser::to_string_pretty(&d, ron::ser::PrettyConfig::default()).expect("serializes");
-        let back: Descriptor = ron::from_str(&text).expect("parses");
+        let text = crate::yaml::to_string(&d).expect("serializes");
+        let back: Descriptor = crate::yaml::from_str(&text, "a descriptor").expect("parses");
         assert_eq!(d, back);
     }
 
     #[test]
     fn a_record_written_before_model_at_reads_its_model_date_from_at() {
-        let old: LabelOrigin = ron::from_str(
-            r#"(by: (kind: Some(Model)), model: Some("qwen3-vl"), at: "2026-08-22")"#,
+        let old: LabelOrigin = crate::yaml::from_str(
+            "by:\n  kind: Model\nmodel: qwen3-vl\nat: 2026-08-22\n",
+            "a label origin",
         )
         .expect("parses");
         assert_eq!(old.model_date(), Some("2026-08-22"));
-        let human: LabelOrigin = ron::from_str(r#"(at: "2026-08-22")"#).expect("parses");
+        let human: LabelOrigin = crate::yaml::from_str("at: 2026-08-22\n", "a label origin").expect("parses");
         assert_eq!(human.model_date(), None);
         let stamped = LabelOrigin::stamped("qwen3-vl", "2026-08-20", None);
         assert_eq!(stamped.model_date(), Some("2026-08-20"));
@@ -2012,7 +2011,7 @@ mod face_tests {
 
     /// A face survives the file it is written in.
     #[test]
-    fn a_front_round_trips_through_ron() {
+    fn a_front_round_trips_through_yaml() {
         let before = Descriptor {
             id: "chair".into(),
             align: Align {
@@ -2021,10 +2020,12 @@ mod face_tests {
             },
             ..Descriptor::default()
         };
-        let text = ron::ser::to_string_pretty(&before, ron::ser::PrettyConfig::default())
-            .unwrap_or_else(|e| panic!("{e}"));
-        assert!(text.contains("front: Some(East)"), "{text}");
-        let after: Descriptor = ron::from_str(&text).unwrap_or_else(|e| panic!("{e}"));
+        let text = crate::yaml::to_string(&before).unwrap_or_else(|p| panic!("{}", p.line()));
+        // **YAML spells a unit enum variant as a plain scalar** (GD-03, #365), where RON wrote `Some(East)`:
+        // an `Option` of one is the value itself or nothing at all, and the tag a variant with fields gets
+        // (`!Near`) is not wanted for a bare name.
+        assert!(text.contains("front: East"), "{text}");
+        let after: Descriptor = crate::yaml::from_str(&text, "a descriptor").unwrap_or_else(|p| panic!("{}", p.line()));
         assert_eq!(before, after);
     }
 }
@@ -2125,16 +2126,15 @@ mod subgrid_tests {
             }])),
             ..Descriptor::default()
         };
-        let text = ron::ser::to_string_pretty(&before, ron::ser::PrettyConfig::default())
-            .unwrap_or_else(|e| panic!("{e}"));
-        let after: Descriptor = ron::from_str(&text).unwrap_or_else(|e| panic!("{e}"));
+        let text = crate::yaml::to_string(&before).unwrap_or_else(|p| panic!("{}", p.line()));
+        let after: Descriptor = crate::yaml::from_str(&text, "a descriptor").unwrap_or_else(|p| panic!("{}", p.line()));
         assert_eq!(before, after);
     }
 
     /// An old library has no `subgrid` key at all and must still parse — the field defaults.
     #[test]
     fn a_descriptor_written_before_the_lattice_still_parses() {
-        let d: Descriptor = ron::from_str("(id: \"crate\")").unwrap_or_else(|e| panic!("{e}"));
+        let d: Descriptor = crate::yaml::from_str("id: crate\n", "a descriptor").unwrap_or_else(|p| panic!("{}", p.line()));
         assert_eq!(d.subgrid, None);
     }
 
@@ -2394,7 +2394,7 @@ mod rotate_tests {
 
     /// A rotation survives the file, and reads as degrees rather than as a count nobody can picture.
     #[test]
-    fn a_rotation_round_trips_through_ron() {
+    fn a_rotation_round_trips_through_yaml() {
         let before = Descriptor {
             id: "door".into(),
             align: Align {
@@ -2403,11 +2403,18 @@ mod rotate_tests {
             },
             ..Descriptor::default()
         };
-        let text = ron::ser::to_string_pretty(&before, ron::ser::PrettyConfig::default())
-            .unwrap_or_else(|e| panic!("{e}"));
-        assert!(text.contains("rotate: Some((90, 0, 180))"), "{text}");
+        let text = crate::yaml::to_string(&before).unwrap_or_else(|p| panic!("{}", p.line()));
+        // **A tuple is a YAML sequence** (GD-03, #365), and an `Option` of one is the sequence or `null`:
+        // there is no `Some(...)` wrapper to write, which is the whole difference the cutover makes to a
+        // file a person reads. The three numbers are on their own lines under the key.
+        let block: Vec<&str> = text.lines().skip_while(|l| !l.trim_start().starts_with("rotate:")).take(4).collect();
         assert_eq!(
-            ron::from_str::<Descriptor>(&text).unwrap_or_else(|e| panic!("{e}")),
+            block.iter().map(|l| l.trim()).collect::<Vec<_>>(),
+            ["rotate:", "- 90", "- 0", "- 180"],
+            "{text}"
+        );
+        assert_eq!(
+            crate::yaml::from_str::<Descriptor>(&text, "a descriptor").unwrap_or_else(|p| panic!("{}", p.line())),
             before
         );
     }

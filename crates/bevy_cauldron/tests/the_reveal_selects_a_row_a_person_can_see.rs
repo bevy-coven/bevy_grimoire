@@ -51,20 +51,20 @@ fn project(tag: &str) -> std::path::PathBuf {
         .side(64.0)
         .build("m");
     let grimoire = root.join("assets/grimoire");
-    std::fs::copy(workspace_asset("grimoire/rigs.ron"), grimoire.join("rigs.ron")).expect("rigs.ron");
+    std::fs::copy(workspace_asset("grimoire/rigs.yaml"), grimoire.join("rigs.yaml")).expect("rigs.yaml");
     std::fs::create_dir_all(root.join("assets/characters")).expect("characters dir");
     std::fs::copy(workspace_asset("characters/valkyrie.glb"), root.join("assets/characters/valkyrie.glb"))
         .expect("valkyrie.glb");
     // **Two leaves, so the cursor has a wrong answer to be caught on**: a reveal that selected the
     // table's first row rather than the file's would pass a `cursor.is_some()` check.
     let kit = root.join("assets/grimoire/furniture");
-    std::fs::write(kit.join("mob.ron"), "// tuning\n(mob: (speed: 1.50, name: \"orc\", hp: 7))\n").expect("mob.ron");
+    std::fs::write(kit.join("mob.yaml"), "# tuning\nmob:\n  speed: 1.50\n  name: orc\n  hp: 7\n").expect("mob.yaml");
     std::fs::write(
-        kit.join("data.ron"),
-        "(version: 1, files: [(id: \"tuning/mob\", path: \"mob.ron\", bounds: {\"mob.speed\": (min: 0.0, max: 9.0)})])",
+        kit.join("data.yaml"),
+        "{version: 1, files: [{id: \"tuning/mob\", path: \"mob.yaml\", bounds: {\"mob.speed\": {min: 0.0, max: 9.0}}}]}",
     )
-    .expect("data.ron");
-    let notes = bevy_grimoire_core::notes::path_for_map(&grimoire.join("maps/m.map.ron"));
+    .expect("data.yaml");
+    let notes = bevy_grimoire_core::notes::path_for_map(&grimoire.join("maps/m.map.yaml"));
     let file = bevy_grimoire_core::notes::Notes {
         version: bevy_grimoire_core::notes::NOTES_VERSION,
         notes: vec![bevy_grimoire_core::notes::Note {
@@ -78,7 +78,7 @@ fn project(tag: &str) -> std::path::PathBuf {
         }],
         lease_secs: bevy_grimoire_core::notes::DEFAULT_LEASE_SECS,
     };
-    std::fs::write(&notes, ron::ser::to_string(&file).expect("the notes serialize")).expect("notes file");
+    std::fs::write(&notes, bevy_grimoire_core::yaml::to_string(&file).expect("the notes serialize")).expect("notes file");
     root
 }
 

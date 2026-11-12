@@ -25,7 +25,7 @@
 //!
 //! # A `Shown` with no page is a bug, and says so
 //!
-//! `Shown::File { path: "assets/grimoire/vocab.ron" }` is a real change with no page: the Files
+//! `Shown::File { path: "assets/grimoire/vocab.yaml" }` is a real change with no page: the Files
 //! workspace is GD-11 (#373) and does not exist. Doing nothing would leave the person reading
 //! `the Familiar added a token` with nowhere to look, so a `Shown` the editor cannot show becomes a
 //! **problem naming the operation and its shown**, which is the work item the missing view is built
@@ -122,7 +122,7 @@ pub enum Select {
 ///
 /// **The one decision**, so the receipt, the reveal and any later navigation cannot disagree about
 /// where a thing lives. `project` is read only for `Shown::File`, whose page depends on whether the
-/// project's `data.ron` registers the file — the DATA table is the only file page the editor has until
+/// project's `data.yaml` registers the file — the DATA table is the only file page the editor has until
 /// GD-11 (#373) lands, and a file the registry does not list has none.
 pub fn page_of(shown: &Shown, project: Option<&Project>) -> Result<Page, String> {
     let page = match shown {
@@ -252,7 +252,7 @@ fn settings_page(section: &str) -> Result<Page, String> {
     }
 }
 
-/// **The registry id of the data file a project-relative path names**, or `None` when `data.ron` does
+/// **The registry id of the data file a project-relative path names**, or `None` when `data.yaml` does
 /// not register it.
 ///
 /// The path a `Shown` carries is relative to the project root; the registry's own `path` is relative to

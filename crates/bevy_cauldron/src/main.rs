@@ -29,6 +29,17 @@ fn main() -> AppExit {
         println!("{}", args::USAGE);
         return AppExit::Success;
     }
+    // **`migrate` runs and exits** (GD-03, #365): a project's files are moved from RON to YAML, and the
+    // editor is never started, so the command works with no window, on a machine with no GPU, over ssh.
+    // It is a *subcommand* rather than a flag because it changes a project on disk and never opens one —
+    // the same reason this subcommand is what every refusal names (`migrate::COMMAND`).
+    if args::subcommand(&argv) == Some("migrate") {
+        return migrate_and_exit(&argv, args::PROGRAM);
+    }
+    // **`bake` runs and exits** (GD-08, #370), for the same reason `migrate` does: it reads a project and writes a folder.
+    if args::subcommand(&argv) == Some("bake") {
+        return bake_and_exit(&argv, args::PROGRAM);
+    }
 
     // **`bevy_audio` is opened only when something plays a sound.** The editor links
     // `bevy_audio` through `DefaultPlugins`, and an audio device that fails is what loops
@@ -51,6 +62,18 @@ fn main() -> AppExit {
         log.line(&bevy_cauldron::log_file::starting_line(&argv));
         bevy_cauldron::log_file::install_panic_hook(log.clone());
     }
+    // **A person's old `.ron` files are converted once, here** (M3 of the review): settings, recent projects and
+    // trusted guides would otherwise reset on upgrade. After the log is open, because this is the one sentence a
+    // person needs after a Finder launch and a bundle has no terminal for stderr; and carried into the launcher as
+    // well (`bevy_cauldron::legacy::StartupNotices`), so it is on screen and not only in a file. A file that cannot
+    // be converted is said out loud, never skipped.
+    let upgrading = bevy_cauldron::legacy::upgrade_user_files(bevy_grimoire_core::user_dirs::config_dir(), bevy_grimoire_core::user_dirs::data_dir());
+    for notice in &upgrading {
+        eprintln!("{notice}");
+        if let Some(log) = &log {
+            log.line(notice);
+        }
+    }
     // **The project is the asset root, and which project is decided later** (`project_assets`): a project named
     // on the command line is pointed at below, and one chosen on the launcher is pointed at when it is chosen.
     // Registered before `DefaultPlugins`, which builds the asset sources.
@@ -59,6 +82,7 @@ fn main() -> AppExit {
     if let Some(log) = log.clone() {
         app.insert_resource(log);
     }
+    app.insert_resource(bevy_cauldron::legacy::StartupNotices(upgrading));
     app.add_plugins(
         plugins
             // **One repeated log line filled a 16 GB RAM disk** (`bevy_cauldron::log_filter`): an
@@ -252,3 +276,86 @@ fn name_the_window(
     }
 }
 
+
+/// **`bevy_cauldron bake <project folder> --out <folder>`**: turn every YAML file the game loads into postcard, prove each
+/// against its YAML, and say what was written (GD-08, #370). A file that does not read, or does not survive the bake, fails
+/// the command naming it and writes nothing.
+fn bake_and_exit(argv: &[String], program: &str) -> AppExit {
+    let command = format!("{program} bake <project folder> --out <folder>");
+    let rest = &argv[1..];
+    let out_at = rest.iter().position(|a| a == "--out");
+    let out = out_at.and_then(|at| rest.get(at + 1));
+    let root = rest.iter().enumerate().find(|(at, a)| !a.starts_with('-') && out_at.is_none_or(|o| *at != o + 1)).map(|(_, a)| a);
+    let (Some(root), Some(out)) = (root, out) else {
+        eprintln!("usage: {command}");
+        return AppExit::error();
+    };
+    // **An unknown flag is refused, never dropped**, as `migrate` refuses one: a run that silently ignored `--check` would write a
+    // bake the flag was written to preview.
+    if let Some(flag) = rest.iter().find(|a| a.starts_with('-') && a.as_str() != "--out") {
+        eprintln!("{program} bake: `{flag}` is not a flag this command takes. usage: {command}");
+        return AppExit::error();
+    }
+    match bevy_grimoire_core::bake::bake(std::path::Path::new(root), std::path::Path::new(out)) {
+        Ok(report) => {
+            println!("baked {} file(s), {} bytes, into {} (manifest: {})", report.files, report.bytes, out, report.manifest.display());
+            AppExit::Success
+        }
+        Err(problem) => {
+            eprintln!("{}", problem.line());
+            AppExit::error()
+        }
+    }
+}
+
+/// **`bevy_cauldron migrate <project folder>`**: move a project's files from RON to YAML, and say what
+/// happened (GD-03, #365).
+///
+/// The work is the migration crate's (`bevy_grimoire_migrate`), which computes every conversion before it
+/// writes one — so a project this refuses is byte for byte what it was. This function only prints:
+///
+/// - one line per converted file, then every comment that had no place, then where the old files went,
+///   or one line saying there was nothing to convert;
+/// - on a refusal, the `Problem`'s own line, which names the file and the fix, and a non-zero exit.
+///
+/// **It converts every kind a project names**: a kind whose type the migration crate has as that type, any other (the
+/// editor's, the checks', a family crate's, a game's own data) by value, each read back and compared before anything is written.
+///
+/// **The folder is required and is the first positional.** A missing one is a refusal rather than a guess
+/// at the current folder: `migrate` moves a person's files, and running it in the wrong directory is a
+/// run they did not mean.
+fn migrate_and_exit(argv: &[String], program: &str) -> AppExit {
+    let command = format!("{program} migrate <project folder>");
+    let Some(root) = args::subcommand_argument(argv) else {
+        eprintln!(
+            "usage: {command}\n\n\
+             Moves a project's files from RON to YAML. Every file is converted in memory and read back \
+             before anything is written, so a project this refuses is left exactly as it was, and the \
+             old files are moved to .dark_factory/migrated-ron/ rather than deleted."
+        );
+        return AppExit::error();
+    };
+    // **An unknown flag is refused, never dropped.** This command moves a person's files: a run that
+    // silently ignored `--dry-run` would do exactly the thing the flag was written to prevent.
+    if let Some(flag) = argv.iter().skip(1).find(|a| a.starts_with('-')) {
+        eprintln!("{program} migrate: `{flag}` is not a flag this command takes. usage: {command}");
+        return AppExit::error();
+    }
+    let root = std::path::Path::new(root);
+    match bevy_grimoire_migrate::migrate_as(root, &command) {
+        Ok(report) => {
+            let lines = report.lines();
+            if lines.is_empty() {
+                println!("nothing to migrate: this project holds no `.ron` project file, and no `data.yaml` names one");
+            }
+            for line in lines {
+                println!("{line}");
+            }
+            AppExit::Success
+        }
+        Err(problem) => {
+            eprintln!("{}", problem.line());
+            AppExit::error()
+        }
+    }
+}

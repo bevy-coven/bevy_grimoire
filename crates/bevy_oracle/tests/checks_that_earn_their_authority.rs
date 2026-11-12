@@ -142,7 +142,7 @@ fn a_check_whose_capture_is_missing_is_an_error_and_never_a_failure() {
 
 /// **The committed clip set reads, has both labels, and names every image it needs.**
 ///
-/// The set is data (`fixtures/clip_samples.ron`), so the things that can be wrong with it are the things a
+/// The set is data (`fixtures/clip_samples.yaml`), so the things that can be wrong with it are the things a
 /// file can do: not parse, be one-sided, or point at images that are not there. The first two are refused by
 /// the loader; the third is checked here against the manifest's own directory, which is the one thing a
 /// test can verify without the clip images (they are extracted on demand, not committed).

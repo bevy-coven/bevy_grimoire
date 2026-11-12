@@ -33,7 +33,7 @@ fn a_recent_project_is_opened_by_clicking_its_name() {
 
     let root = fixtures::Fixture::new(&format!("click_by_label_{}", std::process::id())).descriptor("site/wall", "alpha").build("m");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
-    let file = dir.join("recent.ron");
+    let file = dir.join("recent.yaml");
     for p in [&alpha, &beta] {
         recent::record(&file, p).unwrap();
     }

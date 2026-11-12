@@ -1,7 +1,7 @@
 //! **Each enabled family crate's own settings, edited by gooey's reflect inspector** (UI-57, #243).
 //!
-//! The project's `family.ron` lists the family crates it uses, and each one's settings are its own serde
-//! type written as RON in `<project>/family/<crate>.ron` — the file `family_set` writes and a running
+//! The project's `family.yaml` lists the family crates it uses, and each one's settings are its own serde
+//! type written as RON in `<project>/family/<crate>.yaml` — the file `family_set` writes and a running
 //! game's copy of the plugin reads. #96 put one typed line in the Inspector (`bevy_elements sun.hour 6.5`)
 //! and an agent could `family_set` a field; what was missing is what a person reaches for: the fields
 //! themselves, drawn from the crate's type and edited in place.
@@ -49,10 +49,10 @@ const SETTLE_FRAMES: usize = 6;
 const SKIN_CRATE: &str = "bevy_gooey";
 
 /// A partial skin file, which the crate's `#[serde(default)]` reads: the default skin with one field.
-const SKIN_BLUE: &str = "(accent: Srgba((red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0)))";
+const SKIN_BLUE: &str = "{accent: !Srgba {red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0}}";
 
 /// The same skin with the accent moved, for the block to follow.
-const SKIN_VERMILION: &str = "(accent: Srgba((red: 0.9, green: 0.3, blue: 0.2, alpha: 1.0)))";
+const SKIN_VERMILION: &str = "{accent: !Srgba {red: 0.9, green: 0.3, blue: 0.2, alpha: 1.0}}";
 
 /// **A project that uses `bevy_elements`**, with the settings an author's project carries, and the editor
 /// running `bevy_elements`' own plugins so the preview's sky is the crate's sky (what `main.rs` adds).
@@ -61,11 +61,11 @@ fn editor(tag: &str, hour: f64) -> (App, std::path::PathBuf) {
         .descriptor("site/wall", "alpha")
         .build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_elements\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "version: 1\ncrates: [bevy_elements]\n").unwrap();
     let mut settings = bevy_cauldron::environment::ElementsSettings::defaults();
     settings.clock.hour = hour;
-    let file = root.join("family/bevy_elements.ron");
-    std::fs::write(&file, settings.to_ron()).unwrap();
+    let file = root.join("family/bevy_elements.yaml");
+    std::fs::write(&file, settings.to_yaml()).unwrap();
 
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     // The preview's sky, without a window: `bevy_elements`' celestial plugin keeps `SunState` from the
@@ -83,9 +83,9 @@ fn editor_with_a_file_block(tag: &str) -> (App, std::path::PathBuf) {
         .descriptor("site/wall", "alpha")
         .build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), format!("(version: 1, crates: [\"bevy_elements\", \"{SKIN_CRATE}\"])")).unwrap();
-    std::fs::write(root.join("family/bevy_elements.ron"), bevy_cauldron::environment::ElementsSettings::defaults().to_ron()).unwrap();
-    let skin = root.join(format!("family/{SKIN_CRATE}.ron"));
+    std::fs::write(root.join("family.yaml"), format!("version: 1\ncrates: [bevy_elements, {SKIN_CRATE}]\n")).unwrap();
+    std::fs::write(root.join("family/bevy_elements.yaml"), bevy_cauldron::environment::ElementsSettings::defaults().to_yaml()).unwrap();
+    let skin = root.join(format!("family/{SKIN_CRATE}.yaml"));
     std::fs::write(&skin, SKIN_BLUE).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.add_plugins(bevy_elements::ElementsPlugins);
@@ -162,7 +162,7 @@ fn a_listed_crate_gets_a_panel_of_its_own_settings() {
     let panel = app.world().resource::<FamilyPanel>().clone();
     assert!(
         panel.crates().any(|c| c == "bevy_elements"),
-        "`family.ron` lists bevy_elements, so the panel must offer it: {:?}",
+        "`family.yaml` lists bevy_elements, so the panel must offer it: {:?}",
         panel.crates().collect::<Vec<_>>()
     );
     assert!(panel.has_fields("bevy_elements"), "this build holds the crate's settings type, so it draws its fields");
@@ -238,8 +238,8 @@ fn the_hour_a_person_set_stays_set_after_the_panel_settles() {
 
 /// **A settled panel reads nothing.**
 ///
-/// The panel is derived from `family.ron`, `FamilySettings`, the preview's held hour and the project
-/// root; a frame in which none of them moved must not load `family.ron`, read a settings file or parse
+/// The panel is derived from `family.yaml`, `FamilySettings`, the preview's held hour and the project
+/// root; a frame in which none of them moved must not load `family.yaml`, read a settings file or parse
 /// RON. The first cut did all three sixty times a second on a panel that was not looking at anything new.
 #[test]
 fn a_settled_panel_reads_its_files_once_and_then_not_again() {
@@ -254,14 +254,14 @@ fn a_settled_panel_reads_its_files_once_and_then_not_again() {
     assert_eq!(
         app.world().resource::<FamilyPanel>().reads(),
         reads,
-        "twenty frames in which the project, `family.ron`, the settings text and the held hour all stayed \
+        "twenty frames in which the project, `family.yaml`, the settings text and the held hour all stayed \
          put cost the panel no read at all; {reads} reads before, {} after",
         app.world().resource::<FamilyPanel>().reads()
     );
 
     // **And it reads again the moment an input moves**, or the gate above would be satisfied by a panel
     // that never reads at all.
-    app.world_mut().resource_mut::<FamilySettings>().text.insert("bevy_elements".to_owned(), bevy_cauldron::environment::ElementsSettings::defaults().to_ron());
+    app.world_mut().resource_mut::<FamilySettings>().text.insert("bevy_elements".to_owned(), bevy_cauldron::environment::ElementsSettings::defaults().to_yaml());
     app.update();
     assert!(
         app.world().resource::<FamilyPanel>().reads() > reads,
@@ -353,8 +353,8 @@ fn a_crate_this_build_does_not_have_gets_no_panel() {
         .descriptor("site/wall", "alpha")
         .build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_carnage\"])").unwrap();
-    std::fs::write(root.join("family/bevy_carnage.ron"), "(hitstop_seconds: 0.05)").unwrap();
+    std::fs::write(root.join("family.yaml"), "version: 1\ncrates: [bevy_carnage]\n").unwrap();
+    std::fs::write(root.join("family/bevy_carnage.yaml"), "{hitstop_seconds: 0.05}").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     settle(&mut app);
     let built = bevy_cauldron::family_host::built();

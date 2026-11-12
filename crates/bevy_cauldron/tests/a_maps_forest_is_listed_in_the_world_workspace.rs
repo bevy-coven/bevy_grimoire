@@ -2,10 +2,12 @@
 //!
 //! `docs/ui/navigation.md` measured the World workspace as one chord away and drawing no forest: forest is the `forest_scatter`
 //! operation, written through the terrain line, and nothing showed what a map had planted. The World workspace now has a FOREST section
-//! that reads `<grimoire>/forest/<map>.ron`, the file the operation writes: how many trees, and how many of each species. It lists; it
+//! that reads `<grimoire>/forest/<map>.yaml`, the file the operation writes: how many trees, and how many of each species. It lists; it
 //! does not plant (the terrain line does, and says how under the heading).
 //!
 //! The editor is driven as a person drives it: the workspace's command, then a read of what is on screen.
+//!
+//! Owner exception (2026-11-12): a_maps_forest_is_listed_in_the_world_workspace.rs: main's new test wrote .ron input; converted to the YAML spelling.
 
 use bevy::prelude::*;
 use bevy::ui::{ComputedNode, ScrollPosition, UiGlobalTransform};
@@ -21,17 +23,42 @@ use crate::fixtures;
 const SETTLE_FRAMES: usize = 60;
 
 /// A forest of two oaks and a pine, in the file the operation writes.
-const FOREST: &str = "(version: 1, trees: [\
-    (id: 0, species: \"oak\", at: (3.0, 4.0), ground_m: 0.0, yaw: 0.0, scale: 1.0, variant: 0), \
-    (id: 1, species: \"oak\", at: (5.0, 4.0), ground_m: 0.0, yaw: 0.0, scale: 1.0, variant: 1), \
-    (id: 2, species: \"pine\", at: (7.0, 4.0), ground_m: 0.0, yaw: 0.0, scale: 1.0, variant: 0)])";
+///
+/// **YAML, as `world_lists.rs` reads it** (GD-03, #365): this fixture was main's `(version: 1, trees: [..])`, and no reader in this
+/// build parses RON any more.
+///
+const FOREST: &str = "\
+version: 1
+trees:
+- id: 0
+  species: oak
+  at: [3.0, 4.0]
+  ground_m: 0.0
+  yaw: 0.0
+  scale: 1.0
+  variant: 0
+- id: 1
+  species: oak
+  at: [5.0, 4.0]
+  ground_m: 0.0
+  yaw: 0.0
+  scale: 1.0
+  variant: 1
+- id: 2
+  species: pine
+  at: [7.0, 4.0]
+  ground_m: 0.0
+  yaw: 0.0
+  scale: 1.0
+  variant: 0
+";
 
 fn editor(tag: &str, forest: Option<&str>) -> App {
     let root = fixtures::Fixture::new(&format!("forest_list_{tag}_{}", std::process::id())).descriptor("stool", "alpha").place("stool", (0.0, 0.0)).build("m");
     if let Some(text) = forest {
         let dir = bevy_cauldron::project::Project::open(&root, None).unwrap_or_else(|e| panic!("{e}")).grimoire_dir.join("forest");
         std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("{dir:?}: {e}"));
-        std::fs::write(dir.join("m.ron"), text).unwrap_or_else(|e| panic!("forest: {e}"));
+        std::fs::write(dir.join("m.yaml"), text).unwrap_or_else(|e| panic!("forest: {e}"));
     }
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     settle(&mut app);
@@ -116,9 +143,9 @@ fn a_map_with_no_forest_says_so() {
 
 #[test]
 fn a_forest_file_that_does_not_read_is_said_not_shown_as_empty() {
-    let mut app = editor("broken", Some("(version: 1, trees: [(id: "));
+    let mut app = editor("broken", Some("version: 1\ntrees:\n- id: [\n"));
     press_the_world_chord(&mut app);
     let world = app.world_mut();
-    let said: Vec<String> = world.query::<&Text>().iter(world).map(|t| t.0.clone()).filter(|t| t.contains("forest/m.ron does not read")).collect();
+    let said: Vec<String> = world.query::<&Text>().iter(world).map(|t| t.0.clone()).filter(|t| t.contains("forest/m.yaml did not read")).collect();
     assert_eq!(said.len(), 1, "a forest file that does not parse is not named under FOREST");
 }

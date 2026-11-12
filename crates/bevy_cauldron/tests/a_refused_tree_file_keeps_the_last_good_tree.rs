@@ -1,7 +1,7 @@
 //! **A tree file that is refused keeps the trees drawn from its last good value, and the editor says
 //! which file and field** (#200, H3).
 //!
-//! A `.tree.ron` is a species: every tree of it, placed or pooled, is drawn from it, and the view
+//! A `.tree.yaml` is a species: every tree of it, placed or pooled, is drawn from it, and the view
 //! regrows them when its modification time moves. A bad edit (a hand edit, a truncated write, an
 //! agent's mistake) used to make the species unknown, so every tree of it vanished from the viewport
 //! until the file was fixed. Now each edit is one verdict in `grimoire_state.reloads`: `applied`, or
@@ -23,18 +23,18 @@ mod with_flora {
 
     use crate::fixtures;
 
-    const SPECIES: &str = "trees/old.tree.ron";
+    const SPECIES: &str = "trees/old.tree.yaml";
 
     /// A tree file that reads (every field it leaves out takes its default).
-    const GOOD: &str = "(undergrowth: true)";
-    const FIXED: &str = "(undergrowth: false)";
+    const GOOD: &str = "{undergrowth: true}";
+    const FIXED: &str = "{undergrowth: false}";
 
     /// The three ways to break it, and the field the verdict must name (`None`: the file is cut off
     /// before any field is known).
     const BAD: [(&str, &str, Option<&str>); 3] = [
-        ("corrupt", "(undergrowth: true", None),
-        ("wrong type", "(undergrowth: \"yes\")", Some("undergrowth")),
-        ("unknown field", "(undergrow: true)", Some("undergrow")),
+        ("corrupt", "{undergrowth: true", None),
+        ("wrong type", "{undergrowth: \"yes\"}", Some("undergrowth")),
+        ("unknown field", "{undergrow: true}", Some("undergrow")),
     ];
 
     fn reloads(app: &App) -> Value {

@@ -3,7 +3,7 @@
 //! A game that reloads its grimoire project when the editor writes it either takes the new map or
 //! refuses it (a descriptor id that does not resolve, a plan that cannot be built). Without a trace
 //! the editor, and an agent driving it, keeps editing a map the game stopped following. The game
-//! writes a [`Verdict`] to `<grimoire_dir>/.live/game.ron`; the dot-directory is skipped by
+//! writes a [`Verdict`] to `<grimoire_dir>/.live/game.yaml`; the dot-directory is skipped by
 //! [`super::FileWatch`], so this write never triggers a reload.
 
 use std::path::{Path, PathBuf};
@@ -11,7 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use crate::ron_surgery::save_atomic;
+
 
 /// The schema this build reads and writes. Version 2 adds [`Verdict::seq`] and [`Verdict::kinds`]; a
 /// version 1 file reads with both empty.
@@ -78,7 +78,7 @@ impl KindVerdict {
         KindVerdict { kind: kind.into(), file: file.into(), outcome: Outcome::NeedsRestart, field: None, reason: reason.into() }
     }
 
-    /// `maps/yard.map.ron (placements[3].yaw): 1:47: Expected float`, for the journal.
+    /// `maps/yard.map.yaml (placements[3].yaw): did not read — ...`, for the journal.
     pub fn sentence(&self) -> String {
         match &self.field {
             Some(field) => format!("{} ({field}): {}", self.file, self.reason),
@@ -136,16 +136,15 @@ impl Verdict {
         Verdict { seq, kinds, ..Verdict::now(ok, message) }
     }
 
-    /// `<grimoire_dir>/.live/game.ron`.
+    /// `<grimoire_dir>/.live/game.yaml`.
     pub fn path(grimoire_dir: &Path) -> PathBuf {
-        grimoire_dir.join(".live").join("game.ron")
+        grimoire_dir.join(".live").join("game.yaml")
     }
 
     /// Writes the verdict atomically, creating `.live/`.
     pub fn write(&self, grimoire_dir: &Path) -> Result<(), String> {
-        let text = ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())
-            .map_err(|e| format!("live verdict: {e}"))?;
-        save_atomic(&Self::path(grimoire_dir), &text)
+        let text = crate::yaml::to_string(self).map_err(|p| format!("live verdict: {}", p.line()))?;
+        crate::yaml::save(&Self::path(grimoire_dir), &text)
     }
 
     /// An absent file is `Ok(None)`; a file that does not parse, or comes from a newer version,
@@ -157,8 +156,8 @@ impl Verdict {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(e) => return Err(format!("{}: {e}", path.display())),
         };
-        let v: Verdict =
-            ron::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+        let v: Verdict = crate::yaml::from_str(&text, &path.display().to_string())
+            .map_err(|p| format!("{}: {}", path.display(), p.line()))?;
         if v.version > VERDICT_VERSION {
             return Err(format!(
                 "{}: version {} but this build reads {VERDICT_VERSION} - refusing a verdict \

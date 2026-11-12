@@ -1,6 +1,6 @@
 //! **A game's tuning files, as one registered operation** (#86): `data_set`.
 //!
-//! The files are the ones `<grimoire_dir>/data.ron` registers (`bevy_grimoire_core::data_files`). The
+//! The files are the ones `<grimoire_dir>/data.yaml` registers (`bevy_grimoire_core::data_files`). The
 //! operation sets one scalar leaf and writes at once: data files have no dirty state. Its inverse is
 //! this operation with the old value and the old token's exact text (`restore`, which only an undo may
 //! send), so one undo leaves the file byte-identical even where `1.50` was rewritten as `1.5`.
@@ -14,7 +14,7 @@ use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, shown_file};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
-    /// The registry id of the file, as listed in `data.ron`.
+    /// The registry id of the file, as listed in `data.yaml`.
     pub file: String,
     /// Dotted leaf path inside the file.
     pub path: String,
@@ -32,7 +32,7 @@ impl Params {
             "additionalProperties": false,
             "required": ["file", "path", "value"],
             "properties": {
-                "file": {"type": "string", "description": "The registry id of the data file, as listed in data.ron (grimoire_state project.data_files)."},
+                "file": {"type": "string", "description": "The registry id of the data file, as listed in data.yaml (grimoire_state project.data_files)."},
                 "path": {"type": "string", "description": "Dotted path of one scalar leaf, e.g. mob.speed or rooms[2].weight."},
                 "value": {"description": "The new scalar as JSON: a number, string or bool of the kind the leaf already holds."}
             }
@@ -52,7 +52,7 @@ fn registry(ctx: &Ctx) -> Result<DataFiles, Refusal> {
     };
     let dir = &project.grimoire_dir;
     DataFiles::load(dir).map_err(Refusal::new)?.ok_or_else(|| {
-        Refusal::new(format!("{} has no data.ron, so no data file is registered. Nothing was changed.", dir.display()))
+        Refusal::new(format!("{} has no data.yaml, so no data file is registered. Nothing was changed.", dir.display()))
     })
 }
 
@@ -163,7 +163,7 @@ pub struct LeafRow {
     pub value: String,
 }
 
-/// **Every leaf of every registered file**, in registry then file order. No `data.ron` is an empty
+/// **Every leaf of every registered file**, in registry then file order. No `data.yaml` is an empty
 /// list; a file that cannot be read or parsed contributes no rows (`data_set` names why on use).
 pub fn listing(grimoire_dir: &std::path::Path) -> Vec<LeafRow> {
     let Ok(Some(reg)) = DataFiles::load(grimoire_dir) else {

@@ -66,13 +66,13 @@
     },
     {
       "at": 7.0,
-      "caption": "person's editor.ron moves Redo to Ctrl+Alt+J"
+      "caption": "person's editor.yaml moves Redo to Ctrl+Alt+J"
     },
     {
       "at": 7.1,
       "write": {
-        "path": "assets/grimoire/editor.ron",
-        "text": "(version:1,keymap:{\"edit.redo\":(modifiers:(ctrl:true,shift:false,alt:true,meta:false),key:KeyJ)})"
+        "path": "assets/grimoire/editor.yaml",
+        "text": "version: 1\nkeymap:\n  edit.redo:\n    modifiers:\n      ctrl: true\n      shift: false\n      alt: true\n      meta: false\n    key: KeyJ\n"
       }
     },
     {

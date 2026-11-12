@@ -1,6 +1,6 @@
 //! **The per-user folders the editor keeps its own files in, defined once** (#306).
 //!
-//! The editor (`recent.ron`, `trusted.ron`, `settings.ron`, `cauldron.log`) and its MCP server (which reads
+//! The editor (`recent.yaml`, `trusted.yaml`, `settings.yaml`, `cauldron.log`) and its MCP server (which reads
 //! the log and writes captures when no project is named) must agree on these paths, so they are named here
 //! and nowhere else. None of them is inside a project: a project is a folder a person owns and shares.
 //!

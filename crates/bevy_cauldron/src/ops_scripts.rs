@@ -3,7 +3,7 @@
 //! A trigger is `bevy_society`'s own: an event it listens to (`on`, the crate's `TriggerOn` in RON), an
 //! optional Rhai `if`, and Rhai `then`, written against the crate's `ctx` reader and `fx` writer. The editor
 //! adds no scripting language. What it adds is where the trigger is kept and who it is for: the file is
-//! `<grimoire_dir>/scripts/<map>.ron`, beside the map and the people, and a trigger may be **bound** to named
+//! `<grimoire_dir>/scripts/<map>.yaml`, beside the map and the people, and a trigger may be **bound** to named
 //! people, to a faction, or to an area of the map. A binding is folded into the Rhai condition when the
 //! trigger is compiled (`ctx.name(actor)` and `ctx.member(actor, ..)`), so the crate sees nothing but
 //! its own trigger type.
@@ -71,7 +71,7 @@ fn is_default_bind(b: &Bind) -> bool {
 /// The format version of a triggers file (#202). A file with no `version` is the first.
 pub const SCRIPTS_VERSION: u32 = 1;
 
-/// A map's triggers: `<grimoire_dir>/scripts/<map>.ron`.
+/// A map's triggers: `<grimoire_dir>/scripts/<map>.yaml`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scripts {
@@ -125,7 +125,7 @@ pub(crate) fn path_of(project: &crate::project::Project, map: &str) -> Result<st
     if map.is_empty() || map.contains(['/', '\\', '.']) {
         return Err(Refusal::new(format!("`{map}` is not a map name. Nothing was written.")));
     }
-    Ok(project.grimoire_dir.join("scripts").join(format!("{map}.ron")))
+    Ok(project.grimoire_dir.join("scripts").join(format!("{map}.yaml")))
 }
 
 /// **The saved triggers of a map**, none when there is no file.
@@ -133,7 +133,7 @@ pub fn scripts_of(project: &crate::project::Project, map: &str) -> Scripts {
     path_of(project, map)
         .ok()
         .and_then(|p| std::fs::read_to_string(p).ok())
-        .and_then(|t| ron::from_str(&t).ok())
+        .and_then(|t| bevy_grimoire_core::yaml::from_str(&t, "scripts").ok())
         .unwrap_or_default()
 }
 
@@ -205,8 +205,8 @@ pub const FIRED: &str = "grimoire_fired";
 
 #[cfg(feature = "bevy_society")]
 fn def_of(t: &Trigger, people: &People, watch: bool) -> Result<bevy_society::TriggerDef, Refusal> {
-    let on: bevy_society::TriggerOn = ron::from_str(&t.on).map_err(|e| {
-        Refusal::new(format!("trigger `{}`: `on` is not a bevy_society event ({e}). Write it as RON, for example `Activity(\"work\")`. Nothing was saved.", t.id))
+    let on: bevy_society::TriggerOn = bevy_grimoire_core::yaml::from_str(&t.on, "on").map_err(|p| {
+        Refusal::new(format!("trigger `{}`: `on` is not a bevy_society event ({}). Write it as YAML, for example `!Activity work`. Nothing was saved.", t.id, p.line()))
     })?;
     let then = if watch {
         format!("fx.emit({}, #{{trigger: {}}});\n{}", serde_json::to_string(FIRED).expect("str"), serde_json::to_string(&t.id).expect("str"), t.then)
@@ -227,7 +227,7 @@ fn def_of(t: &Trigger, people: &People, watch: bool) -> Result<bevy_society::Tri
 #[cfg(feature = "bevy_society")]
 fn base_file(ctx: &Ctx) -> Result<bevy_society::DefsFile, Refusal> {
     match crate::ops_family::settings_path(ctx, "bevy_society").ok().and_then(|f| std::fs::read_to_string(f).ok()) {
-        Some(text) => bevy_society::DefsFile::from_ron(&text).map_err(|e| Refusal::new(format!("the society definitions do not parse: {e}"))),
+        Some(text) => bevy_grimoire_core::yaml::from_str(&text, "family/bevy_society.yaml").map_err(|p| Refusal::new(format!("the society definitions do not parse: {}", p.line()))),
         None => bevy_society::DefsFile::starter().map_err(|e| Refusal::new(format!("the starter pack does not parse: {e}"))),
     }
 }
@@ -349,10 +349,7 @@ impl TriggerSet {
             let text = if scripts.triggers.is_empty() {
                 None
             } else {
-                Some(
-                    ron::ser::to_string_pretty(&scripts, ron::ser::PrettyConfig::default())
-                        .map_err(|e| Refusal::new(format!("the triggers could not be written: {e}")))?,
-                )
+                Some(bevy_grimoire_core::yaml::to_string(&scripts).map_err(|p| Refusal::new(format!("the triggers could not be written: {}", p.line())))?)
             };
             (text, summary)
         };
@@ -400,7 +397,7 @@ impl Operation for TriggerSet {
     fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
         // **The file the write goes to**, named by [`path_of`] itself, so the answer and the write
         // cannot name two places: the triggers live in the authoring kit's own folder,
-        // `<grimoire_dir>/scripts/<map>.ron`, and not beside `assets/grimoire` where nothing is
+        // `<grimoire_dir>/scripts/<map>.yaml`, and not beside `assets/grimoire` where nothing is
         // written.
         match params.get("map").and_then(serde_json::Value::as_str) {
             Some(map) => shown_scripts(ctx, map),

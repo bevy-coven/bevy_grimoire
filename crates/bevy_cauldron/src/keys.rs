@@ -202,7 +202,7 @@ pub enum Stance {
     /// An author finished four and could not see the kit, could not reopen one to correct it, and had
     /// no way to notice they had built the same thing twice. The one that was wrong — a low wall
     /// sitting in the middle of its floor instead of flush — was only fixable by editing
-    /// `compositions.ron` by hand.
+    /// `compositions.yaml` by hand.
     ///
     /// It is a stance rather than a flag for the same reason `Proposed` is: the arrows and `Enter`
     /// mean something different while it is on, and a key list that did not say so would be lying.
@@ -755,7 +755,7 @@ enumerated! {
     /// **Add a token to the vocabulary** — the keyboard half of the tag block's `+` chip.
     ///
     /// The block draws the project's whole vocabulary and every chip was a mouse target and nothing
-    /// else, so growing the vocabulary was a hand edit to `vocab.ron` — the one file in the project
+    /// else, so growing the vocabulary was a hand edit to `vocab.yaml` — the one file in the project
     /// whose comments are content. `Shift+T` opens the prompt with the axis on `kind`, cycled
     /// left/right; the `+` chip on an axis row opens it with that axis preset. Both go through
     /// `token_prompt`, one code path.
@@ -1608,7 +1608,7 @@ pub const BINDINGS: &[Binding] = &[
     // **Undo is the MAP's.** It was `Global`, and `keys` had lost its `in_map_mode` run condition, so
     // `Cmd+Z` on the Tiles tab silently despawned a flood fill — up to ~1,400 placements — while every
     // `MapRoot` panel was `Display::None` and nothing on screen changed. An undo you cannot see the
-    // effect of is not an undo. Lattice edits go straight to `library.ron` and have no undo of their
+    // effect of is not an undo. Lattice edits go straight to `library.yaml` and have no undo of their
     // own, which is exactly why the key is reached for there.
     // **One row, two chords.** A shared `does` collapses them the way `W, A, S, D` collapses, so
     // adding redo costs no row — which matters, because the Map context has none to give.
@@ -3017,7 +3017,7 @@ pub const BINDINGS: &[Binding] = &[
         false,
         Context::Anim,
         "Enter",
-        "adopt measured values into rigs.ron",
+        "adopt measured values into rigs.yaml",
     )
     .at(Home::Control(ControlId::Detail)),
     // ── Compose ──────────────────────────────────────────────────────────────────────────────────
@@ -3571,7 +3571,7 @@ impl Badge {
 /// `ResMut<ImportState>` in one *unordered* tuple, so Bevy was free to run the text field first. It
 /// called `edit.active.take()`, the `not_typing` run condition re-evaluated to **true** in the same
 /// frame, `Enter` was still `just_pressed`, and finishing an edge token *also* imported the candidate
-/// into `assets/grimoire/library.ron`. Six descriptors arrived there that way, and
+/// into `assets/grimoire/library.yaml`. Six descriptors arrived there that way, and
 /// `docs/2026-08-04-emerge-mapper-handoff.md` blamed stray automation. The fix is [`Live`]: decided
 /// **once**, in [`Phase::Sense`], so no system can observe a keyboard that changed owner halfway
 /// through its own frame. It is what makes `Enter` safe regardless of the order below.
@@ -4726,7 +4726,7 @@ mod tests {
             // 17 -> 18: `SwitchDoor`, on the backquote. The Kit door and the Map door are one
             // application and one project, and there was no way to cross between them except the
             // menu: `Cmd+O`, walk a column, `Enter` — three keystrokes and a **full project
-            // reload** each way, re-reading `kits.ron`, `vocab.ron` and `rules.ron`, re-validating
+            // reload** each way, re-reading `kits.yaml`, `vocab.yaml` and `rules.yaml`, re-validating
             // 332 library descriptors and 16 compositions, and **re-measuring every GLB's triangle
             // count** from its JSON chunk. Nothing in any of that changes when the author walks from
             // one door to the other to look at the thing they just made.
@@ -5115,7 +5115,7 @@ mod tests {
         );
     }
 
-    /// **The bug that put six descriptors in `library.ron`.** While a field owns the keyboard, no
+    /// **The bug that put six descriptors in `library.yaml`.** While a field owns the keyboard, no
     /// census action may fire — including `Enter`, which is both "commit this token" and "add to
     /// library". Asserted over the WHOLE census rather than the one binding that hurt, because the
     /// next one to hurt will be a different row.

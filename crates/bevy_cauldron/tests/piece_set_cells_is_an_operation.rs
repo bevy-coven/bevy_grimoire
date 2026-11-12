@@ -231,7 +231,7 @@ fn undo_chord(app: &mut App, redo: bool) {
 
 /// **A person's cell key on a library piece is one `piece_set_cells` line stamped as a person's, it edits
 /// the selected cell and no other, Cmd+Z takes it back and Cmd+Shift+Z does it again.** Before slice 10
-/// the key wrote `library.ron` itself and logged nothing.
+/// the key wrote `library.yaml` itself and logged nothing.
 #[test]
 fn a_persons_cell_key_edits_through_the_operation_and_cmd_z_and_redo_follow_it() {
     let mut app = editor("piece-cells-person");

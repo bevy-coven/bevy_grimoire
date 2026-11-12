@@ -1,0 +1,43 @@
+version: 1
+checks:
+- name: floating
+  question: Is any piece in the close-up floating above the ground, with empty space between it and whatever should support it?
+  images:
+  - closeup
+  facts: true
+  threshold: 0.7
+  after_edit: true
+  calibration: null
+- name: clipping
+  question: Does any piece in the close-up pass through another piece, so that part of one is hidden inside the other?
+  images:
+  - closeup
+  facts: true
+  threshold: 0.7
+  after_edit: true
+  calibration: null
+- name: out_of_area
+  question: Compared with the before image, did anything change outside the area the facts say was selected?
+  images:
+  - before
+  - after
+  facts: true
+  threshold: 0.7
+  after_edit: true
+  calibration: null
+- name: blank_frame
+  question: 'Is the image blank: a single flat colour, all black, or magenta, with no scene in it?'
+  images:
+  - view
+  facts: false
+  threshold: 0.7
+  after_edit: false
+  calibration: null
+- name: toast_visible
+  question: Is a toast or problem message visible on the screen?
+  images:
+  - view
+  facts: false
+  threshold: 0.7
+  after_edit: true
+  calibration: null

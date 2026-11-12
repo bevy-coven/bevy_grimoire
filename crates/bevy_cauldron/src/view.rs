@@ -996,7 +996,7 @@ mod tests {
                     bounds,
                     ..bevy_grimoire_core::map::Map::default()
                 },
-                std::path::PathBuf::from("m.map.ron"),
+                std::path::PathBuf::from("m.map.yaml"),
             )
         };
         assert_eq!(max_zoom(None, 1.0), MAX_ZOOM);

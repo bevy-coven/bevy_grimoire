@@ -2,7 +2,7 @@
 //!
 //! A map carries a name, and that name becomes a file on disk, a key in a manifest, and something a
 //! person types into a terminal. Those have different tolerances: a filesystem will happily accept
-//! `My Map (final) v2.ron`, a shell will not without quoting, and two of them differing only by case
+//! `My Map (final) v2.yaml`, a shell will not without quoting, and two of them differing only by case
 //! are the same file on one platform and two on another.
 //!
 //! So there is one spelling and it is **snake_case**: lowercase ASCII letters, digits, and single
@@ -74,7 +74,7 @@ pub fn to_snake_case(s: &str) -> String {
 
 /// The file a named map is written to.
 pub fn map_file_name(name: &str) -> String {
-    format!("{name}.map.ron")
+    format!("{name}.map.yaml")
 }
 
 /// **The words a person reads for an id**: its last `/` segment, underscores as spaces, the first
@@ -174,7 +174,7 @@ mod tests {
 
     #[test]
     fn the_file_name_is_derived_from_the_name() {
-        assert_eq!(map_file_name("site_67"), "site_67.map.ron");
+        assert_eq!(map_file_name("site_67"), "site_67.map.yaml");
     }
 }
 

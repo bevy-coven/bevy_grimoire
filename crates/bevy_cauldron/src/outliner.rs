@@ -17,8 +17,8 @@
 //!   search leaves it in view.
 //!
 //! - **The map's other contents are four groups of their own** below the pieces': its stamps
-//!   (`compositions`), its people (`people/<map>.ron`), its triggers (`scripts/<map>.ron`) and its notes
-//!   (`.notes.ron`). A row in one of them names the thing and nothing else: it is not a placement, so
+//!   (`compositions`), its people (`people/<map>.yaml`), its triggers (`scripts/<map>.yaml`) and its notes
+//!   (`.notes.yaml`). A row in one of them names the thing and nothing else: it is not a placement, so
 //!   clicking it selects nothing and its menu offers no Pin and no Hide.
 //!
 //! # A row's menu
@@ -800,7 +800,7 @@ impl FileStat {
 /// because a write to either is a change the map itself cannot show.
 ///
 /// **The paths come from the operations that own them** ([`crate::ops_people::path_of`] and
-/// [`crate::ops_scripts::path_of`]), not from a second copy of `people/<map>.ron` written here: a stat of a path
+/// [`crate::ops_scripts::path_of`]), not from a second copy of `people/<map>.yaml` written here: a stat of a path
 /// nothing writes is a rebuild nothing asks for, and the two spellings would drift the first time either moved. A
 /// map name the operations refuse is no side file at all, which is the same answer as a missing one.
 fn side_files(project: &Project, map: &Map) -> Vec<FileStat> {
@@ -900,7 +900,7 @@ fn rebuild_the_tree(
     let (eyes_changed, locks_changed) = (eyes.is_changed(), locks.is_changed());
     let (eyes, locks) = (&*eyes, &*locks);
     let (Ok(mut outliner), Ok(mut table)) = (outliners.single_mut(), tables.single_mut()) else { return };
-    // **Two stats, not two parses.** `people/<map>.ron` and `scripts/<map>.ron` are the two facts no resource in the
+    // **Two stats, not two parses.** `people/<map>.yaml` and `scripts/<map>.yaml` are the two facts no resource in the
     // editor can show: `person_set` writes one and a hand edit the other, and the map does not change at all. A
     // `metadata` call each is the whole cost of noticing, and they are taken **before** the gate below, because a
     // change in either is precisely a reason the gate has to open.

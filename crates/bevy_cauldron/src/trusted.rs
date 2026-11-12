@@ -1,6 +1,6 @@
 //! **The editor's half of project-command trust: the store's place, the question, and the answer.**
 //!
-//! `bevy_grimoire_core::trust` decides whether a person has allowed a project's `agent.ron` or `play.ron`
+//! `bevy_grimoire_core::trust` decides whether a person has allowed a project's `agent.yaml` or `play.yaml`
 //! command; this module is where the editor asks that person and writes down what they said. The rules
 //! are in the core module's docs. The two that shape this one:
 //!
@@ -24,7 +24,7 @@ use crate::confirm::{Asked, Choice, Confirm};
 use crate::editor::EditorState;
 
 /// **Where the person's stores live**, when the program has said. The binary names the user's data
-/// directory; a test names a scratch folder, so no test reads or writes the real `trusted.ron`.
+/// directory; a test names a scratch folder, so no test reads or writes the real `trusted.yaml`.
 ///
 /// **The override is the store's *file*, not its folder** ([`TrustState::file`]), and this is the folder a
 /// `None` override resolves to — the one fact that used to be a hard-wired call to
@@ -66,7 +66,7 @@ pub struct TrustState {
     pub file: Option<PathBuf>,
 }
 
-/// `<data_dir>/Grimoire/trusted.ron`.
+/// `<data_dir>/Grimoire/trusted.yaml`.
 pub fn store_path(over: Option<&Path>) -> Result<PathBuf, String> {
     resolve(None, over)
 }

@@ -148,6 +148,12 @@ pub fn read_document(file: &str, text: &str) -> Result<Document, Fault> {
         // `line 0` would be a path with no place to go.
         Fault { file: file.to_owned(), line: problem_line(&p), at, why: p.line() }
     })?;
+    document_of(file, &json, lines)
+}
+
+/// **A document from the value its file holds**, which is all a release has (a bake keeps no text, so no lines).
+#[allow(clippy::result_large_err)]
+pub fn document_of(file: &str, json: &Value, lines: BTreeMap<String, usize>) -> Result<Document, Fault> {
     let root = json.as_object().ok_or_else(|| Fault {
         file: file.to_owned(),
         // **The line the document itself starts on**, which its first node knows.
@@ -587,22 +593,37 @@ fn fault(file: &str, line: usize, at: String, why: String) -> Fault {
 }
 
 /// **The path of every entity file under `root`**, sorted, so a game and a test read the same set.
-pub fn files(root: &Path) -> Vec<PathBuf> {
+pub fn files(root: &Path) -> Result<Vec<PathBuf>, String> {
+    // **A release lists its files from the bake's manifest**, not from a folder it may not ship.
+    if bevy_grimoire_core::load::is_baked() {
+        // **A manifest that will not read is refused, not answered as "the game has no entity files"**: every other baked failure is
+        // loud (#370), and a silent empty set is a game that starts with nothing in it and no reason said anywhere. A refusal, not a
+        // panic: this is library code, and the caller says it.
+        let mut out = bevy_grimoire_core::load::files_of_kind(root, bevy_grimoire_core::bake::ENTITIES_KIND)
+            .map_err(|problem| format!("the bake's entity files could not be listed: {}", problem.line()))?;
+        out.sort();
+        return Ok(out);
+    }
     let dir = root.join(ENTITIES_DIR);
-    let Ok(entries) = std::fs::read_dir(&dir) else { return Vec::new() };
+    let Ok(entries) = std::fs::read_dir(&dir) else { return Ok(Vec::new()) };
     let mut out: Vec<PathBuf> = entries
         .flatten()
         .map(|e| e.path())
         .filter(|p| p.to_string_lossy().ends_with(ENTITIES_EXT))
         .collect();
     out.sort();
-    out
+    Ok(out)
 }
 
 /// **Read one entity file** into a [`Document`].
 #[allow(clippy::result_large_err)]
 pub fn load(path: &Path) -> Result<Document, Fault> {
     let file = path.display().to_string();
+    // **One load function** (`bevy_grimoire_core::load`): a release reads the baked value, a development build the YAML.
+    if bevy_grimoire_core::load::is_baked() {
+        let json = bevy_grimoire_core::load::load_value(path).map_err(|p| Fault { file: file.clone(), line: 0, at: String::new(), why: p.line() })?;
+        return document_of(&file, &json, BTreeMap::new());
+    }
     let text = std::fs::read_to_string(path).map_err(|e| Fault {
         file: file.clone(),
         line: 0,
@@ -650,8 +671,15 @@ pub struct EntityFiles(pub FileWatch);
 
 fn read_every_entity_file(mut commands: Commands, root: Option<Res<EntitiesRoot>>) {
     let Some(root) = root else { return };
-    for path in files(&root.0) {
-        commands.queue(ReadFile { path });
+    // **A manifest that will not read is said once, out loud**, rather than read as no entity files: the game then starts with the
+    // entities it has and a line naming why the rest are missing.
+    match files(&root.0) {
+        Ok(paths) => {
+            for path in paths {
+                commands.queue(ReadFile { path });
+            }
+        }
+        Err(why) => error!("{why}"),
     }
 }
 
@@ -702,8 +730,15 @@ fn read_changed_entity_files(
     if !watch.0.poll(time.elapsed_secs_f64()) {
         return;
     }
-    for path in files(&root.0) {
-        commands.queue(ReadFile { path });
+    // **A manifest that will not read is said once, out loud**, rather than read as no entity files: the game then starts with the
+    // entities it has and a line naming why the rest are missing.
+    match files(&root.0) {
+        Ok(paths) => {
+            for path in paths {
+                commands.queue(ReadFile { path });
+            }
+        }
+        Err(why) => error!("{why}"),
     }
     // **A deleted file's entities are despawned**, which is what deleting it means: the file set is the
     // authority, so anything tracked for a file that is no longer there goes.
@@ -719,8 +754,10 @@ impl Command for ForgetMissingFiles {
     type Out = ();
 
     fn apply(self, world: &mut World) -> Self::Out {
-        let present: std::collections::BTreeSet<String> =
-            files(&self.root).iter().map(|path| path.display().to_string()).collect();
+        // A listing that will not read forgets nothing: despawning every entity because the bake could not be listed would empty a
+        // running game over a manifest.
+        let Ok(listed) = files(&self.root) else { return };
+        let present: std::collections::BTreeSet<String> = listed.iter().map(|path| path.display().to_string()).collect();
         let gone: Vec<String> = world
             .get_resource::<GameEntities>()
             .map(|held| held.spawned.keys().filter(|key| !present.contains(*key)).cloned().collect())

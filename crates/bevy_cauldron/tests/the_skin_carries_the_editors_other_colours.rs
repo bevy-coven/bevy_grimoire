@@ -2,7 +2,7 @@
 //!
 //! `chrome::Ink` has twelve fields that are not a field of `GooeySkin` — `key`, `label`, `muted`,
 //! `suggest`, `labeled`, `grid_line`, `bounds_line`, `veil`, `focus_bg`, `row_pressed`, `snip_wash`,
-//! `overlay_bg` — so they live in the skin's `tones` map (`src/editor_skin.ron`), where a project's
+//! `overlay_bg` — so they live in the skin's `tones` map (`src/editor_skin.yaml`), where a project's
 //! file can change them and `GooeySkin::tone_problems` can check the text pairs among them.
 //!
 //! **Pinned to literal values, not to `chrome::ink()`** (review, 2026-11-10): `Ink::of` reads a skin's

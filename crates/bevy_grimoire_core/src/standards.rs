@@ -4,7 +4,7 @@
 //! integer multiple of (so sub-kits snap together), a door opening the character fits through, a
 //! storey height. Until this existed nothing here stated them, so a 3.1 m wall in a 2 m module or a
 //! 0.6 m door was found by placing it. This module keeps them as data, the project's [`FILE`] beside
-//! `kits.ron`, and [`check`] names every piece in a library that breaks one, with what it measured.
+//! `kits.yaml`, and [`check`] names every piece in a library that breaks one, with what it measured.
 //!
 //! A [`Rule`] covers the pieces whose `kind` holds its token, or every piece when it names none, and
 //! bounds one [`Dim`]: width and depth are [`crate::descriptor::placed_footprint`] (before yaw),
@@ -25,8 +25,8 @@ use crate::library::Library;
 /// The format version of a standards file.
 pub const STANDARDS_VERSION: u32 = 1;
 
-/// A project's standards live in this file, in the same directory as its `kits.ron`.
-pub const FILE: &str = "standards.ron";
+/// A project's standards live in this file, in the same directory as its `kits.yaml`.
+pub const FILE: &str = "standards.yaml";
 
 /// How far, in metres, a dimension may sit off a multiple of the module and still be on it. Exported
 /// meshes are rarely exact; a centimetre is below anything a player sees as a gap.
@@ -55,7 +55,8 @@ impl Standards {
     /// never hold or says nothing: no bound, a bound that is negative or not finite, a module of
     /// zero or less, or a `min` above its `max`.
     pub fn parse(text: &str) -> Result<Standards, String> {
-        let s: Standards = ron::from_str(text).map_err(|e| format!("standards: parse: {e}"))?;
+        let s: Standards =
+            crate::yaml::from_str(text, FILE).map_err(|p| format!("standards: parse: {}", p.line()))?;
         if s.version != STANDARDS_VERSION {
             return Err(format!(
                 "standards: version {} is not the {STANDARDS_VERSION} this build reads",
@@ -70,9 +71,8 @@ impl Standards {
     }
 
     /// The file's text, in the form [`Self::parse`] reads.
-    pub fn to_ron(&self) -> Result<String, String> {
-        ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())
-            .map_err(|e| format!("standards: write: {e}"))
+    pub fn to_yaml(&self) -> Result<String, String> {
+        crate::yaml::to_string(self).map_err(|p| format!("standards: write: {}", p.line()))
     }
 }
 

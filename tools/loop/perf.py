@@ -125,7 +125,7 @@ def poll_yaw(port, target_deg, translation=WATCHED_TRANSLATION, limit=10.0):
 
 
 def rewrite_yaw(path, new_yaw):
-    """Set the watched placement's `yaw:` to `new_yaw`, ending the replaced value at `,` or `)`.
+    """Set the watched placement's `yaw:` to `new_yaw`, ending the replaced value at `,`, `)` or the end of the line (the YAML spelling).
 
     **Both terminators.** The loop's own tool ended at `,` only, and this map closes a placement with
     `)`, so the replacement matched nothing and `file_ms` came back None for an entire iteration —
@@ -142,7 +142,7 @@ def rewrite_yaw(path, new_yaw):
         raise RuntimeError(f"no yaw: in {path}")
     value_at = start + len("yaw:")
     end = value_at
-    while end < len(text) and text[end] not in ",)":
+    while end < len(text) and text[end] not in ",)\n":
         end += 1
     original = text
     replaced = text[:value_at] + f" {new_yaw}" + text[end:]
@@ -174,7 +174,7 @@ def main():
             report["key_p95_ms"], report["key_ms_raw"] = key_ms(port)
 
             # **A file edit**, then the same value through MCP, with the original restored.
-            map_path = Path(scratch) / "assets" / "grimoire" / "maps" / f"{args.map}.map.ron"
+            map_path = Path(scratch) / "assets" / "grimoire" / "maps" / f"{args.map}.map.yaml"
             original = rewrite_yaw(map_path, 90.0)
             try:
                 report["file_ms"] = poll_yaw(port, 90.0)

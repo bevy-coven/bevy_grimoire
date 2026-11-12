@@ -1,6 +1,6 @@
 //! **`play_stop` ends the game, not only the process `play` started** (#97).
 //!
-//! A game is usually started through a launcher: `play.ron`'s own example is `cargo run -- {map}`.
+//! A game is usually started through a launcher: `play.yaml`'s own example is `cargo run -- {map}`.
 //! Killing only the launcher's pid left the game running with no parent, still answering on its
 //! port. This test's launcher is `sh -c "… & wait"`. (Correction, 2026-10-30: the orphaned
 //! `game.py` processes found on bmb were not this. `play_starts_and_stops_the_game` panicked
@@ -38,8 +38,8 @@ fn stop_ends_a_game_started_through_a_launcher() {
     std::fs::write(root.join("game.py"), GAME).unwrap();
     // A launcher that starts the game as its child and waits on it, as `cargo run` does.
     std::fs::write(
-        root.join("play.ron"),
-        format!(r#"(version: 1, command: ["sh", "-c", "{} game.py {port} & wait"], port: {port})"#, fixtures_python()),
+        root.join("play.yaml"),
+        format!("version: 1\ncommand: [\"sh\", \"-c\", \"{} game.py {port} & wait\"]\nport: {port}\n", fixtures_python()),
     )
     .unwrap();
     let trust_file = Some(fixtures::trusted_store(&root));

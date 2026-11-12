@@ -6,7 +6,7 @@
 //! to return to the default.
 //!
 //! The oracle is the person's own claim, in three parts:
-//! - **a restart keeps it**: a layout saved in the user's `settings.ron` is the one a fresh editor opens
+//! - **a restart keeps it**: a layout saved in the user's `settings.yaml` is the one a fresh editor opens
 //!   on, so an inspector moved to the other side is still there;
 //! - **Reset restores it**: Window ▸ Reset layout puts the shell back on `ui::shell_layout` and takes the
 //!   key out of the file, so a restart after a reset is the default again;
@@ -56,7 +56,7 @@ fn editor_at(tag: &str, user: PathBuf) -> App {
 
 fn rig(tag: &str) -> Rig {
     let root = fixtures::Fixture::new(&format!("layout_{tag}_{}", std::process::id())).descriptor("alpha/floor", "alpha").place("alpha/floor", (0.0, 0.0)).build("m");
-    let user = root.join(format!("user_config_{tag}_{}/settings.ron", std::process::id()));
+    let user = root.join(format!("user_config_{tag}_{}/settings.yaml", std::process::id()));
     std::fs::create_dir_all(user.parent().unwrap()).unwrap();
     let app = editor_at(tag, user.clone());
     Rig { app, user }

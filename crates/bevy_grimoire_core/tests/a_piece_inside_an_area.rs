@@ -132,7 +132,7 @@ fn solve_sets_the_table_just_inside_each_edge_it_stood_past_and_keeps_its_headin
 
 #[test]
 fn a_negative_or_unbounded_area_is_refused() {
-    let text = format!("(version: {RELATIONS_VERSION}, relations: [(of: \"table\", kind: Inside(of: \"rug\", width: -1.0, depth: 4.0))])");
+    let text = format!("version: {RELATIONS_VERSION}\nrelations:\n- of: table\n  kind: !Inside\n    of: rug\n    width: -1.0\n    depth: 4.0\n");
     let err = Relations::parse(&text).expect_err("a negative width must not read");
     assert!(err.contains("-1"), "{err}");
     assert!(Relations::parse(&text.replace("width: -1.0, depth: 4.0", "width: 2.0, depth: inf")).is_err());

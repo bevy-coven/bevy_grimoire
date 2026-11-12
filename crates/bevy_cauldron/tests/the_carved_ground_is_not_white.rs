@@ -39,8 +39,8 @@ mod drawn {
     fn bases(root: &std::path::Path, with_environment_file: bool) -> Vec<f32> {
         if with_environment_file {
             std::fs::create_dir_all(root.join("family")).unwrap();
-            std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_elements\"])").unwrap();
-            std::fs::write(root.join("family/bevy_elements.ron"), bevy_cauldron::environment::ElementsSettings::defaults().to_ron()).unwrap();
+            std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_elements\"]}").unwrap();
+            std::fs::write(root.join("family/bevy_elements.yaml"), bevy_cauldron::environment::ElementsSettings::defaults().to_yaml()).unwrap();
         }
         let mut app = bevy_cauldron::harness::build_headless(root, "m", None).unwrap_or_else(|e| panic!("{e}"));
         app.init_asset::<WeatheredMaterial>();
@@ -49,7 +49,7 @@ mod drawn {
         }
         let project = app.world().resource::<bevy_cauldron::project::Project>().clone();
         std::fs::create_dir_all(project.grimoire_dir.join("terrain")).unwrap();
-        std::fs::write(project.grimoire_dir.join("terrain/m.ron"), ron::to_string(&Heightfield::flat((0.0, 0.0), 1.0, 33, 33, 0.3)).unwrap()).unwrap();
+        std::fs::write(project.grimoire_dir.join("terrain/m.yaml"), bevy_grimoire_core::yaml::to_string(&Heightfield::flat((0.0, 0.0), 1.0, 33, 33, 0.3)).unwrap()).unwrap();
         let mut ctx = Ctx { project: Some(project), session: "test".to_owned(), ..Ctx::default() };
         let carve = json!({"map": "m", "edit": {"shape": {"Sphere": {"center": [16.0, 0.3, 16.0], "radius_m": 5.0}}, "mode": "Carve"}});
         match ops::dispatch(&mut ctx, "volume_edit", &carve).unwrap() {

@@ -1,7 +1,7 @@
 # bevy_grimoire: world-building from an authored example, as a set of crates for Bevy 0.20.
 # Extracted from foundation_vs_slop (history kept) and relicensed MIT OR Apache-2.0.
 [workspace]
-members = ["crates/*"]
+members = ["crates/*", "games/*"]
 resolver = "3"
 
 # One version per dependency, for the whole workspace. A member that needs different FEATURES

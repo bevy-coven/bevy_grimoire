@@ -1,7 +1,7 @@
 //! **The project configuration screen leaves a pack out of the kit, and brings it back, through the operation** (UI-74, #252).
 //!
 //! A switch under *Packs the kit leaves out* is `pack_set_excluded`, the operation `Shift+R` on the Meshes
-//! tab and an agent's `apply` dispatch: the kit's `project.ron` is spliced, the editor's policy holds the
+//! tab and an agent's `apply` dispatch: the kit's `project.yaml` is spliced, the editor's policy holds the
 //! change, one log line from a person names it, and a refusal is shown under the switches instead of
 //! being lost.
 
@@ -71,7 +71,7 @@ fn a_switch_leaves_a_pack_out_through_the_operation_and_the_same_switch_brings_i
     click(&mut app, aaa);
     settle(&mut app);
     assert_eq!(excluded(&app), ["aaa"], "the editor's policy holds the exclusion");
-    assert!(policy_file(&app).contains("\"aaa\""), "and project.ron does: {}", policy_file(&app));
+    assert!(policy_file(&app).contains("aaa"), "and project.yaml does: {}", policy_file(&app));
     assert!(app.world().resource::<Project>().policy.excludes("aaa/a1.glb"), "the pack's meshes are no longer offered");
     let lines = log(&app);
     assert_eq!(lines.len(), before + 1, "one switch is one log line");
@@ -81,7 +81,7 @@ fn a_switch_leaves_a_pack_out_through_the_operation_and_the_same_switch_brings_i
     click(&mut app, again);
     settle(&mut app);
     assert!(excluded(&app).is_empty(), "the same switch brings it back");
-    assert!(policy_file(&app).contains("exclude: []"), "and project.ron says so: {}", policy_file(&app));
+    assert!(policy_file(&app).contains("exclude: []"), "and project.yaml says so: {}", policy_file(&app));
     assert_eq!(log(&app).len(), before + 2);
 }
 

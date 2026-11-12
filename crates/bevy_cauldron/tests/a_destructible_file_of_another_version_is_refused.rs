@@ -1,4 +1,4 @@
-//! **A `destructible.ron` from another version is refused by both calls and is never written back as this
+//! **A `destructible.yaml` from another version is refused by both calls and is never written back as this
 //! build's** (#202, H5 step 4).
 //!
 //! `destructible_set` reads the marks, changes one piece and writes the whole file back, and
@@ -35,9 +35,9 @@ fn call(ctx: &mut Ctx, op: &str, params: serde_json::Value) -> Result<(), String
 
 #[test]
 fn a_marks_file_of_another_version_refuses_both_calls_and_stays_as_it_was() {
-    for (what, text) in [("a newer build's", "(version: 2, pieces: [\"site/other\"])"), ("version zero", "(version: 0, pieces: [\"site/other\"])")] {
+    for (what, text) in [("a newer build's", "version: 2\npieces: [site/other]\n"), ("version zero", "version: 0\npieces: [site/other]\n")] {
         let (mut ctx, root) = open(&format!("marks_version_{}", what.replace([' ', '\''], "_")));
-        let marks = root.join("destructible.ron");
+        let marks = root.join("destructible.yaml");
         std::fs::write(&marks, text).unwrap();
         let refusals = [
             call(&mut ctx, "destructible_set", json!({"piece": PIECE, "on": true})).expect_err(what),
@@ -45,10 +45,10 @@ fn a_marks_file_of_another_version_refuses_both_calls_and_stays_as_it_was() {
             call(&mut ctx, "destructible_hit", json!({"piece": PIECE, "point": [0.0, 0.25, 0.0], "radius": 0.3})).expect_err(what),
         ];
         for refusal in refusals {
-            assert!(refusal.contains("destructible.ron (version)") && refusal.contains("is not the 1 this program reads"), "{what}: {refusal}");
+            assert!(refusal.contains("destructible.yaml (version)") && refusal.contains("is not the 1 this program reads"), "{what}: {refusal}");
             assert!(refusal.contains("left as it is"), "{what}: the refusal says the file stands: {refusal}");
         }
         assert_eq!(std::fs::read(&marks).unwrap(), text.as_bytes(), "{what}: the bytes stand");
-        assert!(!root.join("destructible/site__cart.bake.ron").exists(), "{what}: nothing was baked over a marks file this build does not read");
+        assert!(!root.join("destructible/site__cart.bake.yaml").exists(), "{what}: nothing was baked over a marks file this build does not read");
     }
 }

@@ -43,17 +43,17 @@ mod society {
     #[test]
     fn a_script_with_a_syntax_error_is_refused_with_its_line_and_nothing_is_saved() {
         let (mut ctx, project) = village("trigger_syntax");
-        let bad = json!({"map": "m", "id": "oops", "on": "Activity(\"work\")", "then": "fx.bark(actor, \"hi\");\nlet x = ;"});
+        let bad = json!({"map": "m", "id": "oops", "on": "!Activity work", "then": "fx.bark(actor, \"hi\");\nlet x = ;"});
         let e = ops::dispatch(&mut ctx, "trigger_set", &bad).expect_err("a script that does not compile").0;
         assert!(e.contains("oops") && e.contains("line 2"), "the refusal names the trigger and the line: {e}");
         assert!(scripts_of(&project, "m").triggers.is_empty(), "nothing was saved");
-        assert!(!project.grimoire_dir.join("scripts").join("m.ron").exists());
+        assert!(!project.grimoire_dir.join("scripts").join("m.yaml").exists());
     }
 
     #[test]
     fn a_trigger_bound_to_an_area_fires_only_for_people_inside_it() {
         let (mut ctx, project) = village("trigger_area");
-        let all = json!({"map": "m", "id": "everyone", "on": "Activity(\"work\")", "then": "fx.bark(actor, \"on my way\");"});
+        let all = json!({"map": "m", "id": "everyone", "on": "!Activity work", "then": "fx.bark(actor, \"on my way\");"});
         let Applied::Done { .. } = ops::dispatch(&mut ctx, "trigger_set", &all).unwrap() else { panic!("refused") };
         let mut anyone: Vec<String> = fired(&mut ctx).into_iter().map(|(_, p)| p).collect();
         anyone.sort();

@@ -6,7 +6,7 @@
 //! editor's log existed the whole time — on a stderr nobody could read.
 //!
 //! So the same events go to two places: stdout as before (a terminal launch, and CI, keep reading it),
-//! and one file next to `recent.ron`, `<data_dir>/Grimoire/cauldron.log`, which any agent or person can
+//! and one file next to `recent.yaml`, `<data_dir>/Grimoire/cauldron.log`, which any agent or person can
 //! read over ssh with no display and no console app.
 //!
 //! Two things are logged that no `tracing` layer could catch, and each was the thing missing:
@@ -25,7 +25,7 @@
 //! one kept as `cauldron.log.1`. A launch cannot grow it without bound; only a run can, and
 //! `log_filter::LOG_SILENCES` is what stops the one line that did.
 //!
-//! **Where:** `bevy_grimoire_core::user_dirs::log_file()`, beside `recent.ron`, so the two are found together
+//! **Where:** `bevy_grimoire_core::user_dirs::log_file()`, beside `recent.yaml`, so the two are found together
 //! and neither is inside a project (a project is a folder a person owns and shares). The MCP server's
 //! `grimoire_read_log` reads the same path.
 

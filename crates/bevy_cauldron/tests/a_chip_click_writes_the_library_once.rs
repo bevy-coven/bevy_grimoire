@@ -1,4 +1,4 @@
-//! **One chip click writes `library.ron` once, not twice** — E-049.
+//! **One chip click writes `library.yaml` once, not twice** — E-049.
 //!
 //! # Why this file exists
 //!
@@ -69,7 +69,7 @@ fn a_chip_click_writes_the_library_once() {
     assert_eq!(
         after - before,
         1,
-        "a chip click on a library piece must write `library.ron` once, got {}",
+        "a chip click on a library piece must write `library.yaml` once, got {}",
         after - before
     );
 

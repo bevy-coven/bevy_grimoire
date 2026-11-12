@@ -1,7 +1,7 @@
 //! **Mend the open map's broken relations, as one registered operation** (#137): `relations_solve`.
 //!
-//! The relations are data beside the map (`bevy_grimoire_core::relations`, the `.relations.ron` next to
-//! the `.map.ron`), and `relations::solve` nudges the pieces of every unmet one. This runs it on the
+//! The relations are data beside the map (`bevy_grimoire_core::relations`, the `.relations.yaml` next to
+//! the `.map.yaml`), and `relations::solve` nudges the pieces of every unmet one. This runs it on the
 //! open map, writes the rows it moved, and records them as a [`RowDelta`], so one undo puts every
 //! moved row back where it was. A preview is the same solve on the same rows, with nothing written.
 
@@ -299,7 +299,7 @@ impl Operation for RelationsSolve {
     }
 }
 
-/// **Add one relation to the map's `.relations.ron`, or take one out again** (#137, the constraint
+/// **Add one relation to the map's `.relations.yaml`, or take one out again** (#137, the constraint
 /// layer's missing authoring door).
 ///
 /// The relation vocabulary has been complete for weeks — `Faces`, `Near`, `Apart`, `InFrontOf`,
@@ -405,7 +405,7 @@ pub mod relations_add {
             doc.relations.push(relation.clone());
         }
         let text = doc
-            .to_ron()
+            .to_yaml()
             .map_err(|e| Refusal::new(format!("the relations could not be written: {e}")))?;
         Ok((text, found.is_some()))
     }

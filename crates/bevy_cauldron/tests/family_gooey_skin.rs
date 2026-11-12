@@ -1,9 +1,9 @@
-//! **A project's `family/bevy_gooey.ron` is read live, and a bad one changes nothing** (#147).
+//! **A project's `family/bevy_gooey.yaml` is read live, and a bad one changes nothing** (#147).
 //!
 //! **Owner exception (2026-11-10, UI-03 #211): this file's assertions moved from the running
 //! `GooeySkin` resource to `ui_skin::GameSkin`.** Until #211, a project's skin *was* the editor's
 //! running skin; #211's What is one sentence — "Build a `Game UI preview` panel under a `SkinScope`
-//! loaded from `family/bevy_gooey.ron`. The editor chrome never takes it" — so the file now lands in
+//! loaded from `family/bevy_gooey.yaml`. The editor chrome never takes it" — so the file now lands in
 //! `GameSkin`, which the Game UI preview panel's scope reads and nothing else does. Every check this
 //! test made is still made: a partial file changes only its field; a field the file does not name is
 //! the default; an unreadable file and a file that is not RON keep the last good skin and say so; a
@@ -23,7 +23,7 @@ use bevy_gooey::GooeySkin;
 
 use crate::fixtures;
 
-const BLUE: &str = "(accent: Srgba((red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0)))";
+const BLUE: &str = "{accent: !Srgba {red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0}}";
 
 fn run_until(app: &mut App, done: impl Fn(&World) -> bool) {
     let start = std::time::Instant::now();
@@ -46,8 +46,8 @@ fn game(world: &World) -> Option<GooeySkin> {
 fn a_partial_skin_file_changes_only_its_field_and_an_unreadable_one_keeps_the_last_good_skin() {
     let root = fixtures::Fixture::new(&format!("gooey_skin_{}", std::process::id())).descriptor("site/wall", "alpha").build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_gooey\"])").unwrap();
-    let file = root.join("family/bevy_gooey.ron");
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_gooey\"]}").unwrap();
+    let file = root.join("family/bevy_gooey.yaml");
     std::fs::write(&file, BLUE).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     assert!(
@@ -70,7 +70,7 @@ fn a_partial_skin_file_changes_only_its_field_and_an_unreadable_one_keeps_the_la
 
     // Valid RON, but not a skin: a problem, and the blue skin stays.
     std::thread::sleep(std::time::Duration::from_millis(50));
-    std::fs::write(&file, "(accent: 5)").unwrap();
+    std::fs::write(&file, "{accent: 5}").unwrap();
     run_until(&mut app, |w| !problems(w).is_empty());
     let probs = problems(app.world());
     assert!(probs.iter().any(|p| p.contains("bevy_gooey") && p.contains("previous skin stays")), "{probs:?}");
@@ -78,16 +78,16 @@ fn a_partial_skin_file_changes_only_its_field_and_an_unreadable_one_keeps_the_la
 
     // Not RON at all: the host's own problem, and still the blue skin.
     std::thread::sleep(std::time::Duration::from_millis(50));
-    std::fs::write(&file, "(accent: Srgba((red: ").unwrap();
+    std::fs::write(&file, "{accent: !Srgba {red: ").unwrap();
     let before = problems(app.world()).len();
     run_until(&mut app, |w| problems(w).len() > before);
     let probs = problems(app.world());
-    assert!(probs.iter().any(|p| p.contains("bevy_gooey") && p.contains("not valid RON")), "{probs:?}");
+    assert!(probs.iter().any(|p| p.contains("bevy_gooey") && p.contains("not valid YAML")), "{probs:?}");
     assert_eq!(game(app.world()).map(|s| s.accent), Some(blue));
 
     // A skin the crate's own rules refuse is applied, and each broken rule is a problem.
     std::thread::sleep(std::time::Duration::from_millis(50));
-    std::fs::write(&file, "(min_target: 10.0)").unwrap();
+    std::fs::write(&file, "{min_target: 10.0}").unwrap();
     run_until(&mut app, |w| game(w).is_some_and(|s| s.min_target == 10.0));
     assert_eq!(game(app.world()).map(|s| s.min_target), Some(10.0));
     let probs = problems(app.world());

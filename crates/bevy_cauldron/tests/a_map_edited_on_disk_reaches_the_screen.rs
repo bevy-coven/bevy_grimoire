@@ -6,7 +6,7 @@
 //!
 //! **The file watcher read the map file and put the new map into `OpenMap`** — and the placed
 //! pieces were spawned **once, when the editor opened** (`editor.rs::spawn_existing`, on
-//! `OnEnter(Screen::Editor)`). So a person editing `town.map.ron` in a text editor got:
+//! `OnEnter(Screen::Editor)`). So a person editing `town.map.yaml` in a text editor got:
 //!
 //! - **the inspector's numbers updated** — the bounds, the placement count, the note, all read
 //!   from `OpenMap` every frame;
@@ -64,10 +64,10 @@ fn move_the_piece_on_disk(root: &std::path::Path, to: (f32, f32)) {
         .join("assets")
         .join("grimoire")
         .join("maps")
-        .join("m.map.ron");
+        .join("m.map.yaml");
     let text = std::fs::read_to_string(&path).expect("the map file is there");
     let (x, z) = to;
-    let moved = text.replace("at: (0.0, 0.0)", &format!("at: ({x}, {z})"));
+    let moved = text.replace("at:\n  - 0.0\n  - 0.0\n", &format!("at:\n  - {x:?}\n  - {z:?}\n"));
     assert_ne!(
         moved, text,
         "the piece's position is not in the file: {text}"
@@ -161,9 +161,9 @@ fn a_malformed_map_on_disk_is_refused_on_the_map_door() {
         .join("assets")
         .join("grimoire")
         .join("maps")
-        .join("m.map.ron");
+        .join("m.map.yaml");
     let text = std::fs::read_to_string(&path).expect("the map file is there");
-    let broken = text.replacen("bounds: (", "bounds: ((", 1);
+    let broken = text.replacen("bounds:\n", "bounds: [[\n", 1);
     assert_ne!(broken, text, "the map file has no bounds to break: {text}");
     std::fs::write(&path, broken).expect("the map file is written");
 
@@ -184,7 +184,7 @@ fn a_malformed_map_on_disk_is_refused_on_the_map_door() {
         }
     }
     assert!(
-        said.contains("m.map.ron"),
+        said.contains("m.map.yaml"),
         "the malformed map file was refused nowhere the Map door shows, so the author sees the old \
          map and no reason; the Map's problem slot reads {said:?}"
     );

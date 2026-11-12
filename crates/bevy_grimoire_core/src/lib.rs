@@ -32,6 +32,7 @@
 pub mod adjacency;
 pub mod agent_guide;
 pub mod atomic_file;
+pub mod bake;
 pub mod census;
 pub mod clips;
 pub mod composition;
@@ -57,8 +58,8 @@ pub mod kits;
 pub mod lesson;
 pub mod library;
 pub mod live;
+pub mod load;
 pub mod map;
-pub mod migrate;
 pub mod naming;
 pub mod note_agent;
 pub mod notes;
@@ -87,7 +88,7 @@ pub mod schema;
 /// every reproducibility claim here rests on, which is the one outcome that had to be avoided. This
 /// alias means no caller moved.
 pub use bevy_grimoire_rng as rng;
-pub mod ron_surgery;
+pub mod save;
 pub mod session;
 pub mod smart;
 pub mod stack;

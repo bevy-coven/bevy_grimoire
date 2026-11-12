@@ -27,7 +27,7 @@ import time
 import urllib.request
 
 # The window every still is taken in, logical px: the owner's MacBook Air, windowed.
-WINDOW_FRAME = "(x: 0, y: 52, w: 1280, h: 703)"
+WINDOW_FRAME = "{x: 0, y: 52, w: 1280, h: 703}"
 # How long the editor gets to open its project before the first still.
 SETTLE_S = 8.0
 # Pauses that let a keystroke's echo reach the screen before the next one, s.
@@ -192,10 +192,10 @@ def main():
     home = tempfile.mkdtemp(prefix="terminal-shots-")
     data = os.path.join(home, "Library", "Application Support", "Grimoire")
     os.makedirs(data)
-    with open(os.path.join(data, "recent.ron"), "w") as f:
-        f.write("(version: 1, projects: [], window: Some(%s))\n" % WINDOW_FRAME)
-    with open(os.path.join(data, "settings.ron"), "w") as f:
-        f.write("(version: 1, terminal_cursor_blink: Some(false))\n")
+    with open(os.path.join(data, "recent.yaml"), "w") as f:
+        f.write("{version: 1, projects: [], window: %s}\n" % WINDOW_FRAME)
+    with open(os.path.join(data, "settings.yaml"), "w") as f:
+        f.write("{version: 1, terminal_cursor_blink: false}\n")
     with open(os.path.join(home, ".zshrc"), "w") as f:
         f.write("PROMPT=%s\n" % json.dumps(args.prompt) if args.prompt else "")
     project = os.path.join(home, "project")

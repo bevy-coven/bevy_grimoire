@@ -12,11 +12,7 @@ use serde_json::json;
 
 use crate::fixtures;
 
-const SCRIPT: &str = r#"(conversations: {"hello": (start: "ask", nodes: {
-    "ask": Choice(speaker: "Mara", prompt: "Stay?", options: [(text: "Yes", next: "yes"), (text: "No", next: "no")]),
-    "yes": Line(speaker: "Mara", text: "Good.", next: None),
-    "no": Line(speaker: "Mara", text: "Pity.", next: None),
-})})"#;
+const SCRIPT: &str = r#"{conversations: {"hello": {start: "ask", nodes: {"ask": !Choice {speaker: "Mara", prompt: "Stay?", options: [{text: "Yes", next: "yes"}, {text: "No", next: "no"}]}, "yes": !Line {speaker: "Mara", text: "Good.", next: null}, "no": !Line {speaker: "Mara", text: "Pity.", next: null}}}}}"#;
 
 struct Talker;
 impl Component for Talker {
@@ -28,8 +24,8 @@ impl Component for Talker {
 fn the_conversation_a_piece_carries_is_walked_by_the_crates_runtime_down_the_chosen_option() {
     let root = fixtures::Fixture::new("dialogue_runtime").descriptor("site/wall", "alpha").place("site/wall", (0.0, 0.0)).build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_speech_bubbles\"])").unwrap();
-    std::fs::write(root.join("family/bevy_speech_bubbles.ron"), SCRIPT).unwrap();
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_speech_bubbles\"]}").unwrap();
+    std::fs::write(root.join("family/bevy_speech_bubbles.yaml"), SCRIPT).unwrap();
     let mut editor = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
         editor.update();
@@ -45,9 +41,9 @@ fn the_conversation_a_piece_carries_is_walked_by_the_crates_runtime_down_the_cho
 
     // The game reads the saved map and the saved script, as it would at load.
     let map: bevy_grimoire_core::map::Map =
-        ron::from_str(&std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.ron")).unwrap()).unwrap();
-    let name: String = ron::from_str(&map.placements[0].family["bevy_speech_bubbles"]).unwrap();
-    let script: DialogueScript = ron::from_str(&std::fs::read_to_string(root.join("family/bevy_speech_bubbles.ron")).unwrap()).unwrap();
+        bevy_grimoire_core::yaml::from_str(&std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.yaml")).unwrap(), "test").unwrap();
+    let name: String = bevy_grimoire_core::yaml::from_str(&map.placements[0].family["bevy_speech_bubbles"], "test").unwrap();
+    let script: DialogueScript = bevy_grimoire_core::yaml::from_str(&std::fs::read_to_string(root.join("family/bevy_speech_bubbles.yaml")).unwrap(), "test").unwrap();
 
     let mut game = App::new();
     game.add_plugins((MinimalPlugins, AssetPlugin::default(), SpeechBubblesPlugin::<Talker>::default()))

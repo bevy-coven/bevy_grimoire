@@ -174,11 +174,11 @@ fn a_multiple_within_a_centimetre_is_on_the_module() {
 #[test]
 fn the_file_round_trips_and_refuses_what_could_never_hold() {
     let s = standards();
-    let text = s.to_ron().unwrap();
+    let text = s.to_yaml().unwrap();
     assert_eq!(Standards::parse(&text).unwrap(), s);
 
     let bad =
-        |body: &str| Standards::parse(&format!("(version: {STANDARDS_VERSION}, rules: [{body}])"));
+        |body: &str| Standards::parse(&format!("version: {STANDARDS_VERSION}\nrules:\n{body}"));
     // A rule with no bound says nothing.
     assert!(bad(r#"(name: "x", dim: Width)"#).is_err());
     // A module of zero or less has no multiples.
@@ -193,5 +193,7 @@ fn the_file_round_trips_and_refuses_what_could_never_hold() {
     // An unknown field is refused, so a misspelt bound is not silently dropped.
     assert!(bad(r#"(name: "x", dim: Height, minimum: Some(1.0))"#).is_err());
     // A version this build does not read.
-    assert!(Standards::parse("(version: 99, rules: [])").is_err());
+    assert!(Standards::parse(r"version: 99
+rules: []
+").is_err());
 }

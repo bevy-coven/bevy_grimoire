@@ -1,0 +1,42 @@
+version: 1
+note: null
+compositions:
+- id: kit/tile_1
+  envelope: !Bounded
+    size:
+    - 1.0
+    - 4.0
+    - 1.0
+  members:
+  - id: floor
+    body: !Descriptor
+      id: floor
+      tip:
+      - 0
+      - 0
+      on: null
+      patch: null
+    at:
+    - 0.0
+    - 0.0
+    yaw: 0.0
+    lift: 0.0
+    of_fingerprint: null
+    note: null
+  - id: wall
+    body: !Descriptor
+      id: wall
+      tip:
+      - 0
+      - 0
+      on: null
+      patch: null
+    at:
+    - -0.44999966
+    - 5.9604645e-8
+    yaw: 0.0
+    lift: 0.0
+    of_fingerprint: null
+    note: null
+  locations: []
+  note: null

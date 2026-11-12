@@ -1,0 +1,37 @@
+# The courtyard's game, as data: nothing here is Rust.
+#
+# The hero walks (W A S D or the arrows) onto the lever pad, which opens the gate; through the gate lies the crown. The
+# guard walks his beat. The referee is a script that says `win` once the hero has come through the gate and taken the crown.
+entities:
+  hero:
+    Name: hero
+    Body: {}
+    Collector: {}
+    Walker: { speed_m_s: 4.0 }
+    Transform: { translation: [0.0, 0.0, 0.0], rotation: [0.0, 0.0, 0.0, 1.0], scale: [1.0, 1.0, 1.0] }
+  lever:
+    Name: lever
+    Trigger: { radius_m: 1.0, signal: lever_pulled }
+    Switch: { latch: lever_pulled, on: false }
+    Transform: { translation: [4.0, 0.0, 0.0], rotation: [0.0, 0.0, 0.0, 1.0], scale: [1.0, 1.0, 1.0] }
+  gate:
+    Name: gate
+    Door: { link: lever_pulled, open: false }
+    Transform: { translation: [8.0, 0.0, 0.0], rotation: [0.0, 0.0, 0.0, 1.0], scale: [1.0, 1.0, 1.0] }
+  doorway:
+    Name: doorway
+    Trigger: { radius_m: 1.0, signal: doorway }
+    Script: { file: scripts/doorway.rhai }
+    Transform: { translation: [8.0, 0.0, 0.0], rotation: [0.0, 0.0, 0.0, 1.0], scale: [1.0, 1.0, 1.0] }
+  crown:
+    Name: crown
+    Pickup: { item: crown, radius_m: 0.75 }
+    Transform: { translation: [12.0, 0.0, 0.0], rotation: [0.0, 0.0, 0.0, 1.0], scale: [1.0, 1.0, 1.0] }
+  guard:
+    Name: guard
+    Body: {}
+    PathFollow: { speed_m_s: 2.0, waypoints_m: [[12.0, 0.0, -4.0], [16.0, 0.0, -4.0], [12.0, 0.0, -4.0]] }
+    Transform: { translation: [12.0, 0.0, -4.0], rotation: [0.0, 0.0, 0.0, 1.0], scale: [1.0, 1.0, 1.0] }
+  referee:
+    Name: referee
+    Script: { file: scripts/referee.rhai }

@@ -1,7 +1,7 @@
 //! **Walk a conversation without playing it, as one registered operation** (#106): `dialogue_preview`.
 //!
 //! A read: it loads the project's `DialogueScript` (the crate's own type, from
-//! `family/bevy_speech_bubbles.ron`), follows one path through a conversation taking the named
+//! `family/bevy_speech_bubbles.yaml`), follows one path through a conversation taking the named
 //! options at each choice, and answers with the lines said, where the walk stopped, and which nodes
 //! no path from the start reaches. It changes no document, so it has no undo.
 
@@ -33,7 +33,7 @@ impl DialoguePreview {
         let text = std::fs::read_to_string(&path)
             .map_err(|e| Refusal::new(format!("{} cannot be read, so there is nothing to preview: {e}", path.display())))?;
         let script: DialogueScript =
-            ron::from_str(&text).map_err(|e| Refusal::new(format!("the project's dialogue script is not readable: {e}")))?;
+            bevy_grimoire_core::yaml::from_str(&text, "family/bevy_speech_bubbles.yaml").map_err(|p| Refusal::new(format!("the project's dialogue script is not readable: {}", p.line())))?;
         let Some(conv) = script.conversation(&p.conversation) else {
             let mut known: Vec<&str> = script.conversations.keys().map(String::as_str).collect();
             known.sort_unstable();

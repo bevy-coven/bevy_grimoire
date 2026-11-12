@@ -206,10 +206,10 @@ pub fn sync_terrain_view(
         return;
     }
     *since = 0.0;
-    let name = open.map_path.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_suffix(".map.ron")).unwrap_or_default().to_owned();
-    let ground_path = project.grimoire_dir.join("terrain").join(format!("{name}.ron"));
-    let water_path = project.grimoire_dir.join("water").join(format!("{name}.field.ron"));
-    let volume_path = project.grimoire_dir.join("volume").join(format!("{name}.ron"));
+    let name = open.map_path.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_suffix(".map.yaml")).unwrap_or_default().to_owned();
+    let ground_path = project.grimoire_dir.join("terrain").join(format!("{name}.yaml"));
+    let water_path = project.grimoire_dir.join("water").join(format!("{name}.field.yaml"));
+    let volume_path = project.grimoire_dir.join("volume").join(format!("{name}.yaml"));
     let drop = crate::editor::ground_drop(&project);
     let now = Built {
         map_path: open.map_path.clone(),
@@ -320,7 +320,7 @@ fn adopt<T: PartialEq>(slot: &mut Option<T>, read: Option<(Option<T>, KindVerdic
 
 /// **One file the view reads**, decided: `None` when it does not exist; otherwise its value when it
 /// reads, and the verdict either way. A refusal names the file as the project's directory sees it
-/// (`site/terrain/yard.ron`) and the field the file is wrong at.
+/// (`site/terrain/yard.yaml`) and the field the file is wrong at.
 fn read_kind<T>(
     kind: &'static str,
     project: &Project,

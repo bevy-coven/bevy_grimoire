@@ -16,17 +16,29 @@ use bevy_cauldron::project::{OpenMap, Project};
 
 use crate::fixtures;
 
-const RULES: &str = "// the block rules: learned from `m`\n\
-(version: 1, blocks: [(example: \"m\", regions: [], cell: 2.0, \
-size: (4, 4), border: None, no_empty: true, weights: [], \
-footprints: [], attempts: 8, seed: 7)])\n";
+const RULES: &str = r"# the block rules: learned from `m`
+version: 1
+blocks:
+- example: m
+  regions: []
+  cell: 2.0
+  size:
+  - 4
+  - 4
+  border: null
+  no_empty: true
+  weights: []
+  footprints: []
+  attempts: 8
+  seed: 7
+";
 
 /// The app, and the project directory (`assets/grimoire` under the fixture root).
 fn editor(name: &str) -> (App, std::path::PathBuf) {
     let root = fixtures::Fixture::new(name)
         .descriptor("site/wall", "alpha")
         .place("site/wall", (0.0, 0.0))
-        .rules(RULES)
+        .rules_text(RULES)
         .build("m");
     let project = root.join("assets/grimoire");
     // **The log cannot be written**: a directory is where its file goes.
@@ -55,9 +67,9 @@ fn call(app: &mut App, method: &str, params: serde_json::Value) -> serde_json::V
 }
 
 fn example_on_disk(project: &std::path::Path) -> String {
-    let text = std::fs::read_to_string(project.join("rules.ron")).expect("rules.ron is on disk");
+    let text = std::fs::read_to_string(project.join("rules.yaml")).expect("rules.yaml is on disk");
     bevy_grimoire_core::rules::Rules::parse(&text)
-        .expect("rules.ron still parses")
+        .expect("rules.yaml still parses")
         .blocks[0]
         .example
         .clone()
@@ -84,13 +96,13 @@ fn a_rename_whose_log_line_cannot_be_written_is_taken_back() {
         "the open map moved although the log line was never written"
     );
     assert!(
-        project.join("maps/m.map.ron").exists() && !project.join("maps/n.map.ron").exists(),
+        project.join("maps/m.map.yaml").exists() && !project.join("maps/n.map.yaml").exists(),
         "the map file moved although the log line was never written"
     );
     assert_eq!(
         example_on_disk(&project),
         "m",
-        "rules.ron names `n` although the rename was taken back"
+        "rules.yaml names `n` although the rename was taken back"
     );
     assert_eq!(
         app.world().resource::<Project>().rules.blocks[0].example,

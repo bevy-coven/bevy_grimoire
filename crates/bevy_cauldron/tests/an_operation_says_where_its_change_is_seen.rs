@@ -382,8 +382,8 @@ fn a_change_names_a_box_that_holds_the_placement() {
     // **There is no `placement_move` in the registry** — the moves are the biggest verb #129 still
     // owes and they wait on the owner — so the move this proves is the one operation that walks a
     // placement across the floor for it: the relations solver.
-    let relations = root.join("assets/grimoire/maps/m.relations.ron");
-    std::fs::write(&relations, "(version: 1, relations: [(of: \"chair\", kind: Near(to: \"table\", within: 1.0))])")
+    let relations = root.join("assets/grimoire/maps/m.relations.yaml");
+    std::fs::write(&relations, "{version: 1, relations: [{of: \"chair\", kind: !Near {to: \"table\", within: 1.0}}]}")
         .unwrap_or_else(|e| panic!("{relations:?}: {e}"));
     // Reopened, so the solver reads the relations file this test just wrote.
     let mut app = editor(&root);
@@ -437,38 +437,34 @@ fn a_preview_and_its_apply_name_the_same_place() {
     // vocabulary's own splice edits. The fixture writes each axis on a single line, and that splice
     // refuses a list it cannot find.
     std::fs::write(
-        root.join("assets/grimoire/vocab.ron"),
-        r#"(
-    // what a thing is
-    kind: (
-        tokens: [
-            ( name: "prop", note: "a thing" ),
-        ],
-    ),
-    effects: (
-        tokens: [
-            ( name: "inert", note: "does nothing" ),
-        ],
-    ),
-    // how it looks
-    look: (
-        tokens: [
-            ( name: "plain", note: "unremarkable" ),
-        ],
-    ),
-    surfaces: (
-        tokens: [
-            ( name: "worktop", note: "a top" ),
-        ],
-    ),
-    capabilities: (tokens: []),
-    edge: (
-        tokens: [
-            ( name: "wall", note: "a solid run-face" ),
-        ],
-    ),
-    slot: (tokens: []),
-)"#,
+        root.join("assets/grimoire/vocab.yaml"),
+        r#"# what a thing is
+kind:
+  tokens:
+  - name: prop
+    note: a thing
+effects:
+  tokens:
+  - name: inert
+    note: does nothing
+# how it looks
+look:
+  tokens:
+  - name: plain
+    note: unremarkable
+surfaces:
+  tokens:
+  - name: worktop
+    note: a top
+capabilities:
+  tokens: []
+edge:
+  tokens:
+  - name: wall
+    note: a solid run-face
+slot:
+  tokens: []
+"#,
     )
     .unwrap_or_else(|e| panic!("{e}"));
     let mut app = editor(&root);

@@ -37,11 +37,11 @@ fn updates(app: &mut App, n: usize) {
 /// **Rewrite one descriptor's `mount`**, which is how a real kit says where its pieces go.
 fn mount(library: &Path, id: &str, mount: &str) {
     let text = std::fs::read_to_string(library).unwrap_or_else(|e| panic!("{library:?}: {e}"));
-    let at = text.find(&format!("id: \"{id}\"")).unwrap_or_else(|| panic!("no `{id}` in the library"));
-    let was = "mount: Some(OnFloor)";
+    let at = text.find(&format!("id: {id}\n")).unwrap_or_else(|| panic!("no `{id}` in the library"));
+    let was = "mount: OnFloor";
     let found = text[at..].find(was).unwrap_or_else(|| panic!("`{id}` does not have the fixture's floor mount")) + at;
     let mut text = text;
-    text.replace_range(found..found + was.len(), &format!("mount: Some({mount})"));
+    text.replace_range(found..found + was.len(), &format!("mount: {mount}"));
     std::fs::write(library, text).unwrap_or_else(|e| panic!("{library:?}: {e}"));
 }
 
@@ -49,10 +49,11 @@ fn mount(library: &Path, id: &str, mount: &str) {
 fn stamp(map: &Path, id: &str, of: &str) {
     let text = std::fs::read_to_string(map).unwrap_or_else(|e| panic!("{map:?}: {e}"));
     let stamped = format!(
-        "(id: \"{id}\", of: \"{of}\", at: (3.0, 3.0), yaw: 0.0, overrides: [], of_fingerprint: None, note: None)"
+        "{{id: {id}, of: \"{of}\", at: [3.0, 3.0], yaw: 0.0, overrides: [], of_fingerprint: null, note: null}}"
     );
-    assert!(text.contains("stamps: []"), "the fixture's map has room for a stamp: {text}");
-    std::fs::write(map, text.replacen("stamps: []", &format!("stamps: [{stamped}]"), 1))
+    // Owner exception (2026-11-12): the YAML writer leaves an empty `stamps` out, so the stamp goes in before `locations`.
+    assert!(!text.contains("stamps:") && text.contains("locations: []"), "the fixture's map has room for a stamp: {text}");
+    std::fs::write(map, text.replacen("locations: []", &format!("stamps: [{stamped}]\nlocations: []"), 1))
         .unwrap_or_else(|e| panic!("{map:?}: {e}"));
 }
 
@@ -74,29 +75,29 @@ fn rig(tag: &str) -> App {
         .place_on("on_a_table", "desk@3", (2.0, 1.0))
         .place("either", (3.0, 1.0))
         .build("m");
-    let library = root.join("assets/grimoire").join(fixtures::DEFAULT_KIT).join("library.ron");
-    mount(&library, "on_wall", "OnWall( height: 1.8 )");
+    let library = root.join("assets/grimoire").join(fixtures::DEFAULT_KIT).join("library.yaml");
+    mount(&library, "on_wall", "!OnWall {height: 1.8}");
     mount(&library, "on_ceiling", "OnCeiling");
-    mount(&library, "on_a_table", "OnSurface( class: \"worktop\" )");
+    mount(&library, "on_a_table", "!OnSurface {class: worktop}");
     // The desk has to *offer* the surface, or the piece on it is refused by the library's own check.
     let text = std::fs::read_to_string(&library).unwrap_or_else(|e| panic!("{library:?}: {e}"));
-    let at = text.find("id: \"desk\"").expect("the desk is in the library");
-    let was = "offers: ( surfaces: [], sockets: [] )";
+    let at = text.find("id: desk\n").expect("the desk is in the library");
+    let was = "surfaces: []";
     let found = text[at..].find(was).expect("the desk has the fixture's empty offers") + at;
     let mut text = text;
-    text.replace_range(found..found + was.len(), "offers: ( surfaces: [\"worktop\"], sockets: [] )");
+    text.replace_range(found..found + was.len(), "surfaces: [worktop]");
     std::fs::write(&library, text).unwrap_or_else(|e| panic!("{library:?}: {e}"));
-    mount(&library, "either", "OnSurfaceOrFloor( class: \"worktop\" )");
-    stamp(&root.join("assets/grimoire/maps/m.map.ron"), "arch", "the harbour gate");
+    mount(&library, "either", "!OnSurfaceOrFloor {class: worktop}");
+    stamp(&root.join("assets/grimoire/maps/m.map.yaml"), "arch", "the harbour gate");
     // **A long note**, so its row is the one that has to be cut to a line.
-    let notes = root.join("assets/grimoire/maps/m.notes.ron");
+    let notes = root.join("assets/grimoire/maps/m.notes.yaml");
     if let Some(parent) = notes.parent() {
         std::fs::create_dir_all(parent).expect("the notes folder");
     }
     std::fs::write(
         &notes,
         format!(
-            "(version: 1, notes: [(id: \"note_one\", targets: [Cell(1, 1)], text: \"{}\", state: Open)])",
+            "{{version: 1, notes: [{{id: note_one, targets: [!Cell [1, 1]], text: \"{}\", state: Open}}]}}",
             "a sentence that runs well past what one row of the tree can draw, so the row has to cut it somewhere"
         ),
     )
@@ -316,9 +317,9 @@ fn a_write_to_the_people_file_rebuilds_once_and_then_nothing() {
     assert_eq!(rebuilds_now(&mut app), built, "thirty settled frames rebuild nothing ({built} -> {})", rebuilds_now(&mut app));
 
     let project = app.world().resource::<bevy_cauldron::project::Project>().clone();
-    let people = project.grimoire_dir.join("people").join("m.ron");
+    let people = project.grimoire_dir.join("people").join("m.yaml");
     std::fs::create_dir_all(people.parent().expect("the people folder")).expect("a people folder");
-    std::fs::write(&people, "(version: 1, people: [(name: \"Mara\", at: (2.0, 2.0))])").expect("a people file");
+    std::fs::write(&people, "{version: 1, people: [{name: Mara, at: [2.0, 2.0]}]}").expect("a people file");
     updates(&mut app, 4);
     assert_eq!(rebuilds_now(&mut app), built + 1, "the write is one rebuild ({built} -> {})", rebuilds_now(&mut app));
     let name = piece_id(&mut app, "on_wall");

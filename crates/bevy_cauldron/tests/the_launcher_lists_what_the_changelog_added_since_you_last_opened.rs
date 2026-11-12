@@ -2,7 +2,7 @@
 //! a project was opened from the home** (UI-14, #220; #300).
 //!
 //! An entry is a line of `CHANGELOG.md`; one carries ` *For you: <sentence>*` when it is worth telling a person who never reads the
-//! file, and only those are listed, each with the still of its clip. `recent.ron` remembers the id of the newest entry a person had
+//! file, and only those are listed, each with the still of its clip. `recent.yaml` remembers the id of the newest entry a person had
 //! been shown, and the sidebar's What's new counts the sentences above it.
 
 use std::path::PathBuf;
@@ -74,7 +74,7 @@ fn launcher_with_text(tag: &str, changelog: &str, seen: Option<&str>) -> (App, P
     let dir = std::env::temp_dir().join(format!("grimoire_news_{tag}_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let file = dir.join("recent.ron");
+    let file = dir.join("recent.yaml");
     recent::record(&file, &root).unwrap();
     if let Some(id) = seen {
         let mut r = Recent::load(&file).unwrap();
@@ -122,7 +122,7 @@ fn the_page_lists_the_sentences_marks_the_new_ones_and_remembers_the_newest_once
         app.update();
         app.update();
     }
-    let stored = Recent::load(&dir.join("recent.ron")).unwrap();
+    let stored = Recent::load(&dir.join("recent.yaml")).unwrap();
     assert_eq!(stored.changelog_seen.as_deref(), Some("delta"), "opening a project is what marks the news as read");
     assert!(launcher::whats_new(CHANGELOG, stored.changelog_seen.as_deref()).is_empty());
     let _ = std::fs::remove_dir_all(&dir);

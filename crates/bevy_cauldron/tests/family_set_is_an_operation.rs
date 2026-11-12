@@ -8,9 +8,9 @@ use crate::fixtures;
 fn project(tag: &str, listed: &str) -> (Ctx, std::path::PathBuf) {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), format!("(version: 1, crates: [\"{listed}\"])")).unwrap();
-    let file = root.join("family/bevy_elements.ron");
-    std::fs::write(&file, "// the sun\n(sun: (hour: 12.0, tilt: 0.4), wind: 3)\n").unwrap();
+    std::fs::write(root.join("family.yaml"), format!("{{version: 1, crates: [\"{listed}\"]}}")).unwrap();
+    let file = root.join("family/bevy_elements.yaml");
+    std::fs::write(&file, "# the sun\nsun:\n  hour: 12.0\n  tilt: 0.4\nwind: 3\n").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
         app.update();
@@ -29,7 +29,7 @@ fn a_field_is_written_in_place_and_one_undo_puts_it_back() {
     let before = std::fs::read_to_string(&file).unwrap();
     assert!(matches!(set(&mut ctx, "6.5").unwrap(), Applied::Done { .. }));
     let after = std::fs::read_to_string(&file).unwrap();
-    assert_eq!(after, "// the sun\n(sun: (hour: 6.5, tilt: 0.4), wind: 3)\n", "only the value's bytes change");
+    assert_eq!(after, "# the sun\nsun:\n  hour: 6.5\n  tilt: 0.4\nwind: 3\n", "only the value's bytes change");
     ops::undo(&mut ctx, None).unwrap();
     assert_eq!(std::fs::read_to_string(&file).unwrap(), before, "one undo restores the file exactly");
 }
@@ -42,9 +42,9 @@ fn an_unlisted_crate_or_a_bad_value_changes_nothing() {
         Err(e) | Ok(Applied::Refused(e)) => e.0,
         Ok(_) => panic!("an unlisted crate was written"),
     };
-    assert!(e.contains("not listed in family.ron"), "{e}");
+    assert!(e.contains("not listed in family.yaml"), "{e}");
     let (mut ctx2, file2) = project("badvalue", "bevy_elements");
-    assert!(matches!(set(&mut ctx2, "(1.0"), Err(_) | Ok(Applied::Refused(_))));
+    assert!(matches!(set(&mut ctx2, "[1.0"), Err(_) | Ok(Applied::Refused(_))));
     assert_eq!(std::fs::read_to_string(&file).unwrap(), before);
     assert_eq!(std::fs::read_to_string(&file2).unwrap(), before);
     let _ = &ctx2;

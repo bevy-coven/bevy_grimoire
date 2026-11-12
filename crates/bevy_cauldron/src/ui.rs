@@ -7,14 +7,14 @@
 use bevy::prelude::*;
 use bevy_gooey::{GooeyNavPlugin, GooeySkin, GooeyStylePlugin};
 
-/// The editor's own skin, as data: `src/editor_skin.ron`.
-const EDITOR_SKIN: &str = include_str!("editor_skin.ron");
+/// The editor's own skin, as data: `src/editor_skin.yaml`.
+const EDITOR_SKIN: &str = include_str!("editor_skin.yaml");
 
 /// **The editor's look as `bevy_gooey`'s own type** (UI-02, #210): the colours and measures
 /// `chrome.rs` draws with, the elevation ladder in `surfaces` and the sizes a compact tool wants.
 /// `GooeySkin::problems()` is the check that the ladder is a ladder and the ink is readable.
 pub fn editor_skin() -> GooeySkin {
-    crate::ui_skin::from_ron(EDITOR_SKIN).unwrap_or_else(|e| panic!("src/editor_skin.ron does not read: {e}"))
+    crate::ui_skin::from_yaml(EDITOR_SKIN).unwrap_or_else(|e| panic!("src/editor_skin.yaml does not read: {e}"))
 }
 
 /// The least contrast the editor's own ink may have against a theme's ground: WCAG 2.2, success
@@ -24,7 +24,7 @@ const LEAST_TEXT_CONTRAST: f32 = bevy_gooey::TEXT_CONTRAST;
 /// **The editor's skin for a theme** (UI-73, #251): its own measured colours for [`Theme::ToolDark`],
 /// and `bevy_gooey`'s preset for the two the editor does not ship.
 ///
-/// Tool dark is the editor's own `editor_skin.ron` because the editor's darks are *measured*
+/// Tool dark is the editor's own `editor_skin.yaml` because the editor's darks are *measured*
 /// (`chrome.rs`'s elevation ladder and the ink contracts its census holds), and gooey's `tool()` is a
 /// different set of them. Parchment and High contrast are the library's presets whole: they are the
 /// accessibility answer, and a host that re-derived one would be a second, unchecked palette.
@@ -53,7 +53,7 @@ pub fn skin_for(theme: crate::settings::Theme) -> GooeySkin {
 /// against (UI-73, #251).
 ///
 /// **Why a theme needs measuring at all.** `chrome.rs` draws its headings, rows, hints, chips and
-/// status band with `chrome::Ink`, which is the *editor's own* skin (`src/editor_skin.ron`) rather
+/// status band with `chrome::Ink`, which is the *editor's own* skin (`src/editor_skin.yaml`) rather
 /// than the running one, so those colours do not move with a theme. So Parchment — whose `surface` is
 /// cream and whose `text` is dark brown —
 /// would paint every panel cream while each `chrome::ink().text` label over it stayed near-white:
@@ -77,7 +77,7 @@ pub fn editor_inks() -> Vec<(&'static str, Color)> {
         ("accent", skin.accent),
         ("danger", skin.danger),
     ];
-    // The named tones `chrome.rs` draws labels with, in the order `editor_skin.ron` lists them.
+    // The named tones `chrome.rs` draws labels with, in the order `editor_skin.yaml` lists them.
     for tone in ["key", "label", "labeled", "muted", "suggest"] {
         if let Some(colour) = skin.tone(tone) {
             inks.push((tone, colour));
@@ -123,7 +123,7 @@ pub fn unreadable_pairs(theme_skin: &GooeySkin) -> Vec<String> {
 /// **The running skin this theme can be honoured as, and why not when it cannot** (UI-73, #251).
 ///
 /// The editor has one set of inks it can paint — [`editor_inks`], which are `chrome::Ink`'s, and
-/// `chrome::Ink` reads the editor's own `editor_skin.ron` rather than the theme. So a theme is applied
+/// `chrome::Ink` reads the editor's own `editor_skin.yaml` rather than the theme. So a theme is applied
 /// only when the ground it would
 /// paint still leaves those inks readable, and one that would not is refused here naming the pair that
 /// failed — **one path, and a real validation rather than a fallback**: the alternative, painting
@@ -165,7 +165,7 @@ pub fn theme_name(theme: crate::settings::Theme) -> &'static str {
 ///
 /// **A settled editor costs one comparison.** The theme, the size and the refusal last decided are
 /// kept in `Local`s, and a pass whose three inputs are the ones already answered returns before
-/// [`skin_for`] is called: parsing `editor_skin.ron` and measuring nine inks against two grounds sixty
+/// [`skin_for`] is called: parsing `editor_skin.yaml` and measuring nine inks against two grounds sixty
 /// times a second, to write what is already there, is work with no answer at the end of it.
 ///
 /// **The colours and the scale are written separately, and that is not tidiness.** [`skin_for`] builds
@@ -176,7 +176,7 @@ pub fn theme_name(theme: crate::settings::Theme) -> &'static str {
 /// editor's own skin in as the running one, so a run that has only ever seen the default leaves it
 /// exactly as it was found. A *return* to Tool dark after another theme is still an application.
 ///
-/// **A project's `family/bevy_gooey.ron` is not this system's business** (UI-03, #211). That file is a
+/// **A project's `family/bevy_gooey.yaml` is not this system's business** (UI-03, #211). That file is a
 /// *game's* palette: it lives in [`crate::ui_skin::GameSkin`] and reaches the window only through the
 /// Game UI preview panel's `SkinScope`, so the running skin here is always the person's theme whatever
 /// a project ships.
@@ -357,7 +357,7 @@ impl Plugin for EditorUiPlugin {
             follow_the_motion_setting.after(crate::settings::sync_settings).before(bevy_gooey::GooeySystems::Style),
         );
         // **The theme reaches the running skin** (UI-73, #251), after the settings are read. A project's
-        // `family/bevy_gooey.ron` is not consulted: it is the *game's* palette and lives in `GameSkin`
+        // `family/bevy_gooey.yaml` is not consulted: it is the *game's* palette and lives in `GameSkin`
         // for the Game UI preview (UI-03, #211), so the running skin here is always the person's theme.
         app.add_systems(
             Update,

@@ -2,8 +2,8 @@
 //!
 //! # What was wrong
 //!
-//! `watch::adopt` answered a save to a kit's `library.ron` or `project.ron` by calling
-//! `Project::open` again: `kits.ron`, the vocabulary, every bound kit's library and policy, and a
+//! `watch::adopt` answered a save to a kit's `library.yaml` or `project.yaml` by calling
+//! `Project::open` again: `kits.yaml`, the vocabulary, every bound kit's library and policy, and a
 //! triangle count for every `.glb` in the merge. Measured on the shipped project (90 descriptors,
 //! 2 kits) one open took 100–315 ms, and the triangle pass alone 22–255 ms — on the file an author
 //! edits most, per save.
@@ -75,12 +75,12 @@ fn pump_until(app: &mut App, mut done: impl FnMut(&mut App) -> bool) -> bool {
 
 /// **The kit's library with one piece twice as tall.**
 fn stretch_on_disk(dir: &std::path::Path, factor: f32) {
-    let path = dir.join("library.ron");
+    let path = dir.join("library.yaml");
     let text = std::fs::read_to_string(&path).expect("the kit's library is there");
-    let edited = text.replace("stretch_y: None", &format!("stretch_y: Some({factor})"));
+    let edited = text.replace("stretch_y: null", &format!("stretch_y: {factor}"));
     assert_ne!(
         edited, text,
-        "the library has no `stretch_y: None` to edit: {text}"
+        "the library has no `stretch_y: null` to edit: {text}"
     );
     std::fs::write(&path, edited).expect("the library is written");
 }
@@ -142,7 +142,7 @@ fn a_kit_save_relayers_only_that_kit() {
         layers.len(),
         1,
         "a save to one kit's library re-layered {layers:?}. A kit's own file can only change that \
-         kit — which directory answers for which namespace is `kits.ron`'s business and a different \
+         kit — which directory answers for which namespace is `kits.yaml`'s business and a different \
          file — so re-reading the others is work that cannot produce a different answer. The \
          whole-project open re-layers every kit, and that is the cost E-003 is about."
     );
@@ -248,8 +248,8 @@ fn a_kit_edit_that_breaks_a_composition_is_refused_and_keeps_the_last_good_proje
 
     // **And now the kit loses its only piece**, which the composition names.
     std::fs::write(
-        site_dir.join("library.ron"),
-        "(version: 1, note: None, descriptors: [])",
+        site_dir.join("library.yaml"),
+        "version: 1\nnote: null\ndescriptors: []\n",
     )
     .expect("the library is written");
 

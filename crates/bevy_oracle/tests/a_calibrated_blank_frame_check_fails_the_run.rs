@@ -10,7 +10,7 @@
 //!
 //! The fixtures are two real frames: `fixtures/blank/view.png` is one flat colour with no scene in it,
 //! and `fixtures/blank/good.png` is the same size with structure in it. The check is the built-in
-//! `blank_frame` (`fixtures/checks.ron`), whose question is exactly "is the image blank".
+//! `blank_frame` (`fixtures/checks.yaml`), whose question is exactly "is the image blank".
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;

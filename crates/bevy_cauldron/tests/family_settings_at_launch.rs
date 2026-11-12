@@ -14,17 +14,17 @@ use crate::fixtures;
 ///
 /// These tests used to write `(sun: (hour: 6.0))`, which is not an `ElementsSettings` — the host's
 /// typed read refuses it with `Unexpected field named sun`, so nothing was ever stored and the test
-/// was asserting on a fixture the crate throws away (#152). `tests/fixtures/bevy_elements.ron` is
-/// `ElementsSettings::defaults().to_ron()` with `clock.hour` set, so the text these tests compare
+/// was asserting on a fixture the crate throws away (#152). `tests/fixtures/bevy_elements.yaml` is
+/// `ElementsSettings::defaults().to_yaml()` with `clock.hour` set, so the text these tests compare
 /// against is the text a real file holds.
 fn elements_settings() -> &'static str {
-    include_str!("fixtures/bevy_elements.ron")
+    include_str!("fixtures/bevy_elements.yaml")
 }
 
 #[test]
 fn a_settings_file_present_at_launch_is_applied_without_an_edit() {
     let root = fixtures::Fixture::new("family_launch").descriptor("site/wall", "alpha").build("m");
-    let file = root.join("family").join("bevy_elements.ron");
+    let file = root.join("family").join("bevy_elements.yaml");
     std::fs::create_dir_all(file.parent().unwrap()).unwrap();
     std::fs::write(&file, elements_settings()).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));

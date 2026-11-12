@@ -36,8 +36,8 @@ use bevy_cauldron::family_host::{reload_settings, FamilySettings};
 
 use crate::fixtures;
 
-const SETTINGS: &str = include_str!("fixtures/bevy_elements.ron");
-const SETTINGS_LATER: &str = include_str!("fixtures/bevy_elements_18.5.ron");
+const SETTINGS: &str = include_str!("fixtures/bevy_elements.yaml");
+const SETTINGS_LATER: &str = include_str!("fixtures/bevy_elements_18.5.yaml");
 
 /// One step of the test's clock, in seconds. `FamilyWatch` is built with `SETTINGS_POLL_SECS` and
 /// `SETTINGS_SETTLE_SECS` both 0.1, so a step of 0.2 crosses both in a single update.
@@ -70,7 +70,7 @@ fn held(app: &App) -> String {
 #[test]
 fn a_clock_that_does_not_advance_reloads_nothing() {
     let root = fixtures::Fixture::new("reload_frozen_clock").descriptor("site/wall", "alpha").build("m");
-    let file = root.join("family").join("bevy_elements.ron");
+    let file = root.join("family").join("bevy_elements.yaml");
     std::fs::create_dir_all(file.parent().unwrap()).unwrap();
     std::fs::write(&file, SETTINGS).unwrap();
 
@@ -103,7 +103,7 @@ fn a_clock_that_does_not_advance_reloads_nothing() {
 #[test]
 fn stepping_the_clock_past_the_poll_and_the_settle_reloads_the_file() {
     let root = fixtures::Fixture::new("reload_stepped_clock").descriptor("site/wall", "alpha").build("m");
-    let file = root.join("family").join("bevy_elements.ron");
+    let file = root.join("family").join("bevy_elements.yaml");
     std::fs::create_dir_all(file.parent().unwrap()).unwrap();
     std::fs::write(&file, SETTINGS).unwrap();
 

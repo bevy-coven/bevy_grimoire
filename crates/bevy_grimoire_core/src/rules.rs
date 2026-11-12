@@ -2,7 +2,7 @@
 //!
 //! A game draws one example block in the editor; [`crate::grammar::learn`] reads the tile
 //! adjacencies off it and [`crate::wfc::collapse_grid`] fills blocks from them. What local
-//! adjacency cannot say is stated here, in a `rules.ron` the project carries beside `kits.ron`, so
+//! adjacency cannot say is stated here, in a `rules.yaml` the project carries beside `kits.yaml`, so
 //! the editor's preview and the game build the same block from the same file (Sanctuary decision
 //! 0091). The rules were Sanctuary's own `town_plan.rs`; they are generic now.
 //!
@@ -52,7 +52,7 @@ pub const RULES_VERSION: u32 = 1;
 
 /// Where a project keeps its rules, relative to the project directory (`assets/grimoire`). Absent
 /// means no rules.
-pub const FILE: &str = "rules.ron";
+pub const FILE: &str = "rules.yaml";
 
 /// The nine parts of a footprint, by position: the front row is the door side, left and right are
 /// the footprint's own axes. The index of a part is `row * 3 + column`, row 0 being the front.
@@ -81,7 +81,7 @@ pub struct Rules {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct BlockRules {
-    /// The map the grammar is learned from (its name, so `maps/<example>.map.ron`).
+    /// The map the grammar is learned from (its name, so `maps/<example>.map.yaml`).
     pub example: String,
     /// Descriptor ids whose placements each ask for one block, laid out around them.
     #[serde(default)]
@@ -134,7 +134,12 @@ pub struct Footprint {
 
 impl Rules {
     pub fn parse(text: &str) -> Result<Rules, String> {
-        ron::from_str(text).map_err(|e| format!("rules: {e}"))
+        crate::yaml::from_str(text, FILE).map_err(|p| format!("rules: {}", p.line()))
+    }
+
+    /// **The file as the one YAML writer writes it.**
+    pub fn to_yaml(&self) -> Result<String, String> {
+        crate::yaml::to_string(self).map_err(|p| format!("rules: {}", p.line()))
     }
 
     /// Everything that can be checked without the example: the version, the numbers, and that every
@@ -1189,10 +1194,24 @@ mod tests {
 
     #[test]
     fn rules_round_trip_through_ron() {
-        let text = "(version: 1, blocks: [(example: \"b\", cell: 2.0, size: (9, 9), attempts: 3, seed: 1)])";
+        let text = r"version: 1
+blocks:
+- example: b
+  regions: []
+  cell: 2.0
+  size:
+  - 9
+  - 9
+  border: null
+  no_empty: false
+  weights: []
+  footprints: []
+  attempts: 3
+  seed: 1
+";
         let parsed = Rules::parse(text).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(parsed.blocks[0].border, None);
         assert!(parsed.blocks[0].footprints.is_empty());
-        assert!(Rules::parse("(version: 1, blocks: [], surprise: 1)").is_err(), "unknown fields are refused");
+        assert!(Rules::parse("{version: 1, blocks: [], surprise: 1}").is_err(), "unknown fields are refused");
     }
 }

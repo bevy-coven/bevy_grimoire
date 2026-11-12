@@ -1,9 +1,9 @@
 //! **Saving a tile is the operation an agent calls (E-002, #129 slice 15).**
 //!
-//! `Cmd+S` on the Tiles tab wrote the tile in hand to `compositions.ron` with a write of its own
+//! `Cmd+S` on the Tiles tab wrote the tile in hand to `compositions.yaml` with a write of its own
 //! (`build::save`): no log line, no undo, and no way for an agent to author a tile with slots, nested
 //! groups and an envelope of its own, because `composition_define` could only make a group out of pieces.
-//! `composition_define` now takes `composition`, a whole definition as `compositions.ron` holds it, and
+//! `composition_define` now takes `composition`, a whole definition as `compositions.yaml` holds it, and
 //! the tab's save dispatches it. The first two tests go through the registered BRP methods, as an
 //! agent's request goes; the last presses the real keys, as a person does.
 
@@ -54,7 +54,7 @@ fn define(app: &mut App, parameters: serde_json::Value) -> serde_json::Value {
 }
 
 fn comps(root: &std::path::Path) -> String {
-    std::fs::read_to_string(root.join("assets/grimoire/compositions.ron")).unwrap_or_default()
+    std::fs::read_to_string(root.join("assets/grimoire/compositions.yaml")).unwrap_or_default()
 }
 
 fn log(app: &App) -> Vec<Entry> {
@@ -87,7 +87,7 @@ fn an_agent_writes_a_whole_tile_and_one_undo_takes_it_back() {
     let made = define(&mut app, serde_json::json!({"id": "bay_two", "composition": tile}));
     assert_eq!(made["outcome"], "applied", "{made}");
     let after = comps(&root);
-    assert!(after.contains("id: \"bay_two\""), "the tile is written: {after}");
+    assert!(after.contains("id: bay_two"), "the tile is written: {after}");
     assert!(after.contains("a tile an agent wrote whole"), "the note rides along: {after}");
     assert_eq!(log(&app).len(), lines + 1, "one tile is one log line");
 
@@ -95,7 +95,7 @@ fn an_agent_writes_a_whole_tile_and_one_undo_takes_it_back() {
     let undone = call(&mut app, "grimoire/operation_undo", serde_json::json!({"operation_id": id, "dry_run": false}));
     assert_eq!(undone["outcome"], "applied", "{undone}");
     assert!(!comps(&root).contains("bay_two"), "one undo takes the tile out: {}", comps(&root));
-    assert!(comps(&root).contains("id: \"bay\""), "and leaves the others");
+    assert!(comps(&root).contains("id: bay"), "and leaves the others");
 
     // And redefining one that exists asks for `replace`, and its undo puts the old body back.
     let tile = whole(&app, "bay");
@@ -136,7 +136,7 @@ fn a_tile_that_does_not_validate_is_refused_and_nothing_is_written() {
         let r = define(&mut app, params);
         assert_eq!(r["outcome"], "refused", "{what} was accepted: {r}");
     }
-    assert_eq!(comps(&root), before, "a refusal wrote compositions.ron");
+    assert_eq!(comps(&root), before, "a refusal wrote compositions.yaml");
     assert_eq!(log(&app).len(), lines, "a refusal logged a line");
 }
 
@@ -171,7 +171,7 @@ fn a_persons_cmd_s_on_the_tiles_tab_saves_through_the_operation() {
     app.update();
 
     press_with_mod(&mut app, bevy_cauldron::keys::binding(bevy_cauldron::keys::Action::Save).key);
-    assert!(comps(&root).contains("id: \"hall\""), "Cmd+S did not reach compositions.ron: {}", comps(&root));
+    assert!(comps(&root).contains("id: hall"), "Cmd+S did not reach compositions.yaml: {}", comps(&root));
     let entries = log(&app);
     assert_eq!(entries.len(), lines + 1, "one save is one log line");
     let last = entries.last().expect("a line");

@@ -3,7 +3,7 @@
 
     python3 tools/decide/clip_set.py --out /tmp/clipset
 
-`crates/bevy_oracle/fixtures/clip_samples.ron` names every sample; this script makes the images those
+`crates/bevy_oracle/fixtures/clip_samples.yaml` names every sample; this script makes the images those
 samples point at. Four per clip — the still beside the MP4 and three frames spread through it — because
 the API takes at most four images and the still is the fourth.
 
@@ -68,7 +68,7 @@ def run(cmd):
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", default=os.path.join(REPO, "target/clip_set"), help="where the sample images go")
-    ap.add_argument("--manifest", default=os.path.join(REPO, "crates/bevy_oracle/fixtures/clip_samples.ron"),
+    ap.add_argument("--manifest", default=os.path.join(REPO, "crates/bevy_oracle/fixtures/clip_samples.yaml"),
                     help="the committed manifest, whose relative dirs are relative to its own directory")
     args = ap.parse_args(argv)
     if subprocess.run(["which", "ffmpeg"], capture_output=True).returncode != 0:

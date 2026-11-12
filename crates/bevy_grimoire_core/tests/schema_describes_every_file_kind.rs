@@ -27,6 +27,19 @@ fn frozen(rel: &str) -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
+/// **A frozen file as YAML**, through the migration — the one conversion that has been proved lossless
+/// (`tests/a_project_migrates_from_ron_to_yaml.rs`). A frozen file is never edited; it is read as it was
+/// written and converted here.
+fn frozen_yaml(rel: &str, project_name: &str) -> String {
+    let (_, text) = bevy_grimoire_migrate::written_as_yaml(
+        project_name,
+        &frozen(rel),
+        bevy_grimoire_migrate::COMMAND,
+    )
+    .unwrap_or_else(|p| panic!("{}", p.line()));
+    text
+}
+
 fn shipped(rel: &str) -> String {
     let path = grimoire().join(rel);
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
@@ -39,41 +52,42 @@ fn shipped(rel: &str) -> String {
 /// describes.
 fn kinds() -> Vec<(&'static str, String)> {
     vec![
-        ("kits", value_of::<bevy_grimoire_core::kits::Kits>(&shipped("kits.ron"))),
-        ("library", value_of::<bevy_grimoire_core::library::Library>(&shipped("site/library.ron"))),
-        ("policy", value_of::<bevy_grimoire_core::policy::Policy>(&shipped("site/project.ron"))),
-        ("vocab", value_of::<bevy_grimoire_core::vocab::Vocabularies>(&shipped("vocab.ron"))),
-        ("compositions", value_of::<bevy_grimoire_core::composition::Compositions>(&shipped("compositions.ron"))),
-        ("rigs", value_of::<bevy_grimoire_core::rigs::Rigs>(&shipped("rigs.ron"))),
-        ("rules", value_of::<bevy_grimoire_core::rules::Rules>(&frozen("core-0.3.0/rules.ron"))),
-        ("map", value_of::<bevy_grimoire_core::map::Map>(&shipped("maps/bedroom.map.ron"))),
-        ("standards", value_of::<bevy_grimoire_core::standards::Standards>(&frozen("core-0.3.0/standards.ron"))),
-        ("repetition", value_of::<bevy_grimoire_core::repetition::RepetitionRules>(&frozen("core-0.3.0/repetition.ron"))),
-        ("notes", value_of::<bevy_grimoire_core::notes::Notes>(&frozen("core-0.3.0/notes.ron"))),
-        ("plan", value_of::<bevy_grimoire_core::plan::Plan>(&frozen("core-0.3.0/plan.ron"))),
-        ("references", value_of::<bevy_grimoire_core::references::References>(&frozen("core-0.3.0/references.ron"))),
-        ("relations", value_of::<bevy_grimoire_core::relations::Relations>(&frozen("core-0.3.0/relations.ron"))),
-        ("terrain", value_of::<bevy_grimoire_core::heightfield::Heightfield>(&frozen("core-0.3.0/terrain.ron"))),
-        ("water_plan", value_of::<bevy_grimoire_core::water::WaterPlan>(&frozen("core-0.3.0/water_plan.ron"))),
-        ("water_field", value_of::<bevy_grimoire_core::water::WaterField>(&frozen("core-0.3.0/water_field.ron"))),
-        ("volume", value_of::<bevy_grimoire_core::volume::Volume>(&frozen("core-0.3.0/volume.ron"))),
-        ("data_registry", value_of::<bevy_grimoire_core::data_files::DataFiles>(&frozen("core-0.3.0/data_registry.ron"))),
-        ("family_list", value_of::<bevy_grimoire_core::family::Family>(&frozen("core-0.3.0/family_list.ron"))),
-        ("agent", value_of::<bevy_grimoire_core::note_agent::AgentSettings>(&frozen("core-0.3.0/agent.ron"))),
-        ("play", value_of::<bevy_grimoire_core::play::PlayConfig>(&frozen("core-0.3.0/play.ron"))),
-        ("destructible_marks", value_of::<bevy_grimoire_core::destructible::Marks>(&frozen("editor-3f4084c/destructible.ron"))),
-        ("destructible_bake", value_of::<bevy_grimoire_core::destructible::Bake>(&frozen("editor-3f4084c/site__cart.bake.ron"))),
+        ("kits", value_of::<bevy_grimoire_core::kits::Kits>(&shipped("kits.yaml"))),
+        ("library", value_of::<bevy_grimoire_core::library::Library>(&shipped("site/library.yaml"))),
+        ("policy", value_of::<bevy_grimoire_core::policy::Policy>(&shipped("site/project.yaml"))),
+        ("vocab", value_of::<bevy_grimoire_core::vocab::Vocabularies>(&shipped("vocab.yaml"))),
+        ("compositions", value_of::<bevy_grimoire_core::composition::Compositions>(&shipped("compositions.yaml"))),
+        ("rigs", value_of::<bevy_grimoire_core::rigs::Rigs>(&shipped("rigs.yaml"))),
+        ("rules", value_of::<bevy_grimoire_core::rules::Rules>(&frozen_yaml("core-0.3.0/rules.ron", "rules.ron"))),
+        ("map", value_of::<bevy_grimoire_core::map::Map>(&shipped("maps/bedroom.map.yaml"))),
+        ("standards", value_of::<bevy_grimoire_core::standards::Standards>(&frozen_yaml("core-0.3.0/standards.ron", "standards.ron"))),
+        ("repetition", value_of::<bevy_grimoire_core::repetition::RepetitionRules>(&frozen_yaml("core-0.3.0/repetition.ron", "repetition.ron"))),
+        ("notes", value_of::<bevy_grimoire_core::notes::Notes>(&frozen_yaml("core-0.3.0/notes.ron", "maps/yard.notes.ron"))),
+        ("plan", value_of::<bevy_grimoire_core::plan::Plan>(&frozen_yaml("core-0.3.0/plan.ron", "maps/yard.plan.ron"))),
+        ("references", value_of::<bevy_grimoire_core::references::References>(&frozen_yaml("core-0.3.0/references.ron", "maps/yard.references.ron"))),
+        ("relations", value_of::<bevy_grimoire_core::relations::Relations>(&frozen_yaml("core-0.3.0/relations.ron", "maps/yard.relations.ron"))),
+        ("terrain", value_of::<bevy_grimoire_core::heightfield::Heightfield>(&frozen_yaml("core-0.3.0/terrain.ron", "site/terrain/yard.ron"))),
+        ("water_plan", value_of::<bevy_grimoire_core::water::WaterPlan>(&frozen_yaml("core-0.3.0/water_plan.ron", "site/water/yard.ron"))),
+        ("water_field", value_of::<bevy_grimoire_core::water::WaterField>(&frozen_yaml("core-0.3.0/water_field.ron", "site/water/yard.field.ron"))),
+        ("volume", value_of::<bevy_grimoire_core::volume::Volume>(&frozen_yaml("core-0.3.0/volume.ron", "site/volume/yard.ron"))),
+        ("data_registry", value_of::<bevy_grimoire_core::data_files::DataFiles>(&frozen_yaml("core-0.3.0/data_registry.ron", "site/data.ron"))),
+        ("family_list", value_of::<bevy_grimoire_core::family::Family>(&frozen_yaml("core-0.3.0/family_list.ron", "family.ron"))),
+        ("agent", value_of::<bevy_grimoire_core::note_agent::AgentSettings>(&frozen_yaml("core-0.3.0/agent.ron", "agent.ron"))),
+        ("play", value_of::<bevy_grimoire_core::play::PlayConfig>(&frozen_yaml("core-0.3.0/play.ron", "play.ron"))),
+        ("destructible_marks", value_of::<bevy_grimoire_core::destructible::Marks>(&frozen_yaml("editor-3f4084c/destructible.ron", "destructible.ron"))),
+        ("destructible_bake", value_of::<bevy_grimoire_core::destructible::Bake>(&frozen_yaml("editor-3f4084c/site__cart.bake.ron", "destructible/site__cart.bake.ron"))),
     ]
 }
 
-/// A RON fixture as the YAML this crate's writer writes it, so the fixture is in the format the schema
-/// describes.
-fn value_of<T>(ron: &str) -> String
+/// **A fixture read by its type and written again by the one writer**, so what the schema is asked about is
+/// this build's own output for the value the project holds — the same document the editor writes.
+fn value_of<T>(yaml: &str) -> String
 where
     T: serde::Serialize + serde::de::DeserializeOwned,
 {
-    let value: T = ron::from_str(ron).unwrap_or_else(|e| panic!("the fixture does not read as RON: {e}"));
-    bevy_grimoire_core::yaml::to_string(&value).unwrap_or_else(|e| panic!("{e}"))
+    let value: T = bevy_grimoire_core::yaml::from_str(yaml, "a fixture")
+        .unwrap_or_else(|p| panic!("the fixture does not read: {}", p.line()));
+    bevy_grimoire_core::yaml::to_string(&value).unwrap_or_else(|p| panic!("{}", p.line()))
 }
 
 /// **The fixture as the JSON an outside editor sees**, read by the same plain YAML-to-JSON reader an

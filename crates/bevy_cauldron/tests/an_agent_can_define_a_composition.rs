@@ -1,7 +1,7 @@
 //! **An agent defines a composition from placements, and takes it back** (E-072, `composition_define`).
 //!
 //! Through the registered BRP methods, as an agent's request goes: place two pieces, define a group
-//! from them, see `compositions.ron` hold it; redefining needs `replace`; undo restores the file byte
+//! from them, see `compositions.yaml` hold it; redefining needs `replace`; undo restores the file byte
 //! for byte, both for a new group and for a redefinition.
 
 use bevy::prelude::*;
@@ -56,7 +56,7 @@ fn place(app: &mut App, piece: &str, at: [f32; 2]) -> String {
 }
 
 fn comps(root: &std::path::Path) -> String {
-    std::fs::read_to_string(root.join("assets/grimoire/compositions.ron")).unwrap_or_default()
+    std::fs::read_to_string(root.join("assets/grimoire/compositions.yaml")).unwrap_or_default()
 }
 
 fn id_of(a: &serde_json::Value) -> String {
@@ -74,7 +74,7 @@ fn placements_become_a_group_and_undo_takes_it_back() {
 
     let made = id_of(&apply(&mut app, "composition_define", serde_json::json!({"id": "Corner", "from": [a, b]})));
     let after = comps(&root);
-    assert!(after.contains("id: \"corner\""), "the id is forced to snake_case and written: {after}");
+    assert!(after.contains("id: corner"), "the id is forced to snake_case and written: {after}");
     let project = app.world().resource::<Project>();
     let c = project.compositions.compositions.iter().find(|c| c.id == "corner").expect("the project holds it");
     assert_eq!(c.members.len(), 2);
@@ -84,7 +84,7 @@ fn placements_become_a_group_and_undo_takes_it_back() {
     // Absence and an empty file are one state to the loader (see `chooser.rs`), so a project that had
     // no file may be left with an empty one.
     let text = comps(&root);
-    assert!(text.is_empty() || bevy_grimoire_core::composition::Compositions::parse(&text).unwrap().compositions.is_empty(), "undo leaves no group in compositions.ron: {text}");
+    assert!(text.is_empty() || bevy_grimoire_core::composition::Compositions::parse(&text).unwrap().compositions.is_empty(), "undo leaves no group in compositions.yaml: {text}");
     assert!(app.world().resource::<Project>().compositions.compositions.iter().all(|c| c.id != "corner"));
 }
 

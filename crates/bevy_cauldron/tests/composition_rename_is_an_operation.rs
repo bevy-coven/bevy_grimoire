@@ -84,7 +84,7 @@ fn stamped(app: &App) -> Vec<String> {
 }
 
 fn files(root: &std::path::Path, app: &App) -> (String, String) {
-    let comps = std::fs::read_to_string(root.join("assets/grimoire/compositions.ron")).unwrap_or_default();
+    let comps = std::fs::read_to_string(root.join("assets/grimoire/compositions.yaml")).unwrap_or_default();
     let map = std::fs::read_to_string(app.world().resource::<OpenMap>().map_path.clone())
         .expect("the map file");
     (comps, map)
@@ -104,8 +104,8 @@ fn an_agent_renames_a_composition_its_stamps_follow_and_undo_puts_it_back() {
     assert_eq!(ids(&app), ["hall", "pair"], "the project still holds the old name");
     assert_eq!(stamped(&app), ["hall"], "the open map's stamp still names the old composition");
     let (comps, map) = files(&root, &app);
-    assert!(comps.contains("\"hall\"") && !comps.contains("\"corner\""), "compositions.ron: {comps}");
-    assert!(map.contains("\"hall\""), "the map file's stamp does not follow: {map}");
+    assert!(comps.contains("id: hall") && !comps.contains("id: corner"), "compositions.yaml: {comps}");
+    assert!(map.contains("of: hall"), "the map file's stamp does not follow: {map}");
 
     let id = a["operation_id"].as_str().expect("an apply returns its id").to_owned();
     let back = call(
@@ -164,5 +164,5 @@ fn the_compose_field_renames_through_the_operation() {
     assert!(receipt.contains("hall_two"), "the receipt does not name the new id: {receipt}");
     assert_eq!(ids(&app), ["hall_two", "pair"]);
     assert_eq!(stamped(&app), ["hall_two"]);
-    assert!(files(&root, &app).1.contains("\"hall_two\""));
+    assert!(files(&root, &app).1.contains("hall_two"));
 }

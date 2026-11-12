@@ -1,13 +1,13 @@
 //! **Destructible props, through `bevy_carnage`** (#108): `destructible_set` and `destructible_hit`.
 //!
 //! A piece marked destructible is fractured once, by the crate's own `fracture_mesh`, over its mesh
-//! and a box proxy of its bounds. The chunks are cached in the project, `destructible/<piece>.bake.ron`,
+//! and a box proxy of its bounds. The chunks are cached in the project, `destructible/<piece>.bake.yaml`,
 //! keyed by the mesh's bytes and the cut settings, so marking it again (or reopening the project)
-//! never bakes it a second time and a changed mesh does. The marks are `destructible.ron`.
+//! never bakes it a second time and a changed mesh does. The marks are `destructible.yaml`.
 //!
 //! `destructible_hit` previews a hit on the cached chunks and reports which break loose and whether
 //! each is a closed solid, by the crate's own audit. The violence dials (`GorePolicy`) are the crate's
-//! own settings, `family/bevy_carnage.ron`, written through `family_set`; the editor ships no gore.
+//! own settings, `family/bevy_carnage.yaml`, written through `family_set`; the editor ships no gore.
 
 use bevy::prelude::*;
 use bevy_carnage::{CutSettings, ProxyCell, audit_cell, fracture_mesh};
@@ -24,15 +24,15 @@ const TARGET_CHUNKS: usize = 6;
 const MIN_FRACTION: f32 = 0.05;
 
 /// What a refusal calls the marks file: the path the author edits it by.
-const MARKS_FILE: &str = "destructible.ron";
+const MARKS_FILE: &str = "destructible.yaml";
 
 fn marks_path(root: &Path) -> PathBuf {
     root.join(MARKS_FILE)
 }
 
-/// `<project>/destructible/<piece>.bake.ron`, the piece id's `/` written `__`.
+/// `<project>/destructible/<piece>.bake.yaml`, the piece id's `/` written `__`.
 pub fn bake_path(root: &Path, piece: &str) -> PathBuf {
-    root.join("destructible").join(format!("{}.bake.ron", piece.replace('/', "__")))
+    root.join("destructible").join(format!("{}.bake.yaml", piece.replace('/', "__")))
 }
 
 /// **The marks, strictly**: no file is no marks, and a file that does not read refuses with its field
@@ -42,7 +42,7 @@ pub fn bake_path(root: &Path, piece: &str) -> PathBuf {
 fn load_marks(root: &Path) -> Result<Marks, Refusal> {
     match std::fs::read_to_string(marks_path(root)) {
         Ok(t) => {
-            let marks: Marks = read_named("destructible_marks", MARKS_FILE, &t)?;
+            let marks: Marks = read_named("destructible_marks", MARKS_FILE, &t, |t| bevy_grimoire_core::yaml::from_str::<Marks>(t, MARKS_FILE).map_err(|p| p.why.unwrap_or(p.what)))?;
             if marks.version != VERSION {
                 return Err(Refusal::new(format!(
                     "{MARKS_FILE} (version): version {} is not the {VERSION} this program reads. The file is left as it is: it comes from another build, so use that build or remove the file, then try again. Nothing was changed.",
@@ -52,13 +52,13 @@ fn load_marks(root: &Path) -> Result<Marks, Refusal> {
             Ok(marks)
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Marks { version: VERSION, pieces: Vec::new() }),
-        Err(e) => Err(Refusal::new(format!("destructible.ron cannot be read: {e}"))),
+        Err(e) => Err(Refusal::new(format!("destructible.yaml cannot be read: {e}"))),
     }
 }
 
 fn write_marks(root: &Path, marks: &Marks) -> Result<(), Refusal> {
-    let text = ron::ser::to_string_pretty(marks, ron::ser::PrettyConfig::default()).map_err(|e| Refusal::new(e.to_string()))?;
-    bevy_grimoire_core::atomic_file::write(&marks_path(root), text).map_err(|e| Refusal::new(format!("destructible.ron refused the write, so nothing changed: {e}")))
+    let text = bevy_grimoire_core::yaml::to_string(marks).map_err(|p| Refusal::new(p.line()))?;
+    bevy_grimoire_core::atomic_file::write(&marks_path(root), text).map_err(|e| Refusal::new(format!("destructible.yaml refused the write, so nothing changed: {e}")))
 }
 
 fn cut_for(piece: &str) -> CutSettings {
@@ -90,7 +90,7 @@ fn subject(ctx: &Ctx, piece: &str) -> Result<(Mesh, ProxyCell, u64), Refusal> {
     let mut m = Mesh::new(bevy::mesh::PrimitiveTopology::TriangleList, bevy::asset::RenderAssetUsages::default());
     m.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     let proxy = ProxyCell::from_box((lo + hi) * 0.5, ((hi - lo) * 0.5).max(Vec3::splat(1.0e-4)));
-    let key = hash ^ bevy_grimoire_core::glb::fnv1a(ron::to_string(&cut_for(piece)).unwrap_or_default().as_bytes()).rotate_left(17);
+    let key = hash ^ bevy_grimoire_core::glb::fnv1a(format!("{:?}", cut_for(piece)).as_bytes()).rotate_left(17);
     Ok((m, proxy, key))
 }
 
@@ -105,7 +105,7 @@ fn read_bake(root: &Path, piece: &str) -> Result<Option<Bake>, Refusal> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(Refusal::new(format!("{name} cannot be read: {e}. The file is left as it is: fix it or remove it, then try again. Nothing was changed."))),
     };
-    read_named("destructible_bake", &name, &text).map(Some)
+    read_named("destructible_bake", &name, &text, Bake::parse).map(Some)
 }
 
 /// The cached bake for `piece` when it matches `key`; otherwise bake, write and return it. The flag is
@@ -127,7 +127,7 @@ fn baked(ctx: &Ctx, piece: &str) -> Result<(Bake, bool), Refusal> {
     let bake = Bake { version: VERSION, key, chunks };
     let path = bake_path(&root, piece);
     std::fs::create_dir_all(path.parent().expect("a bake path has a directory")).map_err(|e| Refusal::new(e.to_string()))?;
-    let text = ron::ser::to_string(&bake).map_err(|e| Refusal::new(e.to_string()))?;
+    let text = bevy_grimoire_core::yaml::to_string(&bake).map_err(|p| Refusal::new(p.line()))?;
     bevy_grimoire_core::atomic_file::write(&path, text).map_err(|e| Refusal::new(format!("{} refused the bake, so nothing changed: {e}", path.display())))?;
     Ok((bake, true))
 }

@@ -1,0 +1,1363 @@
+version: 1
+note: GENERATED from config.ron:placement.furniture by tests/descriptor_migration.rs. Do not hand-edit — regenerate with GRIMOIRE_WRITE_LIBRARY=1 cargo test --test descriptor_migration.
+descriptors:
+- id: lamp_tall
+  mesh: low_poly_furniture/glb/Lights/Ceiling Light.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.61
+    - 0.61
+    height: 0.5
+  mount: !OnSurface
+    class: worktop
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - light
+  effects:
+  - emit
+  look: []
+  placement:
+    rooms:
+    - decor
+    group: null
+  subgrid: null
+  note: null
+- id: wall_light
+  mesh: low_poly_furniture/glb/Lights/Wall Light.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.38
+    - 0.2
+    height: 0.0
+  mount: !OnWall
+    height: 1.8
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - light
+  effects:
+  - emit
+  look: []
+  placement:
+    rooms:
+    - wall
+    group: null
+  subgrid: null
+  note: null
+- id: bin
+  mesh: low_poly_furniture/glb/Miscellaneous/Bin.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.4
+    - 0.4
+    height: 0.0
+  mount: Tiled
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - bin
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - decor
+    group: null
+  subgrid: null
+  note: null
+- id: globe
+  mesh: low_poly_furniture/glb/Miscellaneous/Globe.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.33
+    - 0.28
+    height: 0.3
+  mount: !OnSurface
+    class: support
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - decor
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - decor
+    group: null
+  subgrid: null
+  note: null
+- id: plant_a
+  mesh: low_poly_furniture/glb/Miscellaneous/Plant A.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.52
+    - 0.55
+    height: 0.5
+  mount: !OnSurface
+    class: support
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - plant
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - decor
+    group: null
+  subgrid: null
+  note: null
+- id: plant_b
+  mesh: low_poly_furniture/glb/Miscellaneous/Plant B.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.18
+    - 0.18
+    height: 0.25
+  mount: !OnSurface
+    class: support
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - plant
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - decor
+    group: null
+  subgrid: null
+  note: null
+- id: lamp
+  mesh: low_poly_furniture/glb/Lights/Lamp C.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.32
+    - 0.32
+    height: 0.4
+  mount: !OnSurface
+    class: worktop
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - light
+  effects:
+  - emit
+  look: []
+  placement:
+    rooms:
+    - decor
+    group: null
+  subgrid: null
+  note: null
+- id: bed_double
+  mesh: low_poly_furniture/glb/Beds/Bed Double.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.278
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.72
+    - 2.22
+    height: 0.714
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - bed
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - bedroom
+    group: null
+  subgrid: null
+  note: null
+- id: sofa
+  mesh: low_poly_furniture/glb/Sofas/Sofa A.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.058
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 2.08
+    - 0.88
+    height: 0.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - living
+    group: null
+  subgrid: null
+  note: null
+- id: table
+  mesh: low_poly_furniture/glb/Tables/Table A.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.66
+    - 0.71
+    height: 0.796
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    - worktop
+    faces: []
+    sockets: []
+  kind:
+  - table
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - living
+    - dining
+    group: null
+  subgrid: null
+  note: null
+- id: chair
+  mesh: low_poly_furniture/glb/Chairs/Chair A.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.057
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.41
+    - 0.51
+    height: 0.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - dining
+    group: null
+  subgrid: null
+  note: null
+- id: drawer
+  mesh: low_poly_furniture/glb/Drawers/Drawer A.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - -0.141
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.55
+    - 0.6
+    height: 0.756
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - storage
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - bedroom
+    group: null
+  subgrid: null
+  note: null
+- id: shelf
+  mesh: low_poly_furniture/glb/Shelves/Shelf D.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.23
+    - 0.38
+    height: 0.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - storage
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - living
+    group: null
+  subgrid: null
+  note: null
+- id: fridge
+  mesh: low_poly_furniture/glb/Kitchen/Fridge A.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - -0.157
+    - -0.136
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.88
+    - 0.61
+    height: 0.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - appliance
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - kitchen
+    group: null
+  subgrid: null
+  note: null
+- id: tv
+  mesh: low_poly_furniture/glb/Electronics/TV A.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.88
+    - 0.8
+    height: 0.5
+  mount: !OnSurface
+    class: support
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - appliance
+  effects:
+  - emit
+  - screen
+  look: []
+  placement:
+    rooms:
+    - living
+    group: null
+  subgrid: null
+  note: null
+- id: crt_large
+  mesh: retro_tvs/retro_tv_large.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.88
+    - 0.56
+    height: 0.66
+  mount: !OnSurface
+    class: support
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - appliance
+  effects:
+  - emit
+  - screen
+  look: []
+  placement:
+    rooms:
+    - living
+    group: null
+  subgrid: null
+  note: null
+- id: crt_a
+  mesh: retro_tvs/retro_tv_a.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.89
+    - 0.89
+    height: 0.66
+  mount: !OnSurface
+    class: support
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - appliance
+  effects:
+  - emit
+  - screen
+  look: []
+  placement:
+    rooms:
+    - living
+    - office
+    group: null
+  subgrid: null
+  note: null
+- id: crt_b
+  mesh: retro_tvs/retro_tv_b.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.51
+    - 0.47
+    height: 0.45
+  mount: !OnSurface
+    class: support
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - appliance
+  effects:
+  - emit
+  - screen
+  look: []
+  placement:
+    rooms:
+    - bedroom
+    - office
+    group: null
+  subgrid: null
+  note: null
+- id: armchair
+  mesh: tinyliving/lovely_armchair.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.82
+    - 0.74
+    height: 1.03
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - living
+    group: null
+  subgrid: null
+  note: null
+- id: loveseat
+  mesh: tinyliving/lovely_loveseat.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.83
+    - 0.75
+    height: 0.91
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - living
+    group: null
+  subgrid: null
+  note: null
+- id: dining_chair
+  mesh: tinyliving/lovely_dining_chair.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.62
+    - 0.66
+    height: 0.99
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - dining
+    - kitchen
+    group: null
+  subgrid: null
+  note: null
+- id: pouffe
+  mesh: tinyliving/modern_pouffe.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.59
+    - 0.6
+    height: 0.53
+  mount: Tiled
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - living
+    group: null
+  subgrid: null
+  note: null
+- id: coffee_table
+  mesh: tinyliving/sir_cumference_coffee_table.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.73
+    - 0.73
+    height: 0.5
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - table
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - living
+    group: null
+  subgrid: null
+  note: null
+- id: writing_desk
+  mesh: tinyliving/tiny_desk_for_tiny_living.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.81
+    - 0.85
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    - worktop
+    faces: []
+    sockets: []
+  kind:
+  - table
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - office
+    - bedroom
+    group: null
+  subgrid: null
+  note: null
+- id: bookcase_tall
+  mesh: tinyliving/power_tower_bookcase.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.85
+    - 0.59
+    height: 2.4
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - storage
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - office
+    - living
+    group: null
+  subgrid: null
+  note: null
+- id: dresser_tall
+  mesh: tinyliving/power_tower_dresser.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.52
+    - 0.53
+    height: 1.51
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - storage
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - bedroom
+    group: null
+  subgrid: null
+  note: null
+- id: dresser_stubby
+  mesh: tinyliving/stubby_cubby_dresser.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.68
+    - 0.85
+    height: 1.36
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - storage
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - bedroom
+    group: null
+  subgrid: null
+  note: null
+- id: tiered_shelf
+  mesh: tinyliving/tiered_shelf.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.3
+    - 0.78
+    height: 1.04
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - storage
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - living
+    - office
+    group: null
+  subgrid: null
+  note: null
+- id: vanity
+  mesh: tinyliving/the_sinkz_bathroom_vanity.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.65
+    - 0.68
+    height: 1.37
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - worktop
+    faces: []
+    sockets: []
+  kind:
+  - appliance
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - bathroom
+    group: null
+  subgrid: null
+  note: null
+- id: lavatory
+  mesh: tinyliving/compact_lavatory.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.39
+    - 0.74
+    height: 0.89
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - appliance
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - bathroom
+    group: null
+  subgrid: null
+  note: null
+- id: desk_lamp_modern
+  mesh: tinyliving/the_modern_desk_lamp.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.25
+    - 0.24
+    height: 0.56
+  mount: !OnSurface
+    class: worktop
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - light
+  effects:
+  - emit
+  look: []
+  placement:
+    rooms:
+    - decor
+    group: null
+  subgrid: null
+  note: null
+- id: barrel_acid
+  mesh: barrels/barrel_acid.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.56
+    - 0.56
+    height: 0.86
+  mount: Tiled
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - container
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - hall
+    - office
+    group: null
+  subgrid: null
+  note: null
+- id: barrel_acid_b
+  mesh: barrels/barrel_acid_b.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.56
+    - 0.56
+    height: 0.86
+  mount: Tiled
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - container
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - hall
+    group: null
+  subgrid: null
+  note: null
+- id: barrel_metal
+  mesh: barrels/barrel_metal.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.56
+    - 0.56
+    height: 0.86
+  mount: Tiled
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - container
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - hall
+    - kitchen
+    group: null
+  subgrid: null
+  note: null
+- id: barrel_rusty
+  mesh: barrels/barrel_rusty.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.56
+    - 0.56
+    height: 0.86
+  mount: Tiled
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - container
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - hall
+    - office
+    group: null
+  subgrid: null
+  note: null
+- id: floor_grate
+  mesh: ozea/floor_grate.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.03
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 0.06
+  mount: Tiled
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - decor
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - hall
+    - office
+    group: null
+  subgrid: null
+  note: null
+- id: floor_light
+  mesh: ozea/floor_light.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.03
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 0.06
+  mount: Tiled
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - light
+  effects:
+  - emit
+  look: []
+  placement:
+    rooms:
+    - hall
+    group: null
+  subgrid: null
+  note: null
+- id: desk
+  mesh: low_poly_furniture/glb/Tables/Desk.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - -0.347
+    - -0.126
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.897
+    - 0.895
+    height: 0.854
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    - worktop
+    faces: []
+    sockets: []
+  kind:
+  - table
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - office
+    group: null
+  subgrid: null
+  note: null
+- id: toilet
+  mesh: low_poly_furniture/glb/Bathroom/Toilet.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - -0.029
+    - 0.124
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.592
+    - 0.765
+    height: 0.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - fixture
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - bathroom
+    group: bath
+  subgrid: null
+  note: null
+- id: sink
+  mesh: low_poly_furniture/glb/Bathroom/Sink.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - -0.006
+    - 0.09
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.444
+    - 0.29
+    height: 0.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - fixture
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - bathroom
+    group: bath
+  subgrid: null
+  note: null
+- id: bath
+  mesh: low_poly_furniture/glb/Bathroom/Bath.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.545
+    - 0.004
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.412
+    - 0.781
+    height: 0.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - fixture
+  effects: []
+  look: []
+  placement:
+    rooms:
+    - bathroom
+    group: null
+  subgrid: null
+  note: null

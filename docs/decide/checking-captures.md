@@ -30,10 +30,10 @@ fails when it has earned nothing — is the failure mode the issue exists to avo
 
 ## Where the checks come from
 
-- **Built in** — `crates/bevy_oracle/fixtures/checks.ron`, five yes/no questions about a close-up, a
+- **Built in** — `crates/bevy_oracle/fixtures/checks.yaml`, five yes/no questions about a close-up, a
   before/after pair and a whole view (`floating`, `clipping`, `out_of_area`, `blank_frame`,
   `toast_visible`).
-- **The project's** — `assets/grimoire/checks.ron` in the project being checked, merged over the built-in
+- **The project's** — `assets/grimoire/checks.yaml` in the project being checked, merged over the built-in
   set by name, so a project can re-point a threshold without losing the rest.
 
 ## Evidence
@@ -46,7 +46,7 @@ problem in a picture.*
 ## Calibrating a check
 
 A check earns the right to block by being measured against a labelled set of real captures; the result is
-written into its `calibration` in `checks.ron` (`agreement`, `set_size`, `model`, `date`). `--bar` (default
+written into its `calibration` in `checks.yaml` (`agreement`, `set_size`, `model`, `date`). `--bar` (default
 0.9) is the agreement a check must reach. Until a check has one, it is **advisory** — printed every run,
 never fatal — which is what lets a new check be added to a project on its first day.
 
@@ -62,7 +62,7 @@ what its line claims. It sends four images — the still beside the MP4 and thre
 what the line says?* The line's title is carried in the question, because a model asked "does this match?"
 without the claim answers from nothing.
 
-**Its labelled set is data**: `crates/bevy_oracle/fixtures/clip_samples.ron`, every changelog clip with a
+**Its labelled set is data**: `crates/bevy_oracle/fixtures/clip_samples.yaml`, every changelog clip with a
 clip as a *match* (its own line) and a *mismatch* (the same frames under another line's title). The second
 half is what stops a check that always says "that is fine" from scoring 100 %. The images are derived, not
 committed; remake them with:
@@ -81,7 +81,7 @@ another line's mismatch), at a chosen threshold of 0.241:
 ```sh
 GRIMOIRE_DECIDE_ENDPOINT=http://127.0.0.1:8093/v1/systemone \
   cargo run -q -p bevy_oracle --bin decide_check -- \
-  --calibrate crates/bevy_oracle/fixtures/clip_samples.ron
+  --calibrate crates/bevy_oracle/fixtures/clip_samples.yaml
 # clip_shows_its_title   agreement 61.5% on 122 samples, threshold 0.241, model clef-flash
 ```
 
@@ -92,12 +92,12 @@ must not be able to block, and this one has now shown what it is worth rather th
 **The measurement is a file, not this paragraph.** `--out` writes it, and a test reads it:
 
 ```sh
-  --out crates/bevy_oracle/fixtures/clip_calibration.ron
+  --out crates/bevy_oracle/fixtures/clip_calibration.yaml
 # clip_shows_its_title   agreement 61.5% on 122 samples, threshold 0.241, model clef-flash
-# recorded to crates/bevy_oracle/fixtures/clip_calibration.ron
+# recorded to crates/bevy_oracle/fixtures/clip_calibration.yaml
 ```
 
-`crates/bevy_oracle/fixtures/clip_calibration.ron` is that record: the check, the model, the set size, the
+`crates/bevy_oracle/fixtures/clip_calibration.yaml` is that record: the check, the model, the set size, the
 threshold, the counts the agreement is made of, and the date. `tests/the_clips_calibration_is_recorded.rs`
 reads it and refuses a record whose `agreement` is not its own `correct / set_size`, whose `set_size` is not
 the labelled set's, or whose set has lost one of its two halves. That is the issue's first acceptance item
@@ -125,7 +125,7 @@ and 30 blanks in the shapes the check exists for (all black, magenta, flat grey,
 The two classes separated cleanly — **blanks scored at least 0.923, every real still at most 0.027** — so a
 threshold of 0.475 agrees with all 60.
 
-Writing that into `fixtures/checks.ron` is **blocked by a protected assertion**:
+Writing that into `fixtures/checks.yaml` is **blocked by a protected assertion**:
 `checks::builtin_checks_parse_and_name_the_five` ends `assert!(c.checks.iter().all(|c| c.calibration.is_none()),
 "none has earned a calibration yet")`. That assertion is the right one for the day it was written and it is
 now false in fact. Changing it is a re-pin of an existing assertion, which a pass may not do; the owner makes

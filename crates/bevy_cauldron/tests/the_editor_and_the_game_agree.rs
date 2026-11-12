@@ -184,7 +184,7 @@ fn the_saved_file_holds_a_reference_and_not_the_rows() {
         );
     }
 
-    let text = std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.ron"))
+    let text = std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.yaml"))
         .unwrap_or_else(|e| panic!("{e}"));
     assert!(
         text.contains("stamps:"),

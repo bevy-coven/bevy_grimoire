@@ -1,0 +1,29 @@
+version: 9
+name: courtyard
+origin:
+- 0.0
+- 0.0
+- 0.0
+bounds:
+- 24.0
+- 3.0
+- 24.0
+bash: null
+placements:
+- id: floor@0
+  descriptor: floor
+  at:
+  - 2.0
+  - 2.0
+  yaw: 0.0
+- id: wall@1
+  descriptor: wall
+  at:
+  - 0.0
+  - 0.0
+  yaw: 0.0
+locations: []
+note: null
+enclosure:
+  wish: 0.25
+  weight: 200

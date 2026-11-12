@@ -91,8 +91,8 @@ struct PosixShell(#[allow(dead_code)] std::sync::MutexGuard<'static, ()>);
 /// and the card is waited for exactly as `an_agent_tab_runs_its_self_test` waits for it.
 fn editor_on_an_agent_tab(tag: &str) -> App {
     let root = fixtures::Fixture::new(&format!("{tag}_{}", std::process::id())).descriptor("floor", "alpha").build("m");
-    let file = root.join("assets/grimoire/editor.ron");
-    let settings = r#"(version: 1, terminal_agent: Some(Custom), terminal_agent_command: Some("printf 'AGENT-%s\n' UP"))"#;
+    let file = root.join("assets/grimoire/editor.yaml");
+    let settings = r#"{version: 1, terminal_agent: Custom, terminal_agent_command: "printf 'AGENT-%s\n' UP"}"#;
     std::fs::write(&file, settings).unwrap_or_else(|e| panic!("{}: {e}", file.display()));
     let agents = std::env::temp_dir().join(format!("{tag}_{}_agents", std::process::id()));
     let server = std::env::temp_dir().join(format!("{tag}_{}_server", std::process::id()));
@@ -201,7 +201,7 @@ fn the_card_and_the_chip_are_repainted_from_the_running_skin() {
     until(&mut app, "the self-test card was never drawn", |app| !drawn_card(app).is_empty());
 
     // **A skin no preset is**, inserted after the card and the chip stand: this is the case the system
-    // exists for — a project's `family/bevy_gooey.ron` edited while the tab is on screen.
+    // exists for — a project's `family/bevy_gooey.yaml` edited while the tab is on screen.
     let skin = a_skin_of_its_own();
     let expect = AgentInk::of(Some(&skin));
     app.world_mut().insert_resource(skin);

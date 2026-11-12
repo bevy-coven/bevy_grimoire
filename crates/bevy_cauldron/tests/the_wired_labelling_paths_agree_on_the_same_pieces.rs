@@ -127,7 +127,7 @@ fn the_decision_path_suggests_every_token_the_recorded_judgement_names() {
     assert_eq!(suggestion.offers_surfaces, vec!["seat"]);
     assert_eq!(suggestion.look, vec!["brown"]);
 
-    // **The provenance names the model and the day**, so a reviewer reading `library.ron` can tell
+    // **The provenance names the model and the day**, so a reviewer reading `library.yaml` can tell
     // which judgements came from a model and when — the reason `label_suggestion::Provenance`
     // carries `model`, off the answer, rather than the endpoint's configured model name.
     assert_eq!(provenance.model, "recorded", "the model that answered is the one recorded");

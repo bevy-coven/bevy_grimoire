@@ -54,7 +54,7 @@ fn every_tree_in_the_file_is_drawn_where_it_stands_and_follows_the_files() {
         &json!({"map": "m", "plant": {"points": [[0.0, 0.0], [12.0, 0.0]], "radius_m": 4.0, "spacing_m": 3.0, "seed": 3, "species": [{"name": "oak", "weight": 1.0}]}}),
     )
     .unwrap();
-    ops::dispatch(&mut ctx, "forest_scatter", &json!({"map": "m", "place": {"species": "trees/tall.tree.ron", "at": [20.0, 5.0], "age_years": 12.0, "seed": 7}})).unwrap();
+    ops::dispatch(&mut ctx, "forest_scatter", &json!({"map": "m", "place": {"species": "trees/tall.tree.yaml", "at": [20.0, 5.0], "age_years": 12.0, "seed": 7}})).unwrap();
     let forest = forest_of(&project, "m");
     let scattered = forest.trees.iter().filter(|t| t.seed.is_none()).count();
     assert!(scattered >= 2, "the stroke planted a few oaks: {forest:?}");
@@ -80,7 +80,7 @@ fn every_tree_in_the_file_is_drawn_where_it_stands_and_follows_the_files() {
             Some(seed) => {
                 let grown = grown.expect("a placed tree is grown by the crate");
                 assert_eq!(grown.0.seed, seed, "the tree's own seed grows it, so it is the game's tree");
-                assert_eq!(grown.0.trunk.radius, 0.3, "its species is the project's .tree.ron");
+                assert_eq!(grown.0.trunk.radius, 0.3, "its species is the project's .tree.yaml");
                 assert_eq!(age.map(|a| a.0), tree.age_years);
                 assert!(pooled.is_none());
             }
@@ -101,7 +101,7 @@ fn every_tree_in_the_file_is_drawn_where_it_stands_and_follows_the_files() {
     until(&mut app, "the undone tree is gone", |w| drawn(w) == scattered && placed_radius(w).is_none());
 
     // A forest file broken by hand keeps the trees drawn rather than emptying the viewport.
-    std::fs::write(project.grimoire_dir.join("forest/m.ron"), "(trees: [(id: 0,").unwrap();
+    std::fs::write(project.grimoire_dir.join("forest/m.yaml"), "{trees: [{id: 0").unwrap();
     for _ in 0..20 {
         app.update();
         std::thread::sleep(std::time::Duration::from_millis(50));

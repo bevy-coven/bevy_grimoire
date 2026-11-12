@@ -132,7 +132,7 @@ fn the_reload_panel_is_the_docks_and_its_lines_are_in_it() {
     // **A game's refusal is one of the lines**, so the list is filled rather than empty: the same
     // `reload_files` rows `grimoire_state.reload_files` reports reach the dock's column.
     let project_dir = app.world().resource::<Project>().project_dir.clone();
-    Verdict::with_kinds(4, "refused", vec![KindVerdict::applied("kits", "kits.ron")]).write(&project_dir).unwrap();
+    Verdict::with_kinds(4, "refused", vec![KindVerdict::applied("kits", "kits.yaml")]).write(&project_dir).unwrap();
     settle(&mut app);
     let lines: Vec<String> = {
         let world = app.world_mut();
@@ -154,7 +154,7 @@ fn the_reload_panel_is_the_docks_and_its_lines_are_in_it() {
 #[test]
 fn a_dock_layout_change_in_the_bottom_dock_is_not_the_workspaces_arrangement() {
     let mut app = editor("not_the_arrangement");
-    let user = app.world().resource::<Project>().root.join(format!("user_{}/settings.ron", std::process::id()));
+    let user = app.world().resource::<Project>().root.join(format!("user_{}/settings.yaml", std::process::id()));
     std::fs::create_dir_all(user.parent().unwrap()).unwrap();
     app.insert_resource(bevy_cauldron::settings::UserSettingsFile(user.clone()));
     for _ in 0..4 {

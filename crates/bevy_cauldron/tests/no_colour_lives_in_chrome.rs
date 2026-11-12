@@ -1,7 +1,7 @@
 //! **`chrome.rs` declares no colour of its own** (UI-02, #210).
 //!
 //! #210's acceptance is *"`chrome.rs` declares no colour constants, and the editor skin's
-//! `problems()` is empty"*. Two slices took the skin half (`src/editor_skin.ron`, the state roles of
+//! `problems()` is empty"*. Two slices took the skin half (`src/editor_skin.yaml`, the state roles of
 //! G-33); this is the other half: the 28 constants are gone and every painter asks
 //! [`chrome::Ink`], which reads the editor's own skin.
 //!
@@ -52,7 +52,7 @@ fn chrome_declares_no_colour_constant() {
     assert!(
         names.is_empty(),
         "chrome.rs still declares {} colour constant(s): {names:?}. Every colour the chrome paints \
-         comes from `chrome::Ink`, which is the editor's skin (`src/editor_skin.ron`) — a constant \
+         comes from `chrome::Ink`, which is the editor's skin (`src/editor_skin.yaml`) — a constant \
          beside it is a second palette, and a second palette is a colour a theme can never reach.",
         names.len()
     );
@@ -123,7 +123,7 @@ fn the_ink_is_read_from_the_skin_it_is_given() {
 /// Game UI preview panel.
 ///
 /// **Updated for #211 in this same issue's wave.** When this test was written, a project's
-/// `family/bevy_gooey.ron` *was* the running `GooeySkin`, so it could only ask the weaker question
+/// `family/bevy_gooey.yaml` *was* the running `GooeySkin`, so it could only ask the weaker question
 /// ("the chrome's ink is its own skin even though the resource is the project's"). #211 moves the file
 /// into [`bevy_cauldron::ui_skin::GameSkin`], so the question is now the strong one: the file is read
 /// into the preview's resource, the running skin is the editor's own, and the chrome's ink is that
@@ -134,8 +134,8 @@ fn the_editor_ink_is_the_editors_skin_whatever_the_project_ships() {
         .descriptor("site/wall", "alpha")
         .build("m");
     std::fs::create_dir_all(root.join("family")).expect("a family folder");
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_gooey\"])").expect("a family.ron");
-    std::fs::write(root.join("family/bevy_gooey.ron"), "(accent: Srgba((red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0)))")
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_gooey\"]}").expect("a family.yaml");
+    std::fs::write(root.join("family/bevy_gooey.yaml"), "{accent: !Srgba {red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0}}")
         .expect("a project skin");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     // The family settings are read over the first frames, which is when `ui_skin::apply_ui_skin`

@@ -5,7 +5,7 @@
 //! so an agent could import meshes and place pieces and never start the kit they belong in. They are now
 //! `kit_create` and `kit_set_authoring`. The agent tests go through the registered BRP methods; the person
 //! tests use the project page's New kit dialog and its Make default item, from a page that has a
-//! root and no loaded project, and assert on `kits.ron`, the files and the log.
+//! root and no loaded project, and assert on `kits.yaml`, the files and the log.
 
 use bevy::prelude::*;
 use bevy::ui_widgets::{Activate, ValueChange};
@@ -50,7 +50,7 @@ fn apply(app: &mut App, operation: &str, parameters: serde_json::Value) -> serde
 }
 
 fn kits_ron(root: &std::path::Path) -> String {
-    std::fs::read_to_string(root.join("assets/grimoire/kits.ron")).expect("kits.ron")
+    std::fs::read_to_string(root.join("assets/grimoire/kits.yaml")).expect("kits.yaml")
 }
 
 fn log_at(root: &std::path::Path) -> Vec<Entry> {
@@ -62,7 +62,7 @@ fn log_at(root: &std::path::Path) -> Vec<Entry> {
         .collect()
 }
 
-/// **One call makes the kit, binds it, and one undo takes it away and puts kits.ron back byte for byte.**
+/// **One call makes the kit, binds it, and one undo takes it away and puts kits.yaml back byte for byte.**
 #[test]
 fn an_agent_makes_a_kit_and_one_undo_takes_it_away() {
     let (root, mut app) = editor("kit-agent");
@@ -72,8 +72,8 @@ fn an_agent_makes_a_kit_and_one_undo_takes_it_away() {
     let a = apply(&mut app, "kit_create", serde_json::json!({"name": "Tavern Props"}));
     assert_eq!(a["outcome"], "applied", "{a}");
     let dir = root.join("assets/grimoire/tavern_props");
-    assert!(dir.join("library.ron").exists() && dir.join("project.ron").exists(), "the kit's two files are not there");
-    assert!(kits_ron(&root).contains("tavern_props"), "kits.ron does not bind it: {}", kits_ron(&root));
+    assert!(dir.join("library.yaml").exists() && dir.join("project.yaml").exists(), "the kit's two files are not there");
+    assert!(kits_ron(&root).contains("tavern_props"), "kits.yaml does not bind it: {}", kits_ron(&root));
     assert_eq!(log_at(&root).len(), lines + 1, "a kit is one log line");
 
     let again = apply(&mut app, "kit_create", serde_json::json!({"name": "tavern props"}));
@@ -83,7 +83,7 @@ fn an_agent_makes_a_kit_and_one_undo_takes_it_away() {
     let back = call(&mut app, "grimoire/operation_undo", serde_json::json!({"operation_id": id, "dry_run": false}));
     assert_eq!(back["outcome"], "applied", "{back}");
     assert!(!dir.exists(), "one undo takes the kit's directory away");
-    assert_eq!(kits_ron(&root), kits_before, "and puts kits.ron back byte for byte");
+    assert_eq!(kits_ron(&root), kits_before, "and puts kits.yaml back byte for byte");
 }
 
 /// **An undo never deletes what an author has put in the kit since.**
@@ -97,7 +97,7 @@ fn an_undo_leaves_a_kit_someone_has_added_to() {
     let id = a["operation_id"].as_str().expect("id").to_owned();
     let back = call(&mut app, "grimoire/operation_undo", serde_json::json!({"operation_id": id, "dry_run": false}));
     assert_eq!(back["outcome"], "refused", "an undo deleted a kit with a file in it: {back}");
-    assert!(dir.join("notes.txt").exists() && dir.join("library.ron").exists(), "the kit lost files");
+    assert!(dir.join("notes.txt").exists() && dir.join("library.yaml").exists(), "the kit lost files");
 }
 
 /// **A bad name, an existing kit, an undo an agent forges and a typo are refused, and nothing is written.**
@@ -115,7 +115,7 @@ fn bad_kits_are_refused_and_nothing_is_written() {
         let r = apply(&mut app, "kit_create", params);
         assert_eq!(r["outcome"], "refused", "{what} was accepted: {r}");
     }
-    assert_eq!(kits_ron(&root), kits_before, "a refusal wrote kits.ron");
+    assert_eq!(kits_ron(&root), kits_before, "a refusal wrote kits.yaml");
     assert_eq!(log_at(&root).len(), lines, "a refusal logged a line");
     assert!(root.join("assets/grimoire/site").exists(), "the existing kit was touched");
 }
@@ -129,7 +129,7 @@ fn an_agent_chooses_the_authoring_kit_and_one_undo_chooses_it_back() {
     assert_eq!(made["outcome"], "applied", "{made}");
     let authoring = |app: &App| -> Option<String> {
         let _ = app;
-        bevy_grimoire_core::kits::Kits::parse(&kits_ron(&root)).expect("kits.ron").authoring
+        bevy_grimoire_core::kits::Kits::parse(&kits_ron(&root)).expect("kits.yaml").authoring
     };
     let first = authoring(&app).expect("the fixture names an authoring kit");
     assert_ne!(first, "second", "the new kit took the authoring seat from the one that had it");
@@ -169,8 +169,8 @@ fn the_pages_new_kit_dialog_makes_the_kit_through_the_operation() {
 
     make_kit(&mut app, "cellar");
 
-    assert!(root.join("assets/grimoire/cellar/library.ron").exists(), "the dialog made no kit");
-    assert!(kits_ron(&root).contains("cellar"), "kits.ron does not bind it");
+    assert!(root.join("assets/grimoire/cellar/library.yaml").exists(), "the dialog made no kit");
+    assert!(kits_ron(&root).contains("cellar"), "kits.yaml does not bind it");
     let entries = log_at(&root);
     assert_eq!(entries.len(), lines + 1, "one dialog is one log line");
     let last = entries.last().expect("a line");

@@ -7,19 +7,13 @@ use serde_json::json;
 
 use crate::fixtures;
 
-const SCRIPT: &str = r#"(conversations: {"hello": (start: "a", nodes: {
-    "a": Line(speaker: "Mara", text: "Well met.", next: Some("b")),
-    "b": Choice(speaker: "Mara", prompt: "Stay?", options: [(text: "Yes", next: "c"), (text: "No", next: "d")]),
-    "c": Line(speaker: "Mara", text: "Good.", next: None),
-    "d": Line(speaker: "Mara", text: "Farewell.", next: None),
-    "orphan": Line(speaker: "Mara", text: "Never said.", next: None),
-})})"#;
+const SCRIPT: &str = r#"{conversations: {"hello": {start: "a", nodes: {"a": !Line {speaker: "Mara", text: "Well met.", next: "b"}, "b": !Choice {speaker: "Mara", prompt: "Stay?", options: [{text: "Yes", next: "c"}, {text: "No", next: "d"}]}, "c": !Line {speaker: "Mara", text: "Good.", next: null}, "d": !Line {speaker: "Mara", text: "Farewell.", next: null}, "orphan": !Line {speaker: "Mara", text: "Never said.", next: null}}}}}"#;
 
 fn open(name: &str) -> Ctx {
     let root = fixtures::Fixture::new(name).descriptor("site/wall", "alpha").build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_speech_bubbles\"])").unwrap();
-    std::fs::write(root.join("family/bevy_speech_bubbles.ron"), SCRIPT).unwrap();
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_speech_bubbles\"]}").unwrap();
+    std::fs::write(root.join("family/bevy_speech_bubbles.yaml"), SCRIPT).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
         app.update();

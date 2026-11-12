@@ -1,5 +1,5 @@
 //! **The editor starts a program a project names only after a person has allowed it** (the review of
-//! 2026-11-02, risk 1). `play.ron` and `agent.ron` come with a cloned project; before this, Play and Send
+//! 2026-11-02, risk 1). `play.yaml` and `agent.yaml` come with a cloned project; before this, Play and Send
 //! ran whatever they named. The model is `bevy_grimoire_core::trust`; these tests are the editor's side:
 //! the refusals, the question and its three answers, and that an agent cannot answer it.
 
@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 
 use crate::fixtures;
 
-/// A project whose `play.ron` runs `touch <root>/ran.marker`: harmless, and it leaves proof it ran.
+/// A project whose `play.yaml` runs `touch <root>/ran.marker`: harmless, and it leaves proof it ran.
 fn project(tag: &str) -> (PathBuf, PathBuf) {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").build("town");
     let marker = root.join("ran.marker");
@@ -26,15 +26,15 @@ fn project(tag: &str) -> (PathBuf, PathBuf) {
 
 fn write_play(root: &Path, marker: &Path) {
     std::fs::write(
-        root.join("play.ron"),
-        format!("(version: 1, command: [\"/usr/bin/touch\", \"{}\"])", marker.display()),
+        root.join("play.yaml"),
+        format!("version: 1\ncommand: [\"/usr/bin/touch\", \"{}\"]\n", marker.display()),
     )
     .unwrap();
 }
 
 /// A store of the test's own that trusts nothing.
 fn empty_store(root: &Path) -> PathBuf {
-    let file = root.join("nothing-trusted.ron");
+    let file = root.join("nothing-trusted.yaml");
     TrustStore::default().save(&file).unwrap();
     file
 }
@@ -98,7 +98,7 @@ fn an_edit_to_play_ron_after_the_person_allowed_the_command_asks_again() {
     let planted = root.join("planted.marker");
     write_play(&root, &planted);
     let mut c = ctx(&root, store, Source::Agent);
-    play(&mut c).expect_err("an edited play.ron ran on the old trust");
+    play(&mut c).expect_err("an edited play.yaml ran on the old trust");
     assert_not_started(&planted);
 }
 
@@ -153,7 +153,7 @@ fn tap(app: &mut App, logical: Key, code: KeyCode) {
 /// Raises the question the way Send or Play leaves it, and returns the store it will write to.
 fn raise(app: &mut App, root: &Path) -> (PathBuf, TrustRequest) {
     let store = empty_store(root);
-    let request = TrustRequest { root: root.to_path_buf(), spec: PlayConfig::from_ron("(version: 1, command: [\"game\", \"{map}\"])").unwrap().spec() };
+    let request = TrustRequest { root: root.to_path_buf(), spec: PlayConfig::parse("version: 1\ncommand: [\"game\", \"{map}\"]\n").unwrap().spec() };
     {
         let mut state = app.world_mut().resource_mut::<EditorState>();
         state.trust.file = Some(store.clone());
@@ -221,8 +221,8 @@ fn the_question_names_the_command_and_the_project() {
 fn a_damaged_store_is_a_problem_on_the_status_line_and_grants_nothing() {
     let (mut app, root) = editor(&format!("trust_q_bad_{}", std::process::id()));
     let (store, _request) = raise(&mut app, &root);
-    std::fs::write(&store, "(version: 1, projects: [").unwrap();
+    std::fs::write(&store, "{version: 1, projects: [").unwrap();
     tap(&mut app, Key::Character("y".into()), KeyCode::KeyY);
     assert!(app.world().resource::<EditorState>().status.problem_text().contains("trusted") || app.world().resource::<EditorState>().status.problem_text().contains("nothing-trusted"));
-    assert_eq!(std::fs::read_to_string(&store).unwrap(), "(version: 1, projects: [", "a damaged store is left as it is");
+    assert_eq!(std::fs::read_to_string(&store).unwrap(), "{version: 1, projects: [", "a damaged store is left as it is");
 }

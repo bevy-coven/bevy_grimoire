@@ -26,30 +26,29 @@ fn project(name: &str) -> std::path::PathBuf {
     // **A stamp of the composition**, so the rename has a reference to follow. The fixture's map
     // carries none — the shipped project's maps carry none either, which is why the case has to be
     // built to be tested.
-    let map = root.join("assets/grimoire/maps/m.map.ron");
+    let map = root.join("assets/grimoire/maps/m.map.yaml");
     let text = std::fs::read_to_string(&map).expect("the map is there");
-    // **The fixture's map already carries an empty `stamps:`**, so the stamp goes *inside* it —
-    // a second `stamps` key would be a duplicate field, and the map would not parse.
+    // **A map that stamps nothing writes no `stamps:` key at all** (it is `skip_serializing_if` empty), so the
+    // stamp is added as a new field under `placements: []` — which is where the writer puts it.
     let stamped = text.replace(
-        "stamps: [],",
-        r#"stamps: [
-        (
-            id: "room@1",
-            of: "site/room",
-            at: (0.0, 0.0),
-            yaw: 0.0,
-            overrides: [],
-            of_fingerprint: None,
-            owned: false,
-            owned_because: None,
-            note: None,
-        ),
-    ],"#,
+        "placements: []\n",
+        r#"placements: []
+stamps:
+- id: room@1
+  of: site/room
+  at: [0.0, 0.0]
+  yaw: 0.0
+  overrides: []
+  of_fingerprint: null
+  owned: false
+  owned_because: null
+  note: null
+"#,
     );
     assert_ne!(
         stamped, text,
-        "the fixture's map has no `stamps: [],` to fill. The map's shape changed and this test \
-         would be stamping nothing."
+        "the fixture's map gained no stamps. The map's shape changed and this test would be \
+         stamping nothing."
     );
     std::fs::write(&map, stamped).expect("the map is writable");
     root
@@ -79,27 +78,27 @@ fn the_rename_reaches_the_door_and_the_map_follows() {
     app.update();
 
     // **The composition's file says the new name.**
-    let comps = std::fs::read_to_string(root.join("assets/grimoire/compositions.ron"))
+    let comps = std::fs::read_to_string(root.join("assets/grimoire/compositions.yaml"))
         .expect("the compositions file is there");
     assert!(
-        comps.contains(r#"id: "site/room_v2""#),
+        comps.contains("id: site/room_v2"),
         "the composition is not under its new name"
     );
     assert!(
-        !comps.contains(r#"id: "site/room""#),
+        !comps.contains("id: site/room\n"),
         "the composition is still under its old name"
     );
 
     // **And the map followed.**
-    let map = std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.ron"))
+    let map = std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.yaml"))
         .expect("the map is there");
     assert!(
-        map.contains(r#"of: "site/room_v2""#),
+        map.contains("of: site/room_v2"),
         "the map's stamp still names the old composition, so the map has a dangling reference and \
          will not open. The map reads:\n{map}"
     );
     assert!(
-        !map.contains(r#"of: "site/room""#),
+        !map.contains("of: site/room\n"),
         "the map's stamp still names the old composition"
     );
 }
@@ -124,7 +123,7 @@ fn a_rename_that_would_collide_is_refused_and_changes_nothing() {
     }
     app.update();
 
-    let before = std::fs::read_to_string(root.join("assets/grimoire/compositions.ron"))
+    let before = std::fs::read_to_string(root.join("assets/grimoire/compositions.yaml"))
         .expect("the compositions file is there");
     let refused = {
         let world = app.world_mut();
@@ -135,7 +134,7 @@ fn a_rename_that_would_collide_is_refused_and_changes_nothing() {
         refused.is_err(),
         "renaming to a name that is already taken must be refused"
     );
-    let after = std::fs::read_to_string(root.join("assets/grimoire/compositions.ron"))
+    let after = std::fs::read_to_string(root.join("assets/grimoire/compositions.yaml"))
         .expect("the compositions file is there");
     assert_eq!(
         before, after,

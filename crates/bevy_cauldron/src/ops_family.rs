@@ -1,6 +1,6 @@
 //! **A family crate's settings, as one registered operation** (#96): `family_set`.
 //!
-//! The settings are the crate's own serde types written as RON in `<project>/family/<crate>.ron`.
+//! The settings are the crate's own serde types written as YAML in `<project>/family/<crate>.yaml`.
 //! The editor holds no schema for them: this operation rewrites one dot-pathed field's value text
 //! (`bevy_grimoire_core::family::set_field`) and keeps the rest of the file as the author left it. Its
 //! inverse is the same operation with the old value, so a person's Enter and an agent's `apply` are
@@ -15,12 +15,12 @@ use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, shown_placement}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
-    /// The family crate whose settings file is written, as named in `family.ron`.
+    /// The family crate whose settings file is written, as named in `family.yaml`.
     #[serde(rename = "crate")]
     pub krate: String,
     /// Dot-separated field names inside the settings, `sun.hour`.
     pub field: String,
-    /// One RON value: `6.5`, `"dusk"`, `(1.0, 2.0)`.
+    /// One YAML value: `6.5`, `dusk`, `[1.0, 2.0]`, or `{x: 1.0, y: 2.0}`.
     pub value: String,
 }
 
@@ -31,9 +31,9 @@ impl Params {
             "additionalProperties": false,
             "required": ["crate", "field", "value"],
             "properties": {
-                "crate": {"type": "string", "description": "The family crate whose settings are written, as listed in family.ron."},
+                "crate": {"type": "string", "description": "The family crate whose settings are written, as listed in family.yaml."},
                 "field": {"type": "string", "description": "Dot-separated field names inside its settings file, e.g. sun.hour."},
-                "value": {"type": "string", "description": "The new value as one RON value, e.g. 6.5 or \"dusk\"."}
+                "value": {"type": "string", "description": "The new value as one YAML value, e.g. 6.5, dusk or {x: 1.0, y: 2.0}."}
             }
         })
     }
@@ -55,9 +55,9 @@ pub(crate) fn settings_path(ctx: &Ctx, krate: &str) -> Result<std::path::PathBuf
     }
     let listed = family::Family::load(&root).map_err(Refusal::new)?;
     if !listed.crates.iter().any(|c| c == krate) {
-        return Err(Refusal::new(format!("{krate} is not listed in family.ron, so its settings were not changed.")));
+        return Err(Refusal::new(format!("{krate} is not listed in family.yaml, so its settings were not changed.")));
     }
-    Ok(root.join("family").join(format!("{krate}.ron")))
+    Ok(root.join("family").join(format!("{krate}.yaml")))
 }
 
 fn read(ctx: &Ctx, krate: &str) -> Option<String> {
@@ -130,10 +130,10 @@ impl Operation for FamilySet {
 pub struct PieceParams {
     /// The placement's id, as the map file names it.
     pub id: String,
-    /// The family crate whose settings this piece carries, as listed in `family.ron`.
+    /// The family crate whose settings this piece carries, as listed in `family.yaml`.
     #[serde(rename = "crate")]
     pub krate: String,
-    /// The crate's own settings type for this piece as one RON value, `(base: 900.0, phase: 1.3, depth: 0.15)`.
+    /// The crate's own settings type for this piece as one YAML value, `{base: 900.0, phase: 1.3, depth: 0.15}`.
     /// Absent takes the settings off the piece.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
@@ -147,8 +147,8 @@ impl PieceParams {
             "required": ["id", "crate"],
             "properties": {
                 "id": {"type": "string", "description": "The placement's id, as the map file names it."},
-                "crate": {"type": "string", "description": "The family crate whose settings the piece carries, as listed in family.ron, e.g. bevy_lights."},
-                "value": {"type": "string", "description": "The crate's own settings type as one RON value, e.g. (base: 900.0, phase: 1.3, depth: 0.15) for a bevy_lights Flicker, or (kind: Campfire, lumens: Some(40.0)) for a Fire. Leave it out to take the settings off the piece."}
+                "crate": {"type": "string", "description": "The family crate whose settings the piece carries, as listed in family.yaml, e.g. bevy_lights."},
+                "value": {"type": "string", "description": "The crate's own settings type as one YAML value, e.g. {base: 900.0, phase: 1.3, depth: 0.15} for a bevy_lights Flicker, or {kind: Campfire, lumens: 40.0} for a Fire. Leave it out to take the settings off the piece."}
             }
         })
     }
@@ -162,14 +162,14 @@ impl PieceParams {
 
 /// **Whether `text` is a value the crate's own type reads**: a crate this build knows is parsed as
 /// that type, so a typo in a field name is refused here and not discovered by the game; any other
-/// listed crate is held to being well-formed RON.
+/// listed crate is held to being well-formed YAML.
 fn reads_as(krate: &str, text: &str) -> Result<(), String> {
     #[cfg(feature = "bevy_lights")]
     if krate == "bevy_lights" {
         return crate::fixture::Fixture::read(text).map(|_| ());
     }
     let _ = krate;
-    ron::from_str::<ron::Value>(text).map(|_| ()).map_err(|e| format!("`{text}` is not RON: {e}"))
+    bevy_grimoire_core::yaml::to_json(text, krate).map(|_| ()).map_err(|p| format!("`{text}` is not YAML: {}", p.line()))
 }
 
 fn family_of(open: &crate::project::OpenMap, id: &str, krate: &str) -> serde_json::Value {
@@ -198,24 +198,24 @@ impl PlacementSetFamily {
     }
 }
 
-/// **What a piece carries for `bevy_speech_bubbles`** (#106): a conversation's name (a RON string), which the
-/// project's `DialogueScript` must define, or a list of the crate's own `Bark`s (a RON list), which it must read.
+/// **What a piece carries for `bevy_speech_bubbles`** (#106): a conversation's name (a YAML string), which the
+/// project's `DialogueScript` must define, or a list of the crate's own `Bark`s (a YAML list), which it must read.
 #[cfg(feature = "bevy_speech_bubbles")]
 fn check_conversation(script: &std::path::Path, p: &PieceParams) -> Result<(), Refusal> {
     let (true, Some(v)) = (p.krate == "bevy_speech_bubbles", p.value.as_deref()) else {
         return Ok(());
     };
     if v.trim_start().starts_with('[') {
-        return ron::from_str::<Vec<bevy_speech_bubbles::Bark>>(v)
+        return bevy_grimoire_core::yaml::from_str::<Vec<bevy_speech_bubbles::Bark>>(v, "bevy_speech_bubbles")
             .map(|_| ())
-            .map_err(|e| Refusal::new(format!("`{v}` is not a list of barks (speaker, kind, emotion, text): {e}. Nothing was set.")));
+            .map_err(|p| Refusal::new(format!("`{v}` is not a list of barks (speaker, kind, emotion, text): {}. Nothing was set.", p.line())));
     }
-    let name: String = ron::from_str(v)
-        .map_err(|e| Refusal::new(format!("`{v}` is not a conversation name (a quoted string such as \"hello\"): {e}. Nothing was set.")))?;
+    let name: String = bevy_grimoire_core::yaml::from_str(v, "bevy_speech_bubbles")
+        .map_err(|p| Refusal::new(format!("`{v}` is not a conversation name (a string such as hello): {}. Nothing was set.", p.line())))?;
     let text = std::fs::read_to_string(script)
         .map_err(|e| Refusal::new(format!("{} cannot be read, so no conversation can be attached: {e}", script.display())))?;
     let defined: bevy_speech_bubbles::DialogueScript =
-        ron::from_str(&text).map_err(|e| Refusal::new(format!("the project's dialogue script is not readable: {e}")))?;
+        bevy_grimoire_core::yaml::from_str(&text, "family/bevy_speech_bubbles.yaml").map_err(|p| Refusal::new(format!("the project's dialogue script is not readable: {}", p.line())))?;
     if defined.conversations.contains_key(&name) {
         return Ok(());
     }
@@ -304,7 +304,9 @@ fn check_society(krate: &str, text: &str) -> Result<(), Refusal> {
     if krate != "bevy_society" {
         return Ok(());
     }
-    bevy_society::SocietyDefs::from_ron(text).map(|_| ()).map_err(|e| Refusal::new(format!("{e}. Nothing was written.")))
+    bevy_grimoire_core::yaml::from_str::<bevy_society::DefsFile>(text, "family/bevy_society.yaml")
+        .map_err(|p| Refusal::new(format!("{}. Nothing was written.", p.line())))
+        .and_then(|file| bevy_society::SocietyDefs::compile(file).map(|_| ()).map_err(|e| Refusal::new(format!("{e}. Nothing was written."))))
 }
 
 #[cfg(not(feature = "bevy_society"))]
@@ -320,7 +322,7 @@ fn check_script(krate: &str, text: &str) -> Result<(), Refusal> {
         return Ok(());
     }
     let script: bevy_speech_bubbles::DialogueScript =
-        ron::from_str(text).map_err(|e| Refusal::new(format!("that is not a dialogue script, so nothing was written: {e}")))?;
+        bevy_grimoire_core::yaml::from_str(text, "family/bevy_speech_bubbles.yaml").map_err(|p| Refusal::new(format!("that is not a dialogue script, so nothing was written: {}", p.line())))?;
     bevy_speech_bubbles::validate_script(&script).map_err(|e| Refusal::new(format!("{e}. Nothing was written.")))
 }
 

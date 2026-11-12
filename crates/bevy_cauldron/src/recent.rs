@@ -1,12 +1,12 @@
 //! **The projects the editor has opened, most recent first** (UI-11, #217).
 //!
-//! One file per user, `<data_dir>/Grimoire/recent.ron`, where `<data_dir>` is the platform's own
+//! One file per user, `<data_dir>/Grimoire/recent.yaml`, where `<data_dir>` is the platform's own
 //! (`dirs::data_dir`: `~/.local/share` on Linux, `~/Library/Application Support` on macOS,
 //! `%APPDATA%` on Windows). It is not in any project: a project is a folder a person owns and may
 //! share, and where one author opened it from is no business of its files.
 //!
 //! The list is data like every other file here: versioned, and a file of another version is refused
-//! by name rather than read as this one's ([`Recent::from_ron`]). A path whose folder has gone is
+//! by name rather than read as this one's ([`Recent::parse`]). A path whose folder has gone is
 //! listed as [`Listed::missing`], never dropped: the author moved it, and [`Recent::locate`] points
 //! the entry at where it went.
 //!
@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 pub const RECENT_VERSION: u32 = 1;
 
-const FILE: &str = "recent.ron";
+const FILE: &str = "recent.yaml";
 
 /// Where the recent list lives for this user, or `None` on a platform with no data directory.
 pub fn user_file() -> Option<PathBuf> {
@@ -98,22 +98,23 @@ fn key(path: &Path) -> PathBuf {
 }
 
 impl Recent {
-    pub fn from_ron(text: &str) -> Result<Recent, String> {
-        let r: Recent = ron::from_str(text).map_err(|e| format!("recent: parse: {e}"))?;
+    pub fn from_yaml(text: &str) -> Result<Recent, String> {
+        let r: Recent = bevy_grimoire_core::yaml::from_str(text, FILE)
+            .map_err(|p| format!("recent: parse: {}", p.line()))?;
         if r.version != RECENT_VERSION {
             return Err(format!("recent: version {} is not the {RECENT_VERSION} this build reads", r.version));
         }
         Ok(r)
     }
 
-    pub fn to_ron(&self) -> Result<String, String> {
-        ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default()).map_err(|e| format!("recent: write: {e}"))
+    pub fn to_yaml(&self) -> Result<String, String> {
+        bevy_grimoire_core::yaml::to_string(self).map_err(|p| format!("recent: write: {}", p.line()))
     }
 
     /// Reads the list at `file`; no file is an empty list, a file this build cannot read is an error naming it.
     pub fn load(file: &Path) -> Result<Recent, String> {
         match std::fs::read_to_string(file) {
-            Ok(text) => Recent::from_ron(&text).map_err(|e| format!("{}: {e}", file.display())),
+            Ok(text) => Recent::from_yaml(&text).map_err(|e| format!("{}: {e}", file.display())),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Recent::default()),
             Err(e) => Err(format!("recent: {}: {e}", file.display())),
         }
@@ -121,7 +122,7 @@ impl Recent {
 
     /// Writes the list to `file` through the one atomic write, so a reader and a crash see the old list or the new one.
     pub fn save(&self, file: &Path) -> Result<(), String> {
-        let text = self.to_ron()?;
+        let text = self.to_yaml()?;
         if let Some(dir) = file.parent() {
             std::fs::create_dir_all(dir).map_err(|e| format!("recent: {}: {e}", dir.display()))?;
         }

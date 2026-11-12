@@ -38,7 +38,7 @@ mod society {
     fn a_fired_trigger_is_named_on_the_receipt_and_a_run_without_one_says_nothing_of_triggers() {
         let with = run_receipt(
             "receipt_fired",
-            Some(json!({"map": "m", "id": "go_to_work", "on": "Activity(\"work\")", "then": "fx.bark(actor, \"on my way\");"})),
+            Some(json!({"map": "m", "id": "go_to_work", "on": "!Activity work", "then": "fx.bark(actor, \"on my way\");"})),
         );
         assert!(with.contains("go_to_work") && with.contains("Mara"), "the receipt names the trigger and the person: {with}");
         let without = run_receipt("receipt_none", None);

@@ -45,6 +45,20 @@ fn frozen(rel: &str) -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
+/// **A frozen file as the YAML this build reads it as**, through the migration, which is the one conversion
+/// that has been proved lossless (`tests/a_project_migrates_from_ron_to_yaml.rs`).
+fn frozen_as_yaml(rel: &str, project_name: &str) -> String {
+    // **The migration matches a file by the name a project gives it** (`maps/yard.notes.ron`), not by the path
+    // it is frozen at (`core-0.3.0/notes.ron`), so the caller says both.
+    let (_, text) = bevy_grimoire_migrate::written_as_yaml(
+        project_name,
+        &frozen(rel),
+        bevy_grimoire_migrate::COMMAND,
+    )
+    .unwrap_or_else(|p| panic!("{}", p.line()));
+    text
+}
+
 fn shipped(rel: &str) -> String {
     let path = grimoire().join(rel);
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
@@ -52,24 +66,27 @@ fn shipped(rel: &str) -> String {
 
 /// **The YAML this crate's writer writes for a RON fixture**, so the document checked is the one the reader
 /// reads rather than a hand-typed guess at it.
-fn value_of<T>(ron: &str) -> String
+fn value_of<T>(yaml: &str) -> String
 where
     T: serde::Serialize + serde::de::DeserializeOwned,
 {
-    let value: T = ron::from_str(ron).unwrap_or_else(|e| panic!("the fixture does not read as RON: {e}"));
-    bevy_grimoire_core::yaml::to_string(&value).unwrap_or_else(|e| panic!("{e}"))
+    // **The document is read and written again**, so what the schema sees is the one writer's output for the
+    // value this build reads — not a file a hand edit left in another shape.
+    let value: T = bevy_grimoire_core::yaml::from_str(yaml, "a fixture")
+        .unwrap_or_else(|p| panic!("the fixture does not read: {}", p.line()));
+    bevy_grimoire_core::yaml::to_string(&value).unwrap_or_else(|p| panic!("{}", p.line()))
 }
 
 /// Every tagged kind and its fixture, as YAML.
 fn tagged_kinds() -> Vec<(&'static str, String)> {
     vec![
-        ("library", value_of::<bevy_grimoire_core::library::Library>(&shipped("site/library.ron"))),
-        ("policy", value_of::<bevy_grimoire_core::policy::Policy>(&shipped("site/project.ron"))),
-        ("compositions", value_of::<bevy_grimoire_core::composition::Compositions>(&shipped("compositions.ron"))),
-        ("rigs", value_of::<bevy_grimoire_core::rigs::Rigs>(&shipped("rigs.ron"))),
-        ("notes", value_of::<bevy_grimoire_core::notes::Notes>(&frozen("core-0.3.0/notes.ron"))),
-        ("relations", value_of::<bevy_grimoire_core::relations::Relations>(&frozen("core-0.3.0/relations.ron"))),
-        ("volume", value_of::<bevy_grimoire_core::volume::Volume>(&frozen("core-0.3.0/volume.ron"))),
+        ("library", value_of::<bevy_grimoire_core::library::Library>(&shipped("site/library.yaml"))),
+        ("policy", value_of::<bevy_grimoire_core::policy::Policy>(&shipped("site/project.yaml"))),
+        ("compositions", value_of::<bevy_grimoire_core::composition::Compositions>(&shipped("compositions.yaml"))),
+        ("rigs", value_of::<bevy_grimoire_core::rigs::Rigs>(&shipped("rigs.yaml"))),
+        ("notes", value_of::<bevy_grimoire_core::notes::Notes>(&frozen_as_yaml("core-0.3.0/notes.ron", "maps/yard.notes.ron"))),
+        ("relations", value_of::<bevy_grimoire_core::relations::Relations>(&frozen_as_yaml("core-0.3.0/relations.ron", "maps/yard.relations.ron"))),
+        ("volume", value_of::<bevy_grimoire_core::volume::Volume>(&frozen_as_yaml("core-0.3.0/volume.ron", "site/volume/yard.ron"))),
     ]
 }
 

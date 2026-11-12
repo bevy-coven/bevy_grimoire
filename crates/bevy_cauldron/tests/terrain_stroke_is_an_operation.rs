@@ -13,7 +13,7 @@ fn project(tag: &str) -> (Ctx, std::path::PathBuf) {
         app.update();
     }
     let project = app.world().resource::<bevy_cauldron::project::Project>().clone();
-    let file = project.grimoire_dir.join("terrain").join("m.ron");
+    let file = project.grimoire_dir.join("terrain").join("m.yaml");
     let open = app.world().resource::<bevy_cauldron::project::OpenMap>().clone();
     (Ctx { project: Some(project), open: Some(open), session: "test".to_owned(), ..Ctx::default() }, file)
 }
@@ -25,7 +25,7 @@ fn raise(ctx: &mut Ctx, extra: serde_json::Value) -> Result<Applied, ops::Refusa
 }
 
 fn load(file: &std::path::Path) -> Heightfield {
-    ron::from_str(&std::fs::read_to_string(file).unwrap()).unwrap()
+    bevy_grimoire_core::yaml::from_str(&std::fs::read_to_string(file).unwrap(), "test").unwrap()
 }
 
 #[test]

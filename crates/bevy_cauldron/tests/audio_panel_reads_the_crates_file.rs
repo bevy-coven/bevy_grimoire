@@ -1,7 +1,7 @@
 //! **The audio panel reads the crate's own sound, and an audition plays it** (S-01).
 //!
 //! `bevy_siren` is hosted behind the `bevy_siren` feature, and the panel writes and reads
-//! `<project>/family/bevy_siren.ron` through the crate's own `SirenSettings` and `CueTable` — never a second schema.
+//! `<project>/family/bevy_siren.yaml` through the crate's own `SirenSettings` and `CueTable` — never a second schema.
 //! This file is the proof of that claim and of the one behaviour the panel exists for: an **Audition** is a
 //! `Play::cue`, so what the panel shows is what a game hears.
 //!
@@ -55,19 +55,7 @@ fn project(tag: &str, text: &str) -> std::path::PathBuf {
 /// names in the panel, with a key for every sound the panel can audition.
 #[test]
 fn the_panel_reads_the_crates_own_file() {
-    let text = r#"(
-        settings: (
-            max_voices: 8,
-            buses: [(name: "Music", gain_db: -2.0), (name: "Effects")],
-            ducks: [],
-        ),
-        cues: (
-            cues: [
-                (name: "footstep.grass", sounds: [(sound: "step_01"), (sound: "step_02")]),
-                (name: "ui.click", sounds: [(sound: "click")], gain_db: -6.0),
-            ],
-        ),
-    )"#;
+    let text = r#"{settings: {max_voices: 8, buses: [{name: "Music", gain_db: -2.0}, {name: "Effects"}], ducks: []}, cues: {cues: [{name: "footstep.grass", sounds: [{sound: "step_01"}, {sound: "step_02"}]}, {name: "ui.click", sounds: [{sound: "click"}], gain_db: -6.0}]}}"#;
     let root = project("siren_reads", text);
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
@@ -104,16 +92,7 @@ fn the_panel_reads_the_crates_own_file() {
 /// key would be playing something the project did not ship.
 #[test]
 fn an_audition_is_a_play_and_the_panel_hears_it() {
-    let text = r#"(
-        settings: (
-            max_voices: 8,
-            buses: [(name: "Effects")],
-            ducks: [],
-        ),
-        cues: (
-            cues: [(name: "ui.click", sounds: [(sound: "click")])],
-        ),
-    )"#;
+    let text = r#"{settings: {max_voices: 8, buses: [{name: "Effects"}], ducks: []}, cues: {cues: [{name: "ui.click", sounds: [{sound: "click"}]}]}}"#;
     let root = project("siren_audition", text);
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     // The headless harness has no `AudioPlugin` (nothing opens a device), so the audio asset store the editor's
@@ -196,10 +175,7 @@ fn an_audition_is_a_play_and_the_panel_hears_it() {
 /// edit never silently zeroes a project's sound.
 #[test]
 fn a_file_that_does_not_parse_is_named_and_the_mix_stays() {
-    let good = r#"(
-        settings: (max_voices: 8, buses: [(name: "Effects")], ducks: []),
-        cues: (cues: [(name: "ui.click", sounds: [(sound: "click")])]),
-    )"#;
+    let good = r#"{settings: {max_voices: 8, buses: [{name: "Effects"}], ducks: []}, cues: {cues: [{name: "ui.click", sounds: [{sound: "click"}]}]}}"#;
     let root = project("siren_broken", good);
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {

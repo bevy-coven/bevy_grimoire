@@ -76,7 +76,7 @@ def entries(text):
 
 
 def checks_file():
-    """A `checks.ron` of one check, held in a temporary project so nothing of this repo's is edited.
+    """A `checks.yaml` of one check, held in a temporary project so nothing of this repo's is edited.
 
     **One line per string, escaped** — RON has no implicit concatenation, so a question split across
     source lines is a parse error, not a longer sentence.
@@ -131,12 +131,12 @@ def main(argv):
         # summary of it.
         facts = scratch / "facts.json"
         facts.write_text(json.dumps({"entries": [{"id": i, "sentence": s} for i, s in rows]}, indent=2), encoding="utf-8")
-        # **A project, in the shape `bevy_oracle` reads one**: `<project>/assets/grimoire/checks.ron`, which
+        # **A project, in the shape `bevy_oracle` reads one**: `<project>/assets/grimoire/checks.yaml`, which
         # is where a game's own checks live. Writing it anywhere else would be a second convention for the
         # same file, and `for_project` would quietly answer with the built-in set instead.
         project = scratch / "project"
         (project / "assets" / "grimoire").mkdir(parents=True)
-        (project / "assets" / "grimoire" / "checks.ron").write_text(checks_file(), encoding="utf-8")
+        (project / "assets" / "grimoire" / "checks.yaml").write_text(checks_file(), encoding="utf-8")
         cmd = [
             "cargo", "run", "-q", "-p", "bevy_oracle", "--bin", "decide_check", "--",
             "--captures", str(scratch),

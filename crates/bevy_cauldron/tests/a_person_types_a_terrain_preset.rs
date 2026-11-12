@@ -31,7 +31,7 @@ fn type_line(app: &mut App, raw: &str) {
 }
 
 fn terrain_file(app: &App) -> std::path::PathBuf {
-    app.world().resource::<Project>().grimoire_dir.join("terrain").join("m.ron")
+    app.world().resource::<Project>().grimoire_dir.join("terrain").join("m.yaml")
 }
 
 fn log(app: &App) -> Vec<Entry> {
@@ -50,7 +50,7 @@ fn log(app: &App) -> Vec<Entry> {
 fn a_typed_preset_line_bakes_the_ground_through_the_operation() {
     let mut app = editor("preset-typed");
     type_line(&mut app, "preset hills 7 8 32 24");
-    let field: Heightfield = ron::from_str(&std::fs::read_to_string(terrain_file(&app)).expect("the bake wrote a terrain")).unwrap();
+    let field: Heightfield = bevy_grimoire_core::yaml::from_str(&std::fs::read_to_string(terrain_file(&app)).expect("the bake wrote a terrain"), "test").unwrap();
     assert_eq!((field.width, field.depth, field.cell_m), (32, 24, 8.0), "the size typed is the size baked");
     let lines = log(&app);
     assert_eq!(lines.len(), 1, "one line is one log line: {lines:?}");

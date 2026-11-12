@@ -11,7 +11,7 @@
     {"at": 1.2, "click": [640, 423], "caption": "person: Settings (Ctrl+, opens it from anywhere)"},
     {"at": 2.6, "type": "grid", "caption": "person: searches grid, and only the grid settings stay"},
     {"at": 4.6, "cursor": [680, 365]},
-    {"at": 5.0, "click": [680, 365], "caption": "person: Reset Grid lines takes the key out of settings.ron"},
+    {"at": 5.0, "click": [680, 365], "caption": "person: Reset Grid lines takes the key out of settings.yaml"},
     {"at": 7.0, "caption": "back to its default (On); Text size, also set in the file, is untouched"}
   ]
 }

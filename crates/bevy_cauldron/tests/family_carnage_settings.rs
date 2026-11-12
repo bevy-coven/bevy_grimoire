@@ -11,9 +11,9 @@ use crate::fixtures;
 fn a_hit_stop_is_set_through_family_set_and_reads_back_as_the_crates_own_type() {
     let root = fixtures::Fixture::new("carnage_settings").descriptor("site/wall", "alpha").build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_carnage\"])").unwrap();
-    let file = root.join("family/bevy_carnage.ron");
-    std::fs::write(&file, "(trauma_per_wound: 0.4, hitstop_seconds: 0.055)").unwrap();
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_carnage\"]}").unwrap();
+    let file = root.join("family/bevy_carnage.yaml");
+    std::fs::write(&file, "{trauma_per_wound: 0.4, hitstop_seconds: 0.055}").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
         app.update();
@@ -26,6 +26,6 @@ fn a_hit_stop_is_set_through_family_set_and_reads_back_as_the_crates_own_type() 
     let mut ctx = Ctx { project: Some(project), session: "test".to_owned(), ..Ctx::default() };
     let done = ops::dispatch(&mut ctx, "family_set", &json!({"crate": "bevy_carnage", "field": "hitstop_seconds", "value": "0.1"})).unwrap();
     assert!(matches!(done, Applied::Done { .. }));
-    let flicker: CarnageSettings = ron::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let flicker: CarnageSettings = bevy_grimoire_core::yaml::from_str(&std::fs::read_to_string(&file).unwrap(), "test").unwrap();
     assert_eq!((flicker.trauma_per_wound, flicker.hitstop_seconds), (0.4, 0.1));
 }

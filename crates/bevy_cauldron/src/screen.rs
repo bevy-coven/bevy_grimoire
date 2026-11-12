@@ -41,7 +41,7 @@
 //! [`Ownership`] table has always said a same-kit door change should do.
 //!
 //! Measured on 2026-10-21: the round trip was **three keystrokes and a full project reload** each
-//! way — `Cmd+O`, walk a column, `Enter` — re-reading `kits.ron`, `vocab.ron` and `rules.ron`,
+//! way — `Cmd+O`, walk a column, `Enter` — re-reading `kits.yaml`, `vocab.yaml` and `rules.yaml`,
 //! re-validating 332 library descriptors and 16 compositions, and **re-measuring every GLB's
 //! triangle count** from its JSON chunk. None of that changes when the author walks from one door
 //! to the other to look at the thing they just made.
@@ -204,8 +204,8 @@ pub struct Crossing;
 ///
 /// The round trip. Measured on 2026-10-21: **`Cmd+O`, `right`, `Enter`** each way — three
 /// keystrokes and a **full project reload**, to move between two halves of one project. The reload
-/// re-reads `kits.ron`, `vocab.ron` and `rules.ron`, re-validates every bound kit's
-/// `library.ron`, and **re-measures the triangle count of every GLB** by reading its JSON chunk.
+/// re-reads `kits.yaml`, `vocab.yaml` and `rules.yaml`, re-validates every bound kit's
+/// `library.yaml`, and **re-measures the triangle count of every GLB** by reading its JSON chunk.
 /// Nothing in any of that changes when the author walks from one door to the other.
 ///
 /// The [`crate::screen::Ownership`] table already says so: `Project` is *"reloaded when the kit is
@@ -357,7 +357,7 @@ door_state![
     crate::editor::PlaceDrag,
     crate::editor::RemovalDrag,
     crate::editor::NoteBox,
-    // **The note a reveal selected** (AF-03, #359): it names a row of *this map's* `.notes.ron`, so a
+    // **The note a reveal selected** (AF-03, #359): it names a row of *this map's* `.notes.yaml`, so a
     // selection carried across a door would name a note the next map does not have.
     crate::editor::SelectedNote,
     crate::editor::NotesFilter,
@@ -684,23 +684,23 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::editor::TerrainEdit", Ownership::Workspace),
     ("bevy_cauldron::editor::CrowdEdit", Ownership::Workspace),
     ("bevy_cauldron::balloon::BalloonPreview", Ownership::Workspace),
-    // The game's newest verdict on a reload, read from `.live/game.ron`: true for as long as the app runs.
+    // The game's newest verdict on a reload, read from `.live/game.yaml`: true for as long as the app runs.
     ("bevy_cauldron::live::LiveGame", Ownership::Session),
     // **The editor's own verdicts on the files it draws from** (#200): true for as long as the app runs, like the
     // game's; `sync_terrain_view` forgets and re-decides them whenever one of its files or its map changes.
     ("bevy_cauldron::live::EditorReloads", Ownership::Session),
     // **Derived from the open map's notes file**: the last good notes the signs and the panel draw (#200). Another map's file starts it afresh.
     ("bevy_cauldron::notes_view::NotesView", Ownership::Project),
-    // **Derived from the open project's `checks.ron`**: the last good checks the after-edit run asks (#200). Another project's file starts it afresh.
+    // **Derived from the open project's `checks.yaml`**: the last good checks the after-edit run asks (#200). Another project's file starts it afresh.
     ("bevy_cauldron::checks_view::ChecksView", Ownership::Project),
     // **Derived from the open project's `oplog.jsonl`**: what the editor last found when it read the log (#200). Another project's log starts it afresh.
     ("bevy_cauldron::oplog_view::OplogView", Ownership::Project),
-    // **Derived from the open project's `data.ron` and the files it lists**: what the editor last found when it read them (#200). Another project's registry starts it afresh.
+    // **Derived from the open project's `data.yaml` and the files it lists**: what the editor last found when it read them (#200). Another project's registry starts it afresh.
     ("bevy_cauldron::data_view::DataView", Ownership::Project),
-    // **Derived from the open map's `references.ron` and the pictures it lists**: what the editor last found when it read their headers (#200). Another map or project starts it afresh.
+    // **Derived from the open map's `references.yaml` and the pictures it lists**: what the editor last found when it read their headers (#200). Another map or project starts it afresh.
     ("bevy_cauldron::reference_view::ReferenceView", Ownership::Project),
     ("bevy_cauldron::family_host::FamilySettings", Ownership::Session),
-    // **`Session`, for `FamilySettings`' reason**: the project's `family/bevy_gooey.ron` read as the game
+    // **`Session`, for `FamilySettings`' reason**: the project's `family/bevy_gooey.yaml` read as the game
     // skin the Game UI preview draws (UI-03, #211). It is a fact about the open project that the panel
     // reads, never the door's working state; a switching keeps it and the file watch fills it again.
     ("bevy_cauldron::ui_skin::GameSkin", Ownership::Session),
@@ -759,7 +759,7 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::shell_view::ShellView", Ownership::Session),
     ("bevy_cauldron::selection::Selection", Ownership::Session),
     // **`Door`, like the light map**: the audio panel's buses, cue names and selection are read from
-    // this door's `family/bevy_siren.ron`, and another project's sound is another file.
+    // this door's `family/bevy_siren.yaml`, and another project's sound is another file.
     #[cfg(feature = "bevy_siren")]
     ("bevy_cauldron::audio_panel::AudioPanel", Ownership::Workspace),
     // **`Session`, not `Door`**: the icon sheet is decoded from the binary (`icons::ATLAS_PNG`) once and

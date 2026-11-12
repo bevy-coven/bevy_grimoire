@@ -221,7 +221,7 @@ impl Plugin for GuidePlugin {
                 // **The measured layer, because that is the one the tag toggle writes.**
                 // `tiles::toggle_tag` edits through `state.editing_mut(&mut project.measured)`, and
                 // `placed_at_target` reads `project.library` — the measurements with the kit's
-                // `project.ron` stretched over them. Reading the patched view answered `false` about
+                // `project.yaml` stretched over them. Reading the patched view answered `false` about
                 // a token that had just landed, on exactly the rows a kit patches.
                 let Some(d) = state.editing(&project.measured) else {
                     return false;
@@ -389,7 +389,7 @@ pub const GUIDES_DIR: &str = "guides";
 /// **Exercises waiting on a kit that is not bound yet** — `guides/pending/`.
 ///
 /// A card names the pieces it sends an author to select, so a guide is only walkable while its kit
-/// ships. Six of them name `site/*`, and `assets/grimoire/kits.ron` says in its own note that that kit
+/// ships. Six of them name `site/*`, and `assets/grimoire/kits.yaml` says in its own note that that kit
 /// *"was cleared … and is being re-authored"* — so they strand at the step that names a piece.
 ///
 /// Parking is a **move, not a branch**: nothing here reads this directory, and the two tests that

@@ -17,14 +17,14 @@ fn item(text: &str, status: Status) -> PlanItem {
 
 #[test]
 fn the_file_sits_beside_the_map() {
-    assert_eq!(path_for_map(Path::new("a/maps/town.map.ron")), Path::new("a/maps/town.plan.ron"));
-    assert_eq!(path_for_map(Path::new("a/maps/odd.ron")), Path::new("a/maps/odd.plan.ron"));
+    assert_eq!(path_for_map(Path::new("a/maps/town.map.yaml")), Path::new("a/maps/town.plan.yaml"));
+    assert_eq!(path_for_map(Path::new("a/maps/odd.yaml")), Path::new("a/maps/odd.plan.yaml"));
 }
 
 #[test]
 fn a_plan_survives_a_restart_with_every_status() {
     let dir = scratch("roundtrip");
-    let path = path_for_map(&dir.join("town.map.ron"));
+    let path = path_for_map(&dir.join("town.map.yaml"));
     let plan = Plan::new(vec![
         item("lay the road", Status::Done),
         item("place the lamps", Status::Doing),
@@ -39,7 +39,7 @@ fn a_plan_survives_a_restart_with_every_status() {
 #[test]
 fn a_map_with_no_plan_file_has_an_empty_plan_and_an_empty_plan_writes_nothing() {
     let dir = scratch("absent");
-    let path = path_for_map(&dir.join("town.map.ron"));
+    let path = path_for_map(&dir.join("town.map.yaml"));
     assert_eq!(Plan::load(&path).unwrap(), Plan::default());
     Plan::default().save(&path).unwrap();
     assert!(!path.exists(), "a map that never had a plan never grows one");
@@ -61,6 +61,6 @@ fn a_status_defaults_to_pending_and_names_are_lowercase_in_json() {
 
 #[test]
 fn a_file_from_another_version_is_refused() {
-    let e = Plan::from_ron("(version: 9, items: [])").unwrap_err();
+    let e = Plan::parse("version: 9\nitems: []\n").unwrap_err();
     assert!(e.contains("version 9"), "{e}");
 }

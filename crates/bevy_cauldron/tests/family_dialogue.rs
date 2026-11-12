@@ -7,23 +7,19 @@ use serde_json::json;
 
 use crate::fixtures;
 
-const SCRIPT: &str = r#"(conversations: {"hello": (start: "a", nodes: {
-    "a": Line(speaker: "Mara", text: "Well met.", next: Some("b")),
-    "b": Choice(speaker: "Mara", prompt: "Stay?", options: [(text: "Yes", next: "c")]),
-    "c": Line(speaker: "Mara", text: "Good.", next: None),
-})})"#;
+const SCRIPT: &str = r#"{conversations: {"hello": {start: "a", nodes: {"a": !Line {speaker: "Mara", text: "Well met.", next: "b"}, "b": !Choice {speaker: "Mara", prompt: "Stay?", options: [{text: "Yes", next: "c"}]}, "c": !Line {speaker: "Mara", text: "Good.", next: null}}}}}"#;
 
 /// The `conversations` field's value with the start node replaced: a conversation is edited whole.
 fn with_start(start: &str) -> String {
-    let body = SCRIPT.trim_start_matches("(conversations: ").trim_end_matches(')');
+    let body = SCRIPT.strip_prefix("{conversations: ").and_then(|s| s.strip_suffix('}')).expect("the script is one flow mapping");
     body.replace("start: \"a\"", &format!("start: \"{start}\""))
 }
 
 fn open(name: &str) -> (Ctx, std::path::PathBuf) {
     let root = fixtures::Fixture::new(name).descriptor("site/wall", "alpha").build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_speech_bubbles\"])").unwrap();
-    let file = root.join("family/bevy_speech_bubbles.ron");
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_speech_bubbles\"]}").unwrap();
+    let file = root.join("family/bevy_speech_bubbles.yaml");
     std::fs::write(&file, SCRIPT).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
@@ -57,15 +53,15 @@ fn a_valid_edit_is_written_and_reads_back_as_the_crates_own_script() {
     )
     .unwrap_or_else(|e| panic!("{e:?}"));
     assert!(matches!(done, Applied::Done { .. }));
-    let script: bevy_speech_bubbles::DialogueScript = ron::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let script: bevy_speech_bubbles::DialogueScript = bevy_grimoire_core::yaml::from_str(&std::fs::read_to_string(&file).unwrap(), "test").unwrap();
     assert_eq!(script.conversation("hello").unwrap().start, "b");
 }
 
 fn placed(name: &str) -> (Ctx, std::path::PathBuf) {
     let root = fixtures::Fixture::new(name).descriptor("site/wall", "alpha").place("site/wall", (0.0, 0.0)).build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_speech_bubbles\"])").unwrap();
-    std::fs::write(root.join("family/bevy_speech_bubbles.ron"), SCRIPT).unwrap();
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_speech_bubbles\"]}").unwrap();
+    std::fs::write(root.join("family/bevy_speech_bubbles.yaml"), SCRIPT).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
         app.update();
@@ -76,8 +72,8 @@ fn placed(name: &str) -> (Ctx, std::path::PathBuf) {
 }
 
 fn saved_family(root: &std::path::Path) -> std::collections::BTreeMap<String, String> {
-    let text = std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.ron")).unwrap();
-    let map: bevy_grimoire_core::map::Map = ron::from_str(&text).unwrap();
+    let text = std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.yaml")).unwrap();
+    let map: bevy_grimoire_core::map::Map = bevy_grimoire_core::yaml::from_str(&text, "test").unwrap();
     map.placements[0].family.clone().into_iter().collect()
 }
 
@@ -105,14 +101,14 @@ fn a_conversation_attached_to_a_piece_is_saved_on_its_row_and_one_the_script_lac
 fn barks_attached_to_a_piece_are_the_crates_own_bark_list_and_a_malformed_one_is_refused() {
     let (mut ctx, root) = placed("dialogue_barks");
     let id = ctx.open.as_ref().unwrap().map.placements[0].id.clone();
-    let barks = r#"[(speaker: "Mara", kind: Speech, emotion: Joy, text: "Fine day."), (speaker: "Mara", kind: Thought, emotion: Neutral, text: "Rain soon.")]"#;
+    let barks = r#"[{speaker: "Mara", kind: Speech, emotion: Joy, text: "Fine day."}, {speaker: "Mara", kind: Thought, emotion: Neutral, text: "Rain soon."}]"#;
     let done = ops::dispatch(&mut ctx, "placement_set_family", &json!({"id": id, "crate": "bevy_speech_bubbles", "value": barks})).unwrap();
     assert!(matches!(done, Applied::Done { .. }), "{done:?}");
-    let saved: Vec<bevy_speech_bubbles::Bark> = ron::from_str(&saved_family(&root)["bevy_speech_bubbles"]).unwrap();
+    let saved: Vec<bevy_speech_bubbles::Bark> = bevy_grimoire_core::yaml::from_str(&saved_family(&root)["bevy_speech_bubbles"], "test").unwrap();
     assert_eq!(saved.len(), 2);
     assert_eq!(saved[0].text, "Fine day.");
 
-    let bad = r#"[(speaker: "Mara", kind: Shout, emotion: Joy, text: "x")]"#;
+    let bad = r#"[{speaker: "Mara", kind: Shout, emotion: Joy, text: "x"}]"#;
     let r = ops::dispatch(&mut ctx, "placement_set_family", &json!({"id": id, "crate": "bevy_speech_bubbles", "value": bad}));
     let said = match r {
         Ok(Applied::Refused(e)) | Err(e) => e.0,

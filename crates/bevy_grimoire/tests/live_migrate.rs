@@ -74,16 +74,16 @@ impl Project {
             bash: Vec::new(),
             authoring: Some("kit".to_owned()),
         };
-        std::fs::write(grimoire.join("kits.ron"), kits.to_ron().unwrap()).unwrap();
-        std::fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/grimoire/vocab.ron"), grimoire.join("vocab.ron"))
+        std::fs::write(grimoire.join("kits.yaml"), kits.to_yaml().unwrap()).unwrap();
+        std::fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/grimoire/vocab.yaml"), grimoire.join("vocab.yaml"))
             .unwrap();
-        std::fs::write(grimoire.join("kit/project.ron"), "(\n    version: 2,\n    note: None,\n    patches: [],\n)").unwrap();
+        std::fs::write(grimoire.join("kit/project.yaml"), bevy_grimoire_core::policy::Policy::default().to_yaml().unwrap()).unwrap();
         let library = Library {
             version: LIBRARY_VERSION,
             note: None,
             descriptors: vec![piece("kit/crate", (1.0, 1.0)), piece("kit/table", (2.0, 1.0))],
         };
-        std::fs::write(grimoire.join("kit/library.ron"), library.to_ron().unwrap()).unwrap();
+        std::fs::write(grimoire.join("kit/library.yaml"), library.to_yaml().unwrap()).unwrap();
         Project { grimoire }
     }
 
@@ -99,7 +99,7 @@ impl Project {
     }
 
     fn write_map(&self, m: &Map) {
-        self.write("maps/yard.map.ron", &m.to_ron().unwrap());
+        self.write("maps/yard.map.yaml", &m.to_yaml().unwrap());
     }
 
     /// The library with `kit/crate` given another footprint: an edit that draws every crate again.
@@ -109,7 +109,7 @@ impl Project {
             note: None,
             descriptors: vec![piece("kit/crate", footprint), piece("kit/table", (2.0, 1.0))],
         };
-        self.write("kit/library.ron", &library.to_ron().unwrap());
+        self.write("kit/library.yaml", &library.to_yaml().unwrap());
     }
 }
 

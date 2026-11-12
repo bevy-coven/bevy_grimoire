@@ -136,13 +136,13 @@ fn a_replace_that_would_break_a_yaml_file_writes_nothing_and_names_the_file_and_
 #[test]
 fn a_replace_leaves_the_command_files_alone() {
     let root = project("command");
-    write(&root, "agent.ron", "(version: 1, note: \"gate\")\n");
+    write(&root, "agent.yaml", "version: 1\nnote: gate\n");
     write(&root, "notes.md", "gate\n");
     let app = editor_app(&root);
     let mut ctx = ctx(&app, Source::Human);
     let Ok(Applied::Done { outcome, .. }) = ops::dispatch(&mut ctx, "files_replace", &serde_json::json!({"query": "gate", "replacement": "portal"})) else { panic!("applies") };
     assert!(outcome.summary.contains("read-only"), "{}", outcome.summary);
-    assert_eq!(read(&root, "agent.ron"), "(version: 1, note: \"gate\")\n");
+    assert_eq!(read(&root, "agent.yaml"), "version: 1\nnote: gate\n");
     assert_eq!(read(&root, "notes.md"), "portal\n");
 }
 
@@ -263,7 +263,7 @@ fn an_agents_file_edit_lands_in_the_open_tab_without_moving_the_caret_and_undoes
 fn an_edit_that_breaks_the_schema_or_meets_a_persons_unsaved_edits_or_a_command_file_is_refused() {
     let root = project("refused");
     write(&root, YAML, YAML_TEXT);
-    write(&root, "agent.ron", "(version: 1)\n");
+    write(&root, "agent.yaml", "version: 1\n");
     let mut app = editor_app(&root);
     let editor = open(&mut app, YAML);
     let mut ctx = ctx(&app, Source::Agent);
@@ -286,10 +286,10 @@ fn an_edit_that_breaks_the_schema_or_meets_a_persons_unsaved_edits_or_a_command_
     assert!(refused.0.contains("the person is editing") && refused.0.contains("wait or ask"), "{refused}");
     assert_eq!(read(&root, YAML), YAML_TEXT);
 
-    let command = serde_json::json!({"path": "agent.ron", "edits": [{"at": {"line": 1}, "value": "(version: 2)"}]});
+    let command = serde_json::json!({"path": "agent.yaml", "edits": [{"at": {"line": 1}, "value": "version: 2"}]});
     let refused = ops::dispatch(&mut ctx, "file_edit", &command).expect_err("a command file is refused");
     assert!(refused.0.contains("Read-only"), "{refused}");
-    assert_eq!(read(&root, "agent.ron"), "(version: 1)\n");
+    assert_eq!(read(&root, "agent.yaml"), "version: 1\n");
 }
 
 /// **GD-14**: the edit lands as an external edit, so the person's unsaved typing is untouched by an outside write to another place.

@@ -3,7 +3,7 @@
 //!
 //! Opened from the settings screen's *Project configuration* button (and by [`OpenProjectConfig`]) in a
 //! project that is open. It lists every crate the editor can host (`family_host::KNOWN`), one switch each,
-//! on while the project's `family.ron` names it. A switch rewrites `family.ron` atomically with the crate
+//! on while the project's `family.yaml` names it. A switch rewrites `family.yaml` atomically with the crate
 //! added or taken out, every other crate in the order the file has them, and then reads the file back
 //! through the reload contract's own check (`reload_check::check`, kind `family_list`) and records the
 //! verdict where `grimoire_state.reloads` and the reload panel read it. The screen shows that verdict
@@ -13,11 +13,11 @@
 //!
 //! A crate the project lists that this build was compiled without is a problem the file can carry (the
 //! game may use it; the editor cannot host its panel), so it is shown on the crate's own line, in the
-//! words the status line uses (`family_host::problems_with`), and the switch still works. A `family.ron`
+//! words the status line uses (`family_host::problems_with`), and the switch still works. A `family.yaml`
 //! that does not read is shown and **never written over**: the switches wait until it reads.
 //!
 //! The kits the project binds are listed under the switches, the one being authored marked. Under them
-//! is the kit's **policy**: every folder directly under `assets/` and every pack `project.ron` already
+//! is the kit's **policy**: every folder directly under `assets/` and every pack `project.yaml` already
 //! leaves out, one switch each, on while the pack is left out. A switch is the operation
 //! `pack_set_excluded` (the one `Shift+R` on the Meshes tab and an agent's `apply` dispatch), so the
 //! file's prose stays, a refusal is shown under the switches, and one log line names the change. Kit
@@ -39,11 +39,11 @@ use crate::tiles::ImportState;
 /// How many switches the list shows before it scrolls.
 const FAMILY_ROWS: f32 = 4.5;
 
-/// The reload-contract kind `family.ron` is.
+/// The reload-contract kind `family.yaml` is.
 pub const KIND: &str = "family_list";
 
 /// The file's name as a verdict names it.
-pub const FILE: &str = "family.ron";
+pub const FILE: &str = "family.yaml";
 
 /// Ask for the project configuration screen.
 #[derive(Message, Clone, Copy, Debug, Default)]
@@ -83,7 +83,7 @@ struct Writer<'w, 's> {
 }
 
 impl Writer<'_, '_> {
-    /// Lists `krate` in `family.ron` when `on`, takes it out otherwise, and records what the reload contract
+    /// Lists `krate` in `family.yaml` when `on`, takes it out otherwise, and records what the reload contract
     /// makes of the file it wrote.
     fn set(&mut self, krate: &str, on: bool) {
         let Some(project) = self.project.as_deref() else { return };
@@ -110,7 +110,7 @@ impl Writer<'_, '_> {
     }
 }
 
-/// **Rewrites `<root>/family.ron` with `krate` listed or not**, atomically; a file that does not read is
+/// **Rewrites `<root>/family.yaml` with `krate` listed or not**, atomically; a file that does not read is
 /// refused and left as it is. Other crates keep the file's order and a crate is never listed twice.
 pub fn write_family(root: &std::path::Path, krate: &str, on: bool) -> Result<(), String> {
     let mut family = Family::load(root).map_err(|e| format!("{e}; not changed"))?;
@@ -120,11 +120,11 @@ pub fn write_family(root: &std::path::Path, krate: &str, on: bool) -> Result<(),
         (false, true) => family.crates.retain(|c| c != krate),
         _ => return Ok(()),
     }
-    let text = ron::ser::to_string_pretty(&family, ron::ser::PrettyConfig::default()).map_err(|e| e.to_string())?;
+    let text = bevy_grimoire_core::yaml::to_string(&family).map_err(|p| p.line())?;
     bevy_grimoire_core::atomic_file::write(&family::path_for_project(root), text).map_err(|e| format!("{FILE}: {e}"))
 }
 
-/// **The reload contract's verdict on the project's `family.ron`** as it is on disk now: applied when it
+/// **The reload contract's verdict on the project's `family.yaml`** as it is on disk now: applied when it
 /// reads, the refusal (file and field) when it does not.
 pub fn verdict_of(root: &std::path::Path) -> KindVerdict {
     let path = family::path_for_project(root);
@@ -220,7 +220,7 @@ fn refresh(
     let problems = family_host::problems_with(&project.root, &built_in);
     commands.entity(column).with_children(|lines| {
         lines.spawn(heading("Family crates"));
-        lines.spawn(label("A project lists the crates it uses in family.ron; a switch adds or takes one out."));
+        lines.spawn(label("A project lists the crates it uses in family.yaml; a switch adds or takes one out."));
         match &family {
             Err(why) => {
                 lines.spawn(label(format!("{why}. Fix the file by hand: nothing is written until it reads.")));
@@ -244,8 +244,8 @@ fn refresh(
             }
         }
         lines.spawn(label(match &verdict {
-            Some(said) => format!("family.ron: {said}"),
-            None => "family.ron: not changed from here yet".to_owned(),
+            Some(said) => format!("family.yaml: {said}"),
+            None => "family.yaml: not changed from here yet".to_owned(),
         }));
         if let Some(problem) = &dialog.problem {
             lines.spawn(label(problem.clone()));
@@ -257,7 +257,7 @@ fn refresh(
             lines.spawn(label(format!("{dir}: provides {}{mark}", kit.namespace)));
         }
         lines.spawn(heading("Packs the kit leaves out"));
-        lines.spawn(label("A pack on this list is not offered or labelled; project.ron keeps its prose when a switch rewrites it."));
+        lines.spawn(label("A pack on this list is not offered or labelled; project.yaml keeps its prose when a switch rewrites it."));
         let assets = project.root.join("assets");
         let mut folders: Vec<String> = std::fs::read_dir(&assets)
             .into_iter()

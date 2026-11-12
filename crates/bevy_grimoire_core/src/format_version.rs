@@ -15,7 +15,7 @@
 //! - `deserialize_with = read` is the refusal. It sits in the type's own deserialiser, not in a
 //!   `parse` function beside it, because a `parse` only protects the callers that use it: an editor
 //!   operation that reads the file with a plain `ron::from_str` and writes it back would otherwise
-//!   write a newer file at this build's version (the failure `destructible.ron` had until slice 1 of
+//!   write a newer file at this build's version (the failure `destructible.yaml` had until slice 1 of
 //!   #202). With the refusal in the type, every reader of the type refuses, and the refusal names the
 //!   field (`version`) like any other.
 //!

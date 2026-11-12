@@ -78,7 +78,7 @@ pub struct Terminal {
     active: usize,
     /// The last refusal, kept so the pane can draw it after the call that produced it returned.
     problem: Option<String>,
-    /// The pane's height in logical pixels, remembered for the session (`recent.ron`'s
+    /// The pane's height in logical pixels, remembered for the session (`recent.yaml`'s
     /// `terminal_h`), so the dock opens where the person left it.
     height: f32,
     /// Where the *next* shell starts. Set from the open project and from a `cd` chip.

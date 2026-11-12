@@ -151,7 +151,7 @@ fn a_damaged_line_is_named_once_per_edit_and_the_rest_of_the_log_still_reads() {
         assert!(refusal.contains("Nothing was changed"), "{what}: {refusal}");
         assert_eq!(std::fs::read(log_path(&ctx)).unwrap(), log_before, "{what}: the refused undo wrote to the log");
         for name in ["east", "west", "north"] {
-            assert!(ctx.project.as_ref().unwrap().maps_dir.join(format!("{name}.map.ron")).exists(), "{what}: the refused undo took `{name}` away");
+            assert!(ctx.project.as_ref().unwrap().maps_dir.join(format!("{name}.map.yaml")).exists(), "{what}: the refused undo took `{name}` away");
         }
 
         // Nothing was edited, so no new decision, however many frames pass.

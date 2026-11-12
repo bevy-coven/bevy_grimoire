@@ -87,13 +87,13 @@ fn rig(tag: &str) -> App {
         .place("on_floor", (3.0, 0.0))
         .place("on_ceiling", (6.0, 0.0))
         .build("m");
-    let library = root.join("assets/grimoire").join(fixtures::DEFAULT_KIT).join("library.ron");
+    let library = root.join("assets/grimoire").join(fixtures::DEFAULT_KIT).join("library.yaml");
     let text = std::fs::read_to_string(&library).unwrap_or_else(|e| panic!("{library:?}: {e}"));
-    let at = text.find("id: \"on_ceiling\"").expect("the ceiling piece is in the library");
-    let was = "mount: Some(OnFloor)";
+    let at = text.find("id: on_ceiling\n").expect("the ceiling piece is in the library");
+    let was = "mount: OnFloor";
     let found = text[at..].find(was).expect("the fixture's floor mount") + at;
     let mut text = text;
-    text.replace_range(found..found + was.len(), "mount: Some(OnCeiling)");
+    text.replace_range(found..found + was.len(), "mount: OnCeiling");
     std::fs::write(&library, text).unwrap_or_else(|e| panic!("{library:?}: {e}"));
 
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));

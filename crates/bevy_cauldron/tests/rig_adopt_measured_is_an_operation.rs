@@ -1,7 +1,7 @@
-//! **An agent can adopt a rig's measured gait values into `rigs.ron`, and Enter on the Anim tab is the
+//! **An agent can adopt a rig's measured gait values into `rigs.yaml`, and Enter on the Anim tab is the
 //! same operation (E-002, #129 slice 13).**
 //!
-//! Enter on the animation tab measured the selected rig and rewrote `rigs.ron` with a write of its own,
+//! Enter on the animation tab measured the selected rig and rewrote `rigs.yaml` with a write of its own,
 //! named by no operation: an agent could read a rig's measured values and never adopt them, no log line
 //! named the adoption, and the registry's two-front-end rule listed the key (`AdoptMeasured`) as
 //! unmigrated. It is now the registered operation `rig_adopt_measured`. The first three tests go through
@@ -25,7 +25,7 @@ fn workspace_asset(rel: &str) -> std::path::PathBuf {
 /// tab entered so it has read the manifest.
 fn editor(name: &str) -> App {
     let root = fixtures::Fixture::new(name).descriptor("site/a", "alpha").build("m");
-    std::fs::copy(workspace_asset("grimoire/rigs.ron"), root.join("assets/grimoire/rigs.ron")).expect("rigs.ron");
+    std::fs::copy(workspace_asset("grimoire/rigs.yaml"), root.join("assets/grimoire/rigs.yaml")).expect("rigs.yaml");
     std::fs::create_dir_all(root.join("assets/characters")).expect("characters dir");
     std::fs::copy(workspace_asset("characters/valkyrie.glb"), root.join("assets/characters/valkyrie.glb"))
         .expect("valkyrie.glb");
@@ -66,8 +66,8 @@ fn apply(app: &mut App, parameters: serde_json::Value, dry_run: bool) -> serde_j
 }
 
 fn manifest(app: &App) -> String {
-    std::fs::read_to_string(app.world().resource::<Project>().root.join("assets/grimoire/rigs.ron"))
-        .expect("rigs.ron")
+    std::fs::read_to_string(app.world().resource::<Project>().root.join("assets/grimoire/rigs.yaml"))
+        .expect("rigs.yaml")
 }
 
 fn log(app: &App) -> Vec<Entry> {
@@ -122,7 +122,7 @@ fn a_preview_writes_nothing_and_a_second_adoption_changes_nothing() {
 
     let preview = apply(&mut app, serde_json::json!({"rig": "valkyrie"}), true);
     assert_ne!(preview["outcome"], "refused", "{preview}");
-    assert_eq!(manifest(&app), before, "a preview wrote rigs.ron");
+    assert_eq!(manifest(&app), before, "a preview wrote rigs.yaml");
     assert_eq!(log(&app).len(), lines_before, "a preview logged a line");
 
     // Skipping every slot leaves nothing to write: the refusal says so and names the rig.
@@ -130,7 +130,7 @@ fn a_preview_writes_nothing_and_a_second_adoption_changes_nothing() {
     let all: Vec<usize> = (0..slots).collect();
     let none = apply(&mut app, serde_json::json!({"rig": "valkyrie", "skip_slots": all}), false);
     assert_eq!(none["outcome"], "refused", "{none}");
-    assert_eq!(manifest(&app), before, "a refused adoption wrote rigs.ron");
+    assert_eq!(manifest(&app), before, "a refused adoption wrote rigs.yaml");
 
     assert_eq!(apply(&mut app, serde_json::json!({"rig": "valkyrie"}), false)["outcome"], "applied");
     let adopted = manifest(&app);
@@ -153,12 +153,12 @@ fn a_bad_request_is_refused_and_writes_nothing() {
         ("a slot the rig lacks", serde_json::json!({"rig": "valkyrie", "skip_slots": [9999]})),
         ("a typo'd field", serde_json::json!({"rig": "valkyrie", "skipp_slots": [1]})),
         ("no rig named", serde_json::json!({})),
-        ("a put-back from an agent", serde_json::json!({"rig": "valkyrie", "restore": "(version: 3, rigs: {})"})),
+        ("a put-back from an agent", serde_json::json!({"rig": "valkyrie", "restore": "{version: 3, rigs: {}}"})),
     ] {
         let r = apply(&mut app, params, false);
         assert_eq!(r["outcome"], "refused", "{what} was accepted: {r}");
     }
-    assert_eq!(manifest(&app), before, "a refused request wrote rigs.ron");
+    assert_eq!(manifest(&app), before, "a refused request wrote rigs.yaml");
     assert_eq!(log(&app).len(), lines_before, "a refusal logged a line");
 }
 
@@ -177,7 +177,7 @@ fn tap(app: &mut App, logical: Key, code: KeyCode) {
 }
 
 /// **A person's Enter on the Anim tab is one `rig_adopt_measured` line stamped as a person's, and the tab
-/// holds what the file holds.** Before slice 13 the key wrote `rigs.ron` itself and logged nothing.
+/// holds what the file holds.** Before slice 13 the key wrote `rigs.yaml` itself and logged nothing.
 #[test]
 fn a_persons_enter_on_the_anim_tab_adopts_through_the_operation() {
     let mut app = editor("rig-adopt-person");
@@ -195,7 +195,7 @@ fn a_persons_enter_on_the_anim_tab_adopts_through_the_operation() {
         app.update();
     }
     let after = manifest(&app);
-    assert_ne!(before, after, "Enter did not reach rigs.ron");
+    assert_ne!(before, after, "Enter did not reach rigs.yaml");
     assert_eq!(
         app.world().resource::<BenchState>().text.as_deref(),
         Some(after.as_str()),
@@ -210,7 +210,7 @@ fn a_persons_enter_on_the_anim_tab_adopts_through_the_operation() {
 
 /// **A bare `operation_undo` takes back the open map's newest change, never a rig adoption.** The adoption
 /// is a kit-level write scoped to its own rig, so with no change to the map in effect the bare undo has
-/// nothing to take back, and `rigs.ron` stays as the adoption left it until its own id is named.
+/// nothing to take back, and `rigs.yaml` stays as the adoption left it until its own id is named.
 #[test]
 fn a_bare_undo_does_not_revert_a_rig_adoption() {
     let mut app = editor("rig-adopt-bare-undo");
@@ -221,7 +221,7 @@ fn a_bare_undo_does_not_revert_a_rig_adoption() {
 
     let bare = call(&mut app, "grimoire/operation_undo", serde_json::json!({"dry_run": false}));
     assert_ne!(bare["outcome"], "applied", "a bare undo reverted the adoption: {bare}");
-    assert_eq!(manifest(&app), adopted, "the bare undo wrote rigs.ron");
+    assert_eq!(manifest(&app), adopted, "the bare undo wrote rigs.yaml");
 
     let id = a["operation_id"].as_str().expect("an apply returns its id").to_owned();
     let named = call(&mut app, "grimoire/operation_undo", serde_json::json!({"operation_id": id, "dry_run": false}));

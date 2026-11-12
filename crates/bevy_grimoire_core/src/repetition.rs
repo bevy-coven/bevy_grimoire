@@ -35,10 +35,10 @@ use crate::stack::descriptor_of;
 /// Two yaws closer than this, in degrees, are one look.
 pub const YAW_TOLERANCE_DEG: f32 = 1.0;
 
-/// The project's rules, beside `kits.ron` (#139). Absent means [`RepetitionRules::default`].
-pub const FILE: &str = "repetition.ron";
+/// The project's rules, beside `kits.yaml` (#139). Absent means [`RepetitionRules::default`].
+pub const FILE: &str = "repetition.yaml";
 
-/// The format version of a `repetition.ron` (#202). A file with no `version` is the first.
+/// The format version of a `repetition.yaml` (#202). A file with no `version` is the first.
 pub const REPETITION_VERSION: u32 = 1;
 
 /// What a repeat is, and what it costs, as data an author can tune.
@@ -76,12 +76,12 @@ impl Default for RepetitionRules {
 }
 
 impl RepetitionRules {
-    /// Parse a project's `repetition.ron`. A field it leaves out keeps its default; a radius that
+    /// Parse a project's `repetition.yaml`. A field it leaves out keeps its default; a radius that
     /// is not a positive number of metres, or a weight that is negative or not a number, is refused
     /// rather than read as a report nobody could trust.
     pub fn parse(text: &str) -> Result<RepetitionRules, String> {
-        let r: RepetitionRules =
-            ron::from_str(text).map_err(|e| format!("repetition: parse: {e}"))?;
+        let r: RepetitionRules = crate::yaml::from_str(text, FILE)
+            .map_err(|p| format!("repetition: parse: {}", p.line()))?;
         if !(r.radius_m.is_finite() && r.radius_m > 0.0) {
             return Err(format!(
                 "repetition: radius_m {} is not a positive number of metres",

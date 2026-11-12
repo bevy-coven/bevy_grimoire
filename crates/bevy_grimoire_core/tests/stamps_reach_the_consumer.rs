@@ -104,22 +104,23 @@ fn project(tag: &str, stamps: Option<&[Stamped]>) -> PathBuf {
     };
     std::fs::write(
         grimoire.join(bevy_grimoire_core::kits::KITS_FILE),
-        kits.to_ron().unwrap_or_else(|e| panic!("{e}")),
+        kits.to_yaml().unwrap_or_else(|e| panic!("{e}")),
     )
     .unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(
-        grimoire.join("vocab.ron"),
-        ron::to_string(&Vocabularies::default()).unwrap_or_else(|e| panic!("{e}")),
+        grimoire.join(bevy_grimoire_core::project_data::VOCAB_FILE),
+        Vocabularies::default().to_yaml().unwrap_or_else(|e| panic!("{e}")),
     )
     .unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(
-        grimoire.join("kit/library.ron"),
-        library().to_ron().unwrap_or_else(|e| panic!("{e}")),
+        grimoire.join("kit").join(bevy_grimoire_core::policy::LIBRARY_FILE),
+        library().to_yaml().unwrap_or_else(|e| panic!("{e}")),
     )
     .unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(
-        grimoire.join("kit/project.ron"),
-        "(\n    version: 2,\n    note: None,\n    patches: [],\n)",
+        grimoire.join("kit").join(bevy_grimoire_core::policy::POLICY_FILE),
+        bevy_grimoire_core::yaml::to_string(&bevy_grimoire_core::policy::Policy::default())
+            .unwrap_or_else(|p| panic!("{}", p.line())),
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
@@ -130,8 +131,7 @@ fn project(tag: &str, stamps: Option<&[Stamped]>) -> PathBuf {
     };
     std::fs::write(
         grimoire.join(Compositions::FILE),
-        ron::ser::to_string_pretty(&compositions, ron::ser::PrettyConfig::default())
-            .unwrap_or_else(|e| panic!("{e}")),
+        bevy_grimoire_core::yaml::to_string(&compositions).unwrap_or_else(|p| panic!("{}", p.line())),
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
@@ -154,9 +154,8 @@ fn project(tag: &str, stamps: Option<&[Stamped]>) -> PathBuf {
         ..Default::default()
     };
     std::fs::write(
-        grimoire.join("maps/yard.map.ron"),
-        ron::ser::to_string_pretty(&map, ron::ser::PrettyConfig::default())
-            .unwrap_or_else(|e| panic!("{e}")),
+        grimoire.join("maps/yard.map.yaml"),
+        bevy_grimoire_core::yaml::to_string(&map).unwrap_or_else(|p| panic!("{}", p.line())),
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
@@ -221,7 +220,7 @@ fn the_editor_and_the_consumer_expand_the_same_rows() {
 
     // What the editor's own expander says, read from the file the editor wrote.
     let raw =
-        std::fs::read_to_string(grimoire.join("maps/yard.map.ron")).unwrap_or_else(|e| panic!("{e}"));
+        std::fs::read_to_string(grimoire.join("maps/yard.map.yaml")).unwrap_or_else(|e| panic!("{e}"));
     let authored = Map::parse(&raw).unwrap_or_else(|e| panic!("{e}"));
     let expansion = bevy_grimoire_core::composition::expand_map(
         &authored,
@@ -305,7 +304,7 @@ fn the_census_counts_the_rows_the_consumer_has() {
     let map = data.maps.get("yard").expect("the map loaded");
 
     let raw =
-        std::fs::read_to_string(grimoire.join("maps/yard.map.ron")).unwrap_or_else(|e| panic!("{e}"));
+        std::fs::read_to_string(grimoire.join("maps/yard.map.yaml")).unwrap_or_else(|e| panic!("{e}"));
     let authored = Map::parse(&raw).unwrap_or_else(|e| panic!("{e}"));
     let counted = bevy_grimoire_core::census::of_map(
         &authored,
@@ -345,7 +344,7 @@ fn a_map_with_no_stamps_is_unchanged() {
 fn a_slash_in_a_hand_placed_id_does_not_make_it_a_stamped_row() {
     let grimoire = project("slash", None);
     let raw =
-        std::fs::read_to_string(grimoire.join("maps/yard.map.ron")).unwrap_or_else(|e| panic!("{e}"));
+        std::fs::read_to_string(grimoire.join("maps/yard.map.yaml")).unwrap_or_else(|e| panic!("{e}"));
     let mut authored = Map::parse(&raw).unwrap_or_else(|e| panic!("{e}"));
     authored.placements[0].id = "mess_a/table".to_owned();
 
@@ -367,7 +366,7 @@ fn a_stamped_row_names_its_stamp_and_its_member() {
         Some(&[stamp("run@1", "kit/fence_run", (5.0, 5.0))]),
     );
     let raw =
-        std::fs::read_to_string(grimoire.join("maps/yard.map.ron")).unwrap_or_else(|e| panic!("{e}"));
+        std::fs::read_to_string(grimoire.join("maps/yard.map.yaml")).unwrap_or_else(|e| panic!("{e}"));
     let authored = Map::parse(&raw).unwrap_or_else(|e| panic!("{e}"));
 
     assert_eq!(
@@ -396,11 +395,8 @@ fn a_map_with_stamps_compositions_and_rules_round_trips() {
     );
     // A rules file, so the round trip covers all three kinds of file at once.
     std::fs::write(
-        grimoire.join("rules.ron"),
-        format!(
-            "(\n    version: {},\n    blocks: [],\n)",
-            bevy_grimoire_core::rules::RULES_VERSION
-        ),
+        grimoire.join("rules.yaml"),
+        format!("version: {}\nblocks: []\n", bevy_grimoire_core::rules::RULES_VERSION),
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
@@ -408,10 +404,9 @@ fn a_map_with_stamps_compositions_and_rules_round_trips() {
     let map = data.maps.get("yard").expect("the map loaded");
 
     // **The file the consumer wrote back is the file it read.**
-    let re_saved = ron::ser::to_string_pretty(map, ron::ser::PrettyConfig::default())
-        .unwrap_or_else(|e| panic!("{e}"));
+    let re_saved = bevy_grimoire_core::yaml::to_string(map).unwrap_or_else(|p| panic!("{}", p.line()));
     let original =
-        std::fs::read_to_string(grimoire.join("maps/yard.map.ron")).unwrap_or_else(|e| panic!("{e}"));
+        std::fs::read_to_string(grimoire.join("maps/yard.map.yaml")).unwrap_or_else(|e| panic!("{e}"));
 
     // The expanded map has the group's rows in `placements`, so it is NOT byte-identical to the
     // authored file — and it must not be: the file on disk holds the reference, and the expanded

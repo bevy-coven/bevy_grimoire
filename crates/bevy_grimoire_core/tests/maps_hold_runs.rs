@@ -47,7 +47,7 @@ fn placed(id: &str, run: Run) -> RunPlaced {
 }
 
 fn ron_of(map: &Map) -> String {
-    ron::ser::to_string_pretty(map, ron::ser::PrettyConfig::default()).unwrap()
+    bevy_grimoire_core::yaml::to_string(map).unwrap()
 }
 
 /// Criterion 1: a run of ten posts round-trips and expands to ten rows `<id>/0..9` at the pitch.

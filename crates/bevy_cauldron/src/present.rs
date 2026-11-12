@@ -703,7 +703,7 @@ pub fn record_handed_back_notes(
             _ => continue,
         };
         // **The key is the map file, not the notes file.** A wish cites the open map
-        // (`OpenMap::map_path`), so a record keyed on `m.notes.ron` could never be found by it.
+        // (`OpenMap::map_path`), so a record keyed on `m.notes.yaml` could never be found by it.
         handbacks.record_note(&project.root, &open.map_path, &note.id, note.text.clone(), ops);
         // **It is this session's now**, so the baseline cannot claim it again if the clock is read
         // again at the same second.

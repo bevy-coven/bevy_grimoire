@@ -3,7 +3,7 @@
 //! A reference (`reference_set`) is a project-relative picture an agent is told to look at. Nothing in
 //! this repository decodes it, so a file that a full disk cut off, that a text saved over or that was
 //! renamed from another format cost the agent a picture it could not open, and the author a sentence
-//! nobody said. One system looks at the map's `references.ron` and every picture it lists when one of
+//! nobody said. One system looks at the map's `references.yaml` and every picture it lists when one of
 //! them moved, or once a second, and decides into `grimoire_state.reloads`, kind `reference_images`, per
 //! file:
 //!

@@ -42,19 +42,19 @@
   },
   {
    "at": 0.2,
-   "caption": "no repetition.ron: REPEATS names the chairs first (chair x4, 1 more)"
+   "caption": "no repetition.yaml: REPEATS names the chairs first (chair x4, 1 more)"
   },
   {
    "at": 4.2,
-   "caption": "repetition.ron = (structure: [\"seating\"]): chairs are meant to repeat, the lamps lead"
+   "caption": "repetition.yaml = (structure: [\"seating\"]): chairs are meant to repeat, the lamps lead"
   },
   {
    "at": 8.2,
-   "caption": "repetition.ron = (radius_m: 0.5): the chairs, a metre apart, no longer repeat"
+   "caption": "repetition.yaml = (radius_m: 0.5): the chairs, a metre apart, no longer repeat"
   },
   {
    "at": 12.2,
-   "caption": "repetition.ron = (radius_m: -1.0): a bad file is named, never read as the defaults"
+   "caption": "repetition.yaml = (radius_m: -1.0): a bad file is named, never read as the defaults"
   }
  ]
 }

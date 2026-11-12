@@ -90,14 +90,14 @@ fn a_rename_whose_old_file_cannot_go_is_refused_and_changes_nothing() {
     let answer = apply(&mut app, serde_json::json!({"name": "renamed"}));
     assert_eq!(answer["outcome"], "refused", "{answer}");
     assert!(
-        answer.to_string().contains("m.map.ron"),
+        answer.to_string().contains("m.map.yaml"),
         "the refusal names the old file the author has to deal with: {answer}"
     );
 
     assert_eq!(held_name(&app), "m", "a refused rename keeps the name");
     assert_eq!(held_path(&app), before, "a refused rename keeps the path");
     assert!(
-        !dir.join("renamed.map.ron").exists(),
+        !dir.join("renamed.map.yaml").exists(),
         "the new file the rename wrote is taken back"
     );
     assert_eq!(

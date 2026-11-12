@@ -173,7 +173,7 @@ fn collect_glb(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
 ///
 /// It used to qualify by the mesh's *set* — the first segment of its relative path — so that two
 /// packs both shipping `chair.glb` would not collide. That reasoning was sound and the mechanism was
-/// wrong, because a pack folder is not a namespace. A kit is bound in `kits.ron` (`namespace:
+/// wrong, because a pack folder is not a namespace. A kit is bound in `kits.yaml` (`namespace:
 /// "furniture"` → `dir: "furniture"`), and **the binding is what qualifies these ids**; a proposal
 /// carrying `low_poly_furniture/` claims a namespace no project binds, so the commit door refuses it
 /// — every single import, from every pack. Reported at the keyboard, 2026-08-16: the importer could
@@ -192,7 +192,7 @@ pub fn proposed_id(stem: &str) -> String {
 pub fn measure(path: &Path, rel: &str, library: &Library) -> Candidate {
     let mut findings = Vec::new();
     // An id is a starting point, not a decision: the file name in the project's one spelling, and
-    // unqualified — the kit's binding in `kits.ron` is what supplies the namespace. See
+    // unqualified — the kit's binding in `kits.yaml` is what supplies the namespace. See
     // [`proposed_id`] for why the pack folder is not one.
     let stem = path
         .file_stem()
@@ -762,7 +762,7 @@ mod tests {
     /// **A proposal is the stem alone** — the pack folder is not a namespace.
     ///
     /// Qualifying by the first path segment made every import from every pack propose an id in a
-    /// namespace no `kits.ron` binds, so the commit door refused all of them. The binding qualifies
+    /// namespace no `kits.yaml` binds, so the commit door refused all of them. The binding qualifies
     /// these ids; the proposal must not pre-empt it.
     #[test]
     fn a_proposal_is_the_stem_and_not_its_pack() {

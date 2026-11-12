@@ -96,10 +96,16 @@ fn solve_sets_the_chest_behind_the_counter_and_its_rider_with_it() {
 
 #[test]
 fn the_file_reads_and_writes_behind_and_refuses_a_negative_distance() {
-    let text = r#"(version: 1, relations: [(of: "chest", kind: Behind(of: "counter", within: 3.0))])"#;
+    let text = r"version: 1
+relations:
+- of: chest
+  kind: !Behind
+    of: counter
+    within: 3.0
+";
     let parsed = Relations::parse(text).unwrap();
     assert_eq!(parsed, chest_behind_counter());
-    assert_eq!(Relations::parse(&parsed.to_ron().unwrap()).unwrap(), parsed);
+    assert_eq!(Relations::parse(&parsed.to_yaml().unwrap()).unwrap(), parsed);
     let bad = text.replace("3.0", "-1.0");
     assert!(Relations::parse(&bad).is_err());
 }

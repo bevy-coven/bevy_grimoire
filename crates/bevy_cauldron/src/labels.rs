@@ -745,12 +745,12 @@ impl OpenGlb for std::path::PathBuf {
 
 /// Where flagged vocabulary ideas wait for a human. Under `slop/` because that is dev-time prose
 /// territory — **nothing loads this file**, which is the whole point: the LLM never touches
-/// `vocab.ron`, and adopting a token is a person's two-file edit.
-pub const PROPOSALS_PATH: &str = "slop/llm/vocab_proposals.ron";
+/// `vocab.yaml`, and adopting a token is a person's two-file edit.
+pub const PROPOSALS_PATH: &str = "slop/llm/vocab_proposals.yaml";
 
 /// A `readme` FIELD rather than a comment, because comments do not survive re-serialization.
 const PROPOSALS_README: &str = "PROPOSALS ONLY - nothing loads this file. Adopting a token is a \
-    human edit: append a row to assets/grimoire/vocab.ron (append-only; bits come from position), \
+    human edit: append a row to assets/grimoire/vocab.yaml (append-only; bits come from position), \
     and for a `surfaces` token ALSO add the row to \
     crates/bevy_grimoire_core/src/placement/surfaces.rs SURFACE_CLASSES. See docs/llm_rule_authoring.md.";
 
@@ -787,8 +787,8 @@ fn merge_proposals(
         return Ok(None);
     }
     let mut file = match existing {
-        Some(text) => ron::from_str::<ProposalsFile>(text)
-            .map_err(|e| format!("{PROPOSALS_PATH} no longer parses ({e}); not overwriting it"))?,
+        Some(text) => bevy_grimoire_core::yaml::from_str::<ProposalsFile>(text, PROPOSALS_PATH)
+            .map_err(|p| format!("{PROPOSALS_PATH} no longer parses ({}); not overwriting it", p.line()))?,
         None => ProposalsFile {
             readme: PROPOSALS_README.to_owned(),
             proposals: Vec::new(),
@@ -823,8 +823,7 @@ fn merge_proposals(
     if !changed {
         return Ok(None);
     }
-    let text = ron::ser::to_string_pretty(&file, ron::ser::PrettyConfig::default())
-        .map_err(|e| format!("cannot serialize {PROPOSALS_PATH}: {e}"))?;
+    let text = bevy_grimoire_core::yaml::to_string(&file).map_err(|p| format!("cannot serialize {PROPOSALS_PATH}: {}", p.line()))?;
     Ok(Some(text))
 }
 
@@ -845,7 +844,7 @@ fn record_proposals(root: &std::path::Path, entry: &Entry, asset: &str) {
             if let Some(dir) = path.parent() {
                 let _ = std::fs::create_dir_all(dir);
             }
-            if let Err(e) = bevy_grimoire_core::ron_surgery::save_atomic(&path, &text) {
+            if let Err(e) = bevy_grimoire_core::save::save_atomic(&path, &text) {
                 warn!("could not write {PROPOSALS_PATH}: {e}");
             }
         }
@@ -1352,7 +1351,7 @@ pub(crate) fn paint_labels_badge(
 /// does not carry stay untouched; undo covers regret like any other edit.
 /// **Recompute the derived half of `effects` from `kind`, using the vocabulary's own rule.**
 ///
-/// The rule itself is `implies` on a `kind` token in `vocab.ron`, resolved by
+/// The rule itself is `implies` on a `kind` token in `vocab.yaml`, resolved by
 /// [`bevy_grimoire_core::vocab::Vocabularies::implied_effects`]. It was a five-row `IMPLIED_BY_KIND` table
 /// in this file until 2026-08-19, which put game-design semantics — *a bed restores stamina* —
 /// inside the editor's labeller. Two consequences, and the second is the one that mattered:
@@ -1365,7 +1364,7 @@ pub(crate) fn paint_labels_badge(
 ///
 /// Now the rule lives in the data, `masks` folds it in for every consumer, and this exists only to
 /// keep the *stored* list in step with what will be resolved from it — so an author reading
-/// `library.ron` sees what the game will see.
+/// `library.yaml` sees what the game will see.
 ///
 /// It REMOVES as well as adds, and only ever touches tokens some kind implies: a piece retyped from
 /// `light` to `decor` must stop claiming to use electricity, or the tag becomes a thing that can
@@ -1662,7 +1661,7 @@ mod tests {
 
     /// **The preview promises what applying will do, including the half the model never proposes.**
     ///
-    /// An implied effect (`implies` on a `kind` token in `vocab.ron`) is deliberately not asked of
+    /// An implied effect (`implies` on a `kind` token in `vocab.yaml`) is deliberately not asked of
     /// the model — a bed recharges stamina because this game says beds do, and no render can show
     /// it. That made the proposal preview *wrong*
     /// rather than merely quiet: the DOES chips ghost-lit `suggestion.effects`, so a bed read
@@ -1794,26 +1793,26 @@ mod tests {
 
     /// **Every word this rule names still exists in the shipped vocabulary.**
     ///
-    /// The table is strings, so renaming a token in `vocab.ron` would leave the rule pointing at a
+    /// The table is strings, so renaming a token in `vocab.yaml` would leave the rule pointing at a
     /// word nothing has — and it would fail by going quiet, which is the same failure mode as the
-    /// four unread affordance tokens that made `vocab.ron` a closed table in the first place. This
+    /// four unread affordance tokens that made `vocab.yaml` a closed table in the first place. This
     /// is that audit run from the other side: a reader with no token.
     #[test]
     fn the_implied_effects_table_names_only_shipped_tokens() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let text = std::fs::read_to_string(root.join("assets/grimoire/vocab.ron"))
+        let text = std::fs::read_to_string(root.join("assets/grimoire/vocab.yaml"))
             .unwrap_or_else(|e| panic!("the shipped vocabulary must be readable: {e}"));
-        // **Loading the file IS the audit now.** This used to `ron::from_str` straight into
+        // **Loading the file IS the audit now.** This used to read the text straight into
         // `Vocabularies` — around the door — and then leaned on `implied_effects` returning a
         // `Result` to catch an implication naming a token the `effects` axis does not hold. That
-        // check moved to `Vocabularies::validate_tables`, which `parse` runs and `ron::from_str`
+        // check moved to `Vocabularies::validate_tables`, which `parse` runs and a plain read
         // does not, so going around `parse` was the one thing making this test unable to fail.
         let v = bevy_grimoire_core::vocab::Vocabularies::parse(&text).unwrap_or_else(|e| {
             panic!("the shipped vocabulary must load, and every `implies` in it must resolve: {e}")
         });
         assert!(
             v.kind.tokens.iter().any(|t| !t.implies.is_empty()),
-            "no kind implies anything — the rule moved to `vocab.ron` and would be silently gone"
+            "no kind implies anything — the rule moved to `vocab.yaml` and would be silently gone"
         );
     }
 
@@ -1981,7 +1980,7 @@ mod tests {
         )
         .unwrap_or_else(|e| panic!("{e}"))
         .unwrap_or_else(|| panic!("nothing written"));
-        let parsed: ProposalsFile = ron::from_str(&text2).unwrap_or_else(|e| panic!("{e}"));
+        let parsed: ProposalsFile = bevy_grimoire_core::yaml::from_str(&text2, PROPOSALS_PATH).unwrap_or_else(|p| panic!("{}", p.line()));
         assert_eq!(parsed.proposals.len(), 1);
         assert_eq!(
             parsed.proposals[0].assets,
@@ -2293,7 +2292,7 @@ mod tests {
 
     /// **An apply records that a model wrote it, and a hand edit takes one axis back.**
     ///
-    /// Before this, the two were byte-identical in `library.ron` the moment `U` was pressed: the
+    /// Before this, the two were byte-identical in `library.yaml` the moment `U` was pressed: the
     /// model's name, the date and its own confidence were dropped by `apply_fields`, and the only
     /// surviving copy lived in a RON file under the build directory, so `cargo clean` deleted every
     /// record of what any model had ever said about the kit. That file is gone now too (see the

@@ -1,4 +1,4 @@
-//! **The animation tab takes an edit of `rigs.ron` at once: its rigs are measured again, and the rig the
+//! **The animation tab takes an edit of `rigs.yaml` at once: its rigs are measured again, and the rig the
 //! author was on stays selected by name** (#202, the `rigs` kind leaves the restart list).
 //!
 //! The tab used to hold the manifest it read and say `needs_restart` about every later edit. A rig added
@@ -38,8 +38,8 @@ fn until(app: &mut App, secs: f64, what: &str, done: impl Fn(&App) -> bool) {
 #[test]
 fn a_rig_added_ahead_of_the_selected_one_is_measured_and_the_selection_stays_on_its_rig() {
     let root = fixtures::Fixture::new("rigs_edit_measured_again").descriptor("site/a", "alpha").build("m");
-    let path = root.join("assets/grimoire/rigs.ron");
-    std::fs::copy(workspace_asset("grimoire/rigs.ron"), &path).expect("rigs.ron");
+    let path = root.join("assets/grimoire/rigs.yaml");
+    std::fs::copy(workspace_asset("grimoire/rigs.yaml"), &path).expect("rigs.yaml");
     std::fs::create_dir_all(root.join("assets/characters")).expect("characters dir");
     std::fs::copy(workspace_asset("characters/valkyrie.glb"), root.join("assets/characters/valkyrie.glb"))
         .expect("valkyrie.glb");
@@ -61,11 +61,11 @@ fn a_rig_added_ahead_of_the_selected_one_is_measured_and_the_selection_stays_on_
 
     // A rig that sorts before it is added on disk, by a hand or an agent.
     let had = app.world().resource::<BenchState>().names().len();
-    let text = std::fs::read_to_string(&path).expect("rigs.ron");
+    let text = std::fs::read_to_string(&path).expect("rigs.yaml");
     let mut rigs = Rigs::parse(&text).expect("the shipped manifest reads");
     let copy = rigs.rigs["valkyrie"].clone();
     rigs.rigs.insert("aardvark".to_owned(), copy);
-    let edited = rigs.to_ron().expect("serialises");
+    let edited = rigs.to_yaml().expect("serialises");
     std::fs::write(&path, &edited).expect("write");
 
     until(&mut app, 30.0, "the tab holding the edit", |a| a.world().resource::<BenchState>().text.as_deref() == Some(edited.as_str()));

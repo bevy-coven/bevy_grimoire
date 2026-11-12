@@ -47,7 +47,7 @@ fn project(dir: &Path, name: &str) -> PathBuf {
 fn on_the_launcher(tag: &str, scratch: &Scratch, count: usize) -> App {
     let root = fixtures::Fixture::new(&format!("fade_{tag}_{}", std::process::id())).descriptor("site/wall", "alpha").build("m");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
-    let file = scratch.0.join("recent.ron");
+    let file = scratch.0.join("recent.yaml");
     for n in 0..count {
         let path = project(&scratch.0, &format!("project_{n:02}"));
         recent::record(&file, &path).unwrap_or_else(|e| panic!("{e}"));

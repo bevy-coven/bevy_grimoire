@@ -29,3 +29,13 @@ serde_json.workspace = true
 # `#[reflect(Deserialize)]`, which is a `serde::Deserialize` impl; GD-05's reader then builds it through
 # `ReflectDeserialize`. Not a test dependency any more: the crate itself derives them now.
 serde.workspace = true
+
+# **The script host a game made of data runs** (`game.rs`, GD-10, #372): `GamePlugin` adds it beside the behaviours.
+[dependencies.bevy_grimoire_rhai]
+path = "../bevy_grimoire_rhai"
+version = "0.1.0"
+
+[features]
+# **A release that reads only its bake** (GD-08, #370): `GameDataPlugin` opens `<root>/baked` before it reads anything,
+# refuses to start naming the file when the YAML has changed since, and never falls back to the YAML.
+baked = []

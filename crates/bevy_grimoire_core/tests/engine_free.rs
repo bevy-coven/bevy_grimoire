@@ -94,7 +94,6 @@ use std::path::{Path, PathBuf};
 const ALLOWED_DEPS: &[&str] = &[
     "serde",
     "serde_json",
-    "ron",
     "rand",
     "rand_chacha",
     "bevy_grimoire_rng",
@@ -109,6 +108,9 @@ const ALLOWED_DEPS: &[&str] = &[
     // test's own message asks for — `sha2` is the published construction rather than sixty lines of
     // arithmetic whose silent wrongness would read as a trust bug.
     "sha2",
+    // **The container a bake writes** (#370, GD-08): postcard, over a value tree. serde-only, pure Rust, no engine type; added in
+    // the commit that needed it (a new row, nothing loosened; assumed owner exception 2026-11-12).
+    "postcard",
 ];
 
 /// Crate names that would mean the boundary has been crossed, checked as substrings so

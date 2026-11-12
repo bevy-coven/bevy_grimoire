@@ -12,3 +12,7 @@ crates/bevy_oracle/fixtures/clips/
 
 # Impeccable design-critique archive: a run own bookkeeping, not source.
 .impeccable/
+
+# **A migrated project's old files** (GD-03, #365): `cauldron migrate` copies every RON original here before
+# removing it, so a person can diff what the migration did. It is the project's own archive, never source.
+.dark_factory/migrated-ron/

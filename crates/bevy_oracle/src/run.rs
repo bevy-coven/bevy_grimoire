@@ -73,7 +73,7 @@ impl Verdict {
 /// **Run every check `Checks` holds against `evidence`.**
 ///
 /// `bar` is the agreement a check must have measured to block (the issue's *"a check must earn its
-/// authority"*); a project's `checks.ron` carries its own calibration, and the caller decides the bar.
+/// authority"*); a project's `checks.yaml` carries its own calibration, and the caller decides the bar.
 /// `evidence_for` names the images each check wants, because the CLI and a test load them differently
 /// — a test holds them in memory, the CLI reads a directory.
 pub fn run_checks(checks: &Checks, transport: &dyn Transport, evidence_for: &dyn Fn(&Check) -> Result<Evidence, String>, bar: f64) -> Verdict {

@@ -332,7 +332,7 @@ const UNMIGRATED: &[Action] = &[
 // 99 -> 96: `CellSolid`, `CellEdge` and `CellClear` -> `piece_set_cells` (E-002, #129 slice 10): `Z`, `X`, `V`, the lattice grid's chips and headers edit a library piece's cells through the operation an agent calls.
 // 96 -> 95: `NewToken` -> `vocab_add_token` (E-002, #129 slice 11): `Shift+T` and the `+` chip add a token to the vocabulary through the operation an agent calls.
 // 95 -> 94: `AcceptEdges` -> `piece_set_cells` (E-002, #129 slice 12): `Enter` on a mesh scan's derived edges keeps them on a library piece through the operation an agent calls (its `edges` verb).
-// 94 -> 93: `AdoptMeasured` -> `rig_adopt_measured` (E-002, #129 slice 13): `Enter` on the Anim tab adopts the selected rig's measured gait values into `rigs.ron` through the operation an agent calls.
+// 94 -> 93: `AdoptMeasured` -> `rig_adopt_measured` (E-002, #129 slice 13): `Enter` on the Anim tab adopts the selected rig's measured gait values into `rigs.yaml` through the operation an agent calls.
 // 93 -> 92: `GroupFromSet` -> `composition_define` (E-002, #129 slice 14): `M`, a name and Enter keep the set in hand as a group through the operation an agent calls (its `set` verb).
 // 92 -> 91: `ScanMesh` -> `piece_set_cells` (E-002, #129 slice 19): `B` and the SCAN chip read a library piece's mesh and mark the cells it occupies through the operation an agent calls (its `scan` verb).
 // 86 -> 87: `LookAtAgentChange` (AF-04, #360) moves the camera and names no operation, exactly

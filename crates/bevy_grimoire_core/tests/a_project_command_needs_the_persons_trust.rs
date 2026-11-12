@@ -109,7 +109,7 @@ fn a_project_that_cannot_be_resolved_is_refused_not_guessed() {
 fn the_store_survives_a_round_trip_and_a_missing_file_is_empty() {
     let home = Dir::new("home");
     let project = Dir::new("proj");
-    let file = home.0.join("Grimoire").join("trusted.ron");
+    let file = home.0.join("Grimoire").join("trusted.yaml");
     assert_eq!(TrustStore::load(&file).unwrap(), TrustStore::default(), "no file yet: nothing is trusted");
 
     let mut store = TrustStore::default();
@@ -126,16 +126,16 @@ fn the_store_survives_a_round_trip_and_a_missing_file_is_empty() {
 #[test]
 fn a_damaged_store_is_refused_and_never_read_as_empty_or_as_everything() {
     let home = Dir::new("bad");
-    let file = home.0.join("trusted.ron");
+    let file = home.0.join("trusted.yaml");
     for (text, why) in [
-        ("(version: 1, projects: [", "cut off"),
-        ("(version: 99, projects: [], commands: [])", "a version this build does not read"),
-        ("(version: 1, projects: [], commands: [], also: true)", "a field it does not know"),
+        ("version: 1\nprojects: [", "cut off"),
+        ("version: 99\nprojects: []\ncommands: []\n", "a version this build does not read"),
+        ("version: 1\nprojects: []\ncommands: []\nalso: true\n", "a field it does not know"),
         ("", "empty"),
     ] {
         std::fs::write(&file, text).unwrap();
         let err = TrustStore::load(&file).expect_err(why);
-        assert!(err.contains("trusted.ron"), "{why}: the refusal names the file: {err}");
+        assert!(err.contains("trusted.yaml"), "{why}: the refusal names the file: {err}");
     }
 }
 
@@ -151,8 +151,8 @@ fn the_sentence_for_an_untrusted_command_shows_it_and_says_who_can_trust_it() {
 // ---- the launch itself ----
 
 fn agent_in(marker: &Path) -> AgentSettings {
-    AgentSettings::from_ron(&format!(
-        "(version: 1, command: Some(\"/usr/bin/touch\"), args: [\"{}\"])",
+    AgentSettings::parse(&format!(
+        "version: 1\ncommand: /usr/bin/touch\nargs: [\"{}\"]\n",
         marker.display()
     ))
     .unwrap()

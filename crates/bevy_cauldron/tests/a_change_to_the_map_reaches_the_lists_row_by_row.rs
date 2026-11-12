@@ -52,10 +52,10 @@ fn rig(tag: &str) -> App {
         .descriptor("beam", "alpha")
         .place("crate", (1.0, 1.0))
         .build("m");
-    let library = root.join("assets/grimoire").join(fixtures::DEFAULT_KIT).join("library.ron");
+    let library = root.join("assets/grimoire").join(fixtures::DEFAULT_KIT).join("library.yaml");
     let text = std::fs::read_to_string(&library).unwrap_or_else(|e| panic!("{library:?}: {e}"));
-    let text = rewrite(&text, "lamp", "kind: [\"prop\"]", "kind: [\"lamp\"]");
-    let text = rewrite(&text, "beam", "mount: Some(OnFloor)", "mount: Some(OnCeiling)");
+    let text = rewrite(&text, "lamp", "kind:\n  - prop", "kind:\n  - lamp");
+    let text = rewrite(&text, "beam", "mount: OnFloor", "mount: OnCeiling");
     std::fs::write(&library, text).unwrap_or_else(|e| panic!("{library:?}: {e}"));
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     updates(&mut app, 8);
@@ -70,7 +70,7 @@ fn rig(tag: &str) -> App {
 
 /// **Rewrite the first `was` after the descriptor `id` to `becomes`**, which is how a real kit says where a piece goes.
 fn rewrite(text: &str, id: &str, was: &str, becomes: &str) -> String {
-    let at = text.find(&format!("id: \"{id}\"")).unwrap_or_else(|| panic!("no `{id}` in the library"));
+    let at = text.find(&format!("id: {id}\n")).unwrap_or_else(|| panic!("no `{id}` in the library"));
     let found = text[at..].find(was).unwrap_or_else(|| panic!("`{id}` does not have `{was}`")) + at;
     let mut text = text.to_owned();
     text.replace_range(found..found + was.len(), becomes);

@@ -44,7 +44,7 @@ fn on_the_page(tag: &str) -> (PathBuf, PathBuf, App) {
         .descriptor("site/wall", "alpha")
         .place("site/wall", (0.0, 0.0))
         .build("m");
-    let store = root.join("trusted.ron");
+    let store = root.join("trusted.yaml");
     TrustStore::default().save(&store).expect("an empty store");
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.add_plugins(LoadingPlugin);

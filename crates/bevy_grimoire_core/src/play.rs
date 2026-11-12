@@ -1,4 +1,4 @@
-//! `play.ron`: how a project runs its game (#97).
+//! `play.yaml`: how a project runs its game (#97).
 //!
 //! The editor never links the game. A project says how to start it, and the editor starts that
 //! command as a child process on the open map. Engine-free: this is the file's schema and the
@@ -19,6 +19,9 @@ pub const PLAY_VERSION_READS_FROM: u32 = 1;
 
 /// The port `bevy_fairy` serves BRP on unless told otherwise.
 pub const DEFAULT_PORT: u16 = 15702;
+
+/// **The file this kind lives in**, at the project root: `play.yaml`.
+pub const FILE: &str = "play.yaml";
 
 fn default_port() -> u16 {
     DEFAULT_PORT
@@ -48,14 +51,14 @@ pub struct PlayConfig {
     pub build: Vec<String>,
 }
 
-/// `<project>/play.ron`.
+/// `<project>/play.yaml`.
 pub fn path_for_project(root: &Path) -> PathBuf {
-    root.join("play.ron")
+    root.join(FILE)
 }
 
 impl PlayConfig {
-    pub fn from_ron(text: &str) -> Result<PlayConfig, String> {
-        let c: PlayConfig = ron::from_str(text).map_err(|e| format!("play: parse: {e}"))?;
+    pub fn parse(text: &str) -> Result<PlayConfig, String> {
+        let c: PlayConfig = crate::yaml::from_str(text, FILE).map_err(|p| format!("play: {}", p.line()))?;
         if c.version < PLAY_VERSION_READS_FROM || c.version > PLAY_VERSION {
             return Err(format!(
                 "play: version {} is not one of the versions this build reads ({PLAY_VERSION_READS_FROM}-{PLAY_VERSION})",
@@ -68,14 +71,20 @@ impl PlayConfig {
         Ok(c)
     }
 
-    /// Reads the project's `play.ron`. A project without one has no way to play, and says so.
+    /// **The file as the one YAML writer writes it**, which is what `play` saves.
+    pub fn to_yaml(&self) -> Result<String, String> {
+        crate::yaml::to_string(self).map_err(|p| format!("play: {}", p.line()))
+    }
+
+    /// Reads the project's `play.yaml`. A project without one has no way to play, and says so.
     pub fn load(root: &Path) -> Result<PlayConfig, String> {
         let path = path_for_project(root);
         match std::fs::read_to_string(&path) {
-            Ok(text) => PlayConfig::from_ron(&text).map_err(|e| format!("{}: {e}", path.display())),
+            Ok(text) => PlayConfig::parse(&text).map_err(|e| format!("{}: {e}", path.display())),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(format!(
-                "{} does not exist. Write `(version: 1, command: [\"cargo\", \"run\", \"--\", \"{{map}}\"])` there: how to run this game.",
-                path.display()
+                "{} does not exist. Write it as YAML:\nversion: 1\ncommand: [\"cargo\", \"run\", \"--\", \"{{map}}\"]\n{}: how to run this game.",
+                path.display(),
+                path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
             )),
             Err(e) => Err(format!("play: {}: {e}", path.display())),
         }
@@ -105,7 +114,7 @@ impl PlayConfig {
 
     /// **The build command with `{root}` filled in**, or why this project has none.
     ///
-    /// The one place the command is read, so a `play.ron` that names an empty build is refused the
+    /// The one place the command is read, so a `play.yaml` that names an empty build is refused the
     /// same way everywhere it is asked.
     pub fn build_argv(&self, root: &Path) -> Result<Vec<String>, String> {
         // **One refusal for both empty cases**: a `build: []` and a `build` the file never wrote mean
@@ -148,13 +157,16 @@ mod tests {
 
     #[test]
     fn the_command_takes_the_map_and_camera() {
-        let c = PlayConfig::from_ron(r#"(version: 1, command: ["g", "--map", "{map}", "--at={camera}"])"#).unwrap();
+        let c = PlayConfig::parse(
+            "version: 1\ncommand: [\"g\", \"--map\", \"{map}\", \"--at={camera}\"]\n",
+        )
+        .unwrap();
         assert_eq!(c.port, DEFAULT_PORT);
         assert_eq!(c.argv(Path::new("/p"), "town", Some([1.0, 2.5, -3.0])), ["g", "--map", "town", "--at=1,2.5,-3"]);
     }
 
     #[test]
     fn an_empty_command_is_refused() {
-        assert!(PlayConfig::from_ron("(version: 1, command: [])").is_err());
+        assert!(PlayConfig::parse("version: 1\ncommand: []\n").is_err());
     }
 }

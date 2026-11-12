@@ -1,19 +1,16 @@
 use bevy_grimoire_core::data_files::{Bounds, DataFiles, leaves, set_leaf};
 use serde_json::json;
 
-const FIX: &str = r#"// Mob tuning — hand written, keep the comments.
-(
-    conviction_to_act: 100.0,   // how sure a mob is before it moves
-    /* block comment ( with a paren */
-    crowd: (
-        max:    12,             // aligned
-        label: "mob // not a comment",
-        panic: false,
-        leash: Some(4.5),
-        cooldown: None,
-    ),
-    waves: [ 1, 2, 3 ],
-)
+const FIX: &str = r#"# Mob tuning — hand written, keep the comments.
+conviction_to_act: 100.0  # how sure a mob is before it moves
+# a block comment ( with a paren
+crowd:
+  max: 12  # aligned
+  label: 'mob // not a comment'
+  panic: false
+  leash: 4.5
+  cooldown: null
+waves: [ 1, 2, 3 ]
 "#;
 
 fn diff_span(a: &str, b: &str) -> (usize, usize) {
@@ -30,9 +27,9 @@ fn diff_span(a: &str, b: &str) -> (usize, usize) {
 #[test]
 fn edit_changes_exactly_one_token() {
     let cases = [
-        ("conviction_to_act", json!(150), "150.0"),
+        ("conviction_to_act", json!(150.0), "150.0"),
         ("crowd.max", json!(20), "20"),
-        ("crowd.label", json!("a \"b\" // c"), r#""a \"b\" // c""#),
+        ("crowd.label", json!("a \"b\" // c"), "a \"b\" // c"),
         ("crowd.panic", json!(true), "true"),
         ("crowd.leash", json!(2.25), "2.25"),
         ("waves[1]", json!(9), "9"),
@@ -97,7 +94,8 @@ fn fraction_into_integer_is_refused() {
     assert!(
         set_leaf(FIX, "crowd.max", &json!(3.0), None)
             .unwrap()
-            .contains("max:    3,")
+            .contains("max: 3"),
+        "a whole number is written for an integer leaf"
     );
 }
 
@@ -107,21 +105,23 @@ fn out_of_bounds_is_refused() {
         min: Some(0.0),
         max: Some(200.0),
     };
-    let e = set_leaf(FIX, "conviction_to_act", &json!(201), Some(&b)).unwrap_err();
+    let e = set_leaf(FIX, "conviction_to_act", &json!(201.0), Some(&b)).unwrap_err();
     assert!(
         e.contains("conviction_to_act") && e.contains("bounds"),
         "{e}"
     );
-    assert!(set_leaf(FIX, "conviction_to_act", &json!(200), Some(&b)).is_ok());
+    assert!(set_leaf(FIX, "conviction_to_act", &json!(200.0), Some(&b)).is_ok());
     assert!(set_leaf(FIX, "conviction_to_act", &json!(-0.1), Some(&b)).is_err());
 }
 
 #[test]
-fn unparseable_result_is_refused() {
-    // the scanner tolerates the broken char literal in `b`; the parser does not, so the edit is refused
-    let bad = "(a: 5, b: 'x)";
+fn a_file_that_does_not_read_is_refused_before_an_edit_lands_in_it() {
+    // **A file that does not read has no leaves**, so an edit is refused at the file and never at the leaf:
+    // the stronger promise, because a splice into a file the reader cannot read edits a file whose value
+    // nobody knows. The refusal names the field the read stopped at (`b`).
+    let bad = "a: 5\nb: 'x\n";
     let e = set_leaf(bad, "a", &json!(6), None).unwrap_err();
-    assert!(e.contains("`a`") && e.contains("parse"), "{e}");
+    assert!(e.contains("did not read") && e.contains('b'), "{e}");
 }
 
 #[test]
@@ -131,14 +131,14 @@ fn registry_loads_and_reports() {
     std::fs::create_dir_all(d.join("data")).unwrap();
     let em = d.join("grimoire");
     assert_eq!(DataFiles::load(&em).unwrap(), None);
-    let reg = r#"(version: 1, files: [(id: "tuning/mob", path: "../data/mob.ron", note: Some("tune"), bounds: {"conviction_to_act": (min: 0.0, max: 200.0)})])"#;
-    std::fs::write(em.join("data.ron"), reg).unwrap();
+    let reg = "version: 1\nfiles:\n- id: tuning/mob\n  path: ../data/mob.yaml\n  note: tune\n  bounds:\n    conviction_to_act:\n      min: 0.0\n      max: 200.0\n";
+    std::fs::write(em.join("data.yaml"), reg).unwrap();
     let e = DataFiles::load(&em).unwrap_err();
     assert!(
-        e.contains("tuning/mob") && e.contains("../data/mob.ron"),
+        e.contains("tuning/mob") && e.contains("../data/mob.yaml"),
         "{e}"
     );
-    std::fs::write(d.join("data/mob.ron"), FIX).unwrap();
+    std::fs::write(d.join("data/mob.yaml"), FIX).unwrap();
     let r = DataFiles::load(&em).unwrap().unwrap();
     let f = r.get("tuning/mob").unwrap();
     assert_eq!(f.bounds["conviction_to_act"].max, Some(200.0));

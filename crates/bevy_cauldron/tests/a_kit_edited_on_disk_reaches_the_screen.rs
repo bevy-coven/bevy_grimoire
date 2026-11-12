@@ -2,7 +2,7 @@
 //!
 //! # What was broken
 //!
-//! `watch::adopt` re-reads a kit's `library.ron` and replaces the whole `Project` with a fresh
+//! `watch::adopt` re-reads a kit's `library.yaml` and replaces the whole `Project` with a fresh
 //! `Project::open`. **That is the memory.** The placed pieces on screen were spawned from the
 //! library the project held *then*, and nothing told the Map to redraw them: `Due::map_replaced`
 //! is the map file's flag, and the redraw of *pieces* is driven by `Project::touched`, which
@@ -17,7 +17,7 @@
 //!
 //! # What this test does
 //!
-//! It runs the real editor headless over a fixture, edits the kit's `library.ron` on disk so the
+//! It runs the real editor headless over a fixture, edits the kit's `library.yaml` on disk so the
 //! piece is twice as tall, lets the watcher poll, and asks **the world** for the piece's scale.
 //! The assertion is on the entity's `Transform`, not on the project's library: a test that
 //! asserted on `Project` would have passed while the screen showed the old shape, which is the
@@ -59,12 +59,12 @@ fn stretch_the_piece_on_disk(root: &std::path::Path, factor: f32) {
         .join("assets")
         .join("grimoire")
         .join(fixtures::DEFAULT_KIT)
-        .join("library.ron");
+        .join("library.yaml");
     let text = std::fs::read_to_string(&path).expect("the kit's library is there");
-    let edited = text.replace("stretch_y: None", &format!("stretch_y: Some({factor})"));
+    let edited = text.replace("stretch_y: null", &format!("stretch_y: {factor}"));
     assert_ne!(
         edited, text,
-        "the library has no `stretch_y: None` to edit: {text}"
+        "the library has no `stretch_y: null` to edit: {text}"
     );
     std::fs::write(&path, edited).expect("the library is written");
 }

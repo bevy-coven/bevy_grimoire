@@ -14,8 +14,8 @@ fn a_change_that_needs_a_restart_is_not_ok_and_survives_the_file_it_travels_in()
     std::fs::create_dir_all(&dir).unwrap();
 
     let kinds = vec![
-        KindVerdict::applied("kits", "kit/kits.ron"),
-        KindVerdict::needs_restart("rigs", "rigs.ron", "the animation tab holds the rigs it read when it opened"),
+        KindVerdict::applied("kits", "kit/kits.yaml"),
+        KindVerdict::needs_restart("rigs", "rigs.yaml", "the animation tab holds the rigs it read when it opened"),
     ];
     let v = Verdict::with_kinds(3, "one file needs a restart", kinds);
     // The edit is not in use, so the reload did not land: `ok` is the answer an agent branches on.
@@ -27,7 +27,7 @@ fn a_change_that_needs_a_restart_is_not_ok_and_survives_the_file_it_travels_in()
     assert_eq!(rigs.outcome, Outcome::NeedsRestart);
     assert_eq!(rigs.outcome.word(), "needs_restart");
     assert_eq!(rigs.field, None, "a valid file has no field it is wrong at");
-    assert!(rigs.sentence().contains("rigs.ron") && rigs.sentence().contains("holds the rigs"), "{}", rigs.sentence());
+    assert!(rigs.sentence().contains("rigs.yaml") && rigs.sentence().contains("holds the rigs"), "{}", rigs.sentence());
     assert_eq!(read, v);
 
     let _ = std::fs::remove_dir_all(&dir);

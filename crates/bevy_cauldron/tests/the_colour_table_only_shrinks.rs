@@ -116,7 +116,7 @@ fn uses_outside_chrome(names: &[String], dir: &Path) -> usize {
 /// **The ratchet reached zero (UI-02, #210, 2026-11-10), which is what it was for.**
 ///
 /// The three legs below were a ceiling on a table that was being emptied. It is empty now: the 28
-/// constants are `chrome::Ink`, read from `src/editor_skin.ron`, and `tests/no_colour_lives_in_chrome.rs`
+/// constants are `chrome::Ink`, read from `src/editor_skin.yaml`, and `tests/no_colour_lives_in_chrome.rs`
 /// is the check that keeps it that way — it asserts the scan finds *nothing*, which is the same rule
 /// with no ceiling left to lower. These three stay at 0 as the second statement of it, so a constant
 /// reintroduced here fails both tests rather than one.
@@ -151,7 +151,7 @@ fn the_colour_table_only_shrinks() {
         names.len(),
         CONSTANTS_CEILING,
         "chrome.rs declares {} colour constant(s): {names:?}. #210's acceptance is zero. If a *new* \
-         colour is genuinely needed, it belongs in `editor_skin.ron` (a `tones` entry) or a \
+         colour is genuinely needed, it belongs in `editor_skin.yaml` (a `tones` entry) or a \
          `GooeySkin` field — not as a second constant beside the palette the chrome paints from.",
         names.len()
     );

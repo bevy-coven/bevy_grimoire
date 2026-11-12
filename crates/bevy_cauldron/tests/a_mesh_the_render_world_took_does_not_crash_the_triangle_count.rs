@@ -4,7 +4,7 @@
 //! `RENDER_WORLD` only, so once the first frame is extracted the main world's copy has no vertex or
 //! index data, and `Mesh::indices()` panics on it. `refresh_triangle_total` (the `N tris drawn` readout)
 //! asked every visible mesh for its indices, so the editor aborted on `big` the moment a project's
-//! `family/bevy_elements.ron` dressed the viewport. The readout counts what the main world can still
+//! `family/bevy_elements.yaml` dressed the viewport. The readout counts what the main world can still
 //! read and skips what it cannot.
 
 use bevy::asset::RenderAssetUsages;
@@ -32,9 +32,9 @@ fn a_visible_mesh_the_render_world_took_is_skipped_and_the_rest_still_counts() {
     let root = fixtures::Fixture::new("tris_extracted").descriptor("floor", "alpha").build("m");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     // The count is behind View -> Show statistics (#302); this asks for it.
-    let file = std::env::temp_dir().join(format!("grimoire_stats_tris_{}/settings.ron", std::process::id()));
+    let file = std::env::temp_dir().join(format!("grimoire_stats_tris_{}/settings.yaml", std::process::id()));
     std::fs::create_dir_all(file.parent().expect("a folder")).expect("a scratch folder");
-    std::fs::write(&file, "(version: 1, show_statistics: Some(true))").expect("a settings file");
+    std::fs::write(&file, "{version: 1, show_statistics: true}").expect("a settings file");
     app.insert_resource(bevy_cauldron::settings::UserSettingsFile(file));
     for _ in 0..80 {
         app.update();

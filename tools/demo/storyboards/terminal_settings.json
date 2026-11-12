@@ -34,7 +34,7 @@
     },
     {
       "at": 4.6,
-      "caption": "this project's editor.ron asks for a steady bar cursor (terminal_cursor: Bar, terminal_cursor_blink: false)"
+      "caption": "this project's editor.yaml asks for a steady bar cursor (terminal_cursor: Bar, terminal_cursor_blink: false)"
     },
     {
       "at": 7.4,

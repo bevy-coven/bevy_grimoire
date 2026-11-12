@@ -21,7 +21,7 @@ fn editor(name: &str) -> App {
         .place("site/wall", (2.0, 0.0))
         .place("site/torch", (6.0, 6.0))
         .build("m");
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_lights\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_lights\"]}").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
         app.update();
@@ -36,7 +36,7 @@ fn editor(name: &str) -> App {
 fn light(app: &mut App, index: usize) {
     let mut open = app.world_mut().resource_mut::<OpenMap>();
     let torch = open.map.placements.iter_mut().filter(|p| p.descriptor == "site/torch").nth(index).unwrap();
-    torch.family.insert("bevy_lights".to_owned(), "(base: 1000.0)".to_owned());
+    torch.family.insert("bevy_lights".to_owned(), "{base: 1000.0}".to_owned());
 }
 
 /// What an agent reads for the cell at `at`, through the registry.

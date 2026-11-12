@@ -1,9 +1,9 @@
 //! **A project's game skin previews only inside the Game UI preview panel** (UI-03, #211).
 //!
-//! The data is `bevy_gooey`'s own [`GooeySkin`], written as RON in `<project>/family/bevy_gooey.ron`
+//! The data is `bevy_gooey`'s own [`GooeySkin`], written as YAML in `<project>/family/bevy_gooey.yaml`
 //! — the file a game ships so its own UI matches its art. The crate's type is
-//! `#[serde(default)]`, so a partial file such as `(accent: Srgba((red: 0.2, green: 0.6, blue: 0.9,
-//! alpha: 1.0)))` is the library's default skin with only that field changed.
+//! `#[serde(default)]`, so a partial file such as `accent: !Srgba {red: 0.2, green: 0.6, blue: 0.9,
+//! alpha: 1.0}` is the library's default skin with only that field changed.
 //!
 //! # The editor's chrome never takes it
 //!
@@ -31,12 +31,12 @@ use bevy_gooey::{GooeySkin, SkinScope};
 use crate::editor::EditorState;
 use crate::family_host::FamilySettings;
 
-/// The crate this settings file belongs to, as `family.ron` names it.
+/// The crate this settings file belongs to, as `family.yaml` names it.
 pub const CRATE: &str = "bevy_gooey";
 
 /// Reads a skin file's text as the crate's own type.
-pub fn from_ron(text: &str) -> Result<GooeySkin, String> {
-    ron::from_str(text).map_err(|e| format!("bevy_gooey skin: {e}"))
+pub fn from_yaml(text: &str) -> Result<GooeySkin, String> {
+    bevy_grimoire_core::yaml::from_str(text, "family/bevy_gooey.yaml").map_err(|p| format!("bevy_gooey skin: {}", p.line()))
 }
 
 /// **The project's game skin, as the file says it** (UI-03, #211).
@@ -44,7 +44,7 @@ pub fn from_ron(text: &str) -> Result<GooeySkin, String> {
 /// A resource of its own, and deliberately **not** the running [`GooeySkin`]: a game's palette belongs
 /// inside the Game UI preview panel and nowhere else, so this is the only thing that carries it and
 /// [`skin_scope`] is the only thing that reads it onto the screen. `None` is a project with no
-/// `family/bevy_gooey.ron` — the panel then previews the editor's own skin and says there is nothing
+/// `family/bevy_gooey.yaml` — the panel then previews the editor's own skin and says there is nothing
 /// shipped yet.
 ///
 /// **It is not a `Local` on [`apply_ui_skin`]** because two systems and a test read it: the preview's
@@ -63,7 +63,7 @@ impl GameSkin {
     }
 }
 
-/// Copies a changed `family/bevy_gooey.ron` into [`GameSkin`], and **never** into the running skin.
+/// Copies a changed `family/bevy_gooey.yaml` into [`GameSkin`], and **never** into the running skin.
 ///
 /// The running [`GooeySkin`] is the editor's own (UI-02, #210): a project's file is a game's palette
 /// and reaches the window only through the Game UI preview panel's [`SkinScope`].
@@ -83,7 +83,7 @@ pub fn apply_ui_skin(
         return;
     }
     *seen = Some(text.clone());
-    let parsed = match from_ron(text) {
+    let parsed = match from_yaml(text) {
         Ok(p) => p,
         Err(e) => {
             state.status.problem(format!("{e}; the previous skin stays"));

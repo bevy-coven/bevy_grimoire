@@ -124,13 +124,13 @@ fn a_grant_is_for_one_project_and_a_symlink_to_it_is_that_project() {
 #[test]
 fn a_store_written_before_guides_grants_existed_still_reads() {
     let dir = Dir::new("old");
-    let file = dir.0.join("trusted.ron");
+    let file = dir.0.join("trusted.yaml");
     let project = project("old-project");
     // What version 1 wrote, before this build added a field: no `guides`, and its own version number.
     let resolved = std::fs::canonicalize(&project.0).expect("the project resolves");
     std::fs::write(
         &file,
-        format!("(version: 1, projects: [\"{}\"], commands: [])", resolved.display()),
+        format!("version: 1\nprojects: [\"{}\"]\ncommands: []\n", resolved.display()),
     )
     .expect("the old store is written");
     let store = TrustStore::load(&file).expect("a store from before the field reads");
@@ -151,7 +151,7 @@ fn the_projects_guide_cannot_be_registered_as_a_data_file() {
         "the guide is a file no registry may name: {COMMAND_FILES:?}"
     );
     for bad in [".dark_factory/AGENTS.md", "../.dark_factory/AGENTS.md", "/an/absolute/AGENTS.md"] {
-        let text = format!("(version: 1, files: [(id: \"g\", path: \"{bad}\")])");
+        let text = format!("version: 1\nfiles:\n- id: g\n  path: {bad}\n");
         let said = bevy_grimoire_core::data_files::DataFiles::parse(&text)
             .expect_err(&format!("`{bad}` was accepted as a data file"));
         assert!(said.contains("names a program") || said.contains("cannot be a data file"), "{bad}: {said}");

@@ -3,7 +3,7 @@
 //! A person is a marker: a name, where they stand, a faction, and the buildings that are their home and
 //! their workplace. Their behaviour is `bevy_society`'s, never the editor's; the marker is only what the
 //! game needs to spawn them (`Home(entity)`, a faction membership). The file is
-//! `<grimoire_dir>/people/<map>.ron`, beside the map, so the game reads it and the editor reloads it.
+//! `<grimoire_dir>/people/<map>.yaml`, beside the map, so the game reads it and the editor reloads it.
 //!
 //! A home or workplace names a placement that is on the map, and **a placement that someone lives or works
 //! in cannot be removed** (`tenant_of`, called by `placement_remove`): the refusal names the person.
@@ -55,7 +55,7 @@ pub struct Tie {
 /// The format version of a people file (#202). A file with no `version` is the first.
 pub const PEOPLE_VERSION: u32 = 1;
 
-/// A map's people: `<grimoire_dir>/people/<map>.ron`.
+/// A map's people: `<grimoire_dir>/people/<map>.yaml`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct People {
@@ -128,7 +128,7 @@ pub(crate) fn path_of(project: &crate::project::Project, map: &str) -> Result<st
     if map.is_empty() || map.contains(['/', '\\', '.']) {
         return Err(Refusal::new(format!("`{map}` is not a map name. Nothing was written.")));
     }
-    Ok(project.grimoire_dir.join("people").join(format!("{map}.ron")))
+    Ok(project.grimoire_dir.join("people").join(format!("{map}.yaml")))
 }
 
 /// **The saved people of a map**, nobody when there is no file.
@@ -136,7 +136,7 @@ pub fn people_of(project: &crate::project::Project, map: &str) -> People {
     path_of(project, map)
         .ok()
         .and_then(|p| std::fs::read_to_string(p).ok())
-        .and_then(|t| ron::from_str(&t).ok())
+        .and_then(|t| bevy_grimoire_core::yaml::from_str(&t, "people").ok())
         .unwrap_or_default()
 }
 
@@ -161,7 +161,7 @@ pub fn tenant_of(project: &crate::project::Project, map: &str, ids: &[String]) -
 fn check_faction(ctx: &Ctx, faction: &str) -> Result<(), Refusal> {
     let Ok(path) = crate::ops_family::settings_path(ctx, "bevy_society") else { return Ok(()) };
     let Ok(text) = std::fs::read_to_string(&path) else { return Ok(()) };
-    let Ok(file) = ron::from_str::<bevy_society::DefsFile>(&text) else { return Ok(()) };
+    let Ok(file) = bevy_grimoire_core::yaml::from_str::<bevy_society::DefsFile>(&text, "family/bevy_society.yaml") else { return Ok(()) };
     if file.factions.iter().any(|f| f.id == faction) {
         return Ok(());
     }
@@ -183,7 +183,7 @@ fn check_conversation(ctx: &Ctx, name: &str) -> Result<(), Refusal> {
     let text = std::fs::read_to_string(&path)
         .map_err(|e| Refusal::new(format!("{} cannot be read, so no conversation can be attached: {e}. Nothing was changed.", path.display())))?;
     let script: bevy_speech_bubbles::DialogueScript =
-        ron::from_str(&text).map_err(|e| Refusal::new(format!("the project's dialogue script is not readable: {e}. Nothing was changed.")))?;
+        bevy_grimoire_core::yaml::from_str(&text, "family/bevy_speech_bubbles.yaml").map_err(|p| Refusal::new(format!("the project's dialogue script is not readable: {}. Nothing was changed.", p.line())))?;
     if script.conversations.contains_key(name) {
         return Ok(());
     }
@@ -313,8 +313,7 @@ impl PersonSet {
                 }
                 summary
             };
-            let text = ron::ser::to_string_pretty(&people, ron::ser::PrettyConfig::default())
-                .map_err(|e| Refusal::new(format!("the people could not be written: {e}")))?;
+            let text = bevy_grimoire_core::yaml::to_string(&people).map_err(|p| Refusal::new(format!("the people could not be written: {}", p.line())))?;
             (Some(text), summary)
         };
 

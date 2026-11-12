@@ -4,7 +4,7 @@
 //! The host used to call a settings file `applied` once it was valid RON, and left the crate's own type
 //! to refuse it later on the status line, so `grimoire_state.reloads` said a file landed that the crate
 //! had thrown away. In a build that has the crate (`bevy_elements`, `bevy_gooey`) the file is now read as
-//! the crate's own type before it is taken: a refusal is one verdict that names `family/<crate>.ron` and
+//! the crate's own type before it is taken: a refusal is one verdict that names `family/<crate>.yaml` and
 //! the field the type is wrong at, the text never reaches [`FamilySettings`], and a file mended back
 //! (or to anything else the type reads) is `applied`. The three bad files of the issue's acceptance are,
 //! for each crate: a file cut off (not RON), a field of the wrong type, and (for a crate with a required
@@ -30,21 +30,27 @@ struct Case {
     stays: &'static str,
 }
 
+/// A block of YAML one step in, so it can stand under a key.
+#[cfg(feature = "bevy_elements")]
+fn indent(block: &str) -> String {
+    block.lines().map(|l| format!("  {l}\n")).collect()
+}
+
 #[cfg(feature = "bevy_elements")]
 fn elements() -> Case {
     use bevy_cauldron::environment::ElementsSettings;
-    let good = ElementsSettings::defaults().to_ron();
-    let clock = ron::to_string(&bevy_elements::WorldClock::default()).unwrap();
-    let climate = ron::to_string(&bevy_elements::Climate::default()).unwrap();
+    let good = ElementsSettings::defaults().to_yaml();
+    let clock = bevy_grimoire_core::yaml::to_string(&bevy_elements::WorldClock::default()).unwrap();
+    let climate = bevy_grimoire_core::yaml::to_string(&bevy_elements::Climate::default()).unwrap();
     let mut other = ElementsSettings::defaults();
     other.clock.hour = 18.5;
     Case {
         krate: "bevy_elements",
-        other_good: other.to_ron(),
+        other_good: other.to_yaml(),
         bad: vec![
             ("corrupt: a save cut off", good[..good.len() / 2].to_owned(), ""),
-            ("wrong type: the clock is a number", format!("(clock: 5, climate: {climate})"), "clock"),
-            ("missing field: no climate", format!("(clock: {clock})"), "climate"),
+            ("wrong type: the clock is a number", format!("clock: 5\nclimate:\n{}", indent(&climate)), "clock"),
+            ("missing field: no climate", format!("clock:\n{}", indent(&clock)), "climate"),
         ],
         good,
         stays: "previous environment stays",
@@ -54,12 +60,12 @@ fn elements() -> Case {
 fn gooey() -> Case {
     Case {
         krate: "bevy_gooey",
-        good: "(accent: Srgba((red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0)))".to_owned(),
-        other_good: "(min_target: 30.0)".to_owned(),
+        good: "{accent: !Srgba {red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0}}".to_owned(),
+        other_good: "{min_target: 30.0}".to_owned(),
         bad: vec![
-            ("corrupt: a save cut off", "(accent: Srgba((red: ".to_owned(), ""),
-            ("wrong type: the accent is a number", "(accent: 5)".to_owned(), "accent"),
-            ("missing field: a colour without its green", "(accent: Srgba((red: 0.2)))".to_owned(), "accent"),
+            ("corrupt: a save cut off", "{accent: !Srgba {red: ".to_owned(), ""),
+            ("wrong type: the accent is a number", "{accent: 5}".to_owned(), "accent"),
+            ("missing field: a colour without its green", "{accent: !Srgba {red: 0.2}}".to_owned(), "accent"),
         ],
         stays: "previous skin stays",
     }
@@ -111,7 +117,7 @@ fn settings(app: &App, krate: &str) -> Option<String> {
 
 fn project(tag: &str, case: &Case, text: &str) -> (App, std::path::PathBuf) {
     let root = fixtures::Fixture::new(&format!("{tag}_{}", std::process::id())).descriptor("site/wall", "alpha").build("m");
-    let file = root.join("family").join(format!("{}.ron", case.krate));
+    let file = root.join("family").join(format!("{}.yaml", case.krate));
     std::fs::create_dir_all(file.parent().unwrap()).unwrap();
     std::fs::write(&file, text).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
@@ -122,7 +128,7 @@ fn project(tag: &str, case: &Case, text: &str) -> (App, std::path::PathBuf) {
 #[test]
 fn a_file_that_is_not_the_crates_type_is_refused_naming_the_field_once_and_the_last_good_stays() {
     for case in cases() {
-        let name = format!("family/{}.ron", case.krate);
+        let name = format!("family/{}.yaml", case.krate);
         let (mut app, file) = project("family_typed", &case, &case.good);
         assert_eq!(verdict(&app, &name)["outcome"], "applied", "{}: a file that reads is applied at launch", case.krate);
         assert_eq!(settings(&app, case.krate).as_deref(), Some(case.good.as_str()));
@@ -147,9 +153,9 @@ fn a_file_that_is_not_the_crates_type_is_refused_naming_the_field_once_and_the_l
             let raised = (app.world().resource::<EditorState>().status.raised() - raised_before) as usize;
             let said: Vec<String> = app.world().resource::<EditorState>().status.problems().iter().rev().take(raised).map(|p| p.text.clone()).collect();
             assert_eq!(raised, 1, "{}: {what}: the refusal is said once: {said:?}", case.krate);
-            if ron::from_str::<ron::Value>(bad).is_err() {
-                // Not RON at all: the host's own sentence, which the gooey test pins by its words.
-                assert!(said[0].contains(case.krate) && said[0].contains("not valid RON"), "{}: {what}: {said:?}", case.krate);
+            if bevy_grimoire_core::yaml::to_json(bad, "test").is_err() {
+                // Not YAML at all: the host's own sentence, which the gooey test pins by its words.
+                assert!(said[0].contains(case.krate) && said[0].contains("not valid YAML"), "{}: {what}: {said:?}", case.krate);
             } else {
                 assert!(said[0].contains(&name) && said[0].contains(named) && said[0].contains(case.stays), "{}: {what}: {said:?}", case.krate);
             }
@@ -189,7 +195,7 @@ fn a_file_that_is_not_the_crates_type_is_refused_naming_the_field_once_and_the_l
 #[test]
 fn a_file_of_the_wrong_type_when_the_project_opens_is_named_and_not_taken() {
     for case in cases() {
-        let name = format!("family/{}.ron", case.krate);
+        let name = format!("family/{}.yaml", case.krate);
         for (what, bad, field) in &case.bad {
             let (mut app, file) = project("family_typed_launch", &case, bad);
             let v = verdict(&app, &name);
@@ -215,7 +221,7 @@ fn a_file_of_the_wrong_type_when_the_project_opens_is_named_and_not_taken() {
 #[test]
 fn a_refusal_then_an_unreadable_edit_then_the_same_text_back_is_one_decision_per_edit() {
     for case in cases() {
-        let name = format!("family/{}.ron", case.krate);
+        let name = format!("family/{}.yaml", case.krate);
         let (mut app, file) = project("family_typed_back", &case, &case.good);
         let (_, wrong, field) = case.bad[1].clone();
         let (_, cut, _) = case.bad[0].clone();

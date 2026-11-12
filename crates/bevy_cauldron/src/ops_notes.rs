@@ -1,7 +1,7 @@
 //! **Notes for agents, as registered operations** (#89): `note_add`, `note_edit`, `note_remove`.
 //!
-//! A note is data beside the map it marks (`bevy_grimoire_core::notes`, the `.notes.ron` next to the
-//! `.map.ron`). These three operations are the only way the editor changes it, so a person's click
+//! A note is data beside the map it marks (`bevy_grimoire_core::notes`, the `.notes.yaml` next to the
+//! `.map.yaml`). These three operations are the only way the editor changes it, so a person's click
 //! and an agent's `apply` are one change with one log line and one undo.
 //!
 //! Each operation's inverse is the same operation sent a parameter only an undo may send

@@ -1,9 +1,9 @@
 //! **A project's game skin previews only inside the Game UI preview panel** (UI-03, #211).
 //!
-//! A game ships `family/bevy_gooey.ron` so its own UI matches its art. Until this issue, that file
+//! A game ships `family/bevy_gooey.yaml` so its own UI matches its art. Until this issue, that file
 //! *was* the editor's running `GooeySkin`, so a game's palette repainted the Cauldron's own chrome —
 //! and a light game skin left every editor label at about 1.1:1. The issue's What is one sentence:
-//! "Build a `Game UI preview` panel under a `SkinScope` loaded from `family/bevy_gooey.ron`. The editor
+//! "Build a `Game UI preview` panel under a `SkinScope` loaded from `family/bevy_gooey.yaml`. The editor
 //! chrome never takes it."
 //!
 //! # The two acceptance items, as tests
@@ -36,8 +36,7 @@ use bevy_gooey::{GooeySkin, SkinScope, ValueChange};
 use crate::fixtures;
 
 /// The project skill this file writes: a skin that shares no colour with the editor's own.
-const GAME_SKIN: &str = "(accent: Srgba((red: 0.20, green: 0.60, blue: 0.90, alpha: 1.0)), \
-surface: Srgba((red: 0.10, green: 0.14, blue: 0.20, alpha: 1.0)))";
+const GAME_SKIN: &str = "{accent: !Srgba {red: 0.20, green: 0.60, blue: 0.90, alpha: 1.0}, surface: !Srgba {red: 0.10, green: 0.14, blue: 0.20, alpha: 1.0}}";
 
 /// A blue accent unlike the editor's amber, so "the project's skin reached this" is visible.
 fn game_accent() -> Color {
@@ -56,8 +55,8 @@ fn editor_with_a_game_skin(tag: &str) -> (std::path::PathBuf, App) {
         .descriptor("site/wall", "alpha")
         .build("m");
     std::fs::create_dir_all(root.join("family")).expect("a family folder");
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_gooey\"])").expect("a family.ron");
-    std::fs::write(root.join("family/bevy_gooey.ron"), GAME_SKIN).expect("a project skin");
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_gooey\"]}").expect("a family.yaml");
+    std::fs::write(root.join("family/bevy_gooey.yaml"), GAME_SKIN).expect("a project skin");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     updates(&mut app, 12);
     show_the_preview(&mut app, true);
@@ -134,8 +133,8 @@ fn editing_the_projects_accent_moves_the_previews_buttons() {
     // **A new accent, written the way a person writes it**: the file, and the frames that read it.
     let moved = Color::srgba(0.95, 0.30, 0.10, 1.0);
     std::fs::write(
-        root.join("family/bevy_gooey.ron"),
-        "(accent: Srgba((red: 0.95, green: 0.30, blue: 0.10, alpha: 1.0)))",
+        root.join("family/bevy_gooey.yaml"),
+        "{accent: !Srgba {red: 0.95, green: 0.30, blue: 0.10, alpha: 1.0}}",
     )
     .expect("a moved accent");
     let mut seen = None;

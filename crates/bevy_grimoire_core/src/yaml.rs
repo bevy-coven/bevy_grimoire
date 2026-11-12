@@ -149,6 +149,16 @@ where
     })
 }
 
+/// **Write `text` to `path`, atomically**, which is the one way a project file reaches the disk.
+///
+/// The bytes land through [`crate::atomic_file::write`], so a reader never sees a half-written file and a
+/// crash leaves the old one whole. It replaces what is there — the caller chose the path — which is the right
+/// default for a save and the wrong one for a name derived from a typed name; a caller in that position asks
+/// [`crate::atomic_file::write_new`] instead.
+pub fn save(path: &Path, text: &str) -> Result<(), String> {
+    crate::atomic_file::write(path, text).map_err(|e| format!("{}: {e}", path.display()))
+}
+
 /// **The line each path in `text` stands on**, counted from 1 as an editor shows it.
 ///
 /// **A fault a caller builds needs a line, not only a path**: `entities.door_north.Mana` is where a reader is
@@ -166,6 +176,35 @@ pub fn lines(text: &str) -> std::collections::BTreeMap<String, usize> {
         .iter()
         .map(|node| (node.path.clone(), line_of(text, node.span.0)))
         .collect()
+}
+
+/// **Every scalar leaf of `text` in source order**, as `(path, the token as the file writes it)`.
+///
+/// **A leaf's token is its text with its quotes on**, because the caller is a *surgery* — `set_leaf` and
+/// `restore_leaf` in `data_files` replace a token's bytes and must round-trip a string as a string. So a
+/// quoted scalar is `\"yard\"` here and `yard` in [`Node::scalar`], and a block scalar is its content
+/// with the indicator, since that is what a replacement has to span.
+///
+/// The path is the walk's (`mob.speed`, `placements[3].turn_deg`), so a leaf and a [`lines`] entry name the
+/// same place and a refusal can say both.
+pub fn leaves(text: &str) -> Vec<(String, String)> {
+    let walk = walk(text);
+    walk.nodes
+        .iter()
+        .filter_map(|node| {
+            let leaf = node.scalar.as_ref()?;
+            Some((node.path.clone(), token_of(text, node, leaf)))
+        })
+        .collect()
+}
+
+/// **The bytes a leaf stands for**, as a surgery replaces them: a plain scalar's own text, a quoted
+/// scalar's quotes and all, and a block scalar's indicator through its content.
+fn token_of(text: &str, node: &Node, leaf: &Leaf) -> String {
+    match leaf.style {
+        Style::Plain => leaf.text.clone(),
+        Style::Quoted | Style::Block => text.get(node.span.0..node.span.1).unwrap_or(&leaf.text).to_owned(),
+    }
 }
 
 /// **What a span of a YAML file is**, for an editor that colours it (GD-11, #373).
