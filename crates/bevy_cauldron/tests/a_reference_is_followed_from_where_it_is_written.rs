@@ -144,13 +144,22 @@ fn selected_cue(app: &App) -> Option<String> {
     app.world().resource::<SelectedCue>().0.clone()
 }
 
-/// **Acceptance 1a — Cmd/Ctrl+click.** The pointer goes to the editor's empty part with the primary modifier held; the caret lands at the end of
-/// the one line, which is the end of the `cue:` value, and the click follows it to the Sound workspace with the cue selected.
+/// The column (0-based) inside `cue: door.creak` that the value occupies: the `d` is at 5, so 8 is inside the name and 1 is on `c`.
+const IN_THE_VALUE: usize = 8;
+const OFF_THE_VALUE: usize = 1;
+
+/// **Acceptance 1a — Cmd/Ctrl+click.** With the primary modifier held, a press puts the caret where the pointer went down and the release
+/// follows the reference under it to the Sound workspace with the cue selected.
+///
+/// **The caret is placed here, as the F12 test places it**: `bevy_gooey::testing::click` sends the press and the release at the editor's
+/// centre without moving a caret, so a test that relied on the click to place it would be measuring the harness. What the product does
+/// is read the reference under the caret **at the release**, which is asserted here and, for the stale case, just below.
 #[test]
 fn a_primary_click_on_a_cue_value_lands_in_sound_with_that_cue_selected() {
     let root = project("click", &[("family/bevy_siren.ron", CUES), ("data/door.yaml", DOOR)]);
     let mut app = files_editor(&root, "data/door.yaml");
     assert_eq!(selected_cue(&app), None, "no cue is chosen before the click");
+    caret_at(&mut app, 0, IN_THE_VALUE);
 
     let primary = if cfg!(target_os = "macos") { (KeyCode::SuperLeft, Key::Super) } else { (KeyCode::ControlLeft, Key::Control) };
     key(&mut app, primary.0, primary.1, ButtonState::Pressed);
@@ -162,6 +171,26 @@ fn a_primary_click_on_a_cue_value_lands_in_sound_with_that_cue_selected() {
     assert_eq!(selected_cue(&app).as_deref(), Some("door.creak"), "and it is the cue the value names that is selected");
     assert!(drawn(&mut app, "▸ door.creak"), "the Sound list marks the selected cue; on screen: {:?}", on_screen(&mut app));
     assert!(drawn(&mut app, "wind.loop"), "the other cue is listed and not marked");
+}
+
+/// **The click reads the caret it finds, not one it remembers.** A caret that was on the reference and has since moved off it follows
+/// nothing: the path asks the caret at the release, so a remembered one would be the dead link this series forbids.
+#[test]
+fn a_primary_click_off_the_reference_does_not_follow_a_caret_that_has_moved() {
+    let root = project("click_stale", &[("family/bevy_siren.ron", CUES), ("data/door.yaml", DOOR)]);
+    let mut app = files_editor(&root, "data/door.yaml");
+    // **On the value, then off it**: the second place is the one the click must read.
+    caret_at(&mut app, 0, IN_THE_VALUE);
+    caret_at(&mut app, 0, OFF_THE_VALUE);
+
+    let primary = if cfg!(target_os = "macos") { (KeyCode::SuperLeft, Key::Super) } else { (KeyCode::ControlLeft, Key::Control) };
+    key(&mut app, primary.0, primary.1, ButtonState::Pressed);
+    let editor = editor_entity(&mut app);
+    bevy_gooey::testing::click(&mut app, editor);
+    settle(&mut app);
+
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Files, "a caret off the value follows nothing; it stays in the editor");
+    assert_eq!(selected_cue(&app), None, "and no cue is marked");
 }
 
 /// **A click without the modifier only edits**: the caret goes where it was clicked and the editor stays where it is.

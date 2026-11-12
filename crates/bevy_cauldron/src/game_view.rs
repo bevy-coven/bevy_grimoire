@@ -711,13 +711,17 @@ pub const FIELD_FILES_POLL_S: f32 = 1.5;
 
 /// **Draw an Open file row for each component the project's entity files set**, for the chosen entity. The state view stays read-only (the file is
 /// the truth, P3): a row does not change the game, it opens the YAML that does, at the line.
+/// **What the Open file column last drew**: the entity and its fields it was drawn for, the rows it drew (component, file, line), and the
+/// seconds since it last looked. A named type, so the column's own memory reads as one thing.
+type Drawn = (Option<(u64, Vec<String>)>, Vec<(String, String, usize)>, f32);
+
 fn draw_the_field_files(
     view: Res<GameView>,
     project: Option<Res<Project>>,
     time: Res<Time>,
     list: Query<(Entity, Option<&Children>), With<GameFieldFiles>>,
     mut commands: Commands,
-    mut shown: Local<(Option<(u64, Vec<String>)>, Vec<(String, String, usize)>, f32)>,
+    mut shown: Local<Drawn>,
 ) {
     let Ok((container, children)) = list.single() else { return };
     let key = view.snapshot.fields.clone().filter(|(id, _)| view.selected == Some(*id));

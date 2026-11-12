@@ -272,24 +272,25 @@ struct Shown {
     since: f32,
 }
 
+/// **What the references block reads**: the project, the open map and the editor's one lock, as one fact ("what is selected").
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct Selected<'w, 's> {
+    project: Option<Res<'w, Project>>,
+    open: Option<Res<'w, OpenMap>>,
+    lock: Option<Res<'w, TargetLock>>,
+    poses: Query<'w, 's, (Entity, Option<&'static Children>), With<PoseBlock>>,
+    blocks: Query<'w, 's, Entity, With<LinksBlock>>,
+    lines: Query<'w, 's, &'static mut Text, With<UsedByLine>>,
+}
+
 /// **Put the references block under the pose block while a piece is selected**, and keep its `Used by` line true. Spawned with the pose
 /// block (and gone with it), never kept hidden.
-fn draw_the_links(
-    mut commands: Commands,
-    time: Res<Time<Real>>,
-    project: Option<Res<Project>>,
-    open: Option<Res<OpenMap>>,
-    lock: Option<Res<TargetLock>>,
-    poses: Query<(Entity, Option<&Children>), With<PoseBlock>>,
-    blocks: Query<Entity, With<LinksBlock>>,
-    mut lines: Query<&mut Text, With<UsedByLine>>,
-    mut shown: Local<Shown>,
-) {
-    let Some(block) = poses.iter().map(|(entity, _)| entity).next() else {
+fn draw_the_links(mut commands: Commands, time: Res<Time<Real>>, mut selected: Selected, mut shown: Local<Shown>) {
+    let Some(block) = selected.poses.iter().map(|(entity, _)| entity).next() else {
         shown.key = None;
         return;
     };
-    if blocks.is_empty() {
+    if selected.blocks.is_empty() {
         let dim = chrome::ink().dim;
         commands.entity(block).with_children(|b| {
             b.spawn((LinksBlock, Name::new("references block"), Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(chrome::GAP_TIGHT), ..default() }))
@@ -305,7 +306,7 @@ fn draw_the_links(
         shown.key = None;
         return;
     }
-    let (Some(project), Some(open), Some(lock)) = (project.as_deref(), open.as_deref(), lock.as_deref()) else { return };
+    let (Some(project), Some(open), Some(lock)) = (selected.project.as_deref(), selected.open.as_deref(), selected.lock.as_deref()) else { return };
     let Some(id) = lock.placement_id() else { return };
     let Some(piece) = open.map.placements.iter().find(|p| p.id == id).map(|p| p.descriptor.clone()) else { return };
     shown.since += time.delta_secs();
@@ -316,7 +317,7 @@ fn draw_the_links(
     shown.since = 0.0;
     shown.key = Some(key);
     let words = used_by_line(project, &piece).unwrap_or_else(|why| why);
-    for mut line in &mut lines {
+    for mut line in &mut selected.lines {
         if line.0 != words {
             line.0 = words.clone();
         }
