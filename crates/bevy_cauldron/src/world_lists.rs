@@ -3,7 +3,7 @@
 //! `docs/ui/navigation.md` measured four destinations that nothing drew: a project's **sound cues** (behind the `bevy_siren` feature),
 //! a map's **lights** (behind `bevy_lights`), and a map's **water** and **forest** (operations, `water_place` and `forest_scatter`, written
 //! through the World workspace's terrain line, with no panel). Each is a *list of data the project already has*: a cue is a name in
-//! `family/bevy_siren.ron`, a light is a placement's `bevy_lights` family value, the water plan and the forest are files the operations
+//! `family/bevy_siren.yaml`, a light is a placement's `bevy_lights` family value, the water plan and the forest are files the operations
 //! write. None needs the family crate to be **read**; only to be edited or auditioned. So each list is drawn in every build, from the
 //! file, and the family crate's own controls (the audition button, the pool budget) stay behind their feature.
 //!
@@ -69,13 +69,13 @@ pub const LIGHTS_HINT: &str = "set per piece with family_set";
 pub struct LightsList;
 
 /// The crate's sound file under the project's `family/`, the same name `audio_panel::FILE` holds in a build that has the crate.
-pub const SIREN_FILE: &str = "bevy_siren.ron";
+pub const SIREN_FILE: &str = "bevy_siren.yaml";
 
 /// What the CUES list says when the project has none.
 pub const NO_CUES: &str = "no cues in this project";
 
 /// Where a cue is edited: not here.
-pub const CUES_HINT: &str = "cues live in family/bevy_siren.ron";
+pub const CUES_HINT: &str = "cues live in family/bevy_siren.yaml";
 
 /// The CUES list, in the Sound workspace's panel.
 #[derive(Component, Clone, Copy)]
@@ -119,12 +119,15 @@ enum Read<T> {
     Broken(String),
 }
 
-/// **Read one RON file a map's operation writes**, naming it (`water/m.ron`) when it exists and does not parse.
+/// **Read one YAML file a map's operation writes**, naming it (`water/m.yaml`) when it exists and does not parse.
+///
+/// The project is YAML since the cutover (GD-03, #365): this read a `.ron` and parsed with `ron::from_str`, so the lists were
+/// empty for every project the editor can open.
 fn read_file<T: serde::de::DeserializeOwned>(path: &std::path::Path, shown_as: &str) -> Read<T> {
     match std::fs::read_to_string(path) {
-        Ok(text) => match ron::from_str(&text) {
+        Ok(text) => match bevy_grimoire_core::yaml::from_str::<T>(&text, shown_as) {
             Ok(value) => Read::Value(value),
-            Err(e) => Read::Broken(format!("{shown_as} does not read: {e}")),
+            Err(problem) => Read::Broken(problem.line()),
         },
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Read::Absent,
         Err(e) => Read::Broken(format!("{shown_as} cannot be read: {e}")),
@@ -205,25 +208,21 @@ fn list_node() -> Node {
     Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(chrome::GAP_TIGHT), ..default() }
 }
 
-/// **The cue names in `family/bevy_siren.ron`**, read as RON text rather than as the crate's `CueTable`, so a build without `bevy_siren`
-/// lists them too. The file is `(settings: .., cues: (cues: [(name: "..", ..), ..]))`; a file that does not read is an error naming what is wrong.
+/// **The cue names in `family/bevy_siren.yaml`**, read as a plain value rather than as the crate's `CueTable`, so a build without
+/// `bevy_siren` lists them too. The file is a mapping of `settings:` (whatever the crate keeps) and `cues: {cues: [{name: ..}, ..]}`;
+/// a file that does not read is an error naming what is wrong.
 pub fn cue_names(text: &str) -> Result<Vec<String>, String> {
-    let file: ron::Value = ron::from_str(text).map_err(|e| format!("family/{SIREN_FILE} does not parse: {e}"))?;
-    let field = |value: &ron::Value, name: &str| -> Option<ron::Value> {
-        match value {
-            ron::Value::Map(fields) => fields.iter().find(|(k, _)| matches!(k, ron::Value::String(s) if s == name)).map(|(_, v)| v.clone()),
-            _ => None,
-        }
+    // **The one YAML reader**, so this file is held to the rules every project file is, and a refusal names the field it stopped at.
+    let file = bevy_grimoire_core::yaml::to_json(text, &format!("family/{SIREN_FILE}")).map_err(|p| p.line())?;
+    let field = |value: &serde_json::Value, name: &str| -> Option<serde_json::Value> {
+        value.as_object().and_then(|fields| fields.get(name)).cloned()
     };
     // A project with no cues table has none: the crate's own default is an empty table.
     let Some(table) = field(&file, "cues") else { return Ok(Vec::new()) };
-    let Some(ron::Value::Seq(cues)) = field(&table, "cues") else { return Ok(Vec::new()) };
+    let Some(cues) = field(&table, "cues").and_then(|c| c.as_array().cloned()) else { return Ok(Vec::new()) };
     Ok(cues
         .iter()
-        .filter_map(|cue| match field(cue, "name") {
-            Some(ron::Value::String(name)) => Some(name),
-            _ => None,
-        })
+        .filter_map(|cue| field(cue, "name").and_then(|n| n.as_str().map(str::to_owned)))
         .collect())
 }
 
@@ -324,8 +323,8 @@ fn refresh_forest(
     keep(&mut commands, &time, &mut shown, &lists, || {
         let (project, open) = (project.as_deref()?, open.as_deref()?);
         let name = &open.map.name;
-        let path = project.grimoire_dir.join("forest").join(format!("{name}.ron"));
-        Some(match read_file::<Forest>(&path, &format!("forest/{name}.ron")) {
+        let path = project.grimoire_dir.join("forest").join(format!("{name}.yaml"));
+        Some(match read_file::<Forest>(&path, &format!("forest/{name}.yaml")) {
             Read::Value(forest) => forest_rows(&forest),
             Read::Absent => vec![NO_TREES.to_owned()],
             Read::Broken(why) => vec![why],

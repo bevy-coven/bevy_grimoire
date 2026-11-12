@@ -204,50 +204,40 @@ mod erased {
     }
 }
 
-/// **A crafted binary that nests past the reader's depth is refused, not allowed to overflow the stack** (review MUST-FIX 3).
+/// **A tree that nests past the reader's depth is refused, not walked until the stack is gone** (review MUST-FIX 3).
 ///
-/// postcard decodes a `Tree` with no bound of its own, and a `List` frame is two bytes, so a ~1 MiB binary nests about half a
-/// million deep: the recursive decode and `into_value` would take the game down with a stack overflow — an abort, which no
-/// `Result` and no hash can stop (`baked_sha256` sits in the same untrusted manifest). The reader refuses past a named depth, as
-/// the RON reader does at its own.
+/// postcard decodes a `Tree` with no bound of its own and a list frame is two bytes, so a crafted ~1 MiB binary nests half a
+/// million deep: the decode and `Tree::into_value` would recurse until the stack ran out, which is an abort no `Result` and no
+/// hash can stop — `baked_sha256` sits in the same untrusted manifest.
 ///
-/// The deep value is written through [`bake::encode`], so the bytes are the ones the bake scheme really produces; what is measured
-/// is the reader, which is the side a crafted manifest reaches.
+/// Two bounds are measured, because a bake has two doors: the **writer** refuses a value past the limit (so this build never makes
+/// such a binary), and the **reader** refuses one past it, which is the door a crafted manifest reaches. The tree here is built
+/// and written at `DEEP` — well past the limit and still far inside what a stack holds — so the reader is exercised without the
+/// test itself depending on a half-million-deep fixture that would overflow while it was being built.
 #[test]
-fn a_binary_nested_past_the_depth_limit_is_refused_not_overflowed() {
-    // **A list of one, inside a list of one, …**: `DEEP` is far past `bake::MAX_TREE_DEPTH` and past any stack a recursive
-    // walk could use for it.
-    const DEEP: usize = 200_000;
+fn a_tree_nested_past_the_limit_is_refused_by_both_the_writer_and_the_reader() {
+    /// Past `MAX_TREE_DEPTH`, and shallow enough that writing it does not overflow anything itself.
+    const DEEP: usize = 200;
+
+    // **The value the writer is asked for**: `[[[…]]]`, built iteratively so the fixture does not recurse.
     let mut value = serde_json::Value::Null;
     for _ in 0..DEEP {
         value = serde_json::Value::Array(vec![value]);
     }
-    let bytes = bake::encode("map", "maps/m.map.yaml", &value).expect_err("the writer refuses a tree past the depth limit, so no bake can make one");
-    assert!(bytes.line().contains(&bake::MAX_TREE_DEPTH.to_string()), "the refusal names the limit: {}", bytes.line());
+    let refused = bake::encode("map", "maps/m.map.yaml", &value).expect_err("the writer refuses a tree past the limit");
+    assert!(refused.line().contains(&bake::MAX_TREE_DEPTH.to_string()), "the refusal names the limit: {}", refused.line());
 
-    // The reader is asked directly too, with a binary the writer would never make: this is what a crafted manifest holds.
-    let refused = bake::decode("maps/m.map.yaml", &hand_built(DEEP)).expect_err("a binary nested past the limit is refused");
+    // **The reader**, with the bytes a crafted manifest would hold: the tree as the bake scheme writes one, at a depth the writer
+    // would have refused had it been asked.
+    let mut tree = bake::Tree::Null;
+    for _ in 0..DEEP {
+        tree = bake::Tree::List(vec![tree]);
+    }
+    let bytes = postcard::to_allocvec(&(bake::BAKE_FORMAT, "map", "maps/m.map.yaml", tree)).expect("the container writes");
+    let refused = bake::decode("maps/m.map.yaml", &bytes).expect_err("the reader refuses it");
     let said = refused.line();
-    assert!(said.contains("nested"), "the refusal says what is wrong: {said}");
-    assert!(said.contains(&bake::MAX_TREE_DEPTH.to_string()), "and names the limit: {said}");
-}
-
-/// **A binary whose tree is `DEEP` lists deep**, written by hand in the container's own postcard shape: a struct's fields in
-/// order with no tag, and `Tree::List` as variant 6 followed by its length.
-fn hand_built(deep: usize) -> Vec<u8> {
-    let mut bytes = Vec::with_capacity(deep * 2 + 64);
-    bytes.extend_from_slice(&bake::BAKE_FORMAT.to_le_bytes());
-    for text in ["map", "maps/m.map.yaml"] {
-        // A postcard string is its byte length as a varint, then the bytes: short ASCII here, so one byte each.
-        bytes.push(u8::try_from(text.len()).unwrap_or(u8::MAX));
-        bytes.extend_from_slice(text.as_bytes());
-    }
-    for _ in 0..deep {
-        bytes.push(6); // `Tree::List`
-        bytes.push(1); // one item
-    }
-    bytes.push(0); // the innermost `Tree::Null`
-    bytes
+    assert!(said.contains("does not decode"), "the refusal says what happened: {said}");
+    assert!(said.contains(&bake::MAX_TREE_DEPTH.to_string()), "and names the depth a tree may nest to: {said}");
 }
 
 /// **A manifest cannot point a read outside the bake folder** (review MUST-FIX 4).

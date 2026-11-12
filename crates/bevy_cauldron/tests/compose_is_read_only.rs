@@ -21,7 +21,7 @@
 //!
 //! Naming the compositions file, serialising a `Compositions`, or writing bytes — anywhere outside
 //! `project.rs`, outside `#[cfg(test)]` modules. A test may build a `Compositions` in memory and
-//! round-trip it through `to_ron`; that touches no disk and is how the paint-order encoding is pinned.
+//! round-trip it through the YAML writer; that touches no disk and is how the paint-order encoding is pinned.
 //!
 //! Reading is not forbidden and must not be: several tabs' whole job is to show what the file says.
 //! They read it through `Project`, which the loader filled.
@@ -30,14 +30,14 @@ use std::path::Path;
 
 /// **Naming the compositions file.** The one token that means *this* file and no other.
 ///
-/// `save_atomic` and `to_ron()` are deliberately not here: they are how every RON file in the project
+/// `save_atomic` and the YAML writer are deliberately not here: they are how every project file
 /// is written, so a rule built on them cannot tell a tab saving `library.yaml` — which `tiles.rs`
 /// legitimately does — from a tab saving this one. The first draft of this rewrite did exactly that
 /// and failed on `tiles.rs:2251`, which is correct code. The file's *name* is the unambiguous thing.
 const NAMES_THE_FILE: &str = "Compositions::FILE";
 
 /// The ways a line writes bytes at all, for the one module that must write none.
-const ANY_WRITE: &[&str] = &["save_atomic", "to_ron()", "fs::write", "File::create"];
+const ANY_WRITE: &[&str] = &["save_atomic", "yaml::to_string", "fs::write", "File::create"];
 
 /// **The one module allowed to do it.** Everything else asks it.
 const DOOR: &str = "src/project.rs";

@@ -84,9 +84,10 @@ const SKIPPED_DIRS: &[&str] = &["target", "node_modules", "baked"];
 /// **One thing a YAML file holds, as bytes can carry it.** The shape [`serde_json::Value`] has, as an enum
 /// postcard can write (`Value` itself needs a self-describing format).
 ///
-/// **Its reader is depth-bounded** ([`MAX_TREE_DEPTH`]): postcard has no bound of its own and a list frame is two bytes, so a
-/// crafted binary nests half a million deep and a derived deserialiser recurses until the stack is gone — an abort, not an error
-/// a caller can catch. `Serialize` stays derived (the writer is this build's own value, already measured by [`depth_of`]).
+/// **Its reader refuses past [`MAX_TREE_DEPTH`], before anything recurses into it.** postcard has no bound of its own and a list
+/// frame is two bytes, so a crafted binary nests half a million deep; the derived deserialiser would recurse until the stack was
+/// gone, which is an abort no `Result` can catch. The bound is the guard around each variant's own read (below), so the recursion
+/// the reader does is bounded by construction, and `decode` measures the result before `into_value` as a second check.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Tree {
     Null,
@@ -99,11 +100,11 @@ pub enum Tree {
     Map(Vec<(String, Tree)>),
 }
 
-/// **The depth a reader is at**, as a thread-local rather than a parameter: a `Deserialize` impl has one signature, and threading
-/// a depth through it would mean a second deserialiser for every `Vec` and tuple postcard builds on the way.
+/// **The depth a reader is at**, as a thread-local rather than a parameter: a `Deserialize` impl has one signature, and threading a
+/// depth through it would mean a second deserialiser for every `Vec` and tuple postcard builds on the way.
 ///
-/// It is raised before a child is read and lowered after, so a sibling starts where its parent did, and the innermost reader is the
-/// one that refuses. A thread that dies mid-read would leave it high, which is why the guard is a struct with a `Drop`.
+/// It is raised before a variant's payload is read and lowered after, so a sibling starts where its parent did. A guard struct with
+/// a `Drop` restores it even when the read fails, so a refusal on the way out leaves the next read at its own level.
 mod depth {
     use std::cell::Cell;
 
@@ -116,8 +117,7 @@ mod depth {
         HERE.with(Cell::get)
     }
 
-    /// **One level deeper for as long as this lives.** Restored by `Drop`, so a refusal on the way out of a nested read leaves the
-    /// next one at its own level.
+    /// **One level deeper for as long as this lives.**
     pub struct Deeper(usize);
 
     impl Deeper {
@@ -141,8 +141,8 @@ impl<'de> Deserialize<'de> for Tree {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Tree, D::Error> {
         use serde::de::{Error as _, Visitor};
 
-        /// **The variants, in the order the enum declares them**, which is what postcard writes. A derived deserialiser for this
-        /// enum handed the same slice to `deserialize_enum`; naming them here lets the depth guard sit around every variant.
+        /// **The variants, in the order the enum declares them**, which is the index postcard writes: a varint variant tag, and then
+        /// the payload with no name and no length for a newtype.
         const NAMES: &[&str] = &["Null", "Bool", "Int", "Uint", "Float", "Text", "List", "Map"];
 
         struct TreeVisitor;
@@ -156,27 +156,27 @@ impl<'de> Deserialize<'de> for Tree {
 
             fn visit_enum<A: serde::de::EnumAccess<'de>>(self, data: A) -> Result<Tree, A::Error> {
                 use serde::de::VariantAccess as _;
-                let (name, variant) = data.variant::<String>()?;
-                let tag = NAMES.iter().position(|n| *n == name);
-                // **Every variant is read through the same depth guard**, so `List` and `Map` are the ones that can nest and the
-                // others cost one counter set and restore.
+                // **postcard writes the variant as a `u32` varint**, handed to `DeserializeSeed` through a `u32` deserialiser:
+                // asking the seed for a name here fails on every binary, which is what a hand-written visitor got wrong once.
+                let (tag, variant) = data.variant::<u32>()?;
+                // **The guard is around the payload**, which is the only place a tree can nest: `Bool` cannot, `List` can.
                 let _deeper = depth::Deeper::enter();
                 if depth::here() > MAX_TREE_DEPTH {
                     return Err(A::Error::custom(format!("nested more than {MAX_TREE_DEPTH} deep")));
                 }
-                Ok(match tag {
-                    Some(0) => {
+                Ok(match tag as usize {
+                    0 => {
                         variant.unit_variant()?;
                         Tree::Null
                     }
-                    Some(1) => Tree::Bool(variant.newtype_variant()?),
-                    Some(2) => Tree::Int(variant.newtype_variant()?),
-                    Some(3) => Tree::Uint(variant.newtype_variant()?),
-                    Some(4) => Tree::Float(variant.newtype_variant()?),
-                    Some(5) => Tree::Text(variant.newtype_variant()?),
-                    Some(6) => Tree::List(variant.newtype_variant()?),
-                    Some(7) => Tree::Map(variant.newtype_variant()?),
-                    _ => return Err(A::Error::custom(format!("`{name}` is not a baked value"))),
+                    1 => Tree::Bool(variant.newtype_variant()?),
+                    2 => Tree::Int(variant.newtype_variant()?),
+                    3 => Tree::Uint(variant.newtype_variant()?),
+                    4 => Tree::Float(variant.newtype_variant()?),
+                    5 => Tree::Text(variant.newtype_variant()?),
+                    6 => Tree::List(variant.newtype_variant()?),
+                    7 => Tree::Map(variant.newtype_variant()?),
+                    other => return Err(A::Error::custom(format!("`{other}` is not a baked value (the variants are {})", NAMES.len()))),
                 })
             }
         }
@@ -438,8 +438,15 @@ fn depth_of(value: &Value) -> usize {
 /// **Decode a binary into the kind it holds and its value**, refusing one made by another format.
 #[allow(clippy::result_large_err)]
 pub fn decode(file: &str, bytes: &[u8]) -> Result<(String, Value), Problem> {
-    let binary: Binary = postcard::from_bytes(bytes)
-        .map_err(|e| problem(file, &format!("the baked {file} does not decode"), e.to_string(), "bake the project again"))?;
+    // **A binary that does not decode may be one nested past what this build reads** (a crafted manifest's), and postcard reports
+    // its own `Serde` error without the visitor's sentence, so the limit is named here: the reader refuses rather than walking such
+    // a tree until the stack is gone, and this is the sentence a person sees.
+    let binary: Binary = postcard::from_bytes(bytes).map_err(|e| problem(
+        file,
+        &format!("the baked {file} does not decode, so it is not a tree this build reads (a value may nest at most {MAX_TREE_DEPTH} deep)"),
+        e.to_string(),
+        "bake the project again",
+    ))?;
     if binary.format != BAKE_FORMAT {
         return Err(problem(
             file,
@@ -706,7 +713,9 @@ impl Baked {
         })?;
         // **The binary is named relative to the bake's own folder**, and a name that climbs out is refused here as it is in
         // `open`: this is the read that would touch the filesystem.
-        let inside = join_inside(BINARIES_DIR, &entry.baked).filter(|_| entry.baked.starts_with(BINARIES_DIR)).ok_or_else(|| {
+        // **`entry.baked` already begins with `files/`**, which is how the writer names it, so it is checked as a path *inside*
+        // the bake rather than joined into `files/` again: `join_inside(BINARIES_DIR, ..)` would make `files/files/00000.bin`.
+        let inside = join_inside("", &entry.baked).filter(|p| p.starts_with(BINARIES_DIR)).ok_or_else(|| {
             problem(rel, &format!("the baked {rel} is named outside the bake"), format!("`{}` climbs out of {BINARIES_DIR}", entry.baked), "bake the project again")
         })?;
         let path = self.dir.join(&inside);

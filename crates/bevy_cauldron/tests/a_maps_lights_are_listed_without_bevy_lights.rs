@@ -36,12 +36,14 @@ fn editor(tag: &str, light: bool) -> App {
         .place_as("stool@0", "stool", (4.0, 2.0))
         .build("m");
     if light {
-        let file = root.join("assets/grimoire/maps/m.map.ron");
+        // **The map's own file, in the spelling the project reads** (GD-03, #365): a `.ron` here would be a project this build
+        // refuses at open, so the light could never be listed.
+        let file = root.join("assets/grimoire/maps/m.map.yaml");
         let text = std::fs::read_to_string(&file).unwrap_or_else(|e| panic!("{file:?}: {e}"));
         let mut map = Map::parse(&text).unwrap_or_else(|e| panic!("{file:?}: {e}"));
         let torch = map.placements.iter_mut().find(|p| p.id == "torch@0").unwrap_or_else(|| panic!("the fixture has no torch@0"));
         torch.family.insert(KEY.to_owned(), FLICKER.to_owned());
-        std::fs::write(&file, map.to_ron().unwrap_or_else(|e| panic!("{e}"))).unwrap_or_else(|e| panic!("{file:?}: {e}"));
+        std::fs::write(&file, bevy_grimoire_core::yaml::to_string(&map).unwrap_or_else(|p| panic!("{}", p.line()))).unwrap_or_else(|e| panic!("{file:?}: {e}"));
     }
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     settle(&mut app);
