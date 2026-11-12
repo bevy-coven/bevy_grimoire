@@ -16,7 +16,11 @@ if [ "$host" = local ]; then
 else
   clone=${FLEET_CLONE:-'$HOME/dark-incorporated/bevy_dark_factory'}
 fi
-worktree=/tmp/dark-incorporated/bevy_dark_factory-fleet-$cluster
+# **Worktrees live in the host's home, never in /tmp** (owner, 2026-11-12): big's /tmp is a 16 GB tmpfs that lives in swap, and
+# its worktrees (~230 MB each, plus any stray target/) filled it until swap sat at 27 of 32 GB and systemd-oomd killed the push gate
+# eight times in a row.
+if [ "$host" = local ]; then rhome=$HOME; else rhome=$(ssh "$host" 'printf %s "$HOME"'); fi
+worktree=$rhome/worktrees/bevy_dark_factory-fleet-$cluster
 branch=fleet/$cluster
 
 remote() { if [ "$host" = local ]; then bash -s; else ssh "$host" bash -s; fi; }
@@ -24,7 +28,7 @@ remote <<SH
 set -e
 # A non-interactive ssh shell has a bare PATH: git-lfs (checkout filter) lives under homebrew on a Mac.
 export PATH=/opt/homebrew/bin:/usr/local/bin:\$HOME/.local/bin:\$HOME/.cargo/bin:\$PATH
-mkdir -p /tmp/fleet /tmp/dark-incorporated \$HOME/.cargo-target-shared/global
+mkdir -p /tmp/fleet \$HOME/worktrees \$HOME/.cargo-target-fleet
 for b in /tmp/fleet/brief-*.md; do
   [ -e "\$b" ] || continue
   x=\${b#/tmp/fleet/brief-}; x=\${x%.md}

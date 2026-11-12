@@ -5289,6 +5289,8 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(crate::ops_label_vlm::LabelSuggest),
         Box::new(crate::ops_label_vlm::LabelApply),
         Box::new(crate::ops_data::DataSet),
+        Box::new(crate::ops_files::FilesReplace),
+        Box::new(crate::ops_files::FileEdit),
         Box::new(crate::ops_family::FamilySet),
         Box::new(crate::ops_family::PlacementSetFamily),
         #[cfg(feature = "bevy_light_grid")]
@@ -5630,6 +5632,11 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // **The Data field (#86)** — Enter on `<file> <path> <value>` dispatches `data_set` through
     // `set_data_leaf`, the same write an agent's `apply` makes.
     ("data_set", "set_data_leaf("),
+    // **The project search panel's Replace all** (GD-13, #375) dispatches `files_replace` through `replace_all`: one log line and
+    // one undo for a replace across the project's files. **The file editor's field line** (GD-14, #376) dispatches `file_edit`
+    // through `set_the_field`, the same comment-keeping write an agent's `apply` makes.
+    ("files_replace", "replace_all("),
+    ("file_edit", "set_the_field("),
     // **The Terrain field (#99)** — Enter on `<brush> <x> <z> <radius_m> <strength>` dispatches
     // `terrain_stroke` through `sculpt_terrain`, the same write an agent's `apply` makes.
     ("terrain_stroke", "sculpt_terrain("),

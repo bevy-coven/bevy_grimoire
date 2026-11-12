@@ -490,8 +490,11 @@ fn walk_on_the_chords(
         .any(|k| keys.pressed(k));
     // **Cmd/Ctrl+`[` back, Cmd/Ctrl+`]` forward**, and the mouse's two side buttons, as a browser
     // takes them.
-    let back = mouse.just_pressed(MouseButton::Back) || (modifier && keys.just_pressed(KeyCode::BracketLeft));
-    let forward = mouse.just_pressed(MouseButton::Forward) || (modifier && keys.just_pressed(KeyCode::BracketRight));
+    // **Not with Shift**: Cmd/Ctrl+Shift+`[` and `]` close and open a fold in the file editor (GD-12, #374), and one chord must
+    // not do two things.
+    let shifted = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+    let back = mouse.just_pressed(MouseButton::Back) || (modifier && !shifted && keys.just_pressed(KeyCode::BracketLeft));
+    let forward = mouse.just_pressed(MouseButton::Forward) || (modifier && !shifted && keys.just_pressed(KeyCode::BracketRight));
     if !back && !forward {
         return;
     }

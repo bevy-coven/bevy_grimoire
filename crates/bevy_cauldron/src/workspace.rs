@@ -164,7 +164,8 @@ impl Workspace {
             // panel and are not registered.
             Workspace::Game => &[Mode::Game],
             Workspace::Agent => &[Mode::Agent],
-            Workspace::Project | Workspace::Files => &[],
+            Workspace::Files => &[Mode::Files],
+            Workspace::Project => &[],
         }
     }
 
@@ -196,7 +197,7 @@ impl Workspace {
     pub const fn is_built(self) -> bool {
         matches!(
             self,
-            Workspace::Map | Workspace::Kit | Workspace::Animation | Workspace::World | Workspace::Sound | Workspace::Game | Workspace::Agent
+            Workspace::Map | Workspace::Kit | Workspace::Animation | Workspace::World | Workspace::Sound | Workspace::Game | Workspace::Agent | Workspace::Files
         )
     }
 
@@ -206,14 +207,14 @@ impl Workspace {
     pub const fn missing(self) -> Option<&'static str> {
         match self {
             Workspace::Project => Some("the Project workspace arrives with NV-08 (#385)"),
-            Workspace::Files => Some("the Files workspace arrives with GD-11"),
             Workspace::Map
             | Workspace::Kit
             | Workspace::Animation
             | Workspace::World
             | Workspace::Sound
             | Workspace::Game
-            | Workspace::Agent => None,
+            | Workspace::Agent
+            | Workspace::Files => None,
         }
     }
 

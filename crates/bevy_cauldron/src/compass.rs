@@ -298,7 +298,7 @@ fn show_by_tab(
     let show = !asking
         && match *mode {
             Mode::Map | Mode::World | Mode::Tiles | Mode::Meshes => true,
-            Mode::Compose | Mode::Anim | Mode::Sound | Mode::Game | Mode::Agent => false,
+            Mode::Compose | Mode::Anim | Mode::Files | Mode::Sound | Mode::Game | Mode::Agent => false,
         };
     let display = if show { Display::Flex } else { Display::None };
     for mut node in &mut compass {

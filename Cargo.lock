@@ -723,7 +723,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_cauldron"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "accesskit",
  "alacritty_terminal",
@@ -1256,7 +1256,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_grimoire_core"
-version = "0.10.2"
+version = "0.10.3"
 dependencies = [
  "bevy_grimoire_rng",
  "bevy_grimoire_solver",
