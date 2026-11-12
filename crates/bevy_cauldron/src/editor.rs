@@ -2778,9 +2778,8 @@ impl Plugin for EditorPlugin {
                 )
                     .run_if(in_state(crate::screen::Screen::Editor)),
             )
-            // **The door switch, and it is on every door.** The key says *"the other door"*, so it
-            // has to be live in both — and the switching takes the project out of the world, which is
-            // why it is an exclusive system.
+            // **The workspace chords, and they are live in every workspace**, and the switching takes
+            // the project out of the world, which is why it is an exclusive system.
             //
             // **In `PreUpdate`, and that is the whole design.**
             //
@@ -2798,7 +2797,7 @@ impl Plugin for EditorPlugin {
             // conditions against the new door.
             .add_systems(
                 PreUpdate,
-                switch_door.run_if(in_state(crate::screen::Screen::Editor)),
+                go_to_a_workspace.run_if(in_state(crate::screen::Screen::Editor)),
             )
             // **The door switch's own answer**, and it is in `PreUpdate` for the same reason the
             // switch is: it crosses.
@@ -3256,52 +3255,44 @@ fn discard_changes(open: &mut OpenMap, project: &Project) -> Result<(), String> 
     Ok(())
 }
 
-/// **Cross to the other door, keeping the project.**
+/// **Go to the workspace a chord names, keeping the project.**
 ///
-/// **The same verb on both doors.** The key says *"the other door"* and never names a direction — a
-/// key that meant "the Map door" would mean the opposite thing on the Map door, which is a mode
-/// error wearing a chord. Braem & Egner's *Getting a grip on cognitive flexibility* (2018) is the
-/// instruction: a switching cue should be *"a general readiness to switch between tasks rather
-/// than to switch to one particular alternative task"*.
+/// `Cmd`/`Ctrl`+`1`…`9` are the nine `workspace.<id>` commands, and each is the same `door_open`
+/// operation the menu, the palette and an agent call, so there is one switch and no second one for the
+/// key (#379).
 ///
-/// **It asks before it goes, exactly as the menu route does.** Leaving the Map door for the Kit
-/// door leaves the map, and the map may hold unsaved edits — so the same question is raised, and
-/// the same answer path saves it.
+/// **It asks before it goes, exactly as the menu route does.** Leaving the Map workspace for the Kit
+/// leaves the map, and the map may hold unsaved edits — so the same question is raised, and the same
+/// answer path saves it.
 ///
 /// **A refusal is a refusal.** A switching that cannot complete says so and **stays put**: the same
-/// door, the same project, the same map, the same arm. See [`crate::screen::cross`].
-fn switch_door(world: &mut World) {
+/// workspace, the same project, the same map, the same arm. See [`crate::screen::cross`].
+fn go_to_a_workspace(world: &mut World) {
     // **A prompt still owns the keyboard while it is up**, and it owns it for the workspace chords
     // too: a switch taken under the leaving question would change the screen a person is being
     // asked about.
     if world.resource::<EditorState>().leaving {
         return;
     }
-    // **One read of the keyboard answers `=` and the nine workspace chords.** Each chord is one
-    // row of the census, so the search is over `Action::ALL` rather than a second list — and the
-    // order it searches is the order the bindings are declared in, which is the order the strip
-    // and the menus show.
-    let (other, workspace) = {
+    // **One read of the keyboard answers the nine workspace chords.** Each chord is one row of the
+    // census, so the search is over `Action::ALL` rather than a second list — and the order it
+    // searches is the order the bindings are declared in, which is the order the strip and the menus
+    // show.
+    let workspace = {
         let keyboard = world.resource::<ButtonInput<KeyCode>>();
         let live = *world.resource::<keys::Live>();
-        let other = keys::just_pressed(keyboard, live, Action::SwitchDoor);
-        let workspace = keys::Action::ALL
-            .into_iter()
-            .find_map(|action| {
-                let target = action.workspace()?;
-                keys::just_pressed(keyboard, live, action).then_some(target)
-            });
-        (other, workspace)
+        keys::Action::ALL.into_iter().find_map(|action| {
+            let target = action.workspace()?;
+            keys::just_pressed(keyboard, live, action).then_some(target)
+        })
     };
     if let Some(workspace) = workspace {
         open_door(world, workspace, None);
-    } else if other {
-        cross_to_the_other_door(world);
     }
 }
 
-/// **Cross to the other door** — what `=` does and what a click on the strip's name of it does (#288),
-/// so the two cannot disagree about which door is the other.
+/// **Cross to the other workspace** — what a click on the strip's name of it does (#288). `=` was the key
+/// for it until the workspace chords replaced it (#379), so the strip's cue is now the only way here.
 pub fn cross_to_the_other_door(world: &mut World) {
     let Some(workspace) = world.get_resource::<crate::workspace::Workspace>().copied() else {
         return;

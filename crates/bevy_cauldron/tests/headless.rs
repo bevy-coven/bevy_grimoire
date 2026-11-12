@@ -11306,26 +11306,12 @@ fn a_note_does_not_survive_a_tab_change_but_a_problem_does() {
     //
     // Verified both ways: with `clear_note` commented out this reads back
     // "alpha/floor 270,270,180 deg"; with it in, the empty string.
-    let slot = bevy_cauldron::keys::binding(
-        bevy_cauldron::keys::Action::tab_slot(2).unwrap_or_else(|| panic!("no third slot")),
-    )
-    .key;
-    // **`PreUpdate`, after Bevy's own input pass.** `keyboard_input_system` clears `just_pressed`
-    // at the top of the frame, so a press written before `update()` is gone before any `Update`
-    // system sees it — the trap `docs/bevy_debugger_mcp.md` records and the shape every other
-    // key-driving test in this file uses.
-    app.add_systems(
-        PreUpdate,
-        IntoScheduleConfigs::after(
-            move |mut input: ResMut<bevy::input::ButtonInput<KeyCode>>, mut done: Local<bool>| {
-                if !*done {
-                    input.release_all();
-                    input.press(slot);
-                    *done = true;
-                }
-            },
-            bevy::input::InputSystems,
-        ),
+    // **Through `door_open`, the operation a chip click and an agent take** (the slot keys that used
+    // to open the third panel went with #379), which lands on `enter_tab` as they did.
+    bevy_cauldron::editor::open_door(
+        app.world_mut(),
+        bevy_cauldron::workspace::Workspace::Kit,
+        Some(bevy_cauldron::tiles::Mode::Compose),
     );
     app.update();
     app.update();
@@ -11336,7 +11322,7 @@ fn a_note_does_not_survive_a_tab_change_but_a_problem_does() {
     assert!(
         *app.world().resource::<bevy_cauldron::tiles::Mode>()
             != bevy_cauldron::tiles::Mode::Tiles,
-        "the slot key must actually have changed tab, or this test proves nothing"
+        "`door_open` must actually have changed tab, or this test proves nothing"
     );
     // Asserted on the stale text rather than on emptiness, because the rule is "a receipt does not
     // outlive the tab that earned it" — not "a tab arrives silent". `enter_tab` clears before the
@@ -11663,17 +11649,16 @@ fn expected_badges(
 ) -> Vec<bevy_cauldron::keys::Badge> {
     let stance = app.world().resource::<bevy_cauldron::keys::Live>().1;
     let on_screen = controls_on_screen(app);
-    // **The door trims before the home resolves**, in that order, because that is the order
-    // `badges::rebuild_badges` does it in — `2` and `3` are `Context::Global` but the strip they act
-    // on is the door's, so on a one-panel door they are not live at all.
-    let panels = bevy_cauldron::workspace::Workspace::showing(mode).panels().len();
+    // **The trim comes before the home resolves**, in that order, because that is the order
+    // `badges::rebuild_badges` does it in — a workspace chord is `Context::Global` but the workspace
+    // it names may not be built, so it is not offered at all.
     bevy_cauldron::keys::badges(mode.context(), stance)
         .into_iter()
         .chain(bevy_cauldron::keys::badges(
             bevy_cauldron::keys::Context::Global,
             stance,
         ))
-        .filter_map(|b| b.on_a_door_of(panels))
+        .filter_map(|b| b.offered())
         .map(|mut b| {
             b.home = bevy_cauldron::badges::resolve(b.home, &on_screen);
             b
@@ -11813,14 +11798,13 @@ fn every_control_the_census_homes_a_verb_at_is_on_screen() {
             // resolving is the step this must happen before — see the note above. The door trim and
             // the `Context::Global` chain are `rebuild_badges`' own, in its order.
             let stance = app.world().resource::<bevy_cauldron::keys::Live>().1;
-            let panels = bevy_cauldron::workspace::Workspace::showing(mode).panels().len();
             let named: Vec<Home> = bevy_cauldron::keys::badges(mode.context(), stance)
                 .into_iter()
                 .chain(bevy_cauldron::keys::badges(
                     bevy_cauldron::keys::Context::Global,
                     stance,
                 ))
-                .filter_map(|b| b.on_a_door_of(panels))
+                .filter_map(|b| b.offered())
                 .map(|b| b.home)
                 .collect();
             // **Every cluster the overlay built, placed or not.** Existence rather than
@@ -15288,27 +15272,22 @@ fn arriving_on_the_tiles_tab_twice_lands_on_the_page_both_times() {
     let browsing = |app: &App| app.world().resource::<bevy_cauldron::build::Build>().browsing;
     assert_eq!(browsing(&app), Some(landing(&app)), "the first arrival lands on the page");
 
-    // Through the strip's own keys, which is what clears `browsing` on the way out (`enter_tab`).
-    let slot = |mode: Mode| {
-        let i = bevy_cauldron::workspace::Workspace::showing(Mode::Tiles)
-            .panels()
-            .iter()
-            .position(|m| *m == mode)
-            .unwrap_or_else(|| panic!("the mode is on the kit door"));
-        bevy_cauldron::keys::binding(
-            bevy_cauldron::keys::Action::tab_slot(i)
-                .unwrap_or_else(|| panic!("slot {i} has a key")),
-        )
-        .key
+    // Through `door_open`, which is what clears `browsing` on the way out (`enter_tab`); the strip's
+    // slot keys that used to do this went with #379.
+    let go = |app: &mut App, mode: Mode| {
+        bevy_cauldron::editor::open_door(app.world_mut(), bevy_cauldron::workspace::Workspace::Kit, Some(mode));
+        for _ in 0..5 {
+            app.update();
+        }
     };
-    step(&mut app, slot(Mode::Meshes), 5);
+    go(&mut app, Mode::Meshes);
     assert!(
         *app.world().resource::<Mode>() == Mode::Meshes,
-        "the strip key moved the door to MESHES"
+        "`door_open` moved the workspace to MESHES"
     );
     assert_eq!(browsing(&app), None, "leaving the tab clears the page cursor");
 
-    step(&mut app, slot(Mode::Tiles), 5);
+    go(&mut app, Mode::Tiles);
     assert!(*app.world().resource::<Mode>() == Mode::Tiles);
     assert_eq!(
         browsing(&app),

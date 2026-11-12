@@ -462,6 +462,9 @@ impl SettingsLayer {
         if let Some(old) = layer.shell_layout.take() {
             layer.workspace_layout.entry(crate::workspace::Workspace::Map.id().to_owned()).or_insert(old);
         }
+        // **A keymap that rebound a command the workspaces replaced still reads** (#379): the entry
+        // binds nothing now, so it is dropped here and the next save writes the file without it.
+        layer.keymap.retain(|id, _| !crate::commands::is_retired(id));
         let refuse = |field: &str, reason: String| Refusal { kind: KIND, file: file.to_owned(), field: Some(field.to_owned()), reason };
         if layer.version != SETTINGS_VERSION {
             return Err(refuse(

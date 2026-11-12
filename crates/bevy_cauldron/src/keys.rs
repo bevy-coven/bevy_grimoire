@@ -514,26 +514,18 @@ enumerated! {
     /// cannot be checked against the enum is a list that is not checked.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Action {
-    /// Jump to this workspace's first, second or third panel. **Three, because the widest
-    /// workspace holds three** — Kit is Meshes/Tiles/Compose. A fourth would be a fourth row here
-    /// and a fourth in every context's list, and `no_context_gains_a_key` ratchets those counts.
-    TabSlot1,
-    TabSlot2,
-    TabSlot3,
     // ── The workspaces (NV-02, #379) ──────────────────────────────────────────
     //
     // **Nine rows, and they replace four.** `view.switch_door` and `view.panel_1` to `view.panel_3`
-    // go; their work is done here: a workspace *is* where you are, so switching to one and opening a
-    // panel of one are the same act. `Cmd`/`Ctrl`+`1`…`9` is the owner's choice (2026-11-09, recorded
-    // on the issue), in the fixed order `Workspace::ALL` gives, so a person's fingers keep their
-    // meaning across releases. The budget (`no_context_gains_a_key`) is raised by exactly five in
-    // this commit, naming this issue.
+    // are gone (their ids live on in `commands::RETIRED`, so a saved keymap that names one still
+    // reads): a workspace *is* where you are, so switching to one and opening a panel of one are the
+    // same act. `Cmd`/`Ctrl`+`1`…`9` is the owner's choice (2026-11-09, recorded on the issue), in
+    // the fixed order `Workspace::ALL` gives, so a person's fingers keep their meaning across
+    // releases. The budget (`no_context_gains_a_key`) is raised by exactly five in this commit,
+    // naming this issue.
     //
-    // **The digits are free above 3.** `1`, `2` and `3` stay the panel slots of the workspace that
-    // is open — three keys already learned — and the workspace chords take the six that were never
-    // bound. `4` to `9` therefore walk to a workspace, and `1` to `3` move inside the one you are
-    // in. That is not a second meaning for one key: `Cmd`+digit is a workspace, a bare digit is a
-    // panel, and `just_pressed` already refuses one while the other's modifier state holds.
+    // **A bare digit is free again.** `1`, `2` and `3` were the panel slots of the open workspace and
+    // `=` was "the other workspace"; with the chords on `Cmd`/`Ctrl` those four keys bind nothing.
     WorkspaceProject,
     WorkspaceMap,
     WorkspaceWorld,
@@ -572,26 +564,6 @@ enumerated! {
     /// binding per action and the two doors' contexts never overlap. One operation underneath:
     /// `composition_arm`.
     ArmComposition,
-    /// **Cross to the other door** — the Kit door and the Map door, without the menu.
-    ///
-    /// **The same verb on both sides.** Braem & Egner's *Getting a grip on cognitive flexibility*
-    /// (2018, `10.1177/0963721418787475`) is the instruction: a cue that is associated with
-    /// switching should be *"a general readiness to switch between tasks rather than to switch to
-    /// one particular alternative task"*. So this says **"the other door"** and never names a
-    /// direction — a key that meant "the Map door" would mean the opposite thing on the Map door,
-    /// which is a mode error wearing a chord.
-    ///
-    /// It is **not** the menu's route. `Action::MainMenu` opens the chooser, and the chooser opens
-    /// a door; this *changes* which door is open. Different acts, different actions, and the
-    /// census can tell them apart.
-    /// **Go to the other workspace** — the one beside this one, without the command.
-    ///
-    /// **The same verb everywhere.** Braem & Egner's *Getting a grip on cognitive flexibility*
-    /// (2018, `10.1177/0963721418787475`) is the instruction: a cue that is associated with
-    /// switching should be *"a general readiness to switch between tasks rather than to switch to
-    /// one particular alternative task"*. So this says **"the other workspace"** and never names a
-    /// direction.
-    SwitchDoor,
     /// Walk the selected group's members. A second cursor, under the one that walks the groups.
     ComposeMemberPrev,
     ComposeMemberNext,
@@ -951,39 +923,17 @@ pub enum Change {
 }
 
 impl Action {
-    /// **The number key for the nth panel of the workspace that is open**, or `None` past the third.
+    /// **Is this verb offered right now?** Only a chord for a workspace that is not built answers
+    /// no: **a workspace that is not built is refused, so its chord is not advertised.** The overlay
+    /// drawing `Cmd+6` against a screen that answers "arrives with NV-09" would be the overlay
+    /// claiming a key the editor refuses. The command and the palette still list it, and say why it
+    /// does nothing.
     ///
-    /// [`crate::workspace::Workspace::panels`] is what indexes this, so the digits and the strip
-    /// cannot disagree about which panel is second.
-    pub fn tab_slot(i: usize) -> Option<Action> {
-        match i {
-            0 => Some(Action::TabSlot1),
-            1 => Some(Action::TabSlot2),
-            2 => Some(Action::TabSlot3),
-            _ => None,
-        }
-    }
-
-    /// **Can this verb fire on a workspace showing `panels` panels?**
-    ///
-    /// Only the slot keys can answer no, and only because they are `Context::Global` while the thing
-    /// they act on is per workspace: `tiles::tab_shortcuts` walks `Workspace::panels()`, so on the
-    /// Map and Animation workspaces — one panel each — `2` and `3` correctly do nothing. The badge
-    /// overlay did not know that and drew `1, 2, 3` against a strip holding one chip, which is the
-    /// overlay claiming a key the editor refuses.
-    ///
-    /// **Derived from [`Self::tab_slot`], not from a second table.**
-    pub fn fires_in_a_workspace_of(self, panels: usize) -> bool {
-        match self {
-            Action::TabSlot1 | Action::TabSlot2 | Action::TabSlot3 => {
-                (0..panels).filter_map(Action::tab_slot).any(|a| a == self)
-            }
-            // **A workspace that is not built is refused, so its chord is not advertised**: the
-            // overlay drawing `Cmd+6` against a screen that answers "arrives with NV-09" is the
-            // overlay claiming a key the editor refuses, the same fault the slot keys had. The
-            // command and the palette still list it, and say why it does nothing.
-            _ => self.workspace().is_none_or(|w| w.is_built()),
-        }
+    /// It was `fires_in_a_workspace_of(panels)` while the slot keys `1`, `2` and `3` were
+    /// `Context::Global` and the thing they acted on was per workspace; those keys are gone (#379), so
+    /// the panel count no longer decides anything.
+    pub fn is_offered(self) -> bool {
+        self.workspace().is_none_or(|w| w.is_built())
     }
 
     /// **The workspace this chord goes to**, or `None` for every other verb.
@@ -1164,9 +1114,6 @@ impl Action {
             Action::GroupFromSet => Some("composition_define"),
             Action::RenameMap => Some("map_rename"),
             Action::SetRule => Some("rules_set"),
-            Action::SwitchDoor | Action::TabSlot1 | Action::TabSlot2 | Action::TabSlot3 => {
-                Some("door_open")
-            }
             // **Each workspace chord is `door_open` with its own workspace**, which is the same
             // operation the menu, the palette and an agent call (P1). `Action::workspace()` is what
             // the handler reads, so the chord and the id cannot disagree.
@@ -1392,7 +1339,7 @@ pub const BINDINGS: &[Binding] = &[
     // whatever happened to be built would renumber a person's fingers on every release.
     //
     // **One `does` for all nine**, so the census collapses them into one badge on the strip, the
-    // way the three panel slots are one (`badges` joins neighbours that share a home and a `does`).
+    // way the three panel slots once were (`badges` joins neighbours that share a home and a `does`).
     // Nine separate badges on one control would break `no_home_carries_more_than_it_can_show`.
     b(
         Action::WorkspaceProject,
@@ -1475,41 +1422,6 @@ pub const BINDINGS: &[Binding] = &[
         "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
-    // **One row for three keys**, because jumping to a panel is one idea — the same collapse
-    // `T F G H` gets. Three separate rows cost every context three keys of the budget
-    // `no_context_gains_a_key` ratchets, and a Global row costs every
-    // context.
-    //
-    // **The digits follow the strip, and the strip is `Door::tabs`** — so `1` means this door's
-    // first panel rather than the binary's. A number key that jumped somewhere the strip does not
-    // show would be the census disagreeing with the thing it describes.
-    b(
-        Action::TabSlot1,
-        KeyCode::Digit1,
-        false,
-        Context::Global,
-        "1",
-        "panel 1 / 2 / 3 of this door",
-    )
-    .at(Home::Control(ControlId::WorkspaceStrip)),
-    b(
-        Action::TabSlot2,
-        KeyCode::Digit2,
-        false,
-        Context::Global,
-        "2",
-        "panel 1 / 2 / 3 of this door",
-    )
-    .at(Home::Control(ControlId::WorkspaceStrip)),
-    b(
-        Action::TabSlot3,
-        KeyCode::Digit3,
-        false,
-        Context::Global,
-        "3",
-        "panel 1 / 2 / 3 of this door",
-    )
-    .at(Home::Control(ControlId::WorkspaceStrip)),
     // **`Cmd`+remove, not `Cmd`+a tab key.**
     // **`Cmd`+remove opens the piece under the cursor for editing.** It was `Cmd`+the tab key, on the
     // argument that one key could carry both "the Tiles tab" and "the Tiles tab, about this piece".
@@ -1571,39 +1483,6 @@ pub const BINDINGS: &[Binding] = &[
         "back to the menu",
     )
     .at(Home::Control(ControlId::Back)),
-    // **The door switch, and the key is `=`.**
-    //
-    // **The key has to be global** — the switching must work from both doors — and `Context::Global`
-    // overlaps every tab, so **every letter is taken**: `C` in Tiles and Anim, `I` and `L` in Meshes,
-    // and so on. The free bare keys are `Digit4`–`Digit0`, `Minus`, `Equal`, `Semicolon`, `Quote`,
-    // `Backquote`, `Backslash` and `Tab`.
-    //
-    // **And it has to be legible**, which is the half the census cannot measure. The backquote was
-    // the first choice — it is the industry's cue for "the other place" (`Cmd+\`` is VS Code's
-    // *toggle terminal*, `Ctrl+\`` is Blender's *toggle console*) — and **it was measured at 11 px
-    // and read as a speck**: a grave accent is a small mark at any size, and a key the author cannot
-    // see is a key they will not press. `Quote` is the same problem in a different glyph.
-    //
-    // **`=` is the widest mark on the keyboard and the most legible of the free ones**, and it is
-    // also the shape of a toggle — which is what the switching is: the same key, the other door. The
-    // rest are worse for one reason each: `Tab` is Bevy's focus traversal, the digits are **the
-    // most learned keys in this editor** (`1`/`2`/`3` are the door-relative panel slots), `;` and `-`
-    // are punctuation the author reads as punctuation, and `\` is the shell's "leave this level" —
-    // a meaning this key does not have.
-    //
-    // **The home is the door strip**, because the strip is where the editor already says which door
-    // is open — and Braem & Egner, on Crump & Logan (2010): *"switch costs can be reduced for stimuli
-    // that are presented at a screen location associated with a higher likelihood of task
-    // switches."* The cue belongs beside the door's name.
-    b(
-        Action::SwitchDoor,
-        KeyCode::Equal,
-        false,
-        Context::Global,
-        "=",
-        "the other workspace",
-    )
-    .at(Home::Control(ControlId::WorkspaceStrip)),
     // **`Cmd+E` for the errors, and the legend is where it lives** — the panel it opens is not on
     // screen to carry a badge, which is exactly the case `Home::Legend` is for.
     //
@@ -3538,18 +3417,18 @@ pub struct Badge {
 }
 
 impl Badge {
-    /// **The same badge with the chords this door cannot honour taken out of it**, or `None` if that
-    /// is all of them.
+    /// **The same badge with the chords the editor does not offer taken out of it**, or `None` if
+    /// that is all of them.
     ///
-    /// One badge can be several chords, and the slot keys are exactly that case: `1`, `2` and `3`
-    /// share a `does` and collapse into one row. On a door showing a single panel, `1` still fires
-    /// and the other two do not — so the badge is trimmed rather than kept or dropped whole, and its
-    /// column is re-rendered through [`chord_column`], the same function that wrote it.
+    /// One badge can be several chords, and the nine workspace chords are exactly that case: they
+    /// share a `does` and collapse into one row. While only three workspaces are built, `Cmd+1` still
+    /// names a workspace the editor refuses, so the badge is trimmed rather than kept or dropped whole,
+    /// and its column is re-rendered through [`chord_column`], the same function that wrote it.
     ///
-    /// See [`Action::fires_in_a_workspace_of`] for why the census cannot answer this on its own.
-    pub fn on_a_door_of(mut self, panels: usize) -> Option<Badge> {
+    /// See [`Action::is_offered`] for why the census cannot answer this on its own.
+    pub fn offered(mut self) -> Option<Badge> {
         let before = self.actions.len();
-        self.actions.retain(|a| a.fires_in_a_workspace_of(panels));
+        self.actions.retain(|a| a.is_offered());
         if self.actions.is_empty() {
             return None;
         }
@@ -3589,7 +3468,7 @@ pub fn badges(context: Context, stance: Stance) -> Vec<Badge> {
     // **The column is rendered once, from the actions, after the collapse.** It used to be built
     // during it, appending as each binding joined — which meant a badge that later *lost* a chord
     // had no way to say so but to re-render it somewhere else, and two renderers of one column is
-    // how `Cmd+` goes missing from exactly one of them. See [`Badge::on_a_door_of`].
+    // how `Cmd+` goes missing from exactly one of them. See [`Badge::offered`].
     for b in &mut out {
         b.chord = chord_column(&b.actions, &Rebound::NONE);
     }
@@ -4076,9 +3955,6 @@ mod tests {
     #[test]
     fn every_action_has_exactly_one_binding() {
         let actions = [
-            Action::TabSlot1,
-            Action::TabSlot2,
-            Action::TabSlot3,
             Action::ComposePrev,
             Action::ComposeNext,
             Action::ComposeArm,
@@ -4093,7 +3969,6 @@ mod tests {
             Action::CarouselNext,
             Action::Save,
             Action::MainMenu,
-            Action::SwitchDoor,
             Action::WorkspaceProject,
             Action::WorkspaceMap,
             Action::WorkspaceWorld,
@@ -4778,24 +4653,16 @@ mod tests {
             // crop of the Kit door is as much a snip as one of the Map door, so it is `Global`, like
             // Save. `Backslash` is bound in no context, so the chord is free everywhere it is live.
             //
-            // 19 -> 28: **the nine workspaces, NV-02 (#379)**, on `Cmd`/`Ctrl`+`1` to `9`.
-            // `docs/ui/vision.md` §4 makes the workspace the navigation axis, so "go to Kit" and
-            // "go to Map" are nine verbs rather than one `=` that walks between two doors. The
-            // owner chose the chords on 2026-11-09 and that is the exception recorded on the issue.
-            //
-            // **This is +9, not the +5 the issue asks for, and the four it wanted removed stayed.**
-            // The issue says the four `view.*` bindings go (`view.switch_door`, `view.panel_1` to
-            // `view.panel_3`). They cannot: `tests/the_door_switch_crosses.rs::the_crossing_and_the_menu_are_different_verbs`
-            // asserts `binding(Action::SwitchDoor)` differs from `MainMenu` and homes on the strip,
-            // and `tests/headless.rs` walks `Action::tab_slot(i)` over the strip. Deleting the rows
-            // would delete those checks rather than follow a rename, which the re-pin exception
-            // forbids outright ("never delete a check"). So the four stay, the pin is the *measured*
-            // 28, and the acceptance item is recorded unmet on the issue.
-            // Owner exception (2026-11-10): `no_context_gains_a_key` Global 19 -> 28 (+9). The owner
-            // chose Cmd/Ctrl+1..9 on 2026-11-09 (issue #379); the issue's matching removal of the four
-            // `view.*` rows (-4) is not done here because removing them deletes checks the re-pin
-            // exception forbids deleting (see above), so the pin is the measured 28, not 24.
-            (Context::Global, 28),
+            // 19 -> 24: **the nine workspaces, NV-02 (#379)**, on `Cmd`/`Ctrl`+`1` to `9`, and the
+            // four `view.*` bindings they replace gone: +9 − 4 = +5. `docs/ui/vision.md` §4 makes the
+            // workspace the navigation axis, so "go to Kit" and "go to Map" are nine verbs rather than
+            // one `=` that walks between two doors and three bare digits that walk a strip. The owner
+            // chose the chords on 2026-11-09 and that is the exception recorded on the issue.
+            // Owner exception (2026-11-11): `no_context_gains_a_key` Global 19 -> 24 (+5), as the
+            // issue says; `view.switch_door` and `view.panel_1` to `view.panel_3` are removed, and the
+            // protected tests that pinned them are re-pinned to the workspace commands (listed in the
+            // commit that did it).
+            (Context::Global, 24),
             // 16 -> 17: `FocusFilter`, on `Cmd+F`. **The filter box was mouse-only on every tab
             // but one.** `FocusFilter` was `Context::Tiles`, so the Map tab's PLACE palette and the
             // Rigs tab's rig list had no keyboard route to their own filter at all — and a box the

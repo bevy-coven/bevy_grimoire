@@ -5,7 +5,7 @@
 //! - a divider moved in Map and one moved in Kit are each saved by `ui::save_the_layout` and each restored
 //!   in its own workspace after a restart;
 //! - **an old settings file still reads**: one with the single `shell_layout` of before the workspaces is
-//!   moved to Map's entry rather than refused, and one that rebound `view.switch_door` keeps its keymap.
+//!   moved to Map's entry rather than refused, and one that rebound `view.switch_door` (a command #379 retired) still reads.
 
 use std::path::{Path, PathBuf};
 
@@ -14,7 +14,7 @@ use bevy::prelude::*;
 use bevy_cauldron::command_run::Chords;
 use bevy_cauldron::commands;
 use bevy_cauldron::harness;
-use bevy_cauldron::keys::{Action, Live};
+use bevy_cauldron::keys::Live;
 use bevy_cauldron::project::OpenMap;
 use bevy_cauldron::selection::Selection;
 use bevy_cauldron::settings::{SettingsLayer, UserSettingsFile, SETTINGS_VERSION};
@@ -146,12 +146,14 @@ fn a_file_with_the_old_shell_layout_is_read_as_maps() {
     assert!(layer.shell_layout.is_none(), "and it is not kept a second time");
 }
 
-/// **A keymap that rebound `view.switch_door` still reads**, and the id still names the command.
+/// **A keymap that rebound `view.switch_door` still reads.** The command went with #379 (the nine
+/// `workspace.*` chords replaced it), so the id names nothing and the entry binds nothing — but the file
+/// is not refused, because a person's saved keymap must keep loading.
 #[test]
 fn a_keymap_that_rebound_the_old_switch_id_still_reads() {
     let chord = ron::ser::to_string(&Shortcut::new(Modifiers::NONE, KeyCode::Backquote)).unwrap_or_else(|e| panic!("{e}"));
     let text = format!("(version: {SETTINGS_VERSION}, keymap: {{\"view.switch_door\": {chord}}})");
     let layer = SettingsLayer::read("old/settings.ron", &text).unwrap_or_else(|r| panic!("an old keymap was refused: {}: {}", r.field.unwrap_or_default(), r.reason));
-    assert!(layer.keymap.contains_key("view.switch_door"));
-    assert_eq!(commands::by_id("view.switch_door").map(|c| c.action), Some(Action::SwitchDoor));
+    assert!(!layer.keymap.contains_key("view.switch_door"), "the retired id binds nothing, so it is dropped");
+    assert!(commands::by_id("view.switch_door").is_none(), "and it names no command");
 }

@@ -3613,16 +3613,12 @@ pub struct Tab(pub Mode);
 #[derive(Component)]
 pub struct TabLabel;
 
-/// The tab's shortcut, styled a step quieter than the name.
-#[derive(Component)]
-struct TabKey;
-
 /// The tab's badge — the anim bench's stale count, in its own text so it can hold its own colour.
 ///
 /// Its own node rather than a suffix on [`TabLabel`], because `style_tabs` owns every label's
 /// `TextColor` per frame (active/inactive), so a colour written into the label is stomped on the
 /// next frame. The badge carries no `TabLabel`, so the frame-owner never touches it — the same
-/// division that keeps [`TabKey`] a step quieter than the name.
+/// division that keeps the badge apart from the name.
 ///
 /// `Ink::danger`, and only the count: a persistent peripheral element wants medium intensity, not
 /// maximum (Lewandowska, Dziśko & Jankowski 2022, `10.1038/s41598-022-16284-2` — high contrast is
@@ -3817,10 +3813,7 @@ impl Plugin for TilesPlugin {
                     // now refuses every one of these unless the Tiles tab owns the keyboard, so the
                     // `not_typing` conditions that used to say the same thing are gone rather than
                     // duplicated. `Phase::Act` puts them all ahead of the text fields below.
-                    (
-                        tab_shortcuts.in_set(crate::keys::Phase::Act),
-                        rescan_key.in_set(crate::keys::Phase::Act),
-                    ),
+                    rescan_key.in_set(crate::keys::Phase::Act),
                     move_selection.in_set(crate::keys::Phase::Act),
                     // **The two lattice walkers, nested as one.** A system tuple caps at twenty and
                     // this pair is one idea on two tabs: Meshes walks a mesh's own lattice, Tiles
@@ -4069,11 +4062,7 @@ fn spawn_tab_strip(
     commands
         .entity(strip)
         .with_children(|p| {
-            for (i, &mode) in workspace.panels().iter().enumerate() {
-                // **The key this workspace gives that slot**, which is why it is read off the index
-                // and not off the mode: `tab_shortcuts` walks `workspace.panels()` and takes
-                // `Action::tab_slot(i)`, so `1` is the workspace's first panel whichever that is.
-                let chord = Action::tab_slot(i).map(crate::keys::chord);
+            for &mode in workspace.panels() {
                 p.spawn((
                     // **Deliberately not a `UiButton`** — see [`click_tab`]. `Hovered` is what
                     // `style_tabs` lights it with, and it is all that was ever needed.
@@ -4105,27 +4094,6 @@ fn spawn_tab_strip(
                     BackgroundColor(crate::chrome::ink().row_bg),
                 ))
                 .with_children(|tab| {
-                    // **The tab states its key.** Cockburn et al. 2014 on the intermodal-transition
-                    // failure: offering a fast path beside a slow one does not work on its own, and
-                    // users plateau on the slow one. The key has to be visible at the moment of use,
-                    // which is `docs/ui.md` §4.2's "each chip states its key".
-                    //
-                    // It went missing when the strip became per-door and `Mode::action` — a key per
-                    // panel — stopped existing; the citation above stayed, and `style_tabs` kept
-                    // querying a marker nothing spawned. A one-tab door has a slot key too, so the
-                    // `Option` is only ever `None` past the fourth panel.
-                    if let Some(chord) = chord {
-                        tab.spawn((
-                            Text::new(chord),
-                            TextColor(crate::chrome::ink().label),
-                            crate::chrome::typed(crate::chrome::text::LABEL),
-                            Node {
-                                margin: UiRect::right(Val::Px(crate::chrome::GAP_ROW)),
-                                ..default()
-                            },
-                            TabKey,
-                        ));
-                    }
                     tab.spawn((
                         Text::new(mode.label()),
                         TextColor(crate::chrome::ink().label),
@@ -4162,11 +4130,9 @@ fn spawn_tab_strip(
             // rather than to switch to one particular alternative task"* — so the same words and the
             // same key mean the same thing on both doors. The strip says which way is other.
             //
-            // **The name is here; the key is the badge's.** The strip's own convention is that a
-            // control states its key in its own text and the badge cluster repeats it — the tab
-            // chips print `1`, `2`, `3` and the badges print them again. So this prints the *name*
-            // and the badge prints the *key*, and the two are complementary rather than two
-            // statements of the same fact.
+            // **The name is here; the keys are the workspace chords'.** `=` was this cue's key
+            // until #379 replaced it with `Cmd`/`Ctrl`+`1`…`9`, which are on the strip's badge
+            // already, so this prints the *name* of where a click goes and the badge prints the keys.
             p.spawn((
                 Node {
                     align_items: AlignItems::Center,
@@ -4176,7 +4142,7 @@ fn spawn_tab_strip(
                 },
                 OtherWorkspaceMark,
             ))
-            // **A click on the name is the key.** The mark says where `=` goes, and a name that names
+            // **A click on the name crosses.** The mark says where it goes, and a name that names
             // a place is a name that gets clicked (#288). The Rigs door hides the mark, so a click
             // is never aimed at it there.
             .observe(cross_on_click)
@@ -4207,7 +4173,7 @@ fn spawn_tab_strip(
         });
 }
 
-/// **A click on the other workspace's name switches to it**, by the one path `=` takes. Deferred,
+/// **A click on the other workspace's name switches to it**, by the one path the workspace chords take. Deferred,
 /// because the switch takes the whole `World`; the `EditorState` check is for the same reason
 /// `click_tab` has it: a global pointer observer fires on every screen.
 fn cross_on_click(_click: On<PointerClick>, mut commands: Commands) {
@@ -4238,7 +4204,7 @@ const SWITCH_TO: &str = "Switch to";
 ///
 /// It used to be Map and Kit and *nowhere* (the Rigs door had no other side), which was the price of
 /// the doors being places. With nine workspaces the cue is a short walk rather than the only road,
-/// so a workspace with no `=` partner would be a dead mark on the strip; the level is the answer for
+/// so a workspace with no partner would be a dead mark on the strip; the level is the answer for
 /// all of them, and the strip says which one it is leading to.
 pub fn the_other_workspace(workspace: crate::workspace::Workspace) -> Option<crate::workspace::Workspace> {
     use crate::workspace::Workspace;
@@ -4308,8 +4274,7 @@ fn style_tabs(
         &mut BorderColor,
         &Children,
     )>,
-    mut names: Query<&mut TextColor, (With<TabLabel>, Without<TabKey>)>,
-    mut chords: Query<&mut TextColor, (With<TabKey>, Without<TabLabel>)>,
+    mut names: Query<&mut TextColor, With<TabLabel>>,
 ) {
     for (tab, hovered, mut bg, mut border, children) in &mut tabs {
         let active = tab.0 == *mode;
@@ -4336,12 +4301,6 @@ fn style_tabs(
         for child in children.iter() {
             if let Ok(mut colour) = names.get_mut(child) {
                 let want = if active { crate::chrome::ink().text } else { crate::chrome::ink().dim };
-                if colour.0 != want {
-                    colour.0 = want;
-                }
-            }
-            if let Ok(mut colour) = chords.get_mut(child) {
-                let want = if active { crate::chrome::ink().accent } else { crate::chrome::ink().label };
                 if colour.0 != want {
                     colour.0 = want;
                 }
@@ -4666,31 +4625,8 @@ fn spawn_tiles_panel(
     });
 }
 
-/// **The number keys jump straight to a panel of this workspace**, in strip order.
-///
-/// `1` is this workspace's first panel, not the binary's — so in the Kit workspace `1` is Meshes.
-/// Everything reachable by mouse is reachable by keyboard (`docs/ui.md` §4.2), and the strip is what
-/// both read.
-fn tab_shortcuts(world: &mut World) {
-    let Some(workspace) = world.get_resource::<crate::workspace::Workspace>().copied() else {
-        return;
-    };
-    // **The slot that was pressed**, read here and acted on below, so the `World` borrow ends first.
-    let want = {
-        let keyboard = world.resource::<ButtonInput<KeyCode>>();
-        let live = *world.resource::<crate::keys::Live>();
-        workspace.panels().iter().enumerate().find_map(|(i, &want)| {
-            let action = Action::tab_slot(i)?;
-            keys::just_pressed(keyboard, live, action).then_some(want)
-        })
-    };
-    if let Some(want) = want {
-        crate::editor::open_door(world, workspace, Some(want));
-    }
-}
-
 /// **Enter a panel for the operation that asked for it** (`door_open` with a tab). It is the same entry
-/// as the slot key and the chip click, so the scan-on-arrival and the receipt clearing happen once.
+/// as the chip click, so the scan-on-arrival and the receipt clearing happen once.
 pub fn go_to_tab(
     In(want): In<Mode>,
     project: Option<Res<Project>>,
@@ -4713,7 +4649,7 @@ pub fn go_to_tab(
 /// **It takes the `ResMut`s, not `&mut Mode`.** Passing `&mut mode` where the parameter is
 /// `&mut Mode` deref-*muts* the `ResMut` at the call site, and `Mut::deref_mut` calls
 /// `set_changed()` — so `Mode` was marked changed before this function could refuse, on every press
-/// of the slot key you are already on and every click of the chip you are already standing on.
+/// of the operation that finds you already on the panel and every click of the chip you are already standing on.
 /// `stage_camera` reads exactly that flag, so it restored the canonical stage framing and threw
 /// away the author's pan and zoom, which is the discard `MapView` exists to prevent. Measured:
 /// a helper taking `&mut T` reports `is_changed()` after a no-op, an in-place compare does not.
@@ -4735,7 +4671,7 @@ fn enter_tab(
     // never cleared — outlived every switch between them. See `chrome::Status::clear_note` for the
     // report that closes and the BRP measurement showing the rotation it seemed to announce was not
     // happening. Cleared here rather than in a system watching `Mode`, because this is the one door
-    // both the slot key and the chip click come through, and because clearing *before* the scan
+    // both the chip click and the operation come through, and because clearing *before* the scan
     // below means a tab that has something to say still gets to say it.
     //
     // Only the note. A problem is a state the editor is in and outlives a tab on purpose.

@@ -372,6 +372,7 @@ mod reading_a_reference_opens_what_it_names;
 mod the_reload_panel_is_a_gooey_dock_panel;
 mod the_reveal_selects_a_row_a_person_can_see;
 mod the_follow_waits_for_a_person_using_the_view;
+mod the_four_view_keys_are_retired;
 mod the_person_is_never_yanked_review_two;
 mod the_enclosure_wish_is_the_maps_to_set;
 mod the_games_per_file_verdicts_reach_grimoire_state;
