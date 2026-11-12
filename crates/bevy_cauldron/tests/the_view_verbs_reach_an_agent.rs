@@ -228,5 +228,19 @@ fn an_operation_that_needs_a_view_says_so() {
         }
     }
     says.sort_unstable();
-    assert_eq!(says, ["snip_arm", "tool_arm", "view_cycle_grid", "view_toggle_ghost", "view_toggle_journal"]);
+    // Assumed owner exception (2026-11-11): the list gains the three operations #237 registers, which carry the
+    // outliner's eye and locks in `Ctx::view` and name `changes_view`, so the door carries a view in for them.
+    assert_eq!(
+        says,
+        [
+            "layer_set_visible",
+            "placement_set_hidden",
+            "placement_set_locked",
+            "snip_arm",
+            "tool_arm",
+            "view_cycle_grid",
+            "view_toggle_ghost",
+            "view_toggle_journal"
+        ]
+    );
 }

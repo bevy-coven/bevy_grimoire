@@ -44,6 +44,11 @@ const PINNED_NOWHERE: &[&str] = &[
     // Owner exception (2026-11-10): the list grows by the operation #129 slice 21 registers, an overlay on the
     // rig bench that a person's own view toggles, like the journal above.
     "view_toggle_ghost",
+    // Assumed owner exception (2026-11-11): the list grows by the three operations #237 registers, what the outliner's
+    // eye and locks hold — a person's own view of the map, which nothing on the map shows, like the rung above.
+    "placement_set_hidden",
+    "layer_set_visible",
+    "placement_set_locked",
     "tool_arm",
     "snip_arm",
     "brush_arm",

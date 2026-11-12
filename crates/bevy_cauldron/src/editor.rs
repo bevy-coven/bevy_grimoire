@@ -11091,10 +11091,8 @@ fn spawn_removal_tile(
 fn drive_removal(
     mut commands: Commands,
     mouse: Res<ButtonInput<MouseButton>>,
-    over_ui: Res<crate::view::OverUi>,
-    pointer: Res<crate::view::Pointer>,
-    snip: Res<crate::snip::SnipEdit>,
-    report: Res<crate::report::ReportEdit>,
+    claim: Claim,
+    sight: crate::outliner::Sight,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
     placed: Query<(Entity, &Placement)>,
     mut marker: Query<(&mut Transform, &mut Visibility), With<RemovalTile>>,
@@ -11107,6 +11105,7 @@ fn drive_removal(
     keyboard: Res<ButtonInput<KeyCode>>,
     rung: Res<Rung>,
 ) {
+    let Claim { over_ui, pointer, snip, report } = claim;
     // Read, never write, unless something actually happened: `state` is watched by
     // `rebuild_palette`, so an unconditional deref here rebuilds the palette every frame.
     if state.tool != Tool::Remove {
@@ -11163,7 +11162,7 @@ fn drive_removal(
         // **Locked to the live rung** — see `removal_box`. The marker and the deletion below read
         // the one expression, so what the red box covers is what goes.
         Some(from) => Some(removal_box(from, at, pitch)),
-        None => pick_at(&project, &open, at).and_then(|i| {
+        None => pick_at_seen(&project, &open, at, &|p| sight.unseen(&project.library, p)).and_then(|i| {
             let p = open.map.placements.get(i)?;
             let d = descriptor_of(&project.library, p)?;
             let (w, depth) = crate::fill::cell_extents(&d, p.yaw, p.tip);
@@ -11205,8 +11204,18 @@ fn drive_removal(
     };
 
     if (from.0 - at.0).abs() <= CLICK_EPS && (from.1 - at.1).abs() <= CLICK_EPS {
-        match pick_subject(&project, &open, &picture, at) {
+        match pick_subject_seen(&project, &open, &picture, at, &|p| sight.unseen(&project.library, p)) {
             Some(Subject::Placement(i)) => {
+                // **A locked piece is not removed by a click** (UI-51, #237), nor is a stack that holds one: the
+                // removal takes the whole group. An operation still can.
+                let locked = bevy_grimoire_core::stack::group_of(&open.map, i)
+                    .into_iter()
+                    .filter_map(|member| open.map.placements.get(member))
+                    .find(|member| sight.locked(&member.id));
+                if let Some(locked) = locked {
+                    state.status.problem(format!("{} is locked, so a click will not remove it — unlock it in the outliner", locked.id));
+                    return;
+                }
                 delete_index(&mut commands, &project, i, &mut open, &mut state, &placed)
             }
             // **The instance, whole.** A click landed on one member of it; removing that member is
@@ -11229,13 +11238,24 @@ fn drive_removal(
     // be left pointing at a placement that no longer exists, and `resolve_y` refuses the whole map for
     // it. Sorted and deduped, so a composition caught twice — box over both a table and its lamp — is
     // removed once.
+    // **A locked piece stays, and so does the stack it is in** (UI-51, #237): the group goes whole or not at all. A
+    // piece the eye has hidden is not under the box either — it is not drawn, so it cannot be what was swept.
+    let mut skipped_locked = 0usize;
     let mut doomed: Vec<usize> = open
         .map
         .placements
         .iter()
         .enumerate()
         .filter(|(_, p)| p.at.0 >= x0 && p.at.0 <= x1 && p.at.1 >= z0 && p.at.1 <= z1)
-        .flat_map(|(i, _)| bevy_grimoire_core::stack::group_of(&open.map, i))
+        .filter(|(_, p)| !sight.unseen(&project.library, p))
+        .flat_map(|(i, _)| {
+            let group = bevy_grimoire_core::stack::group_of(&open.map, i);
+            if group.iter().any(|g| open.map.placements.get(*g).is_some_and(|member| sight.locked(&member.id))) {
+                skipped_locked += 1;
+                return Vec::new();
+            }
+            group
+        })
         .collect();
     doomed.sort_unstable();
     doomed.dedup();
@@ -11254,7 +11274,11 @@ fn drive_removal(
     stamps.dedup();
 
     if doomed.is_empty() && stamps.is_empty() {
-        state.status.note("nothing inside that box");
+        if skipped_locked > 0 {
+            state.status.note(format!("{skipped_locked} locked piece(s) in that box stayed — unlock them in the outliner to remove them by click"));
+        } else {
+            state.status.note("nothing inside that box");
+        }
         return;
     }
 
@@ -15612,6 +15636,7 @@ fn hide_carried(
     // read here rather than written by a system of its own: two writers of one placement's `Visibility`
     // would take turns undoing each other.
     eyes: Option<Res<crate::outliner::Eyes>>,
+    project: Option<Res<Project>>,
     mut placed: Query<(&Placement, &mut Visibility)>,
     mut instances: Query<(&StampInstance, &mut Visibility), Without<Placement>>,
 ) {
@@ -15649,8 +15674,21 @@ fn hide_carried(
         Some(Held::Stamp(_)) | None => Vec::new(),
     };
 
+    // **The pieces standing in a hidden layer** (UI-51, #237), found only when a layer is hidden: the rule that says
+    // which layer a piece is in is `outliner::layer_of`, which reads the library, so a settled frame with nothing
+    // hidden does no lookup at all.
+    let in_a_hidden_layer: std::collections::HashSet<&str> = match (eyes.as_deref(), project.as_deref()) {
+        (Some(eyes), Some(project)) if eyes.has_hidden_layers() => open
+            .map
+            .placements
+            .iter()
+            .filter(|p| eyes.hides(&project.library, p))
+            .map(|p| p.id.as_str())
+            .collect(),
+        _ => std::collections::HashSet::new(),
+    };
     for (marker, mut vis) in &mut placed {
-        let behind_the_eye = eyes.as_ref().is_some_and(|eyes| eyes.is_hidden(&marker.0));
+        let behind_the_eye = eyes.as_ref().is_some_and(|eyes| eyes.is_hidden(&marker.0)) || in_a_hidden_layer.contains(marker.0.as_str());
         let want = if carried.contains(&marker.0) || behind_the_eye {
             Visibility::Hidden
         } else {
@@ -15892,6 +15930,8 @@ struct MoveInput<'w> {
     picture: Res<'w, StampPicture>,
     compose: Res<'w, crate::compose::Armed>,
     chosen: Chosen<'w>,
+    /// What the outliner has hidden and locked (UI-51, #237), which a grab asks before it picks.
+    sight: crate::outliner::Sight<'w>,
 }
 
 /// What the person has chosen on the map: the lock (the primary) and the selection set around it.
@@ -15964,6 +16004,7 @@ fn drive_move(
         picture,
         compose,
         chosen: Chosen { mut lock, mut selection },
+        sight,
     } = input;
     let Aim { over_ui, pointer, snip, report } = aim;
     let MapWrite {
@@ -16014,7 +16055,8 @@ fn drive_move(
             let probe = open.map.to_map_space((hit.x, hit.z));
             // **One competition over both lists** — see `pick_subject`. A stamped row resolves to
             // its stamp, so grabbing a member picks up the instance rather than reaching into it.
-            let picked = pick_subject(&project, &open, &picture, probe);
+            // **A piece the eye has hidden is not in the competition** (UI-51, #237): it is not drawn.
+            let picked = pick_subject_seen(&project, &open, &picture, probe, &|p| sight.unseen(&project.library, p));
             // **Shift-click selects; it does not carry** (#236, #89). Shift on a *drop* is the finer
             // snap and is untouched — only the grab is read, and only for a piece, since a stamp is
             // not a placement the pose operations address.
@@ -16036,6 +16078,17 @@ fn drive_move(
                     let Some(p) = open.map.placements.get(index) else {
                         return;
                     };
+                    // **A locked piece is not picked up** (UI-51, #237), nor is a stack that carries one: a move
+                    // takes the whole group, so a locked rider would be moved by the click that grabbed its host.
+                    // The status line says which piece, and an operation can still move it.
+                    let locked = bevy_grimoire_core::stack::group_of(&open.map, index)
+                        .into_iter()
+                        .filter_map(|i| open.map.placements.get(i))
+                        .find(|member| sight.locked(&member.id));
+                    if let Some(locked) = locked {
+                        state.status.problem(format!("{} is locked, so a click will not move it — unlock it in the outliner", locked.id));
+                        return;
+                    }
                     Held::Piece(p.id.clone())
                 }
                 Some(Subject::Stamp(id)) => Held::Stamp(id),
@@ -16240,8 +16293,21 @@ fn drop_piece(
 /// Ties break on the placement id, a total order that does not depend on authoring order.
 pub fn pick_at(project: &Project,
     open: &OpenMap, probe: (f32, f32)) -> Option<usize> {
+    pick_at_seen(project, open, probe, &|_| false)
+}
+
+/// **[`pick_at`], past the pieces `unseen` names** (UI-51, #237): the removal tool's preview marker asks it, so the
+/// red box sits on what a click would take and a piece the eye has hidden is not under it.
+pub fn pick_at_seen(project: &Project,
+    open: &OpenMap,
+    probe: (f32, f32),
+    unseen: &dyn Fn(&bevy_grimoire_core::map::Placed) -> bool,
+) -> Option<usize> {
     let mut covering: Option<(usize, f32, &str)> = None;
     for (i, p) in open.map.placements.iter().enumerate() {
+        if unseen(p) {
+            continue;
+        }
         let Some(d) = descriptor_of(&project.library, p) else {
             continue;
         };
@@ -16268,6 +16334,9 @@ pub fn pick_at(project: &Project,
 
     let mut nearest: Option<(usize, f32, &str)> = None;
     for (i, p) in open.map.placements.iter().enumerate() {
+        if unseen(p) {
+            continue;
+        }
         let reach = descriptor_of(&project.library, p)
             .map(|d| crate::fill::cell_extents(&d, p.yaw, p.tip))
             .map_or(crate::fill::MIN_CELL, |(x, z)| x.max(z));
@@ -16415,8 +16484,23 @@ pub fn pick_subject(project: &Project,
     picture: &StampPicture,
     probe: (f32, f32),
 ) -> Option<Subject> {
+    pick_subject_seen(project, open, picture, probe, &|_| false)
+}
+
+/// **[`pick_subject`], past the pieces `unseen` names** (UI-51, #237): a piece the outliner's eye has taken out of the
+/// viewport cannot be picked there, because a click on what is not drawn is a click on whatever is behind it. The
+/// competition is unchanged; an unseen piece simply does not enter it.
+pub fn pick_subject_seen(project: &Project,
+    open: &OpenMap,
+    picture: &StampPicture,
+    probe: (f32, f32),
+    unseen: &dyn Fn(&bevy_grimoire_core::map::Placed) -> bool,
+) -> Option<Subject> {
     let mut best: Option<(Subject, f32, &str)> = None;
     for (i, p) in open.map.placements.iter().enumerate() {
+        if unseen(p) {
+            continue;
+        }
         let Some(d) = descriptor_of(&project.library, p) else {
             continue;
         };
