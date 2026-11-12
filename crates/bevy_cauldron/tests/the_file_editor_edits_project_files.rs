@@ -679,14 +679,12 @@ fn a_dirty_tab_keeps_its_place_and_a_clean_save_writes_nothing() {
     bevy_cauldron::session::close_tab(app.world_mut(), Workspace::Files, &bevy_cauldron::session::Doc::new(bevy_cauldron::session::Kind::File, MAP_RON));
     assert_eq!(files::active_file(app.world().resource::<Session>()).as_deref(), Some(MAP_RON), "the tab is still there");
 
-    let before = std::fs::metadata(root.join("notes.md")).ok();
     std::fs::write(root.join("notes.md"), "# n\n").unwrap_or_else(|e| panic!("{e}"));
     files::open_file(app.world_mut(), "notes.md").unwrap_or_else(|e| panic!("{e}"));
     let stamp = std::fs::metadata(root.join("notes.md")).and_then(|m| m.modified()).ok();
     let mut files_res = app.world_mut().resource_mut::<Files>();
     files::save_file(&mut files_res, &root, "notes.md").unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(std::fs::metadata(root.join("notes.md")).and_then(|m| m.modified()).ok(), stamp, "a clean file is not rewritten");
-    let _ = before;
 }
 
 /// **Unsaved files are unsaved work** (review M8): leaving for the chooser asks even when the map is clean, and "save and

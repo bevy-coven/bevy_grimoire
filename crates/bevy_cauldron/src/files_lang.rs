@@ -842,9 +842,16 @@ fn char_literal_end(text: &str, at: usize) -> Option<usize> {
         return None;
     }
     if first == '\\' {
-        // An escape: up to the next quote, within a `\u{...}`'s length.
-        let close = rest[1..].find('\'')?;
-        return (close <= CHAR_ESCAPE_BYTES).then_some(at + 1 + 1 + close + 1);
+        // An escape: one character after the backslash (which may itself be a quote), or a `u{...}` code, then the closing quote.
+        let after = &rest[1..];
+        let escaped = after.chars().next()?;
+        let body = if escaped == 'u' && after[1..].starts_with('{') {
+            let close = after.find('}')?;
+            (close <= CHAR_ESCAPE_BYTES).then_some(close + 1)?
+        } else {
+            escaped.len_utf8()
+        };
+        return after[body..].starts_with('\'').then_some(at + 1 + 1 + body + 1);
     }
     let (next, c) = chars.next()?;
     (c == '\'').then_some(at + 1 + next + 1)

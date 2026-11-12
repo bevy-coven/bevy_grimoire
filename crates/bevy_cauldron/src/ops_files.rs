@@ -106,16 +106,6 @@ fn current(root: &Path, rel: &str) -> Option<String> {
     std::fs::read_to_string(root.join(rel)).ok()
 }
 
-fn inside(root: &Path, rel: &str) -> Result<(), Refusal> {
-    let path = Path::new(rel);
-    let outside = rel.is_empty() || path.is_absolute() || path.components().any(|c| matches!(c, std::path::Component::ParentDir));
-    if outside {
-        return Err(Refusal::new(format!("`{rel}` is not a path inside the project, so nothing was written.")));
-    }
-    let _ = root;
-    Ok(())
-}
-
 /// **Replace across the project's files.**
 pub struct FilesReplace;
 
@@ -123,8 +113,25 @@ impl FilesReplace {
     /// The plan for a query, as a refusal when it cannot be one.
     fn planned(ctx: &Ctx, p: &ReplaceParams) -> Result<(std::path::PathBuf, files_search::Plan), Refusal> {
         let root = root_of(ctx)?;
-        let plan = files_search::plan(&root, &p.query(), &p.replacement, p.only.as_deref()).map_err(|e| Refusal::new(e.to_string()))?;
+        // **One plan for the plan, the place and the preview of one call**: dispatch asks all three, and each would read every
+        // file again. The last plan is kept for a few seconds against the same root and parameters; a commit plans afresh.
+        let key = (root.clone(), serde_json::to_string(p).unwrap_or_default());
+        if let Some(plan) = cached_plan(&key) {
+            return Ok((root, plan));
+        }
+        let plan = Self::fresh(&root, p)?;
+        keep_plan(key, &plan);
         Ok((root, plan))
+    }
+
+    /// A plan read from the files now: refused when it would break a file, or reaches one a person is typing in.
+    fn fresh(root: &std::path::Path, p: &ReplaceParams) -> Result<files_search::Plan, Refusal> {
+        let plan = files_search::plan(root, &p.query(), &p.replacement, p.only.as_deref()).map_err(|e| Refusal::new(e.to_string()))?;
+        // **An agent never merges into a person's unsaved text**, and a replace is an agent's reach too.
+        if let Some(file) = plan.files.iter().find(|f| crate::files::person_is_editing(root, &f.rel)) {
+            return Err(Refusal::new(format!("the person is editing {}; wait or ask. Nothing was changed.", file.rel)));
+        }
+        Ok(plan)
     }
 
     fn put_back(ctx: &Ctx, restore: &[Restore], write: bool) -> Result<Outcome, Refusal> {
@@ -132,17 +139,23 @@ impl FilesReplace {
         let mut undone = Vec::new();
         let mut now = Vec::new();
         for r in restore {
-            inside(&root, &r.path)?;
+            crate::files::project_path(&root, &r.path).map_err(Refusal::new)?;
             undone.push(Restore { path: r.path.clone(), text: current(&root, &r.path).unwrap_or_default() });
             now.push((r.path.clone(), r.text.clone()));
         }
         if write {
             for (written, (path, text)) in now.iter().enumerate() {
                 if let Err(e) = bevy_grimoire_core::atomic_file::write(&root.join(path), text) {
-                    for back in &undone[..written] {
-                        let _ = bevy_grimoire_core::atomic_file::write(&root.join(&back.path), &back.text);
-                    }
-                    return Err(Refusal::new(format!("{path} was not put back ({e}); the files before it were left as they were.")));
+                    let stuck: Vec<&str> = undone[..written]
+                        .iter()
+                        .filter(|back| bevy_grimoire_core::atomic_file::write(&root.join(&back.path), &back.text).is_err())
+                        .map(|back| back.path.as_str())
+                        .collect();
+                    return Err(Refusal::new(if stuck.is_empty() {
+                        format!("{path} was not put back ({e}); the files before it were left as they were.")
+                    } else {
+                        format!("{path} was not put back ({e}); these could NOT be returned to what they held and are half put back: {}", stuck.join(", "))
+                    }));
                 }
             }
         }
@@ -201,8 +214,12 @@ impl Operation for FilesReplace {
         if let Some(restore) = &p.restore {
             return Self::put_back(ctx, restore, true);
         }
-        let (root, plan) = Self::planned(ctx, &p)?;
-        files_search::apply(&root, &plan).map_err(|e| Refusal::new(format!("{e}. Nothing was changed.")))?;
+        let root = root_of(ctx)?;
+        let plan = Self::fresh(&root, &p)?;
+        let applied = files_search::apply(&root, &plan);
+        // The files changed: what was planned from them is stale.
+        *LAST_PLAN.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+        applied.map_err(|e| Refusal::new(format!("{e}. Nothing was changed.")))?;
         let before: Vec<Restore> = plan.files.iter().map(|f| Restore { path: f.rel.clone(), text: f.before.clone() }).collect();
         let after: serde_json::Map<String, serde_json::Value> = plan.files.iter().map(|f| (f.rel.clone(), json!(f.after))).collect();
         let skipped = if plan.skipped.is_empty() { String::new() } else { format!("; left {} read-only file(s) alone", plan.skipped.len()) };
@@ -248,6 +265,23 @@ impl Operation for FilesReplace {
             None => Shown::File { path: PROJECT_FOLDER.to_owned(), lines: None },
         }
     }
+}
+
+/// How long a plan is kept for the other questions of the same call, in seconds.
+const PLAN_KEPT_S: u64 = 5;
+
+type PlanKey = (std::path::PathBuf, String);
+
+static LAST_PLAN: std::sync::LazyLock<std::sync::Mutex<Option<(PlanKey, std::time::Instant, files_search::Plan)>>> = std::sync::LazyLock::new(Default::default);
+
+fn cached_plan(key: &PlanKey) -> Option<files_search::Plan> {
+    let last = LAST_PLAN.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let (kept, at, plan) = last.as_ref()?;
+    (kept == key && at.elapsed().as_secs() < PLAN_KEPT_S).then(|| plan.clone())
+}
+
+fn keep_plan(key: PlanKey, plan: &files_search::Plan) {
+    *LAST_PLAN.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some((key, std::time::Instant::now(), plan.clone()));
 }
 
 /// **What a replace that has no file to point at names**: the project's own folder, the tree the Files workspace shows. A
@@ -402,7 +436,7 @@ impl FileEdit {
     /// What the file would hold, or why not: every refusal found before anything is written.
     fn resolve(ctx: &Ctx, p: &EditParams) -> Result<(std::path::PathBuf, String, String), Refusal> {
         let root = root_of(ctx)?;
-        inside(&root, &p.path)?;
+        crate::files::project_path(&root, &p.path).map_err(Refusal::new)?;
         if crate::files_lang::is_command_file(&p.path) {
             return Err(Refusal::new(format!("{}: {} Nothing was changed.", p.path, crate::files_lang::READ_ONLY_NOTE)));
         }

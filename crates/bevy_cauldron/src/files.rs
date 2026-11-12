@@ -224,7 +224,7 @@ impl Files {
 
 /// **Whether a path is one the Files workspace may open**: a relative path that stays inside the project.
 /// `Err` says why not, for a notice.
-fn inside(root: &Path, rel: &str) -> Result<PathBuf, String> {
+pub(crate) fn inside(root: &Path, rel: &str) -> Result<PathBuf, String> {
     let path = Path::new(rel);
     if rel.is_empty() || path.is_absolute() || path.components().any(|c| matches!(c, Component::ParentDir | Component::Prefix(_) | Component::RootDir)) {
         return Err(format!("{rel} is not a path inside the project"));
@@ -236,6 +236,33 @@ fn inside(root: &Path, rel: &str) -> Result<PathBuf, String> {
         && !real.starts_with(&base)
     {
         return Err(format!("{rel} is outside the project"));
+    }
+    Ok(full)
+}
+
+/// The operation log, which no operation may rewrite: it is the audit and the undo's source.
+const OPLOG_PATH: &str = "assets/grimoire/oplog.jsonl";
+
+/// **A project path an operation may write**: inside the project (links followed only while they stay in it, and a path
+/// through a linked folder that leaves it is refused), not in a folder the tree never lists (`.git`, `target`, `.live`,
+/// `node_modules`), not named by the project's `.gitignore`, and not the operation log. Writing `.git/hooks/*` or
+/// `oplog.jsonl` would be a way round a trust check and round the undo.
+pub(crate) fn project_path(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    let full = inside(root, rel)?;
+    let parts: Vec<String> = Path::new(rel).components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect();
+    if parts.iter().any(|part| SKIPPED_DIRS.contains(&part.as_str())) || rel.replace('\\', "/") == OPLOG_PATH {
+        return Err(format!("{rel} is not a file the project's tree lists, so it is not edited here"));
+    }
+    let ignore = std::fs::read_to_string(root.join(".gitignore")).map(|t| Ignore::parse(&t)).unwrap_or_default();
+    let mut walked = String::new();
+    for (n, part) in parts.iter().enumerate() {
+        if !walked.is_empty() {
+            walked.push('/');
+        }
+        walked.push_str(part);
+        if ignore.matches(&walked, n + 1 < parts.len()) {
+            return Err(format!("{rel} is ignored by the project's .gitignore, so it is not edited here"));
+        }
     }
     Ok(full)
 }
@@ -419,6 +446,8 @@ struct Walked {
     truncated: bool,
     /// An order-independent sum of what is listed, so a settled tree is told from a changed one without keeping a copy.
     fingerprint: u64,
+    /// Read with no limit: what a search and a replace walk, so a project-wide rename never covers only part of a project.
+    uncapped: bool,
 }
 
 fn walk_dir(root: &Path, dir: &Path, ignore: &Ignore, walked: &mut Walked) -> Vec<TreeNode> {
@@ -427,7 +456,7 @@ fn walk_dir(root: &Path, dir: &Path, ignore: &Ignore, walked: &mut Walked) -> Ve
     // hundred thousand files is the stall the limit exists to prevent.
     let mut read = entries.filter_map(Result::ok);
     let mut listed: Vec<(String, bool)> = Vec::new();
-    for entry in read.by_ref().take(TREE_DIR_LIMIT) {
+    for entry in read.by_ref().take(if walked.uncapped { usize::MAX } else { TREE_DIR_LIMIT }) {
         let Ok(meta) = std::fs::symlink_metadata(entry.path()) else { continue };
         // A link is never followed (the tree stays inside the project) and never listed.
         if !meta.file_type().is_symlink() {
@@ -446,7 +475,7 @@ fn walk_dir(root: &Path, dir: &Path, ignore: &Ignore, walked: &mut Walked) -> Ve
         if (is_dir && SKIPPED_DIRS.contains(&name.as_str())) || name == ".DS_Store" || ignore.matches(&rel, is_dir) {
             continue;
         }
-        if walked.count >= TREE_LIMIT {
+        if !walked.uncapped && walked.count >= TREE_LIMIT {
             walked.truncated = true;
             break;
         }
@@ -463,15 +492,20 @@ fn walk_dir(root: &Path, dir: &Path, ignore: &Ignore, walked: &mut Walked) -> Ve
     out
 }
 fn walk_project(root: &Path) -> Walked {
+    walk_with(root, false)
+}
+
+fn walk_with(root: &Path, uncapped: bool) -> Walked {
     let ignore = std::fs::read_to_string(root.join(".gitignore")).map(|t| Ignore::parse(&t)).unwrap_or_default();
-    let mut walked = Walked::default();
+    let mut walked = Walked { uncapped, ..Walked::default() };
     let nodes = walk_dir(root, root, &ignore, &mut walked);
     walked.nodes = nodes;
     walked
 }
 /// **The paths the tree lists**, files only, in tree order: what a test and the search read.
 pub fn listed_files(root: &Path) -> Vec<String> {
-    let walked = walk_project(root);
+    // **No limit**: the tree stops at its caps and says so, but a search and a replace must see every file.
+    let walked = walk_with(root, true);
     let mut files: Vec<String> = walked.names.into_values().filter(|(_, dir)| !dir).map(|(rel, _)| rel).collect();
     files.sort();
     files

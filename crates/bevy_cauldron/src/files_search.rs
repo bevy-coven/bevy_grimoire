@@ -326,17 +326,21 @@ pub fn plan(root: &Path, query: &Query, replacement: &str, only: Option<&[String
     Ok(out)
 }
 
-/// **Write a plan**, every file atomically. If a write fails, the files already written are put back and the
-/// failure is the answer: the project is never left half renamed.
 pub fn apply(root: &Path, plan: &Plan) -> Result<(), String> {
     let mut written: Vec<&PlannedFile> = Vec::new();
     for file in &plan.files {
         if let Err(e) = bevy_grimoire_core::atomic_file::write(&root.join(&file.rel), &file.after) {
-            for done in &written {
-                // Best effort: the original text is in hand, and a failure here is named after the first.
-                let _ = bevy_grimoire_core::atomic_file::write(&root.join(&done.rel), &done.before);
-            }
-            return Err(format!("{} was not written ({e}); the files before it were put back", file.rel));
+            // The original text is in hand: put back each file already written, and name any that could not be.
+            let stuck: Vec<String> = written
+                .iter()
+                .filter(|done| bevy_grimoire_core::atomic_file::write(&root.join(&done.rel), &done.before).is_err())
+                .map(|done| done.rel.clone())
+                .collect();
+            return Err(if stuck.is_empty() {
+                format!("{} was not written ({e}); the files before it were put back", file.rel)
+            } else {
+                format!("{} was not written ({e}); these could NOT be put back and hold the replaced text: {}", file.rel, stuck.join(", "))
+            });
         }
         written.push(file);
     }

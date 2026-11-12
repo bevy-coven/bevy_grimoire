@@ -241,6 +241,8 @@ fn panel_of<'a>(entity: Entity, parents: &Query<&ChildOf>, panels: &'a mut Query
 fn on_query(change: On<ValueChange<String>>, parents: Query<&ChildOf>, mut panels: Query<&mut SearchPanel>, mut commands: Commands) {
     if let Some(mut panel) = panel_of(change.source, &parents, &mut panels) {
         panel.query.text = change.value.clone();
+        // **A preview is of one query**: any change to it takes the preview away, so Replace all never applies another.
+        panel.preview = None;
     }
     // Enter in the query field searches, as it does in a find bar.
     if change.is_final {
@@ -251,6 +253,7 @@ fn on_query(change: On<ValueChange<String>>, parents: Query<&ChildOf>, mut panel
 fn on_paths(change: On<ValueChange<String>>, parents: Query<&ChildOf>, mut panels: Query<&mut SearchPanel>) {
     if let Some(mut panel) = panel_of(change.source, &parents, &mut panels) {
         panel.query.paths = change.value.clone();
+        panel.preview = None;
     }
 }
 
@@ -420,7 +423,7 @@ fn replace_all(world: &mut World) {
                 state.status.note(outcome.summary.clone());
                 state.record_logged(operation_id, outcome.summary.clone(), false);
             }
-            format!("{}. Cmd+Z takes it back in one step.", outcome.summary)
+            format!("{}. It is one step in the history: Cmd+Z on the Map takes it back whole (Undo is the Map's key).", outcome.summary)
         }
         Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
             if let Some(mut state) = world.get_resource_mut::<EditorState>() {

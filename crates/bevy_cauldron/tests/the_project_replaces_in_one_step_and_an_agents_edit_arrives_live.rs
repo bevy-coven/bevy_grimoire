@@ -197,7 +197,6 @@ fn the_search_streams_into_a_panel_can_be_cancelled_and_a_result_opens_its_file_
     let editor = editor_of(&mut app);
     let buffer = app.world().get::<CodeEditor>(editor).map(|e| (e.buffer().selection(), e.buffer().selected_text())).unwrap_or_else(|| panic!("an editor"));
     assert_eq!(buffer.1, "needle", "the match is selected");
-    let _ = CodePos::new(0, 0);
 }
 
 fn key(app: &mut App, code: KeyCode, logical: Key, state: ButtonState) {
@@ -302,4 +301,97 @@ fn diff_edit_is_the_one_span_that_turns_one_text_into_the_other() {
     assert!(files::diff_edit("same", "same").is_none());
     let edit = files::diff_edit("héllo wörld", "héllo wörld!").unwrap_or_else(|| panic!("they differ"));
     assert_eq!((edit.range.start, edit.text.as_str()), ("héllo wörld".len(), "!"));
+}
+
+/// **A replace covers every file, not the tree's first 5,000 of a folder** (review): more files than the tree's per-folder cap are all
+/// replaced, and one undo puts them all back.
+#[test]
+fn a_replace_over_more_files_than_the_trees_cap_covers_every_one() {
+    let root = project("many");
+    let count = files::TREE_DIR_LIMIT + 100;
+    for n in 0..count {
+        write(&root, &format!("many/f{n:05}.txt"), "needle\n");
+    }
+    let app = editor_app(&root);
+    let mut ctx = ctx(&app, Source::Human);
+    let Ok(Applied::Done { outcome, operation_id, .. }) = ops::dispatch(&mut ctx, "files_replace", &serde_json::json!({"query": "needle", "replacement": "found"})) else { panic!("applies") };
+    assert_eq!(outcome.affected, count, "every file was replaced: {}", outcome.summary);
+    assert!((0..count).all(|n| read(&root, &format!("many/f{n:05}.txt")) == "found\n"));
+    ops::undo(&mut ctx, Some(&operation_id)).unwrap_or_else(|e| panic!("{e}"));
+    assert!((0..count).all(|n| read(&root, &format!("many/f{n:05}.txt")) == "needle\n"), "one undo puts every file back");
+}
+
+/// **A path through a linked folder that leaves the project is refused, and so are the paths the tree never lists** (review): `.git`,
+/// `target`, a `.gitignore`d file and the operation log are not an agent's to edit, and a replace does not follow a link out.
+#[test]
+fn file_edit_refuses_a_link_out_of_the_project_and_the_files_the_tree_never_lists() {
+    let root = project("paths");
+    write(&root, ".gitignore", "secret.log\n");
+    write(&root, "secret.log", "a: 1\n");
+    write(&root, ".git/hooks/pre-commit", "x: 1\n");
+    write(&root, "target/x.yaml", "a: 1\n");
+    let app = editor_app(&root);
+    let mut ctx = ctx(&app, Source::Agent);
+    let edit = |path: &str| serde_json::json!({"path": path, "edits": [{"at": "a", "value": 2}]});
+    for path in [".git/hooks/pre-commit", "target/x.yaml", "secret.log", "assets/grimoire/oplog.jsonl"] {
+        let refused = ops::dispatch(&mut ctx, "file_edit", &edit(path)).expect_err(path);
+        assert!(refused.0.contains("not a file the project's tree lists") || refused.0.contains("ignored"), "{path}: {refused}");
+    }
+    assert_eq!(read(&root, "secret.log"), "a: 1\n");
+    #[cfg(unix)]
+    {
+        let outside = std::env::temp_dir().join(format!("files_link_{}", std::process::id()));
+        std::fs::create_dir_all(&outside).unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(outside.join("x.yaml"), "a: 1\nmarker: 1\n").unwrap_or_else(|e| panic!("{e}"));
+        std::os::unix::fs::symlink(&outside, root.join("link")).unwrap_or_else(|e| panic!("{e}"));
+        let refused = ops::dispatch(&mut ctx, "file_edit", &edit("link/x.yaml")).expect_err("a path through a link out is refused");
+        assert!(refused.0.contains("outside the project"), "{refused}");
+        write(&root, "inside.txt", "marker\n");
+        let mut human = ctx_for(&app);
+        let Ok(Applied::Done { .. }) = ops::dispatch(&mut human, "files_replace", &serde_json::json!({"query": "marker", "replacement": "changed"})) else { panic!("applies") };
+        assert_eq!(read(&root, "inside.txt"), "changed\n");
+        assert_eq!(std::fs::read_to_string(outside.join("x.yaml")).unwrap_or_default(), "a: 1\nmarker: 1\n", "a replace does not follow the link out");
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+}
+
+fn ctx_for(app: &App) -> Ctx {
+    ctx(app, Source::Human)
+}
+
+/// **A preview belongs to one query** (review): changing the query, the paths or the replacement takes the preview away, so Replace all
+/// never applies a replace the person did not preview.
+#[test]
+fn changing_the_query_takes_the_preview_away() {
+    let root = project("preview");
+    write(&root, "a.txt", "foo\n");
+    let mut app = editor_app(&root);
+    chord_ctrl_shift(&mut app, KeyCode::KeyF, "f");
+    let panel = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<SearchPanel>>().single(world).unwrap_or_else(|e| panic!("{e}"))
+    };
+    let field = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<files_panel::QueryField>>().single(world).unwrap_or_else(|e| panic!("{e}"))
+    };
+    app.world_mut().get_mut::<SearchPanel>(panel).map(|mut p| p.preview = Some(files_search::Plan::default())).unwrap_or_default();
+    app.world_mut().trigger(bevy::ui_widgets::ValueChange { source: field, value: "bar".to_owned(), is_final: false });
+    settle(&mut app);
+    assert!(app.world().get::<SearchPanel>(panel).is_some_and(|p| p.preview.is_none()), "the preview of the old query is gone");
+}
+
+/// **A failed write names what could not be put back** (review): the files before it are restored, and the message says so.
+#[test]
+fn a_failed_write_puts_the_earlier_files_back_and_says_so() {
+    let root = project("apply");
+    write(&root, "a.txt", "old a\n");
+    write(&root, "b.txt", "old b\n");
+    std::fs::create_dir_all(root.join("dir_in_the_way")).unwrap_or_else(|e| panic!("{e}"));
+    let file = |rel: &str, before: &str, after: &str| files_search::PlannedFile { rel: rel.to_owned(), before: before.to_owned(), after: after.to_owned(), replacements: 1, changes: Vec::new() };
+    let plan = files_search::Plan { files: vec![file("a.txt", "old a\n", "new a\n"), file("b.txt", "old b\n", "new b\n"), file("dir_in_the_way", "", "x")], skipped: Vec::new() };
+    let refused = files_search::apply(&root, &plan).expect_err("a directory in the way refuses");
+    assert!(refused.contains("dir_in_the_way") && refused.contains("put back") && !refused.contains("NOT"), "{refused}");
+    assert_eq!(read(&root, "a.txt"), "old a\n");
+    assert_eq!(read(&root, "b.txt"), "old b\n");
 }
