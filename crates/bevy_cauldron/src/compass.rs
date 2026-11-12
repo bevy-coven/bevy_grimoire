@@ -297,8 +297,8 @@ fn show_by_tab(
     use crate::tiles::Mode;
     let show = !asking
         && match *mode {
-            Mode::Map | Mode::Tiles | Mode::Meshes => true,
-            Mode::Compose | Mode::Anim | Mode::Files => false,
+            Mode::Map | Mode::World | Mode::Tiles | Mode::Meshes => true,
+            Mode::Compose | Mode::Anim | Mode::Files | Mode::Sound | Mode::Game | Mode::Agent => false,
         };
     let display = if show { Display::Flex } else { Display::None };
     for mut node in &mut compass {

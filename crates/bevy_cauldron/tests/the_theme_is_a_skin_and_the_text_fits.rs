@@ -50,6 +50,11 @@ use bevy_gooey::GooeySkin;
 
 use crate::fixtures;
 
+/// Seconds the test waits for the file watcher's wall-clock poll to see a removed project skin.
+const WATCH_PATIENCE_S: u64 = 10;
+/// Frames checked, once the preview has lost its skin, that the chosen theme is still the running one.
+const FRAMES_AFTER_THE_SKIN_GOES: usize = 40;
+
 /// The editor with `theme` and `text_scale` written into the user's settings file, laid out.
 ///
 /// **Through the file, not the resource.** `sync_settings` re-resolves `EditorSettings` from the two
@@ -262,7 +267,19 @@ fn removing_a_projects_skin_leaves_the_chosen_theme_running() {
 
     // **The file goes.** The preview loses its skin; the chrome does not move.
     std::fs::remove_file(&file).expect("the project skin is removed");
-    for _ in 0..40 {
+    // **The watcher polls on the wall clock** (`watch::POLL`, a quarter of a second), so a fixed count of frames
+    // can all run inside one poll interval on a fast or idle machine and see nothing gone. The frames are
+    // counted until the preview has lost its skin, within a deadline, and the theme is checked on every one.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(WATCH_PATIENCE_S);
+    while app.world().resource::<bevy_cauldron::ui_skin::GameSkin>().0.is_some() && std::time::Instant::now() < deadline {
+        app.update();
+        assert_eq!(
+            app.world().resource::<GooeySkin>().surface,
+            GooeySkin::high_contrast().surface,
+            "the chosen theme stays running on every frame after the file goes"
+        );
+    }
+    for _ in 0..FRAMES_AFTER_THE_SKIN_GOES {
         app.update();
         assert_eq!(
             app.world().resource::<GooeySkin>().surface,

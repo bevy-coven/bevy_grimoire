@@ -65,9 +65,10 @@ the compositions, so crossing between jobs meant a full teardown and a project r
 changes which panels are drawn and nothing else — **one viewport is shared by every workspace that
 shows the world** (Map, World, Kit, Animation), so switching never reloads a map or drops a selection.
 
-**A workspace whose part is not built is not registered.** Files (until GD-11), Game (NV-09) and Agent
-(NV-10) have their chord and their command, and the command says which issue brings it. There are no
-placeholder screens: a workspace either does its job or says what it is waiting for.
+**A workspace whose part is not built is not registered.** Project (the page is still its own screen, reached by
+Cmd/Ctrl+O) and Files (until GD-11) have their chord and their command, and the
+command says which issue brings it. There are no placeholder screens: a workspace either does its job or says what
+it is waiting for.
 
 Regions, top to bottom and left to right:
 
@@ -93,15 +94,15 @@ layouts are per workspace rather than one shared one:
 
 | Workspace | Default | Panels |
 |---|---|---|
-| Project | the page, whole | the project page (NV-08) |
+| Project | the page, whole | the project page (NV-08, not yet moved into the workbench) |
 | Map | inspector 22%, viewport, library | viewport, outliner, inspector, place, notes, checks |
-| World | viewport over the inspector | environment, terrain, water, forest, light (NV-08) |
+| World | viewport over the inspector | terrain, and the environment, lights and light map in a build that has those crates (NV-08, #385). Water and forest are written through the terrain line and have no panel of their own |
 | Kit | inspector 30%, viewport, library | Meshes, Tiles, Compose |
-| Animation | inspector 28%, viewport, library | the rig bench (NV-08) |
-| Sound | inspector and viewport | the audio panel (NV-08) |
+| Animation | inspector 28%, viewport, library | the rig bench |
+| Sound | inspector and viewport | the audio panel (`bevy_siren`; a build without it says so, NV-08, #385) |
 | Files | inspector and viewport | the file tree (GD-11) |
-| Game | viewport and inspector | the running game (NV-09) |
-| Agent | inspector and viewport | the Familiar (NV-10) |
+| Game | viewport and inspector | Play, Stop, Build, the build's errors, the game's log, a read-only view of its state over BRP, frame time and memory, Show window; a crash stays on screen and badges the icon (NV-09, #386) |
+| Agent | inspector and viewport | the AGENT block at full size with the waiting wishes and lessons, and the agent's last changes with Look (NV-10, #387); the compact block stays a toggle of Map |
 
 **Document tabs** (NV-04, #381) are the third thing, beside the workspace and the layout: *what you are
 working on*. Inside a workspace the things you open are tabs: maps in Map and World, files in Files,

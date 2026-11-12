@@ -78,6 +78,21 @@ const ALLOWED: &[Allowed] = &[
         needle: "std::fs::rename(path, PathBuf::from(previous))",
         why: "rotating the editor's log to cauldron.log.1 at startup moves a whole closed file in the user's data folder; it writes no bytes",
     },
+    Allowed {
+        file: "bevy_cauldron/src/ops_play.rs",
+        needle: "std::fs::File::create(path)",
+        why: "creates the running game's output log empty in the per-user temp directory (`ops_play::log_path`); it is not a project file, nothing reads it but the Game workspace, and it is removed when the game stops",
+    },
+    Allowed {
+        file: "bevy_cauldron/src/ops_play.rs",
+        needle: "std::fs::OpenOptions::new().append(true).open(path)",
+        why: "reopens the game's log for append, which is the handle the game writes its own output through (`append(true)`), so a cut by the editor never loses a later line; a per-user temp file, not a project file",
+    },
+    Allowed {
+        file: "bevy_cauldron/src/ops_play.rs",
+        needle: "std::fs::OpenOptions::new().write(true).open(path)",
+        why: "cuts the game's log back past its size cap (`ops_play::enforce_log_cap`); a per-user temp file the editor owns, not a project file",
+    },
 ];
 
 fn workspace_root() -> PathBuf {

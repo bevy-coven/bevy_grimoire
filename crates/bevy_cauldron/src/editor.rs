@@ -2609,7 +2609,7 @@ impl Plugin for EditorPlugin {
                     crate::light_overlay::follow_the_light_map_tick,
                     crate::light_overlay::draw_light_overlay
                         .after(crate::light_overlay::refresh_light_overlay)
-                        .run_if(in_map_mode)
+                        .run_if(in_map_or_world_mode)
                         .run_if(resource_exists::<OpenMap>)
                         .run_if(resource_exists::<Project>),
                 ),
@@ -2634,6 +2634,12 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::add_meshes::AddMeshesPlugin);
         app.add_plugins(crate::menu_bar::MenuBarPlugin);
         app.add_plugins(crate::activity_bar::ActivityBarPlugin);
+        // **The World and Sound workspaces' panels** (NV-08, #385): spawned when their workspace is entered.
+        app.add_plugins(crate::workspace_panels::WorkspacePanelsPlugin);
+        // **The Game workspace** (NV-09, #386): the running game's panel, its log and its state, and the watching of it.
+        app.add_plugins(crate::game_view::GameViewPlugin);
+        // **The Agent workspace** (NV-10, #387): the Familiar's block and history, in a workspace of their own.
+        app.add_plugins(crate::agent_view::AgentViewPlugin);
         // **The Files workspace** (GD-11, #373): the file tree and the code editor.
         app.add_plugins(crate::files::FilesPlugin);
         app.add_plugins(crate::files_panel::FilesPanelPlugin);
@@ -2867,7 +2873,7 @@ impl Plugin for EditorPlugin {
                         // goes down, rather than one where it is invisible and still eating keys.
                         leaving_a_tab_puts_the_name_prompt_down.in_set(keys::Phase::Sense),
                     ),
-                    (size_edit_keys, family_edit_keys, data_edit_keys, terrain_edit_keys, crowd_edit_keys, drop_reference).in_set(keys::Phase::Text),
+                    (size_edit_keys, family_edit_keys, data_edit_keys, crowd_edit_keys, drop_reference).in_set(keys::Phase::Text),
                     // No `not_typing`, no `in_map_mode`: `keys::just_pressed` now refuses on both
                     // counts, and a run condition repeating it would be a second census. Dropping
                     // `in_map_mode` also makes `Cmd+S` and `Cmd+Z` work from every tab, which is what
@@ -2986,7 +2992,6 @@ impl Plugin for EditorPlugin {
                         refresh_size,
                         refresh_family,
                         refresh_data,
-                        refresh_terrain,
                         refresh_crowd,
                         refresh_data_list,
                         refresh_notes_list,
@@ -3032,6 +3037,15 @@ impl Plugin for EditorPlugin {
                 relevel_placements
                     .run_if(in_state(crate::screen::Screen::Editor))
                     .run_if(crate::workspace::Workspace::map_is_open),
+            )
+            // **The terrain line lives in the World workspace** (NV-08, #385), so its readout and its keys run
+            // there and nowhere else: the Map's INSPECTOR no longer draws it. Not behind `map_is_open`, which is
+            // the Map's alone; both take `Option` of the map, so a workspace with none is quiet.
+            .add_systems(
+                Update,
+                (terrain_edit_keys.in_set(keys::Phase::Text), refresh_terrain)
+                    .run_if(in_state(crate::screen::Screen::Editor))
+                    .run_if(crate::workspace::Workspace::world_is_open),
             )
             // **The ghost pair is NOT map-door gated** — the map block above was swallowing it. A
             // tile's picked-but-not-dropped mesh (`StagedTile` + `Ghost`) is assembled on the Tiles
@@ -3902,77 +3916,8 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 );
             });
 
-            // **Play (#97):** start the project's game on the open map at the camera, and stop it.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(crate::ops_play::spawn_section);
-
-            // **Build (#371, GD-09):** rebuild the project's game when a change needs Rust, watching
-            // it as a background job, and relaunch on the same map when it works.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(crate::build_view::spawn_section);
-
-            // **Environment (#98):** clock scrubber and forced weather, for a project that uses `bevy_elements`.
-            #[cfg(feature = "bevy_elements")]
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(crate::environment::spawn_section);
-
-            // **Lights (#103):** the pool's budget from where the camera looks.
-            #[cfg(feature = "bevy_lights")]
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(crate::ops_pool::spawn_section);
-
-            // **Audio (S-01):** `bevy_siren`'s buses and cues, with an audition and its log.
-            #[cfg(feature = "bevy_siren")]
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(crate::audio_panel::spawn_section);
-
-            // **Light map (#103):** show or hide `bevy_light_grid`'s field over the open map.
-            #[cfg(feature = "bevy_light_grid")]
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(crate::light_overlay::spawn_section);
-
-            // **Terrain (#99).** One line: `<brush> <x> <z> <radius_m> <strength>`, e.g.
-            // `raise 12 8 6 2`. Enter sculpts the open map's ground through `terrain_stroke`.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(|s| {
-                crate::chrome::section(s, "TERRAIN");
-                crate::chrome::text_field(
-                    s,
-                    Val::Percent(100.0),
-                    TerrainField,
-                    crate::chrome::text::BODY,
-                    ("brush x z radius strength".to_owned(), crate::chrome::ink().text),
-                    TerrainReadout,
-                );
-            });
+            // **Play and Build have moved to the Game workspace** (NV-09, #386): the same two sections, the same
+            // buttons and observers, spawned in `game_view::spawn_game_panel` — there is no second launcher.
 
             // **Crowd (#107).** One line: `<from_x> <from_z> <to_x> <to_z> <walkers>`, e.g. `-8 -8 8 8 40`.
             // Enter walks that many people between two 2 m squares round the open map's solid pieces.
@@ -4139,6 +4084,32 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 ));
             });
         });
+    });
+}
+
+/// **The TERRAIN section** (#99, NV-08 #385): one line, `<brush> <x> <z> <radius_m> <strength>`, e.g.
+/// `raise 12 8 6 2`; Enter sculpts the open map's ground through `terrain_stroke`.
+///
+/// **In the World workspace now, not in the Map's INSPECTOR.** Terrain is the ground under the level, and the
+/// world's panels are one job (`docs/ui/vision.md` §4); the field is the same node with the same observers, so
+/// only where it is spawned moved. Its function is here because [`TerrainField`] and [`TerrainReadout`] are
+/// this module's.
+pub(crate) fn spawn_terrain_section(p: &mut ChildSpawnerCommands) {
+    p.spawn(Node {
+        flex_direction: FlexDirection::Column,
+        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
+        ..default()
+    })
+    .with_children(|s| {
+        crate::chrome::section(s, "TERRAIN");
+        crate::chrome::text_field(
+            s,
+            Val::Percent(100.0),
+            TerrainField,
+            crate::chrome::text::BODY,
+            ("brush x z radius strength".to_owned(), crate::chrome::ink().text),
+            TerrainReadout,
+        );
     });
 }
 
@@ -8273,6 +8244,40 @@ fn history_nodes(state: &EditorState) -> Vec<bevy_gooey::TreeNode> {
         .collect()
 }
 
+/// **The most rows a move of the history's current line may relabel one by one** before the list is built whole: an undo
+/// or a redo is one or two, a jump across a long stretch of the history is not.
+const MOST_HISTORY_ROWS_RELABELLED: usize = 16;
+
+/// **Put what a move of the two stacks changed into the history's tree row by row** (UI-93, #259), and `false` when the
+/// move is not one this can name, so the caller builds the whole list.
+///
+/// Two moves are named. **An entry recorded on the end** (nothing was waiting to be redone before or after) relabels the
+/// line that was `now:` and adds the new last line. **A move of the current line with the same number of lines** (an undo,
+/// a redo, a jump) relabels the lines between the two positions, both included: the line the editor stood on loses its
+/// `now:`, the one it stands on gains it, and an entry that crossed from one stack to the other says so in its own
+/// words. Every other line is what it was.
+fn patch_history(nodes: &mut bevy_gooey::Tree, state: &EditorState, was: (usize, usize), now: (usize, usize)) -> bool {
+    let ((was_depth, was_redo), (depth, redo)) = (was, now);
+    if was_redo == 0 && redo == 0 && depth == was_depth + 1 {
+        let Some(last) = history_line(state, depth, depth) else { return false };
+        if let Some(line) = history_line(state, was_depth, depth) {
+            nodes.relabel(was_depth as u64, line);
+        }
+        return nodes.insert(None, bevy_gooey::TreeNode::new(depth as u64, last));
+    }
+    // **Only while something is left to redo.** Recording an entry clears the redo stack, so a move that ends with nothing to
+    // redo and the same number of lines may be an undo of two and two new entries as well as a redo of everything: the lines
+    // between the positions are not all what they were, and the list is built whole.
+    if redo > 0 && was_depth + was_redo == depth + redo && was_depth.abs_diff(depth) < MOST_HISTORY_ROWS_RELABELLED {
+        for position in was_depth.min(depth)..=was_depth.max(depth) {
+            let Some(line) = history_line(state, position, depth) else { return false };
+            nodes.relabel(position as u64, line);
+        }
+        return true;
+    }
+    false
+}
+
 /// What a history row needs to jump: the same resources the keyboard's undo system takes. The map's two are
 /// `Option`s because the click observer is global and a click can land where no map is open.
 #[derive(bevy::ecs::system::SystemParam)]
@@ -8375,7 +8380,12 @@ fn refresh_history(
     let _rebuild = spent.rebuilding();
     let Ok(mut table) = tables.get_mut(tree) else { return };
     let Some(nodes) = table.source_mut::<bevy_gooey::Tree>() else { return };
-    nodes.set_nodes(history_nodes(&state));
+    // **A stack that moved by one entry or by the current line touches the rows it names** and leaves the other 5,000 alone.
+    // **A patch that leaves the list a different length than the stacks say has drifted**, and the list is built whole.
+    let patched = mark.seen.is_some_and(|was| patch_history(nodes, &state, was, (depth, redo))) && nodes.node_count() == depth + redo + 1;
+    if !patched {
+        nodes.set_nodes(history_nodes(&state));
+    }
     // **The line the editor stands on is the selected one**, and gooey keeps that row where the person is
     // reading: a selection it did not see change is not scrolled to, so a rebuild leaves the view alone.
     commands
@@ -9283,6 +9293,13 @@ pub fn sense_context(
 /// `Workspace::map_is_open`, and for the same reason.
 pub(crate) fn in_map_mode(mode: Option<Res<crate::tiles::Mode>>) -> bool {
     mode.is_some_and(|m| *m == crate::tiles::Mode::Map)
+}
+
+/// **Is the Map or the World panel showing?** (NV-08, #385.) What the light map's overlay draws under: its button is in the World
+/// workspace now, and a toggle whose result is drawn only in the Map would show nothing where it was pressed.
+#[cfg(feature = "bevy_light_grid")]
+pub(crate) fn in_map_or_world_mode(mode: Option<Res<crate::tiles::Mode>>) -> bool {
+    mode.is_some_and(|m| matches!(*m, crate::tiles::Mode::Map | crate::tiles::Mode::World))
 }
 
 /// **The rule seed the project states for this map**, or `none` when no rule names it.

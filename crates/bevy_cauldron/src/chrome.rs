@@ -862,6 +862,12 @@ pub const GAP_TIGHT: f32 = 3.0;
 pub const GAP_ROW: f32 = 5.0;
 /// Between blocks. Several times [`GAP_TIGHT`], which is the whole point.
 pub const GAP_GROUP: f32 = 16.0;
+/// [`GAP_TIGHT`] in steps of the skin's gap, which is what a gooey row's or column's `gap` takes (0.6).
+pub const GAP_TIGHT_STEPS: f32 = GAP_TIGHT / SKIN_GAP_PX;
+/// [`GAP_GROUP`] in steps of the skin's gap (3.2).
+pub const GAP_GROUP_STEPS: f32 = GAP_GROUP / SKIN_GAP_PX;
+/// [`GAP_ROW`] in steps of the skin's gap (1.0: the editor skin's gap is the row gap).
+pub const GAP_ROW_STEPS: f32 = GAP_ROW / SKIN_GAP_PX;
 
 /// **A chip's (and a compact list row's) inset.** The 6 × 3 pair was an undeclared constant at
 /// twelve sites in five files before it had this name — the exact drift this module's header
@@ -2836,6 +2842,73 @@ pub fn row_value(row: &mut ChildSpawnerCommands, text: impl Into<String>, colour
         typed(text::BODY),
         marker,
     ));
+}
+
+/// **A margin for a text or a cell to stand off its neighbours by**, as the `Node` a text bundle needs (UI-59, #245).
+///
+/// A text carries a `Node` of its own, and a margin is the one thing about it a panel decides: the gap above a block, the
+/// half-step below a heading. The Kit panels used to spell it as a `Node` literal at each text; this is the one place that
+/// does, so a panel's spacing is read from a name and not from nine copies of the same four lines.
+pub fn spaced(margin: UiRect) -> Node {
+    Node { margin, ..default() }
+}
+
+/// **A gooey row with room around it** (UI-59, #245): [`bevy_gooey::row`] with no gap of its own, the margin outside it and
+/// its cells on `align` across.
+///
+/// gooey's row carries no margin and says nothing about alignment, and the skin writes only the fields a row owns (its gap
+/// and its floor width), so both are set over the bundle on the spawned entity, which keeps the one `Node` a bundle may
+/// hold. `.insert(..)` a marker on the returned commands, or `.with_children(..)` the row's cells.
+pub fn spaced_row<'a>(parent: &'a mut ChildSpawnerCommands, margin: UiRect, align: AlignItems) -> EntityCommands<'a> {
+    gapped_row(parent, 0.0, margin, align)
+}
+
+/// **A [`spaced_row`] whose cells stand `gap` steps of the skin's gap apart** (a gooey row's own rhythm: 1.0 is the skin's gap).
+pub fn gapped_row<'a>(parent: &'a mut ChildSpawnerCommands, gap: f32, margin: UiRect, align: AlignItems) -> EntityCommands<'a> {
+    let mut row = parent.spawn(bevy_gooey::row(gap));
+    row.entry::<Node>().and_modify(move |mut node| {
+        node.margin = margin;
+        node.align_items = align;
+    });
+    row
+}
+
+/// **A gooey row that wraps its cells onto a second line instead of running off the panel's edge** (UI-59, #245): the cells
+/// stand `gap` steps of the skin's gap apart and the lines `row_gap` px apart (gooey's rhythm is one number, so the line gap
+/// is the caller's), and the row may narrow below its widest run, which a gooey row always may (the skin floors its width at
+/// nothing), so a last chip is never clipped by the panel (the 2026-09-03 audit's F7).
+pub fn wrapping_row<'a>(
+    parent: &'a mut ChildSpawnerCommands,
+    gap: f32,
+    row_gap: f32,
+    margin: UiRect,
+    align: AlignItems,
+) -> EntityCommands<'a> {
+    let mut row = gapped_row(parent, gap, margin, align);
+    row.entry::<Node>().and_modify(move |mut node| {
+        node.flex_wrap = FlexWrap::Wrap;
+        node.row_gap = Val::Px(row_gap);
+    });
+    row
+}
+
+/// **A text that takes the rest of its row and wraps inside it** (UI-59, #245): a label column that grows with the row and
+/// may narrow below its words, so a long name wraps in its own column instead of widening the row past the panel.
+///
+/// A flex item's automatic minimum size is its content, so without the zero floor the column refuses to narrow and the
+/// row's last cell is clipped by the panel's edge (the 2026-09-03 audit's F7). Returns the commands so a caller can mark it.
+pub fn fill_text<'a>(row: &'a mut ChildSpawnerCommands, text: impl Into<String>, ink: Color, role: text::Role) -> EntityCommands<'a> {
+    row.spawn((
+        Node {
+            flex_grow: 1.0,
+            // CHROME-OK: zero is not a spacing step.
+            min_width: Val::Px(0.0),
+            ..default()
+        },
+        Text::new(text.into()),
+        TextColor(ink),
+        typed(role),
+    ))
 }
 
 /// **A chip** — one small clickable word. [`CHIP_PAD`] and a permanent 1 px border whose COLOUR

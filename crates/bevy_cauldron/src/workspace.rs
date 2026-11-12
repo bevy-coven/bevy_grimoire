@@ -156,12 +156,16 @@ impl Workspace {
             Workspace::Map => &[Mode::Map],
             Workspace::Kit => &[Mode::Meshes, Mode::Tiles, Mode::Compose],
             Workspace::Animation => &[Mode::Anim],
-            // **The project's files** (GD-11, #373): one panel, the file tree and its editor.
-            Workspace::Files => &[Mode::Files],
+            // **The world under the level, and the audio** (NV-08, #385): each is one panel of its own.
+            Workspace::World => &[Mode::World],
+            Workspace::Sound => &[Mode::Sound],
             // **Nothing yet.** These workspaces hold documents rather than panels (NV-04, NV-07) or
             // a page of their own (NV-08, NV-09, NV-10), and until they are built they show no
             // panel and are not registered.
-            Workspace::Project | Workspace::World | Workspace::Sound | Workspace::Game | Workspace::Agent => &[],
+            Workspace::Game => &[Mode::Game],
+            Workspace::Agent => &[Mode::Agent],
+            Workspace::Files => &[Mode::Files],
+            Workspace::Project => &[],
         }
     }
 
@@ -191,7 +195,10 @@ impl Workspace {
     /// A workspace that is not built is refused rather than shown empty: the vision's *"no
     /// placeholder screens"*.
     pub const fn is_built(self) -> bool {
-        matches!(self, Workspace::Map | Workspace::Kit | Workspace::Animation | Workspace::Files)
+        matches!(
+            self,
+            Workspace::Map | Workspace::Kit | Workspace::Animation | Workspace::World | Workspace::Sound | Workspace::Game | Workspace::Agent | Workspace::Files
+        )
     }
 
     /// **What this workspace is waiting for**, in the issue series' own words, or `None` when it is
@@ -199,12 +206,15 @@ impl Workspace {
     /// reads where it comes from instead of wondering whether the key works.
     pub const fn missing(self) -> Option<&'static str> {
         match self {
-            Workspace::Project | Workspace::World => Some("the Project and World workspaces arrive with NV-08 (#385)"),
-            Workspace::Sound => Some("the Sound workspace arrives with NV-08 (#385)"),
-            // `Files` is built (GD-11, #373): the file tree and the code editor.
-            Workspace::Game => Some("the Game workspace arrives with NV-09 (#386)"),
-            Workspace::Agent => Some("the Agent workspace arrives with NV-10 (#387)"),
-            Workspace::Map | Workspace::Kit | Workspace::Animation | Workspace::Files => None,
+            Workspace::Project => Some("the Project workspace arrives with NV-08 (#385)"),
+            Workspace::Map
+            | Workspace::Kit
+            | Workspace::Animation
+            | Workspace::World
+            | Workspace::Sound
+            | Workspace::Game
+            | Workspace::Agent
+            | Workspace::Files => None,
         }
     }
 
@@ -243,6 +253,28 @@ impl Workspace {
     /// there a map" but "may this workspace change one".
     pub fn map_is_open(workspace: Option<Res<Workspace>>) -> bool {
         workspace.is_some_and(|w| w.edits_the_map())
+    }
+
+    /// **Run condition: is the World workspace open?** (NV-08, #385.) What the World's panels need to keep
+    /// running — the terrain line's readout and its keys — and nothing the Map does. `Option`, for the reason
+    /// [`Self::map_is_open`] is.
+    pub fn world_is_open(workspace: Option<Res<Workspace>>) -> bool {
+        workspace.is_some_and(|w| *w == Workspace::World)
+    }
+
+    /// **Run condition: is the Sound workspace open?** (NV-08, #385.)
+    pub fn sound_is_open(workspace: Option<Res<Workspace>>) -> bool {
+        workspace.is_some_and(|w| *w == Workspace::Sound)
+    }
+
+    /// **Run condition: is the Game workspace open?** (NV-09, #386.)
+    pub fn game_is_open(workspace: Option<Res<Workspace>>) -> bool {
+        workspace.is_some_and(|w| *w == Workspace::Game)
+    }
+
+    /// **Run condition: is the Agent workspace open?** (NV-10, #387.)
+    pub fn agent_is_open(workspace: Option<Res<Workspace>>) -> bool {
+        workspace.is_some_and(|w| *w == Workspace::Agent)
     }
 
     /// Whether this workspace's middle is the world — the workspaces that share one viewport

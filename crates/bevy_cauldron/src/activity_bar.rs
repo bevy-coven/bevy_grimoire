@@ -80,8 +80,8 @@ impl Plugin for ActivityBarPlugin {
 /// **The badge for a workspace**, or `0` for none: `problems` is the reloads a file's edit did not take
 /// (refused, or waiting on a restart), `waiting` is the wishes and lessons nobody has answered.
 ///
-/// `Game` has no source — "a build running, or the game running or crashed" is a state and not a count,
-/// and it arrives with the workspace (NV-09) — so it answers `0` rather than a number nothing measured.
+/// `Game` answers `0` here: its badge is a state, not a count (a crash, [`crate::game_view::GameView::crashed`]), and the
+/// bar adds it where it reads the game ([`keep_the_activity_bar`]) so this stays a function of its inputs.
 pub fn badge(workspace: Workspace, problems: usize, waiting: usize) -> usize {
     match workspace {
         Workspace::Map => problems,
@@ -117,6 +117,7 @@ struct Wants<'w> {
     reloads: Option<Res<'w, crate::live::EditorReloads>>,
     wishes: Option<Res<'w, crate::present::Wishes>>,
     lessons: Option<Res<'w, crate::present::Lessons>>,
+    game: Option<Res<'w, crate::game_view::GameView>>,
 }
 
 /// **Spawn the bar while it is wanted, and keep it what it should show.**
@@ -138,7 +139,11 @@ fn keep_the_activity_bar(
     let wanted = wants.settings.is_none_or(|s| s.show_activity_bar) && !wants.view.is_some_and(|v| v.zen);
     let problems = problems(wants.reloads.as_deref());
     let waiting = waiting(wants.wishes.as_deref(), wants.lessons.as_deref());
-    let shown: Vec<(Workspace, usize)> = registered().into_iter().map(|w| (w, badge(w, problems, waiting))).collect();
+    let crashed = usize::from(wants.game.as_deref().is_some_and(crate::game_view::GameView::crashed));
+    let shown: Vec<(Workspace, usize)> = registered()
+        .into_iter()
+        .map(|w| (w, badge(w, problems, waiting) + if w == Workspace::Game { crashed } else { 0 }))
+        .collect();
 
     let mut current = false;
     for (entity, bar) in &bars {

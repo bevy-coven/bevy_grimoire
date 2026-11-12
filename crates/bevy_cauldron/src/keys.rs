@@ -79,6 +79,17 @@ pub enum Context {
     /// place — not a limit to route around, since
     /// Liapis names *"too many options"* as a cause of the user fatigue this is all shaped to avoid.
     Tiles,
+    /// **The World tab** (NV-08, #385): terrain, the environment and the lights. It has no key of its
+    /// own yet, so only the `Global` ones are live there — which is exactly the point of its being a
+    /// context at all: a Map verb must not fire on a tab that is not the Map.
+    World,
+    /// **The Sound tab** (NV-08, #385): the audio panel. No keys of its own, like [`Context::World`].
+    Sound,
+    /// **The Game tab** (NV-09, #386): the running game's panel. No keys of its own, like [`Context::World`]: Play and Stop
+    /// are buttons and the commands they already are.
+    Game,
+    /// **The Agent tab** (NV-10, #387): the Familiar's panel. No keys of its own, like [`Context::World`].
+    Agent,
     /// **The Files tab** (GD-11, #373): the file tree and the code editor. It has no key of its own, so only the
     /// `Global` ones are live there, which is the point of its being a context at all: a Map verb must not
     /// fire on a tab that is not the Map, and the code editor's own keys are gooey's (it holds `TextEditing`).
@@ -95,13 +106,17 @@ impl Context {
     /// **Every context a binding could be judged against**, in one place for the same reason
     /// [`Stance::ALL`] is: the badge tests sweep it, and a seventh context therefore costs one
     /// edit here rather than a hand-written list in each test that silently stops reaching it.
-    pub const ALL: [Context; 8] = [
+    pub const ALL: [Context; 12] = [
         Context::Global,
         Context::Map,
         Context::Meshes,
         Context::Anim,
         Context::Compose,
         Context::Tiles,
+        Context::World,
+        Context::Sound,
+        Context::Game,
+        Context::Agent,
         Context::Files,
         Context::Typing,
     ];
@@ -116,9 +131,16 @@ impl Context {
             // **A tab overlaps only itself.** Five arms rather than a `self == other` catch-all,
             // because the catch-all would also make a *new* context overlap only itself by default —
             // and the whole point of this table is that adding one costs a decision here.
-            (Map, Map) | (Meshes, Meshes) | (Tiles, Tiles) | (Anim, Anim) | (Compose, Compose) | (Files, Files) => {
-                true
-            }
+            (Map, Map)
+            | (Meshes, Meshes)
+            | (Tiles, Tiles)
+            | (Anim, Anim)
+            | (Compose, Compose)
+            | (World, World)
+            | (Sound, Sound)
+            | (Game, Game)
+            | (Agent, Agent)
+            | (Files, Files) => true,
             // **The tabs are never live together**, which is what lets them reuse each other's
             // letters freely: the Tiles tab walks a lattice with `T`/`F`/`G`/`H` and so does Meshes,
             // one tab over. `the_key_space_has_no_collisions` polices that they only do so here.
