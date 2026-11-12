@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-12
 
+- **ui-r06-collapse-split** `92a7f0d6b` Cmd+B collapses the shell split through gooey's CollapseSplit instead of a synthesised Enter key (#336) *No clip: visible, not yet recorded: fleet worker*
 - **ui-93-patched-rows** `4920d7d25` The outliner and the history take the one row a change names instead of rebuilding 10,000 and 5,000: the UI costs under 2 ms on every frame of a placement, an undo and a redo (#259) *No clip: performance of existing lists, no new picture; proved by a_change_to_the_map_reaches_the_lists_row_by_row and the_frame_a_change_lands_on_stays_inside_two_milliseconds*
 
 ## 2026-11-11
