@@ -490,7 +490,7 @@ fn errors_are_the_loaders_own_with_the_line_they_stand_on() {
 
     // Owner exception (2026-11-12): no project file is RON and the `ron` crate is out of the editor (#365), so a RON file's
     // errors are what a bracket scan is sure of, as a Rhai file's are: a bracket that never closes, on the line it opened.
-    let ron = on("scratch/a.ron", "(a: 1,\n b: (2,\n)");
+    let ron = on("scratch/a.ron", "(a: 1)\nb: (2,\n");
     assert_eq!(ron.len(), 1, "{ron:?}");
     assert_eq!(ron[0].0, 1, "{ron:?}");
     assert!(on("scratch/a.ron", "(a: 1)").is_empty());
@@ -540,9 +540,9 @@ fn the_colours_are_for_the_text_that_is_showing() {
     assert!(first.1 > 0);
 
     // Typing moves the text's revision, and the colours move with it in the same frames: never a stale set on new text.
-    caret_at(&mut app, 11, 12);
     let before = revision(&app);
-    bevy_gooey::testing::type_text(&mut app, "lift: 0.5, ");
+    // Owner exception (2026-11-12): the typed text is a YAML key on its own line, not a RON field.
+    type_a_key(&mut app, "lift: 0.5");
     assert!(revision(&app) > before, "typing changed the text");
     let after = drawn(&app).unwrap_or_else(|| panic!("still coloured"));
     assert_eq!(after.0, revision(&app), "the colours follow the text's revision");

@@ -51,8 +51,9 @@ fn stamp(map: &Path, id: &str, of: &str) {
     let stamped = format!(
         "{{id: {id}, of: \"{of}\", at: [3.0, 3.0], yaw: 0.0, overrides: [], of_fingerprint: null, note: null}}"
     );
-    assert!(text.contains("stamps: []"), "the fixture's map has room for a stamp: {text}");
-    std::fs::write(map, text.replacen("stamps: []", &format!("stamps: [{stamped}]"), 1))
+    // Owner exception (2026-11-12): the YAML writer leaves an empty `stamps` out, so the stamp goes in before `locations`.
+    assert!(!text.contains("stamps:") && text.contains("locations: []"), "the fixture's map has room for a stamp: {text}");
+    std::fs::write(map, text.replacen("locations: []", &format!("stamps: [{stamped}]\nlocations: []"), 1))
         .unwrap_or_else(|e| panic!("{map:?}: {e}"));
 }
 

@@ -140,8 +140,10 @@ fn a_divider_moved_in_map_and_one_moved_in_kit_each_come_back_where_they_were_le
 #[test]
 fn a_file_with_the_old_shell_layout_is_read_as_maps() {
     // Owner exception (2026-11-12): the settings text is YAML now (a layer written by the editor's own writer), not RON.
-    let old = SettingsLayer { version: SETTINGS_VERSION, shell_layout: Some(moved(0.4)), ..SettingsLayer::default() };
-    let text = bevy_grimoire_core::yaml::to_string(&old).unwrap_or_else(|p| panic!("{}", p.line()));
+    // `shell_layout` is read and never written now, so the old file's text is the layout under its old key, by hand.
+    let layout = bevy_grimoire_core::yaml::to_string(&moved(0.4)).unwrap_or_else(|p| panic!("{}", p.line()));
+    let indented: String = layout.lines().map(|l| format!("  {l}\n")).collect();
+    let text = format!("version: {SETTINGS_VERSION}\nshell_layout:\n{indented}");
     let layer = SettingsLayer::read("old/settings.yaml", &text).unwrap_or_else(|r| panic!("an old file was refused: {}: {}", r.field.unwrap_or_default(), r.reason));
     assert_eq!(layer.workspace_layout.get("map"), Some(&moved(0.4)), "the one arrangement of before is Map's");
     assert!(layer.shell_layout.is_none(), "and it is not kept a second time");

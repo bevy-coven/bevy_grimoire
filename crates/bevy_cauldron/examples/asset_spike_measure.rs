@@ -130,7 +130,7 @@ fn trial(way: Way, n: u32, dir: &Path) -> [Seen; 4] {
 /// Returns the milliseconds from the first write to each file's arrival in the asset system (`None` for a
 /// file that never arrived), and how many reloads a `FileWatch` over the directory said were due.
 fn set_trial(n: u32, gap_ms: u64, dir: &Path) -> (Vec<Option<f64>>, u32) {
-    const FILES: [&str; 3] = ["a.ron", "b.ron", "c.ron"];
+    const FILES: [&str; 3] = ["a.yaml", "b.yaml", "c.yaml"];
     for file in FILES {
         atomic_file::write(&dir.join(file), text(0)).expect("a first text");
     }
