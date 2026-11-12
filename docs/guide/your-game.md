@@ -38,11 +38,11 @@ Your game keeps its bevy_grimoire data in one folder, `assets/grimoire/`, inside
 
 A kit folder must be bound in `kits.yaml` before the game can load it. See the data file reference for every file's format.
 
-**A project written before the cutover holds `.yaml` files, and it is refused at open** rather than opened half-read. Run `bevy_cauldron migrate <project folder>` once: it converts every file whose kind already reads YAML, leaves the RON originals in `<project>/.dark_factory/migrated-ron/`, and prints one line per converted file and every comment it could not place. A project it refuses is left byte for byte as it was. See [Moving a project to YAML](#moving-a-project-to-yaml).
+**A project written before the cutover holds `.ron` files, and it is refused at open** rather than opened half-read. Run `bevy_cauldron migrate <project folder>` once: it converts every project file, and the data files a game registers in its `data.yaml`, leaves the RON originals in `<project>/.dark_factory/migrated-ron/`, and prints one line per converted file and every comment it could not place. A project it refuses is left byte for byte as it was. See [Moving a project to YAML](#moving-a-project-to-yaml).
 
 ### The rules a project file is read by
 
-The project's files are moving from RON to YAML, one kind at a time, and every one that has moved is read by
+The project's files are YAML, and every one is read by
 `bevy_grimoire_core::yaml` — the only place a project file is parsed or written as YAML, so every file the editor
 and an agent see is held to the same rules.
 
@@ -64,9 +64,9 @@ newline, and a string quoted only where YAML needs it.
 
 ### Moving a project to YAML
 
-A project written before the cutover keeps its `.yaml` files, and this build reads none of them. It is refused at
-open, naming the file it met and the command that fixes it, because opening one half-read and saving would write
-fresh YAML beside files a person still has — the one state nobody can read off the disk.
+A project written before the cutover holds `.ron` files, and this build reads none of them. It is refused at open,
+naming the file it met and the command that fixes it, because opening one half-read and saving would write fresh
+YAML beside files a person still has — the one state nobody can read off the disk.
 
 ```sh
 bevy_cauldron migrate <project folder>
@@ -74,19 +74,21 @@ bevy_cauldron migrate <project folder>
 
 The command, in order:
 
-- **converts every file whose kind this build already reads as YAML**, and no other: a kind still read as RON is
-  left exactly where it is, so a project is never left with a file nothing reads and a `.yaml` in the archive
-  everything needed;
+- **converts every project file**, of every kind: the kinds this crate has a type for are read as that type, and
+  the rest — the editor's settings, the checks, a family crate's, a kit's forests, people, scripts and trees, and a
+  game's own data files — are converted by value, from the RON into a tree and back, and compared;
+- **follows a game's own data files through its `data.yaml`**: each `.ron` file a registry names is converted beside
+  it and the registry's `path:` line is rewritten to the YAML, so the registry and its files always agree;
 - **proves each one first.** A file is parsed as RON, written as YAML, and read back with the type's YAML reader.
   A value that would come back different stops the whole run, names the file, and **writes nothing at all** — not
   that file, not the ones before it;
 - **carries the comments.** A RON comment is written as a YAML comment above the same key wherever it has a place.
-  One that has none — above a list item, or after the file's last field — is printed in the report, never dropped
-  quietly;
+  A trailing `//` after a value and a `/* … */` block are carried too. One that has no place — a file header, or a
+  key the writer does not emit — is printed in the report, never dropped quietly;
 - **moves the old files, never deletes them**, to `<project>/.dark_factory/migrated-ron/`, keeping their paths, so
   you can diff what it did and go back if you must;
-- **refuses rather than replace.** A `kits.yaml` already beside its `kits.yaml` is a file a person made, and the run
-  stops before writing over it.
+- **refuses to replace.** A `kits.yaml` already beside its `kits.ron` is a file a person made, and the run stops
+  before writing over it.
 
 It prints one line per converted file, then every comment it could not place, then where the originals went. A
 project with nothing left to convert prints that instead of nothing.

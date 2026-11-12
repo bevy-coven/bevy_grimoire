@@ -40,8 +40,20 @@ fn the_headless_editor_refuses_it_too() {
     assert_refused(&said, &rel, &root);
 }
 
-// `grimoire/project_open` (an agent's open) calls `project_assets::open_project`, which opens through `Project::open_staged`: the
-// first test above is its refusal.
+/// **An agent's `grimoire/project_open` is refused too, with the same sentence** (review M5 a).
+///
+/// The op checks the folder through `launcher::check_project` and then queues `project_assets::open_project`, which points at the
+/// project before any screen moves. So the refusal is what `point_at` answers — a plain string the op logs — and this is the
+/// path an agent takes, which the three tests above never exercise: they go through `Project::open_staged` directly.
+#[test]
+fn an_agents_project_open_is_refused_naming_the_file_and_the_command() {
+    let (root, rel) = project("ron_agent_open");
+    let mut world = bevy::prelude::World::new();
+    let said = bevy_cauldron::project_assets::open_project(&mut world, &root, None)
+        .err()
+        .unwrap_or_else(|| panic!("an agent opened a project holding RON"));
+    assert_refused(&said, &rel, &root);
+}
 
 /// **Migrating the project is what lets it open**: the leftover file converts, the project opens with no problem, and the
 /// forest reads from its YAML.

@@ -53,6 +53,7 @@ mod a_composed_proposal_draws_its_members;
 mod a_composition_can_be_renamed;
 mod a_damaged_oplog_line_is_named_and_the_rest_still_reads;
 mod the_migrate_command_line;
+mod a_refused_project_offers_to_migrate_itself;
 mod a_project_with_a_ron_file_is_refused_at_open;
 mod an_old_users_files_are_converted_once;
 mod an_oplog_line_of_another_version_is_refused;

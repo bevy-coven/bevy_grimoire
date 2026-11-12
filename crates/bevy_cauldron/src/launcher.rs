@@ -445,7 +445,7 @@ impl Plugin for LauncherPlugin {
             .add_systems(OnEnter(Screen::Launcher), (build_launcher, fill_the_home).chain())
             .add_systems(
                 Update,
-                (hide_the_divider, open_requested, on_picked, say_the_problem, redraw_the_cards, apply_filter, show_the_tab, mark_the_focus)
+                (hide_the_divider, say_the_startup_notices, open_requested, on_picked, say_the_problem, redraw_the_cards, apply_filter, show_the_tab, mark_the_focus)
                     .chain()
                     .run_if(in_state(Screen::Launcher)),
             );
@@ -1319,6 +1319,21 @@ fn on_picked(mut picked: MessageReader<Picked>, recents: Option<Res<RecentProjec
             // The new-project form's Location and the editor's Add meshes… take their own answers.
             PickFor::Location | PickFor::AddMeshes => {}
         }
+    }
+}
+
+/// **Says what the one-time upgrade of a person's own files did**, once, on the first screen they see.
+///
+/// `legacy::upgrade_user_files` converts `settings.ron`, `recent.ron` and `trusted.ron` at startup and answers a sentence per
+/// file. It also goes to the log, but a bundle launch has no terminal — and a person whose keymap was just carried over should
+/// be told rather than discover it. The resource is taken as it is read, so the notices are said once and not every entry.
+fn say_the_startup_notices(mut commands: Commands, mut notices: Option<ResMut<crate::legacy::StartupNotices>>) {
+    let Some(notices) = notices.as_mut() else { return };
+    // **`toast_alert`, because every sentence is one a person has to act on**: `settings.ron` was converted (their keymap is
+    // there), or it could not be and this build ignores it. It stands until dismissed, which is what a message about a file on
+    // their disk deserves.
+    for notice in notices.0.drain(..) {
+        commands.spawn(toast_alert(notice).sticky());
     }
 }
 

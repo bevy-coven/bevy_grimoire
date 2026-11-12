@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-12
 
+- **gd-03-refusal-offers-the-migration** `201764bb` A project refused for still holding RON offers the migration on the screen that refused it *For you: A project from before the cutover now shows a Migrate button where it says why it will not open, so you do not have to leave the window* *No clip: no clip yet: the button and its conversion are proved by bevy_cauldron/tests/a_refused_project_offers_to_migrate_itself.rs (5 tests); the editor's own screen is owed a recording*
 - **gd-10-sample-game** `81f82273f` A sample game made of YAML and Rhai in games/sample, played by a test from the YAML and from the bake *No clip: visible, not yet recorded: fleet worker*
 - **gd-08-bake-for-release** `c19954bdb` cauldron bake turns every YAML file a game loads into binaries, proved against the YAML; a baked release refuses stale data naming the file *No clip: a build step; proved by a_bake_is_proved_against_the_yaml and the sample game's baked playthrough*
 - **gd-03-every-file-is-yaml** `6dc96b1cc` Every project file, and the user's own settings, recent and trusted files, are YAML; cauldron migrate moves an old project and an old project is refused at open naming the command *No clip: visible, not yet recorded: fleet worker*

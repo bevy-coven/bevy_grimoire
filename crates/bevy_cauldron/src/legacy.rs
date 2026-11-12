@@ -6,6 +6,16 @@
 
 use std::path::PathBuf;
 
+use bevy::prelude::Resource;
+
+/// **What the one-time upgrade said, carried into the running app** so it is on screen and not only in the log.
+///
+/// One sentence per file touched (converted, or refused and why). [`crate::launcher`] spawns a toast for each on
+/// entering the Projects home, which is the first screen a person sees after an upgrade; a run that found nothing to
+/// upgrade carries an empty list and says nothing.
+#[derive(Resource, Clone, Debug, Default, PartialEq, Eq)]
+pub struct StartupNotices(pub Vec<String>);
+
 /// **The user files this build reads**, as the stems of the `.ron` they used to be.
 pub const SETTINGS_STEM: &str = "settings";
 /// The recent-projects file's stem.

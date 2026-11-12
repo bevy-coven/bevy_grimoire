@@ -196,7 +196,3 @@ path = "tests/all.rs"
 [[example]]
 name = "asset_spike_measure"
 required-features = ["asset_spike"]
-
-[[example]]
-name = "fixtures_to_yaml"
-required-features = ["bevy_elements"]

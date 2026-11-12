@@ -41,12 +41,6 @@ fn main() -> AppExit {
         return bake_and_exit(&argv, args::PROGRAM);
     }
 
-    // **A person's old `.ron` files are converted once, here** (M3 of the review): settings, recent projects and trusted guides
-    // would otherwise reset on upgrade. A file that cannot be converted is said out loud, never skipped.
-    for notice in bevy_cauldron::legacy::upgrade_user_files(bevy_grimoire_core::user_dirs::config_dir(), bevy_grimoire_core::user_dirs::data_dir()) {
-        eprintln!("{notice}");
-    }
-
     // **`bevy_audio` is opened only when something plays a sound.** The editor links
     // `bevy_audio` through `DefaultPlugins`, and an audio device that fails is what loops
     // (`crate::log_filter` has the measurement: 13.5 GB in five minutes). The only thing in this
@@ -68,6 +62,18 @@ fn main() -> AppExit {
         log.line(&bevy_cauldron::log_file::starting_line(&argv));
         bevy_cauldron::log_file::install_panic_hook(log.clone());
     }
+    // **A person's old `.ron` files are converted once, here** (M3 of the review): settings, recent projects and
+    // trusted guides would otherwise reset on upgrade. After the log is open, because this is the one sentence a
+    // person needs after a Finder launch and a bundle has no terminal for stderr; and carried into the launcher as
+    // well (`bevy_cauldron::legacy::StartupNotices`), so it is on screen and not only in a file. A file that cannot
+    // be converted is said out loud, never skipped.
+    let upgrading = bevy_cauldron::legacy::upgrade_user_files(bevy_grimoire_core::user_dirs::config_dir(), bevy_grimoire_core::user_dirs::data_dir());
+    for notice in &upgrading {
+        eprintln!("{notice}");
+        if let Some(log) = &log {
+            log.line(notice);
+        }
+    }
     // **The project is the asset root, and which project is decided later** (`project_assets`): a project named
     // on the command line is pointed at below, and one chosen on the launcher is pointed at when it is chosen.
     // Registered before `DefaultPlugins`, which builds the asset sources.
@@ -76,6 +82,7 @@ fn main() -> AppExit {
     if let Some(log) = log.clone() {
         app.insert_resource(log);
     }
+    app.insert_resource(bevy_cauldron::legacy::StartupNotices(upgrading));
     app.add_plugins(
         plugins
             // **One repeated log line filled a 16 GB RAM disk** (`bevy_cauldron::log_filter`): an
@@ -333,7 +340,7 @@ fn migrate_and_exit(argv: &[String], program: &str) -> AppExit {
         Ok(report) => {
             let lines = report.lines();
             if lines.is_empty() {
-                println!("nothing to migrate: no file of a kind this build already reads as YAML is still RON");
+                println!("nothing to migrate: this project holds no `.ron` project file, and no `data.yaml` names one");
             }
             for line in lines {
                 println!("{line}");

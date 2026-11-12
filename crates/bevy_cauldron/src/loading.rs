@@ -33,7 +33,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use bevy::prelude::*;
-use bevy_gooey::{Progress, ProgressText, button, heading, label, observe, panel, progress, screen, spinner};
+use bevy_gooey::{Progress, ProgressText, button, heading, label, observe, panel, progress, screen, spinner, toast, toast_alert};
 
 use bevy_grimoire_core::problem::{Detail, Location, Problem};
 use bevy_grimoire_core::reload::{self, Base};
@@ -127,6 +127,10 @@ pub struct LoadFailed(pub String);
 struct LoadingRoot;
 #[derive(Component)]
 struct ReportCard;
+
+/// **The button a refused project offers** (GD-03, #365): it runs `bevy_cauldron migrate` on the project this screen was asked
+/// to open, then opens it again. The same three words the refusal names, so a person reading the sentence finds the button.
+pub const MIGRATE_LABEL: &str = "Migrate it";
 #[derive(Component)]
 struct LoadingPanel;
 #[derive(Component)]
@@ -337,6 +341,7 @@ fn show_the_report(
     mut commands: Commands,
     report: Option<Res<LoadReport>>,
     failed: Option<Res<LoadFailed>>,
+    request: Option<Res<LoadRequest>>,
     cards: Query<(), With<ReportCard>>,
     root: Query<Entity, With<LoadingRoot>>,
 ) {
@@ -344,6 +349,7 @@ fn show_the_report(
         return;
     }
     let Ok(root) = root.single() else { return };
+    let migratable = migrate_offer(request.as_deref(), failed.is_some());
     // A project that did not open is a card too: its reason, and the way back. One that opened with files that
     // do not read adds Open anyway.
     let (head, rows, open_anyway) = match (&report, &failed) {
@@ -369,6 +375,37 @@ fn show_the_report(
                         observe(|_: On<bevy_gooey::Activate>, mut next: ResMut<NextState<Screen>>| next.set(Screen::Editor)),
                     ));
                 }
+                // **The way out of the one refusal the editor can fix itself** (GD-03, #365): a project holding `.ron` files is
+                // refused by name and by command, and until now a person had to leave the window to run it. The button runs the
+                // same library call the `migrate` subcommand does, then opens the project again — it never runs anything else, and
+                // a migration that refuses says why in a toast and leaves the card up.
+                if let Some(root) = migratable.clone() {
+                    row.spawn((
+                        button(MIGRATE_LABEL),
+                        observe(move |_: On<bevy_gooey::Activate>, mut commands: Commands, mut out: MessageWriter<crate::launcher::OpenRequest>, mut next: ResMut<NextState<Screen>>| {
+                            match migrate_now(&root) {
+                                Ok(lines) => {
+                                    // **One line per file it converted, then the project opens again** — the same words the
+                                    // subcommand prints, so the button and the command are one behaviour.
+                                    commands.spawn(toast(format!("Migrated {}: {} file(s)", root.display(), lines.len())));
+                                    for line in lines {
+                                        commands.spawn(toast(line));
+                                    }
+                                    // `OpenRequest` is read on the Projects home, so the card takes a person there and the
+                                    // home opens the project: the same road the editor's own open takes, no second one.
+                                    commands.remove_resource::<LoadFailed>();
+                                    next.set(Screen::Launcher);
+                                    out.write(crate::launcher::OpenRequest(root.clone()));
+                                }
+                                Err(problem) => {
+                                    // **A migration that refuses says why and leaves the card up**: the project is byte for
+                                    // byte as it was, so the person can look at the file it named.
+                                    commands.spawn(toast_alert(problem.line()).sticky());
+                                }
+                            }
+                        }),
+                    ));
+                }
                 row.spawn((
                     button("Back"),
                     observe(|_: On<bevy_gooey::Activate>, mut commands: Commands, mut next: ResMut<NextState<Screen>>| {
@@ -384,3 +421,27 @@ fn show_the_report(
 /// One file of the report.
 #[derive(Component)]
 pub struct ReportRow;
+
+/// **The project a refused screen offers to migrate**, or `None` when there is nothing to offer.
+///
+/// Only a refusal offers anything, and only a project the migration library has work for: `migrate::plan` is the same walk
+/// `leftover` refuses on, so the button appears for exactly the projects `bevy_cauldron migrate` would convert and never on a
+/// project the migration would have nothing to do with. A project folder that cannot be listed is not offered either — the open
+/// that refused it is where that is said.
+pub fn migrate_offer(request: Option<&LoadRequest>, refused: bool) -> Option<std::path::PathBuf> {
+    if !refused {
+        return None;
+    }
+    let root = crate::args::root_of(&request?.0);
+    bevy_grimoire_migrate::plan(&root).ok().filter(|planned| !planned.is_empty()).map(|_| root)
+}
+
+/// **Run the migration on `root` and answer the sentences to say**, or the refusal that stopped it.
+///
+/// The same library call `bevy_cauldron migrate` makes, with the same words, so the button and the subcommand cannot give
+/// different answers. It changes files on disk before it answers: a caller says the result, it does not retry.
+#[allow(clippy::result_large_err)]
+pub fn migrate_now(root: &std::path::Path) -> Result<Vec<String>, bevy_grimoire_core::problem::Problem> {
+    let command = format!("{} migrate {}", crate::args::PROGRAM, root.display());
+    bevy_grimoire_migrate::migrate_as(root, &command).map(|report| report.lines())
+}

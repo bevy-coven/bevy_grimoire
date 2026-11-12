@@ -135,6 +135,10 @@ pub struct Report {
     pub unplaced: Vec<Unplaced>,
     /// Where the old files were moved to, relative to the project root ([`ARCHIVE_DIR`]).
     pub archived_at: String,
+    /// **Every folder the walk could not list**, as `folder (why)`. A folder that cannot be read is not fatal — an
+    /// unmigrated project's whole worth is that it still opens — so its files are not part of the plan and this says which
+    /// folder that was. It is here rather than on stderr because the migration is a library and this is its report.
+    pub unread: Vec<String>,
 }
 
 impl Report {
@@ -150,6 +154,9 @@ impl Report {
         }
         for u in &self.unplaced {
             out.push(format!("{}: comment not placed ({}): {}", u.file, u.why, u.comment));
+        }
+        for folder in &self.unread {
+            out.push(format!("{folder} could not be listed, so its files are not part of this migration"));
         }
         if !self.converted.is_empty() {
             out.push(format!("{} file(s); the RON originals are in {}", self.converted.len(), self.archived_at));
@@ -173,18 +180,21 @@ pub fn yaml_path(rom: &Path) -> Option<PathBuf> {
 /// is left alone: this walks what the registry states, not every file that happens to be RON.
 #[allow(clippy::result_large_err)]
 pub fn plan(root: &Path) -> Result<Vec<(PathBuf, String, &'static FileKind)>, Problem> {
+    plan_and_unread(root).map(|(planned, _)| planned)
+}
+
+/// **[`plan`], and the folders the walk could not read**, each as `folder (why)`.
+///
+/// A library does not print: the migration's own report is where a person looks, so the folders that could not be listed travel
+/// with the answer and [`migrate_as`] puts them in it. [`plan`] is this without them, for a caller that only wants the files.
+#[allow(clippy::result_large_err)]
+pub fn plan_and_unread(root: &Path) -> Result<(Vec<(PathBuf, String, &'static FileKind)>, Vec<String>), Problem> {
     let mut out = Vec::new();
     let mut skipped = Vec::new();
     walk(root, root, &mut out, &mut Vec::new(), &mut skipped)?;
-    // **A folder that cannot be listed is reported, never fatal.** [`leftover`] is what an *open* calls, and
-    // a project whose one unreadable subfolder (a key-only backup, a folder from another account) refused
-    // the open would be a project nobody can open again. The list still answers what it could read, and the
-    // folders it could not are said out loud on stderr rather than swallowed.
-    for (dir, why) in &skipped {
-        eprintln!("migrate: cannot read {} ({why}), so its files are not part of this plan", dir.display());
-    }
+    let unread = skipped.iter().map(|(dir, why)| format!("{} ({why})", dir.display())).collect();
     out.sort();
-    Ok(out
+    let planned = out
         .into_iter()
         .filter_map(|rel| {
             if !rel.ends_with(&format!(".{RON_EXT}")) || is_archived(&rel) {
@@ -193,7 +203,8 @@ pub fn plan(root: &Path) -> Result<Vec<(PathBuf, String, &'static FileKind)>, Pr
             let kind = kind_of_rel(&rel)?;
             Some((root.join(&rel), rel, kind))
         })
-        .collect())
+        .collect();
+    Ok((planned, unread))
 }
 
 /// The kind of a project file named relative to the project root, which is where both bases hang from.
@@ -665,7 +676,8 @@ fn migrate_where(
     command: &str,
     wants: impl Fn(&FileKind) -> bool,
 ) -> Result<Report, Problem> {
-    let mut plan: Vec<_> = plan(root)?.into_iter().filter(|(_, _, kind)| wants(kind)).collect();
+    let (planned, unread) = plan_and_unread(root)?;
+    let mut plan: Vec<_> = planned.into_iter().filter(|(_, _, kind)| wants(kind)).collect();
     plan.extend(registered_data_files(root)?);
     let mut converted = Vec::new();
     let mut pending: Vec<(PathBuf, String, PathBuf)> = Vec::new();
@@ -754,7 +766,7 @@ fn migrate_where(
     for (path, rel, _) in &rewritten {
         converted.push(Converted { rom: String::new(), yaml: rel.clone(), kind: "data_registry", comments_carried: 0, unplaced: Vec::new(), text: std::fs::read_to_string(path).unwrap_or_default() });
     }
-    Ok(Report { converted, unplaced, archived_at: ARCHIVE_DIR.to_owned() })
+    Ok(Report { converted, unplaced, archived_at: ARCHIVE_DIR.to_owned(), unread })
 }
 
 /// `path`, or `path.1`, `path.2`, … — the first name beside it that is not taken.
