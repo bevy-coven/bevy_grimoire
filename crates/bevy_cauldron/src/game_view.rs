@@ -472,6 +472,7 @@ pub struct GameRootPane;
 
 /// What [`draw_the_game`] writes into, bundled for the system-parameter limit.
 #[derive(SystemParam)]
+#[allow(clippy::type_complexity)]
 struct Targets<'w, 's> {
     status: Query<'w, 's, &'static mut Text, With<GameStatus>>,
     log: Query<'w, 's, &'static mut Text, (With<GameLog>, Without<GameStatus>)>,

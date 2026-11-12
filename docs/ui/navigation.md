@@ -39,14 +39,14 @@ did, in order.
 | A map's water | press Cmd/Ctrl+3 (the World workspace) | 1 | 0 | **no** — water is an operation (`water_place`) written through the World workspace's terrain line; it has no panel of its own, so nothing draws a map's water to walk to |
 | A map's forest | press Cmd/Ctrl+3 (the World workspace) | 1 | 0 | **no** — forest is an operation (`forest_scatter`) written through the World workspace's terrain line; it has no panel of its own, so there is nothing to walk to |
 | A map's lights | press Cmd/Ctrl+3 (the World workspace) | 1 | 0 | **no** — the LIGHTS block is in the World workspace but behind the off-by-default `bevy_lights` feature, and nothing else draws a pool |
-| A game data file | wheel down to `DATA` | 0 | 4 | yes |
-| The problems list | wheel down to `PROBLEMS` | 0 | 6 | yes |
-| The notes | wheel down to `NOTES` | 0 | 5 | yes |
+| A game data file | wheel down to `DATA` | 0 | 5 | yes |
+| The problems list | wheel down to `PROBLEMS` | 0 | 7 | yes |
+| The notes | wheel down to `NOTES` | 0 | 6 | yes |
 | The history | it is drawn beside UNDO and REDO, on screen at a cold start (1 line, 1 drawn) | 0 | 0 | yes |
 | The AGENT block | click `View`, click `Show agent` | 0 | 2 | yes |
 | The settings | Cmd+, | 1 | 0 | yes |
-| The running game's log | press Cmd/Ctrl+8 (the Game workspace) | 1 | 0 | yes |
+| The running game's log | Cmd+O (close project) | 1 | 0 | **no** — no panel or screen draws the running game's output: the workbench and the project page both read no log, and the game's output goes to stdout and cauldron.log |
 
 ## What the numbers say
 
-5 of 20 destinations cannot be reached at all. Of the 15 that can, 2 are where the editor already starts, 4 are reached by keys alone, and 9 need the pointer. The inspector moves only by the wheel, so scrolling to a heading costs between 4 and 6 notches. Set against that, a workspace model asks for any workspace in one press, any named thing in at most `Cmd+P`, its name and `Enter`, and one press back: 1 of these 15 cost more than one press and 9 of them need the pointer.
+6 of 20 destinations cannot be reached at all. Of the 14 that can, 2 are where the editor already starts, 3 are reached by keys alone, and 9 need the pointer. The inspector moves only by the wheel, so scrolling to a heading costs between 5 and 7 notches. Set against that, a workspace model asks for any workspace in one press, any named thing in at most `Cmd+P`, its name and `Enter`, and one press back: 1 of these 14 cost more than one press and 9 of them need the pointer.
