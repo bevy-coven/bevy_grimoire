@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-12
 
+- **gd-03-every-file-is-yaml** `6dc96b1cc` Every project file, and the user's own settings, recent and trusted files, are YAML; cauldron migrate moves an old project and an old project is refused at open naming the command *No clip: visible, not yet recorded: fleet worker*
 - **gd-14-agent-file-edit** `c071cc57d` An agent's file_edit lands live in the open file: comments kept, the person's caret untouched, the changed lines tinted *No clip: visible, not yet recorded: fleet worker*
 - **gd-13-project-replace** `c071cc57d` Find and replace across the project: a streaming, cancellable search, a diff preview, and Replace all as one operation with one undo *No clip: visible, not yet recorded: fleet worker*
 - **gd-12-file-editor-navigation** `c071cc57d` The file editor has a minimap, folding by structure, indent guides and find; the fold chords are the editor's own *No clip: visible, not yet recorded: fleet worker*
