@@ -1,11 +1,13 @@
 //! **A rig's clip is reached by `Cmd+P`, its name and `Enter`** (NV-11, #391; series getting around, #377).
 //!
 //! `docs/ui/navigation.md` measured a clip at a workspace chord and a click in the bench's list, against a target of the finder: the
-//! finder indexed rigs and no clips, so a clip could not be named. A clip is a slot of a rig's manifest (`rigs.ron`): the bench plays it
+//! finder indexed rigs and no clips, so a clip could not be named. A clip is a slot of a rig's manifest (`rigs.yaml`): the bench plays it
 //! when its chip is soloed. So a clip is a row of the finder, and choosing it opens the Animation workspace on its rig with that slot soloed.
 //!
 //! The project here has one rig with two clips, and the finder is driven the way a person drives it: the chord, the clip's name typed
 //! a key at a time, `Enter`. Nothing is queued by calling the reveal.
+//!
+//! Owner exception (2026-11-12): a_rigs_clip_is_found_by_the_finder.rs: main's new test wrote .ron input; converted to the YAML spelling.
 
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
@@ -28,9 +30,22 @@ const CLIP: &str = "gallop";
 const CLIP_SLOT: usize = 1;
 
 /// A rig with an idle and a gallop. The mesh is never opened: the finder reads names from the manifest.
-const RIGS: &str = "(version: 3, rigs: { \"hound\": (mesh: \"characters/hound.glb\", scale: 1.0, slots: [\
-    (clip: 0, playback: Free(speed: 1.0), note: Some(\"idle\")), \
-    (clip: 1, playback: Free(speed: 1.0), note: Some(\"gallop\"))])})";
+const RIGS: &str = "\
+version: 3
+rigs:
+  hound:
+    mesh: characters/hound.glb
+    scale: 1.0
+    slots:
+    - clip: 0
+      playback: !Free
+        speed: 1.0
+      note: idle
+    - clip: 1
+      playback: !Free
+        speed: 1.0
+      note: gallop
+";
 
 fn primary() -> KeyCode {
     if cfg!(target_os = "macos") { KeyCode::SuperLeft } else { KeyCode::ControlLeft }
@@ -41,7 +56,7 @@ fn editor(tag: &str) -> App {
         .descriptor("stool", "alpha")
         .place("stool", (0.0, 0.0))
         .build("m");
-    std::fs::write(root.join("assets/grimoire/rigs.ron"), RIGS).unwrap_or_else(|e| panic!("rigs.ron: {e}"));
+    std::fs::write(root.join("assets/grimoire/rigs.yaml"), RIGS).unwrap_or_else(|e| panic!("rigs.yaml: {e}"));
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(std::time::Duration::from_secs_f32(1.0 / 60.0)));
     app.world_mut().spawn((Window::default(), bevy::window::PrimaryWindow));

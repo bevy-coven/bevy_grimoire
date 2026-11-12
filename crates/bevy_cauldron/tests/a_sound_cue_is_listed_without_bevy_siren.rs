@@ -2,11 +2,13 @@
 //!
 //! `docs/ui/navigation.md` measured the Sound workspace as one chord away and empty: its AUDIO panel was behind the off-by-default
 //! `bevy_siren` feature, so a build without the crate drew a sentence and no cue. A cue is a name in the project's
-//! `family/bevy_siren.ron`; only *auditioning* one needs the crate. So the Sound workspace lists the project's cues in every build,
+//! `family/bevy_siren.yaml`; only *auditioning* one needs the crate. So the Sound workspace lists the project's cues in every build,
 //! and says beside the list what the build cannot do with them.
 //!
 //! The editor is driven as a person drives it: the workspace's command (the one its chord, the palette and the activity bar all take),
 //! then a read of what is on screen. The project's file is written in the crate's own shape, which this test never parses itself.
+//!
+//! Owner exception (2026-11-12): a_sound_cue_is_listed_without_bevy_siren.rs: main's new test wrote .ron input; converted to the YAML spelling.
 
 use bevy::prelude::*;
 use bevy::ui::{ComputedNode, ScrollPosition, UiGlobalTransform};
@@ -21,15 +23,20 @@ use crate::fixtures;
 /// Frames the editor is given to settle after a switch and between reads.
 const SETTLE_FRAMES: usize = 60;
 
-/// The cues the project's sound file holds, in the crate's own `(cues: (cues: [(name: ..)]))` shape; every other field has a default.
-const CUES: &str = "(cues: (cues: [(name: \"door.creak\"), (name: \"wind.loop\")]))";
+/// The cues the project's sound file holds, in the crate's own `cues: {cues: [{name: ..}]}` shape; every other field has a default.
+const CUES: &str = "\
+cues:
+  cues:
+  - name: door.creak
+  - name: wind.loop
+";
 
 fn editor(tag: &str, file: Option<&str>) -> App {
     let root = fixtures::Fixture::new(&format!("sound_cue_{tag}_{}", std::process::id())).descriptor("stool", "alpha").place("stool", (0.0, 0.0)).build("m");
     if let Some(text) = file {
         let dir = root.join("family");
         std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("{dir:?}: {e}"));
-        std::fs::write(dir.join("bevy_siren.ron"), text).unwrap_or_else(|e| panic!("bevy_siren.ron: {e}"));
+        std::fs::write(dir.join("bevy_siren.yaml"), text).unwrap_or_else(|e| panic!("bevy_siren.ron: {e}"));
     }
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     settle(&mut app);
@@ -107,9 +114,9 @@ fn a_project_with_no_sound_file_says_it_has_no_cues() {
 
 #[test]
 fn a_sound_file_that_does_not_read_is_said_not_shown_as_empty() {
-    let mut app = editor("broken", Some("(cues: (cues: [(name: "));
+    let mut app = editor("broken", Some("cues:\n  cues:\n  - name: [\n"));
     press_the_sound_chord(&mut app);
     let world = app.world_mut();
-    let said: Vec<String> = world.query::<&Text>().iter(world).map(|t| t.0.clone()).filter(|t| t.contains("bevy_siren.ron does not parse")).collect();
+    let said: Vec<String> = world.query::<&Text>().iter(world).map(|t| t.0.clone()).filter(|t| t.contains("bevy_siren.yaml did not read")).collect();
     assert_eq!(said.len(), 1, "a sound file that does not parse is not named in the Sound workspace");
 }

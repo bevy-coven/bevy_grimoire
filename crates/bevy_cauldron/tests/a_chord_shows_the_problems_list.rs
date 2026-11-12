@@ -7,6 +7,8 @@
 //! scrolling changes.
 //!
 //! The editor is driven as a person drives it: real key events, no wheel, and a read of what is on screen.
+//!
+//! Owner exception (2026-11-12): a_chord_shows_the_problems_list.rs: main's new test wrote .ron input; converted to the YAML spelling.
 
 use std::path::PathBuf;
 
@@ -46,8 +48,8 @@ fn project(tag: &str) -> PathBuf {
         .place_as("chair", "site/chair", (2.0, 2.0))
         .place_as("table", "site/table", (2.0, 0.0))
         .build("m");
-    let file = root.join("assets/grimoire/maps/m.relations.ron");
-    std::fs::write(&file, "(version: 1, relations: [(of: \"chair\", kind: Faces(\"table\"))])").unwrap_or_else(|e| panic!("{file:?}: {e}"));
+    let file = root.join("assets/grimoire/maps/m.relations.yaml");
+    std::fs::write(&file, "version: 1\nrelations:\n- of: chair\n  kind: !Faces table\n").unwrap_or_else(|e| panic!("{file:?}: {e}"));
     root
 }
 

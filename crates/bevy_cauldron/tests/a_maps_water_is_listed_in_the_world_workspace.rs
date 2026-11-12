@@ -2,10 +2,12 @@
 //!
 //! `docs/ui/navigation.md` measured the World workspace as one chord away and drawing no water: water is the `water_place` operation,
 //! written through the terrain line, and nothing showed what a map's plan held. The World workspace now has a WATER section that reads
-//! `<grimoire>/water/<map>.ron`, the file the operation writes. It lists; it does not place (the terrain line does, and says how under
+//! `<grimoire>/water/<map>.yaml`, the file the operation writes. It lists; it does not place (the terrain line does, and says how under
 //! the heading), because a second way to place water would be a second path to one operation.
 //!
 //! The editor is driven as a person drives it: the workspace's command, then a read of what is on screen.
+//!
+//! Owner exception (2026-11-12): a_maps_water_is_listed_in_the_world_workspace.rs: main's new test wrote .ron input; converted to the YAML spelling.
 
 use bevy::prelude::*;
 use bevy::ui::{ComputedNode, ScrollPosition, UiGlobalTransform};
@@ -20,15 +22,26 @@ use crate::fixtures;
 /// Frames the editor is given to settle after a switch and between reads.
 const SETTLE_FRAMES: usize = 60;
 
-/// A plan with one spring and one lake, in the engine-free core's own RON shape (`version` is optional and reads as the first).
-const PLAN: &str = "(springs: [(x: 4.0, z: 6.0, rate_m3_s: 2.5, radius_m: 3.0)], lakes: [(x: 10.0, z: 12.0, radius_m: 5.0, level_m: 1.5)])";
+/// A plan with one spring and one lake, as `water::WaterPlan` reads it (`version` is optional and reads as the first).
+const PLAN: &str = "\
+springs:
+- x: 4.0
+  z: 6.0
+  rate_m3_s: 2.5
+  radius_m: 3.0
+lakes:
+- x: 10.0
+  z: 12.0
+  radius_m: 5.0
+  level_m: 1.5
+";
 
 fn editor(tag: &str, plan: Option<&str>) -> App {
     let root = fixtures::Fixture::new(&format!("water_list_{tag}_{}", std::process::id())).descriptor("stool", "alpha").place("stool", (0.0, 0.0)).build("m");
     if let Some(text) = plan {
         let dir = bevy_cauldron::project::Project::open(&root, None).unwrap_or_else(|e| panic!("{e}")).grimoire_dir.join("water");
         std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("{dir:?}: {e}"));
-        std::fs::write(dir.join("m.ron"), text).unwrap_or_else(|e| panic!("water plan: {e}"));
+        std::fs::write(dir.join("m.yaml"), text).unwrap_or_else(|e| panic!("water plan: {e}"));
     }
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     settle(&mut app);
@@ -106,9 +119,9 @@ fn a_map_with_no_water_says_so() {
 
 #[test]
 fn a_water_plan_that_does_not_read_is_said_not_shown_as_empty() {
-    let mut app = editor("broken", Some("(springs: [(x: "));
+    let mut app = editor("broken", Some("springs:\n- x: [\n"));
     press_the_world_chord(&mut app);
     let world = app.world_mut();
-    let said: Vec<String> = world.query::<&Text>().iter(world).map(|t| t.0.clone()).filter(|t| t.contains("water/m.ron does not read")).collect();
+    let said: Vec<String> = world.query::<&Text>().iter(world).map(|t| t.0.clone()).filter(|t| t.contains("water/m.yaml did not read")).collect();
     assert_eq!(said.len(), 1, "a water plan that does not parse is not named under WATER");
 }

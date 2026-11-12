@@ -213,7 +213,7 @@ fn list_node() -> Node {
 /// a file that does not read is an error naming what is wrong.
 pub fn cue_names(text: &str) -> Result<Vec<String>, String> {
     // **The one YAML reader**, so this file is held to the rules every project file is, and a refusal names the field it stopped at.
-    let file = bevy_grimoire_core::yaml::to_json(text, &format!("family/{SIREN_FILE}")).map_err(|p| p.line())?;
+    let file = bevy_grimoire_core::yaml::to_json(text, &siren_shown()).map_err(|p| p.line())?;
     let field = |value: &serde_json::Value, name: &str| -> Option<serde_json::Value> {
         value.as_object().and_then(|fields| fields.get(name)).cloned()
     };
@@ -226,13 +226,19 @@ pub fn cue_names(text: &str) -> Result<Vec<String>, String> {
         .collect())
 }
 
+/// **The name a person reads for the sound file**, `family/bevy_siren.yaml`: one spelling, so the reader's refusal and the row that says
+/// the file cannot be opened never disagree about which file it is.
+fn siren_shown() -> String {
+    format!("family/{SIREN_FILE}")
+}
+
 /// **The sound cues of a project in words**: a row per cue, or the line that says there are none. A file that does not read is its own row.
 pub fn cue_rows(project: &Project) -> Vec<String> {
     let file = bevy_grimoire_core::family::settings_dir(&project.root).join(SIREN_FILE);
     let text = match std::fs::read_to_string(&file) {
         Ok(text) => text,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return vec![NO_CUES.to_owned()],
-        Err(e) => return vec![format!("family/{SIREN_FILE} cannot be read: {e}")],
+        Err(e) => return vec![format!("{} cannot be read: {e}", siren_shown())],
     };
     match cue_names(&text) {
         Ok(names) if names.is_empty() => vec![NO_CUES.to_owned()],

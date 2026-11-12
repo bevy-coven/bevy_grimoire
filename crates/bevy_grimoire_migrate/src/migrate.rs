@@ -776,11 +776,31 @@ fn migrate_where(
         }
         written.push(target);
     }
+    // **A registry that is rewritten is restored if a later step fails**, the same rule the new YAML files are: these are the only
+    // files the command replaces rather than creates, so they are the only ones that need their old text kept. Read before the first
+    // write, so a rollback puts back what was there and not what this run made.
+    let mut originals: Vec<(&PathBuf, String)> = Vec::new();
+    for (path, _, _) in &rewritten {
+        match std::fs::read_to_string(path) {
+            Ok(text) => originals.push((path, text)),
+            Err(e) => {
+                let problem = io_problem(path, e);
+                for done in &written {
+                    let _ = std::fs::remove_file(done);
+                }
+                return Err(problem);
+            }
+        }
+    }
     for (path, _, text) in &rewritten {
         // The registry keeps its name: it is replaced, not created, and its text was read back and compared above.
         if let Err(problem) = bevy_grimoire_core::atomic_file::write(path, text).map_err(|e| io_problem(path, e)) {
-            for done in written {
+            // **Both halves come back**: the new YAML this run wrote, and every registry it had already rewritten.
+            for done in &written {
                 let _ = std::fs::remove_file(done);
+            }
+            for (path, original) in &originals {
+                let _ = bevy_grimoire_core::atomic_file::write(path, original);
             }
             return Err(problem);
         }
@@ -798,9 +818,19 @@ fn migrate_where(
         // **Copied whole, then removed**, never renamed: the archive copy is a complete file (written beside
         // its final name and renamed into it by `atomic_file`) before the original is touched, so a failure
         // at any point leaves the original in place.
-        let bytes = std::fs::read(path).map_err(|e| io_problem(path, e))?;
-        bevy_grimoire_core::atomic_file::write_new(&into, bytes).map_err(|e| io_problem(&into, e))?;
-        std::fs::remove_file(path).map_err(|e| io_problem(path, e))?;
+        // **A failure here is after every file is written and every registry rewritten**, so both are put back: a project left half
+        // migrated is the one outcome a person cannot repair by hand, and a registry naming a `.yaml` whose `.ron` is still beside it
+        // would read as a project this build refuses.
+        let archived = std::fs::read(path)
+            .map_err(|e| io_problem(path, e))
+            .and_then(|bytes| bevy_grimoire_core::atomic_file::write_new(&into, bytes).map_err(|e| io_problem(&into, e)))
+            .and_then(|()| std::fs::remove_file(path).map_err(|e| io_problem(path, e)));
+        if let Err(problem) = archived {
+            for (path, original) in &originals {
+                let _ = bevy_grimoire_core::atomic_file::write(path, original);
+            }
+            return Err(problem);
+        }
     }
     // **A rewritten registry is reported among the converted files**: it changed, and a report that left it out would make a
     // person diff the project to find out what the command did. It is not archived — it was YAML already, so there is no
