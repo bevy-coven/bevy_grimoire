@@ -101,8 +101,7 @@ fn the_field_under(app: &mut App, label: &str) -> Entity {
         .query::<(Entity, &Text)>()
         .iter(world)
         .find(|(_, text)| text.0.trim() == label)
-        .map(|(entity, _)| world.get::<ChildOf>(entity).map(ChildOf::parent))
-        .flatten()
+        .and_then(|(entity, _)| world.get::<ChildOf>(entity).map(ChildOf::parent))
         .unwrap_or_else(|| panic!("no row on screen reads `{label}`"));
     let world = app.world_mut();
     world
