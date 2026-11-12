@@ -221,3 +221,4 @@ pub mod workspace;
 pub mod watch;
 pub mod window_frame;
 pub mod wish_view;
+pub mod workspace_panels;

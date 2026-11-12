@@ -5,7 +5,8 @@
 //! document tabs — be judged as cheaper or not.
 //!
 //! This file drives the real editor from a cold start on a fixture project, by the keys and pointer
-//! actions a hand would use, and counts them. Its rows *are* `docs/ui/navigation-baseline.md`: the
+//! actions a hand would use, and counts them. Its rows *are* `docs/ui/navigation.md` (the baseline the
+//! series started from, `docs/ui/navigation-baseline.md`, is frozen beside it, #385): the
 //! test renders the document and compares it with the committed file, so a route that gets longer
 //! fails here until the document is regenerated. Nothing is written to the source tree unless
 //! `UPDATE_NAVIGATION_BASELINE=1` is set, which is the pattern `tests/reload_contract.rs` uses for the
@@ -74,8 +75,9 @@ const WAIT_POLL: Duration = Duration::from_millis(10);
 /// by a person either.
 const WHEEL_BUDGET: u32 = 60;
 
-/// Where the generated table lives, relative to the workspace root.
-const BASELINE: &str = "docs/ui/navigation-baseline.md";
+/// Where the generated table lives, relative to the workspace root. **The live measurement**, since NV-08 (#385)
+/// moved the panels into their workspaces and the baseline's routes stopped existing; the baseline is kept as it was.
+const BASELINE: &str = "docs/ui/navigation.md";
 
 /// **Set this to rewrite the document** instead of checking it. Run it, read the diff, commit both.
 const REGENERATE: &str = "UPDATE_NAVIGATION_BASELINE";
@@ -473,25 +475,49 @@ fn a_rigs_clip() -> Destination {
     }
 }
 
-/// **A sound cue**, in the Map inspector's AUDIO block.
+/// **A sound cue**, in the Sound workspace (`Cmd`/`Ctrl`+`6`, NV-08 #385).
+///
+/// It was the Map inspector's AUDIO block, 60 wheel notches that never reached it. The audio panel is the
+/// Sound workspace's now, one chord away. Its heading is drawn in a build with `bevy_siren`; a build without
+/// the crate says so in a sentence, and that is the row's reason.
 fn a_sound_cue() -> Destination {
     let mut d = Driver::cold_start("sound");
-    let arrived = d.scroll_to("AUDIO");
-    let cost = Cost { presses: d.cost.presses, pointer: d.cost.pointer };
+    d.chord(&[primary(), KeyCode::Digit6], "press Cmd/Ctrl+6 (the Sound workspace)");
+    assert_eq!(d.panel_name(), Mode::Sound.label(), "Cmd/Ctrl+6 opens the Sound workspace");
+    let cost = d.cost;
     let steps = d.steps.clone();
-    if arrived {
+    if d.showing("AUDIO") {
         return Destination { what: "A sound cue", steps, cost, reach: Reach::Arrived };
     }
+    assert!(
+        d.showing(bevy_cauldron::workspace_panels::NO_AUDIO),
+        "the Sound workspace shows neither AUDIO nor the sentence that says the build has none: {:#?}",
+        d.words()
+    );
     Destination {
         what: "A sound cue",
         steps,
         cost,
-        reach: Reach::Unreachable(format!(
-            "the AUDIO block is behind the off-by-default `bevy_siren` feature: {} wheel notches down the inspector \
-             never draw it, and nothing else draws a cue",
-            cost.pointer
-        )),
+        reach: Reach::Unreachable(
+            "the Sound workspace opens by one chord, but the AUDIO panel is behind the off-by-default `bevy_siren` \
+             feature: this build draws a sentence saying so, and no cue"
+                .to_owned(),
+        ),
     }
+}
+
+/// **A part of the world**, in the World workspace (`Cmd`/`Ctrl`+`3`, NV-08 #385): terrain, water, forest and
+/// lights were headings of the one Map inspector scroll.
+///
+/// `absent` is the sentence a row that does not arrive gives, naming what would have to exist.
+fn a_world_section(what: &'static str, label: &'static str, tag: &'static str, absent: &'static str) -> Destination {
+    assert!(!absent.is_empty(), "`{label}` must say why it cannot be reached, since a row renders that reason");
+    let mut d = Driver::cold_start(tag);
+    d.chord(&[primary(), KeyCode::Digit3], "press Cmd/Ctrl+3 (the World workspace)");
+    assert_eq!(d.panel_name(), Mode::World.label(), "Cmd/Ctrl+3 opens the World workspace");
+    let arrived = d.showing(label);
+    let reach = if arrived { Reach::Arrived } else { Reach::Unreachable(absent.to_owned()) };
+    Destination { what, steps: d.steps, cost: d.cost, reach }
 }
 
 /// **A heading of the one inspector scroll** — terrain, water, forest, lights, a data file, the
@@ -649,29 +675,29 @@ fn table() -> Vec<Destination> {
         a_rig(),
         a_rigs_clip(),
         a_sound_cue(),
-        an_inspector_section(
+        a_world_section(
             "A map's terrain",
             "TERRAIN",
             "terrain",
-            "the TERRAIN line is a text field at the foot of the Map inspector and the wheel never reached it",
+            "the TERRAIN line is in the World workspace and the heading is not on screen there",
         ),
-        an_inspector_section(
+        a_world_section(
             "A map's water",
             "WATER",
             "water",
-            "water is an operation (`water_place`) with no panel: nothing draws a map's water to walk to",
+            "water is an operation (`water_place`) written through the World workspace's terrain line; it has no panel of its own, so nothing draws a map's water to walk to",
         ),
-        an_inspector_section(
+        a_world_section(
             "A map's forest",
             "FOREST",
             "forest",
-            "forest is an operation (`forest_scatter`) with no panel, so there is nothing to walk to",
+            "forest is an operation (`forest_scatter`) written through the World workspace's terrain line; it has no panel of its own, so there is nothing to walk to",
         ),
-        an_inspector_section(
+        a_world_section(
             "A map's lights",
             "LIGHTS",
             "lights",
-            "the LIGHTS block is behind the off-by-default `bevy_lights` feature, and nothing else draws a pool",
+            "the LIGHTS block is in the World workspace but behind the off-by-default `bevy_lights` feature, and nothing else draws a pool",
         ),
         an_inspector_section(
             "A game data file",
@@ -744,7 +770,9 @@ fn plural<'a>(n: usize, one: &'a str, many: &'a str) -> &'a str {
 /// **The document, rendered from the rows.** No clock, no paths, so two runs produce one text.
 fn render(rows: &[Destination]) -> String {
     let mut out = String::from(
-        "# Getting around, as it is today\n\
+        "# Getting around, as it is now\n\
+         \n\
+         The baseline this is measured against is `navigation-baseline.md`, frozen as NV-01 (#378) left it.\n\
          \n\
          Generated by `crates/bevy_cauldron/tests/navigation.rs` (`navigation::`), which drives the editor from a\n\
          cold start on a fixture project by the keys and pointer actions a person uses. The test **checks** this\n\

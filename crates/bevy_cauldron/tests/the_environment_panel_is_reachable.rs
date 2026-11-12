@@ -12,6 +12,11 @@
 //! Inspector's scroll *content*, and when that scroll is at its end the heading is on screen — its top
 //! is at or above the viewport's bottom, not below it. A headless `App` draws the same nodes the window
 //! does, so this is the rule, not a picture of it.
+//!
+//! **Owner exception (2026-11-12, NV-08 #385): re-pinned to the World workspace.** The ENVIRONMENT section moved
+//! out of the Map's INSPECTOR into the World workspace's own scroll (`workspace_panels::WorldPane`), so the editor
+//! is opened on the World panel and the same two claims — in the scroll's content, and on screen at its end — are
+//! asked of that pane. Nothing is loosened: the heading must still be reachable at the shipped window.
 
 #![cfg(feature = "bevy_elements")]
 
@@ -27,13 +32,13 @@ fn viewport(app: &mut App) -> (Entity, Rect) {
     // the Map tab's Inspector.
     let mut q = app.world_mut().query_filtered::<
         (Entity, &ComputedNode, &bevy::ui::UiGlobalTransform),
-        (With<ScrollArea>, With<bevy_cauldron::editor::MapControlsPane>),
+        (With<ScrollArea>, With<bevy_cauldron::workspace_panels::WorldPane>),
     >();
     let (entity, size, transform) = q
         .iter(app.world())
         .map(|(e, n, t)| (e, n.size(), *t))
         .next()
-        .expect("the Map tab's Inspector is a scroll area with `MapControlsPane` on it");
+        .expect("the World workspace's inspector is a scroll area with `WorldPane` on it");
     let centre = transform.translation;
     (entity, Rect::from_center_size(centre, size))
 }
@@ -44,7 +49,8 @@ fn the_environment_section_is_inside_the_inspectors_scroll_and_on_screen_at_its_
         .descriptor("site/wall", "alpha")
         .place("site/wall", (0.0, 0.0))
         .build("m");
-    let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    let mut app = bevy_cauldron::harness::build_headless_at(&root, "m", None, bevy_cauldron::tiles::Mode::World)
+        .unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..6 {
         app.update();
     }

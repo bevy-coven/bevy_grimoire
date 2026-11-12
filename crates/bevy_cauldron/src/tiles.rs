@@ -48,6 +48,10 @@ crate::keys::enumerated! {
         Anim,
         /// Build reusable groups, and see what they present and what has gone stale under them.
         Compose,
+        /// **The world under the level** (NV-08, #385): terrain, the environment and the lights.
+        World,
+        /// **Cue tables and buses** (NV-08, #385): the audio panel.
+        Sound,
     }
     /// **Every panel there is**, in strip order — for the ratchets that have to visit all of them.
     ///
@@ -86,6 +90,8 @@ impl Mode {
             Mode::Tiles => "TILES",
             Mode::Anim => "ANIM",
             Mode::Compose => "COMPOSE",
+            Mode::World => "WORLD",
+            Mode::Sound => "SOUND",
         }
     }
 
@@ -99,6 +105,8 @@ impl Mode {
             Mode::Tiles => crate::keys::Context::Tiles,
             Mode::Anim => crate::keys::Context::Anim,
             Mode::Compose => crate::keys::Context::Compose,
+            Mode::World => crate::keys::Context::World,
+            Mode::Sound => crate::keys::Context::Sound,
         }
     }
 }
@@ -464,7 +472,7 @@ fn stage_camera(
                 crate::compose::carousel_height(&carousel.0).min(crate::view::MAX_ZOOM);
             rig.elevation = crate::view::ISO_ELEVATION;
         }
-        Mode::Map => {
+        Mode::Map | Mode::World | Mode::Sound => {
             if let Some(was) = saved.0.take() {
                 rig.focus = was.focus;
                 rig.height = was.height;
@@ -4346,6 +4354,9 @@ fn focus_filter(
             Mode::Map => crate::filter::Pane::Palette,
             Mode::Anim => crate::filter::Pane::Rigs,
             Mode::Compose => crate::filter::Pane::Candidates,
+            // **No list of their own** (NV-08, #385): the World and Sound panels are fields, so the key
+            // has no box to take; the Map's is the nearest honest answer and focusing it is harmless.
+            Mode::World | Mode::Sound => crate::filter::Pane::Palette,
         };
         filters.take_focus(pane);
     }
@@ -7737,6 +7748,7 @@ fn apply_mode(
             Mode::Meshes | Mode::Tiles => is_tiles,
             Mode::Anim => is_anim,
             Mode::Compose => is_compose,
+            Mode::World | Mode::Sound => false,
         };
         // A panel belonging to no tab is not ours to touch — the tab strip and the cost readout are
         // both unmarked and must stay visible in every mode.

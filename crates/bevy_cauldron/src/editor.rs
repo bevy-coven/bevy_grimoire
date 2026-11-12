@@ -2634,6 +2634,8 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::add_meshes::AddMeshesPlugin);
         app.add_plugins(crate::menu_bar::MenuBarPlugin);
         app.add_plugins(crate::activity_bar::ActivityBarPlugin);
+        // **The World and Sound workspaces' panels** (NV-08, #385): spawned when their workspace is entered.
+        app.add_plugins(crate::workspace_panels::WorkspacePanelsPlugin);
         app.add_plugins(crate::app_verbs::AppVerbsPlugin);
         // **Each panel header's "?"** (UI-91, #257): the guide page that covers what the panel holds.
         app.add_plugins(crate::help::HelpPlugin);
@@ -2864,7 +2866,7 @@ impl Plugin for EditorPlugin {
                         // goes down, rather than one where it is invisible and still eating keys.
                         leaving_a_tab_puts_the_name_prompt_down.in_set(keys::Phase::Sense),
                     ),
-                    (size_edit_keys, family_edit_keys, data_edit_keys, terrain_edit_keys, crowd_edit_keys, drop_reference).in_set(keys::Phase::Text),
+                    (size_edit_keys, family_edit_keys, data_edit_keys, crowd_edit_keys, drop_reference).in_set(keys::Phase::Text),
                     // No `not_typing`, no `in_map_mode`: `keys::just_pressed` now refuses on both
                     // counts, and a run condition repeating it would be a second census. Dropping
                     // `in_map_mode` also makes `Cmd+S` and `Cmd+Z` work from every tab, which is what
@@ -2983,7 +2985,6 @@ impl Plugin for EditorPlugin {
                         refresh_size,
                         refresh_family,
                         refresh_data,
-                        refresh_terrain,
                         refresh_crowd,
                         refresh_data_list,
                         refresh_notes_list,
@@ -3029,6 +3030,15 @@ impl Plugin for EditorPlugin {
                 relevel_placements
                     .run_if(in_state(crate::screen::Screen::Editor))
                     .run_if(crate::workspace::Workspace::map_is_open),
+            )
+            // **The terrain line lives in the World workspace** (NV-08, #385), so its readout and its keys run
+            // there and nowhere else: the Map's INSPECTOR no longer draws it. Not behind `map_is_open`, which is
+            // the Map's alone; both take `Option` of the map, so a workspace with none is quiet.
+            .add_systems(
+                Update,
+                (terrain_edit_keys.in_set(keys::Phase::Text), refresh_terrain)
+                    .run_if(in_state(crate::screen::Screen::Editor))
+                    .run_if(crate::workspace::Workspace::world_is_open),
             )
             // **The ghost pair is NOT map-door gated** — the map block above was swallowing it. A
             // tile's picked-but-not-dropped mesh (`StagedTile` + `Ghost`) is assembled on the Tiles
@@ -3903,61 +3913,6 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
             })
             .with_children(crate::build_view::spawn_section);
 
-            // **Environment (#98):** clock scrubber and forced weather, for a project that uses `bevy_elements`.
-            #[cfg(feature = "bevy_elements")]
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(crate::environment::spawn_section);
-
-            // **Lights (#103):** the pool's budget from where the camera looks.
-            #[cfg(feature = "bevy_lights")]
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(crate::ops_pool::spawn_section);
-
-            // **Audio (S-01):** `bevy_siren`'s buses and cues, with an audition and its log.
-            #[cfg(feature = "bevy_siren")]
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(crate::audio_panel::spawn_section);
-
-            // **Light map (#103):** show or hide `bevy_light_grid`'s field over the open map.
-            #[cfg(feature = "bevy_light_grid")]
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(crate::light_overlay::spawn_section);
-
-            // **Terrain (#99).** One line: `<brush> <x> <z> <radius_m> <strength>`, e.g.
-            // `raise 12 8 6 2`. Enter sculpts the open map's ground through `terrain_stroke`.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(|s| {
-                crate::chrome::section(s, "TERRAIN");
-                crate::chrome::text_field(
-                    s,
-                    Val::Percent(100.0),
-                    TerrainField,
-                    crate::chrome::text::BODY,
-                    ("brush x z radius strength".to_owned(), crate::chrome::ink().text),
-                    TerrainReadout,
-                );
-            });
-
             // **Crowd (#107).** One line: `<from_x> <from_z> <to_x> <to_z> <walkers>`, e.g. `-8 -8 8 8 40`.
             // Enter walks that many people between two 2 m squares round the open map's solid pieces.
             #[cfg(all(feature = "bevy_orca", feature = "bevy_stigmergy"))]
@@ -4123,6 +4078,32 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 ));
             });
         });
+    });
+}
+
+/// **The TERRAIN section** (#99, NV-08 #385): one line, `<brush> <x> <z> <radius_m> <strength>`, e.g.
+/// `raise 12 8 6 2`; Enter sculpts the open map's ground through `terrain_stroke`.
+///
+/// **In the World workspace now, not in the Map's INSPECTOR.** Terrain is the ground under the level, and the
+/// world's panels are one job (`docs/ui/vision.md` §4); the field is the same node with the same observers, so
+/// only where it is spawned moved. Its function is here because [`TerrainField`] and [`TerrainReadout`] are
+/// this module's.
+pub(crate) fn spawn_terrain_section(p: &mut ChildSpawnerCommands) {
+    p.spawn(Node {
+        flex_direction: FlexDirection::Column,
+        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
+        ..default()
+    })
+    .with_children(|s| {
+        crate::chrome::section(s, "TERRAIN");
+        crate::chrome::text_field(
+            s,
+            Val::Percent(100.0),
+            TerrainField,
+            crate::chrome::text::BODY,
+            ("brush x z radius strength".to_owned(), crate::chrome::ink().text),
+            TerrainReadout,
+        );
     });
 }
 
