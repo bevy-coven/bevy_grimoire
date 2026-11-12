@@ -319,7 +319,18 @@ pub fn convert<T>(text: &str, file: &str, command: &str) -> Result<Converted, Pr
 where
     T: Serialize + DeserializeOwned,
 {
-    let value: T = ron::from_str(text).map_err(|e| {
+    convert_with::<T>(text, file, command, |_| {})
+}
+
+/// **[`convert`], with a change made to the value between the read and the write**: the registry's `path: mob.ron` entries become
+/// `mob.yaml` here, so the YAML the registry is written as names the YAML its files are written as. The faithfulness check
+/// compares what was written with what was read *after* the change.
+#[allow(clippy::result_large_err)]
+fn convert_with<T>(text: &str, file: &str, command: &str, fix: impl Fn(&mut T)) -> Result<Converted, Problem>
+where
+    T: Serialize + DeserializeOwned,
+{
+    let mut value: T = ron::from_str(text).map_err(|e| {
         Problem::with(
             format!("{file} did not read as RON, so nothing was migrated"),
             Detail::default()
@@ -329,6 +340,7 @@ where
                 .docs(DOCS),
         )
     })?;
+    fix(&mut value);
     let plain = yaml::to_string(&value).map_err(|p| {
         Problem::with(format!("{file} did not write as YAML, so nothing was migrated"), p.detail())
     })?;
@@ -443,7 +455,13 @@ fn write_kind(kind: &FileKind, text: &str, file: &str, command: &str) -> Result<
         "water_plan" => convert::<WaterPlan>(text, file, command),
         "water_field" => convert::<WaterField>(text, file, command),
         "volume" => convert::<Volume>(text, file, command),
-        "data_registry" => convert::<DataFiles>(text, file, command),
+        "data_registry" => convert_with::<DataFiles>(text, file, command, |registry| {
+            for entry in &mut registry.files {
+                if let Some(stem) = entry.path.strip_suffix(&format!(".{RON_EXT}")) {
+                    entry.path = format!("{stem}.{YAML_EXT}");
+                }
+            }
+        }),
         "family_list" => convert::<Family>(text, file, command),
         "agent" => convert::<AgentSettings>(text, file, command),
         "play" => convert::<PlayConfig>(text, file, command),
@@ -473,6 +491,64 @@ pub fn migrate_as(root: &Path, command: &str) -> Result<Report, Problem> {
     migrate_where(root, command, |_| true)
 }
 
+/// **The game's own data files that the registries in `plan` register**, as plan entries of kind `game_data`.
+///
+/// A registry (`<kit>/data.ron`) lists tuning files by a path relative to itself. Each `.ron` one is converted by value with its
+/// registry, so the registry and its files move together; a file that does not exist is skipped (the registry's own load names it),
+/// and one that lies outside the project is refused rather than moved from somewhere this migration was not pointed at.
+#[allow(clippy::result_large_err)]
+fn registered_data_files(root: &Path, plan: &[(PathBuf, String, &'static FileKind)]) -> Result<Vec<(PathBuf, String, &'static FileKind)>, Problem> {
+    let Some(kind) = KINDS.iter().find(|k| k.id == "game_data") else { return Ok(Vec::new()) };
+    let mut out: Vec<(PathBuf, String, &'static FileKind)> = Vec::new();
+    for (path, rel, registry) in plan {
+        if registry.id != "data_registry" {
+            continue;
+        }
+        let text = std::fs::read_to_string(path).map_err(|e| io_problem(path, e))?;
+        let Ok(files) = ron::from_str::<DataFiles>(&text) else { continue };
+        let dir = path.parent().unwrap_or(root);
+        for entry in &files.files {
+            if !entry.path.ends_with(&format!(".{RON_EXT}")) {
+                continue;
+            }
+            let joined = dir.join(&entry.path);
+            let Some(target) = normalised(&joined).filter(|t| t.starts_with(root)) else {
+                return Err(Problem::with(
+                    format!("{rel} registers `{}`, which is outside the project, so nothing was migrated", entry.path),
+                    Detail::default()
+                        .at(Location::file(rel.clone()))
+                        .because("a migration moves only the files inside the project it was pointed at".to_owned())
+                        .fix("convert that file by hand and point the registry at the YAML".to_owned())
+                        .docs(DOCS),
+                ));
+            };
+            if !target.is_file() || out.iter().any(|(p, _, _)| *p == target) {
+                continue;
+            }
+            let shown = target.strip_prefix(root).unwrap_or(&target).to_string_lossy().replace('\\', "/");
+            out.push((target, shown, kind));
+        }
+    }
+    Ok(out)
+}
+
+/// **A path with its `.` and `..` resolved by name**, without touching the disk; `None` when it climbs above its start.
+fn normalised(path: &Path) -> Option<PathBuf> {
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                if !out.pop() {
+                    return None;
+                }
+            }
+            std::path::Component::CurDir => {}
+            other => out.push(other.as_os_str()),
+        }
+    }
+    Some(out)
+}
+
 /// **The one migration body**: every file `wants` accepts, converted or nothing written at all.
 #[allow(clippy::result_large_err)]
 fn migrate_where(
@@ -480,7 +556,8 @@ fn migrate_where(
     command: &str,
     wants: impl Fn(&FileKind) -> bool,
 ) -> Result<Report, Problem> {
-    let plan: Vec<_> = plan(root)?.into_iter().filter(|(_, _, kind)| wants(kind)).collect();
+    let mut plan: Vec<_> = plan(root)?.into_iter().filter(|(_, _, kind)| wants(kind)).collect();
+    plan.extend(registered_data_files(root, &plan)?);
     let mut converted = Vec::new();
     let mut pending: Vec<(PathBuf, String, PathBuf)> = Vec::new();
     let mut unplaced = Vec::new();

@@ -259,7 +259,7 @@ impl Project {
         // The migration library's own walk decides what "still RON" means (`migrate::leftover`), so the editor,
         // the command line and an agent cannot disagree about it.
         if let Some(problem) =
-            bevy_grimoire_migrate::leftover(root, &format!("{} migrate <project folder>", crate::args::PROGRAM))
+            bevy_grimoire_migrate::leftover(root, &format!("{} migrate {}", crate::args::PROGRAM, root.display()))
             .map_err(|p| format!("{}: {}", root.display(), p.line()))?
         {
             return Err(problem.line());
