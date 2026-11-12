@@ -53,6 +53,13 @@ pub const SCAN_POLL_S: f32 = 1.5;
 /// **The largest YAML file the scan reads**, in bytes: the Files workspace's own limit, so the scan never reads what the editor will not open.
 pub const SCAN_MAX_BYTES: u64 = crate::files::MAX_FILE_BYTES;
 
+/// **The map file's list of placements**, whose rows a placement's line is found among: a stamp or a note can carry the same word.
+pub const PLACEMENTS_KEY: &str = "placements";
+
+/// **The library file's list of descriptors** (`library.ron`'s `descriptors:`), for the same reason: a stamp or a note can
+/// carry a piece's word too.
+pub const PIECES_KEY: &str = "descriptors";
+
 /// How often the inspector's `Used by` line reads the project's maps again, in seconds. A selection change is read at once.
 pub const USED_BY_POLL_S: f32 = 1.0;
 
@@ -63,6 +70,8 @@ pub struct Named {
     pub kind: String,
     pub name: String,
     pub file: String,
+    /// **The line, counted from 0** as every line in this crate is (`component_line`, `FieldFileButton::line`,
+    /// `nav::FILE_STOP`). A person reads 1-based numbers, so the one place that shows one — a `Used by` row — adds 1.
     pub line: usize,
 }
 
@@ -107,7 +116,7 @@ pub fn scan(root: &Path, last: Option<u64>) -> Option<Scan> {
         let schema = bevy_grimoire_core::reload_check::kind_of_path(rel)
             .and_then(|(kind, _)| schemas.entry(kind.id).or_insert_with(|| bevy_grimoire_core::schema::for_kind(kind.id).ok()).as_ref());
         for found in files_lang::references(Lang::Yaml, &text, schema) {
-            refs.push(Named { kind: found.kind, name: found.name, file: rel.clone(), line: found.line + 1 });
+            refs.push(Named { kind: found.kind, name: found.name, file: rel.clone(), line: found.line });
         }
     }
     Some(Scan { files, refs, stamp })
@@ -135,25 +144,63 @@ fn is_name_char(c: char) -> bool {
     c.is_alphanumeric() || matches!(c, '_' | '@' | '.' | '-')
 }
 
-/// **The first line (0-based) of `text` that names `id`** as a value or a key of its own.
-pub fn line_naming(text: &str, id: &str) -> Option<usize> {
+/// **The first line (0-based) of `text` that names `id`** as a value or a key of its own, **inside `section`** when one is
+/// given: the map's `placements:` list, the library's `pieces:` list. A stamp, a composition member or a note can carry the same
+/// word, and the first one in the file is not the row the thing is written on.
+pub fn line_naming_in(text: &str, id: &str, section: Option<&str>) -> Option<usize> {
     if id.is_empty() {
         return None;
     }
-    text.lines().position(|line| {
+    let names_it = |line: &str| {
         line.match_indices(id).any(|(at, _)| {
             let before = line[..at].chars().next_back();
             let after = line[at + id.len()..].chars().next();
             !before.is_some_and(is_name_char) && !after.is_some_and(is_name_char)
         })
-    })
+    };
+    let Some(section) = section else {
+        return text.lines().position(names_it);
+    };
+    // **From the section's own key to the next key at that indent or shallower**: the list's rows, and nothing else's.
+    let mut lines = text.lines().enumerate();
+    let mut indent_of_section = None;
+    for (n, line) in lines.by_ref() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with(section) && trimmed[section.len()..].trim_start().starts_with(':') {
+            indent_of_section = Some(line.len() - trimmed.len());
+            if names_it(line) {
+                return Some(n);
+            }
+            break;
+        }
+    }
+    let indent_of_section = indent_of_section?;
+    for (n, line) in lines {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let indent = line.len() - line.trim_start().len();
+        // A key back at the section's own indent is a sibling: the section has ended.
+        if indent <= indent_of_section && !line.trim_start().starts_with('-') {
+            break;
+        }
+        if names_it(line) {
+            return Some(n);
+        }
+    }
+    None
+}
+
+/// **The first line (0-based) of `text` that names `id`** anywhere in it, as a value or a key of its own.
+pub fn line_naming(text: &str, id: &str) -> Option<usize> {
+    line_naming_in(text, id, None)
 }
 
 /// **The file and the line a placement is written on**, in the open map's own file: `(relative path, 0-based line)`.
 pub fn placement_line(project: &Project, open: &OpenMap, id: &str) -> Result<(String, usize), String> {
     let rel = relative_to(project, &open.map_path)?;
     let text = std::fs::read_to_string(&open.map_path).map_err(|e| format!("{rel} cannot be read: {e}"))?;
-    let line = line_naming(&text, id).ok_or_else(|| format!("`{id}` is not written in {rel}"))?;
+    let line = line_naming_in(&text, id, Some(PLACEMENTS_KEY)).ok_or_else(|| format!("`{id}` is not written in {rel}"))?;
     Ok((rel, line))
 }
 
@@ -162,7 +209,7 @@ pub fn piece_line(project: &Project, id: &str) -> Result<(String, usize), String
     let path = project.grimoire_dir.join(crate::project::LIBRARY_FILE);
     let rel = relative_to(project, &path)?;
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{rel} cannot be read: {e}"))?;
-    let line = line_naming(&text, id).ok_or_else(|| format!("`{id}` is not written in {rel}"))?;
+    let line = line_naming_in(&text, id, Some(PIECES_KEY)).ok_or_else(|| format!("`{id}` is not written in {rel}"))?;
     Ok((rel, line))
 }
 

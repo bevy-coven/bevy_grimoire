@@ -271,7 +271,7 @@ pub fn cue_use_rows(selected: Option<&str>, index: &crate::goto::GotoIndex) -> V
     let Some(cue) = selected else { return Vec::new() };
     let uses: Vec<String> = index
         .used_by(crate::files_lang::CUE_KIND, cue)
-        .map(|named| format!("used by {}:{}", named.file, named.line))
+        .map(|named| format!("used by {}:{}", named.file, named.line + 1))
         .collect();
     if uses.is_empty() { vec![format!("no file names `{cue}`")] } else { uses }
 }

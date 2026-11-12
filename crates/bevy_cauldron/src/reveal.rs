@@ -109,6 +109,9 @@ pub enum Select {
     Note(String),
     /// **A sound cue** on the Sound workspace's list (NV-07, #384): the cue the list marks as selected.
     Cue(String),
+    /// **A project file in the Files workspace** (NV-07, #384, GD-11, #373): the file open as the active tab, its caret
+    /// at `line`, counted from 0. A registered data file is [`Select::DataFile`] instead: its page is the DATA table.
+    File { path: String, line: Option<usize> },
     /// An inspector section alone.
     Section(InspectorSection),
     /// Nothing to select: the page is enough.
@@ -174,25 +177,25 @@ pub fn page_of(shown: &Shown, project: Option<&Project>) -> Result<Page, String>
             tab: Mode::Sound,
             select: Select::Cue(name.clone()),
         },
-        // **A registered data file's page is the DATA table**; anything else has none until the Files
-        // workspace lands (GD-11, #373). `lines` is where that page would scroll to, so it is named in
-        // the refusal: the day the page exists, this arm becomes it.
+        // **A registered data file's page is the DATA table**, which is where its values are edited; **every other
+        // project file's page is the Files workspace, at the file and the line** (GD-11 exists, so the refusal this arm
+        // used to carry is gone). One route: a followed change, a cross-link and the finder's file row all land here.
         Shown::File { path, lines } => match project.and_then(|p| registered_data_file(p, path)) {
             Some(file) => Page::Workspace {
                 workspace: Workspace::Map,
                 tab: Mode::Map,
                 select: Select::DataFile(file),
             },
-            None => {
-                return Err(format!(
-                    "`{path}` is a project file, and the editor has no page that shows one yet (the Files \
-                     workspace, #373), so nothing was selected{}",
-                    match lines {
-                        Some([first, last]) => format!("; the change is at lines {first}..{last}"),
-                        _ => String::new(),
-                    }
-                ));
-            }
+            None => Page::Workspace {
+                workspace: Workspace::Files,
+                tab: Mode::Files,
+                select: Select::File {
+                    path: path.clone(),
+                    // **The line a reader scrolls to is the change's first**, counted from 0 as every line in this
+                    // crate is (`Select::File`'s own note); `Shown::File` carries 1-based lines, as an editor shows them.
+                    line: lines.map(|[first, _]| usize::try_from(first).unwrap_or(0).saturating_sub(1)),
+                },
+            },
         },
         Shown::Settings { section } => settings_page(section)?,
     };
@@ -468,6 +471,7 @@ fn take_the_reveal(
     mut open_settings: MessageWriter<crate::settings_screen::OpenSettings>,
     mut open_config: MessageWriter<crate::project_config::OpenProjectConfig>,
     mut tables: Table<'_, '_>,
+    mut commands: Commands,
 ) {
     // **Taken, not cloned**: the reveal is put back at the end of the branch that continues it, so a
     // frame that finishes one costs no copy of the `Shown` the page was decided from.
@@ -552,6 +556,7 @@ fn take_the_reveal(
                 revealing.in_flight = Some(in_flight);
                 return;
             }
+            let mut to_open: Option<(String, Option<usize>)> = None;
             let selected = apply_selection(
                 select,
                 project.as_deref(),
@@ -563,7 +568,13 @@ fn take_the_reveal(
                 selected_note.as_deref_mut(),
                 &mut inspector,
                 &mut tables,
+                &mut to_open,
             );
+            // **The file is opened once the door has landed**, as a cue's mark and a map's lock are: a door change resets
+            // the workspace's own state, so opening it here would be undone by the crossing this page asked for.
+            if let Some((path, line)) = to_open {
+                commands.queue(move |world: &mut World| crate::crosslinks::open_in_files(world, &path, line));
+            }
             if !selected {
                 in_flight.tries += 1;
                 if in_flight.tries < REVEAL_TRIES {
@@ -661,6 +672,7 @@ struct Table<'w, 's> {
     scrub: Option<ResMut<'w, crate::anim_stage::BenchScrub>>,
     /// **The cue the Sound workspace's list marks as selected**, which a cue reveal writes (NV-07, #384).
     cue: Option<ResMut<'w, crate::world_lists::SelectedCue>>,
+
 }
 
 /// **Write the page's selection**, and answer whether the row it names was there.
@@ -683,6 +695,9 @@ fn apply_selection(
     selected_note: Option<&mut crate::editor::SelectedNote>,
     inspector: &mut InspectorReveal,
     tables: &mut Table<'_, '_>,
+    // **`to_open`: the file a `Select::File` asks for and the line to open it at** (NV-07, #384). Opening is a world job, so
+    // the caller does it once the page's door has landed, through the one `crosslinks::open_in_files`.
+    to_open: &mut Option<(String, Option<usize>)>,
 ) -> bool {
     let mut want: Option<InspectorSection> = None;
     // **Whether the row the selection names was found.** An inspector section alone is always
@@ -766,6 +781,14 @@ fn apply_selection(
             if let Some(selected_note) = selected_note {
                 selected_note.0 = Some(id.clone());
             }
+        }
+        Select::File { path, line } => {
+            // **A file is opened the one way a file is opened** (`crosslinks::open_in_files`: the tab, the text, the caret
+            // and the door), which is a world job rather than a resource write, so it is queued and found on the frame
+            // after the door has crossed. `found` stays true: the file's own existence is the refusal, said on the status
+            // line by that call.
+            let (path, line) = (path.clone(), *line);
+            *to_open = Some((path, line));
         }
         Select::Cue(name) => {
             // **A cue the project does not hold is a row that never appears**, so the reveal says so rather than marking nothing.

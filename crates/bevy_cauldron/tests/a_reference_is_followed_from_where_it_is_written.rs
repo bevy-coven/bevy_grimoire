@@ -193,6 +193,56 @@ fn a_primary_click_off_the_reference_does_not_follow_a_caret_that_has_moved() {
     assert_eq!(selected_cue(&app), None, "and no cue is marked");
 }
 
+/// **Cmd/Ctrl+clicking the file tree does not follow the caret's reference** (review M2): the tree, the header and the notice live
+/// in the same workspace, so a click outside the editor's own bounds is a click on the workspace, not on a value.
+#[test]
+fn a_primary_click_on_the_tree_stays_in_files() {
+    let root = project("click_tree", &[("family/bevy_siren.ron", CUES), ("data/door.yaml", DOOR)]);
+    let mut app = files_editor(&root, "data/door.yaml");
+    caret_at(&mut app, 0, IN_THE_VALUE);
+    assert_eq!(selected_cue(&app), None, "nothing is followed before the click");
+
+    // **The pointer is put over the tree**, which the harness's own click does not do: it clicks an entity's node directly.
+    let tree = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<files::FilesTree>>().single(world).unwrap_or_else(|e| panic!("the tree is on screen: {e}"))
+    };
+    let tree_place = {
+        let world = app.world();
+        world.get::<UiGlobalTransform>(tree).unwrap_or_else(|| panic!("the tree is laid out")).translation
+    };
+    let window = app.world_mut().query_filtered::<Entity, With<PrimaryWindow>>().single(app.world()).expect("one primary window");
+    let scale = app.world().get::<Window>(window).map_or(1.0, Window::scale_factor);
+    app.world_mut().write_message(bevy::window::CursorMoved { window, position: tree_place / scale, delta: Some(Vec2::ZERO) });
+
+    let primary = if cfg!(target_os = "macos") { (KeyCode::SuperLeft, Key::Super) } else { (KeyCode::ControlLeft, Key::Control) };
+    key(&mut app, primary.0, primary.1, ButtonState::Pressed);
+    bevy_gooey::testing::click(&mut app, tree);
+    settle(&mut app);
+
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Files, "a Cmd+click on the tree is not a click on a reference");
+    assert_eq!(selected_cue(&app), None, "and no cue is marked");
+}
+
+/// **F12 while the finder is open does nothing** (review M3): the finder's own box holds the keyboard, and every other chord
+/// respects that. Without the gate F12 would follow the reference behind the overlay the person is typing into.
+#[test]
+fn f12_with_the_finder_open_does_nothing() {
+    let root = project("f12_finder", &[("family/bevy_siren.ron", CUES), ("data/door.yaml", DOOR)]);
+    let mut app = files_editor(&root, "data/door.yaml");
+    caret_at(&mut app, 0, IN_THE_VALUE);
+    // Cmd/Ctrl+P opens the finder, whose search field takes the keyboard.
+    let finder_key = if cfg!(target_os = "macos") { KeyCode::SuperLeft } else { KeyCode::ControlLeft };
+    let logical = if cfg!(target_os = "macos") { Key::Super } else { Key::Control };
+    key(&mut app, finder_key, logical, ButtonState::Pressed);
+    press(&mut app, KeyCode::KeyP, Key::Character("p".into()));
+    settle(&mut app);
+
+    press(&mut app, KeyCode::F12, Key::F12);
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Files, "the editor stays where it is");
+    assert_eq!(selected_cue(&app), None, "and F12 followed nothing behind the finder");
+}
+
 /// **A click without the modifier only edits**: the caret goes where it was clicked and the editor stays where it is.
 #[test]
 fn a_plain_click_does_not_follow_the_reference() {

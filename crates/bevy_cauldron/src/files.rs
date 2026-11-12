@@ -591,6 +591,7 @@ pub struct FilesPlugin;
 
 impl Plugin for FilesPlugin {
     fn build(&self, app: &mut App) {
+        app.init_resource::<PointerAt>();
         app.init_resource::<Files>()
             .add_systems(OnEnter(Screen::Editor), spawn_the_files_workspace.after(FrameSystems).run_if(in_files))
             .add_systems(
@@ -600,6 +601,7 @@ impl Plugin for FilesPlugin {
                     poll_the_disk,
                     keep_the_editor,
                     decorate_the_editor,
+                    track_the_pointer,
                     follow_on_f12,
                     follow_on_primary_click,
                     keep_the_header,
@@ -992,6 +994,55 @@ fn decorate_the_editor(
     }
 }
 
+/// **Where the pointer last was, in the window's logical pixels** (NV-07, #384): the file editor's click needs the place a
+/// click landed to tell a click in the editor from one on the tree. Bevy's own `Window::cursor_position` is one source; a
+/// `PointerInput` message is the other, and it is the one a test's synthetic click and a touch both speak. A resource rather
+/// than a read at the click, because a message lasts two frames and the release is a frame after the press.
+#[derive(Resource, Default, Debug, Clone, Copy)]
+pub struct PointerAt(pub Option<Vec2>);
+
+/// **Keep [`PointerAt`] true** from either channel: the pointer's own moves, and a pointer input's place.
+fn track_the_pointer(mut at: ResMut<PointerAt>, mut inputs: MessageReader<bevy::picking::pointer::PointerInput>, windows: Query<&Window, With<bevy::window::PrimaryWindow>>) {
+    // **The last pointer input of the frame wins**, so a synthetic click over an editor is read at its own place rather than at
+    // wherever a `CursorMoved` left the pointer.
+    for input in inputs.read() {
+        at.0 = Some(input.location.position);
+    }
+    if at.0.is_none()
+        && let Some(window) = windows.iter().next()
+        && let Some(cursor) = window.cursor_position()
+    {
+        at.0 = Some(cursor);
+    }
+}
+
+/// **The open code editors**, as one fact: the file's own state, the widget, its text and where it is drawn. Bundled because
+/// three systems read the same four components and the one that also reads the pointer was over Bevy's parameter cap.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct OpenEditor<'w, 's> {
+    editors: Query<'w, 's, (&'static FileEditor, &'static CodeEditor, &'static CodeEditorValue, &'static ComputedNode, &'static UiGlobalTransform)>,
+}
+
+/// **What a Cmd/Ctrl+click reads**: the open editors, the window the pointer is measured in, the pointer's last place, and the two
+/// gates. Bundled because they answer one question — *is this click on a reference in the editor?* — and the system was over Bevy's
+/// parameter cap.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct ClickFacts<'w, 's> {
+    open: OpenEditor<'w, 's>,
+    windows: Query<'w, 's, &'static Window, With<bevy::window::PrimaryWindow>>,
+    at: Res<'w, PointerAt>,
+    live: Option<Res<'w, crate::keys::Live>>,
+    confirm: Option<Res<'w, crate::confirm::Confirm>>,
+}
+
+/// **Whether a reference may be followed right now**: the gates `nav`'s walk and the other chords take — no text field holding the
+/// keyboard, the tab holding it, and no question on screen. One function, so F12 and the click cannot disagree about when they are
+/// allowed, and neither can drift from `nav`.
+fn may_follow(live: Option<&crate::keys::Live>, confirm: Option<&crate::confirm::Confirm>) -> bool {
+    let some_other_holder = live.is_some_and(|l| l.0 == crate::keys::Context::Typing || l.2 != crate::keys::Holder::Tab);
+    !some_other_holder && !confirm.is_some_and(crate::confirm::Confirm::is_open)
+}
+
 /// **The reference under the caret of one editor**, when the caret is on a value that names another thing.
 fn reference_under_caret(files: &mut Files, editor: &FileEditor, widget: &CodeEditor, value: &CodeEditorValue) -> Option<files_lang::Reference> {
     let rel = editor.shown.clone()?;
@@ -1015,14 +1066,22 @@ fn follow_reference_later(commands: &mut Commands, found: files_lang::Reference)
 fn follow_on_f12(
     keys: Res<ButtonInput<KeyCode>>,
     mut files: ResMut<Files>,
-    editors: Query<(&FileEditor, &CodeEditor, &CodeEditorValue)>,
+    open: OpenEditor,
     mut state: Option<ResMut<EditorState>>,
+    live: Option<Res<crate::keys::Live>>,
+    confirm: Option<Res<crate::confirm::Confirm>>,
     mut commands: Commands,
 ) {
     if !keys.just_pressed(KeyCode::F12) {
         return;
     }
-    let found = editors.iter().next().and_then(|(editor, widget, value)| reference_under_caret(&mut files, editor, widget, value));
+    // **The gates every other chord respects** (`nav::walk_on_the_chords`): not while a text field has the keyboard, not while
+    // another pane holds it, and not over a question — the finder's own box is a text field, so Cmd+P then F12 would otherwise
+    // follow the reference behind the overlay.
+    if !may_follow(live.as_deref(), confirm.as_deref()) {
+        return;
+    }
+    let found = open.editors.iter().next().and_then(|(editor, widget, value, _, _)| reference_under_caret(&mut files, editor, widget, value));
     match found {
         Some(found) => follow_reference_later(&mut commands, found),
         None => {
@@ -1039,11 +1098,11 @@ fn follow_on_primary_click(
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     mut files: ResMut<Files>,
-    // **No hover test**: `Hovered` is set on the deepest node under the pointer, which inside the editor is the editor's own node, not
-    // the column that holds it — so asking either node whether it is hovered answered no and the click did nothing while F12 on the same
-    // value followed it. The gesture is the modifier, and the reference is read under the caret the press put where the pointer went down;
-    // a Cmd/Ctrl+click anywhere in the Files workspace is the same gesture, and a plain click is still only an edit.
-    editors: Query<(&FileEditor, &CodeEditor, &CodeEditorValue)>,
+    // **The editor's own place on screen**, so a click is a click *in the editor*: the tree, the header and the notice are in the same
+    // workspace, and a Cmd+click on one of them must not follow whatever reference the caret was left on. `Hovered` is no use for this
+    // (bevy sets it on the deepest node under the pointer, which inside the editor is the editor's own node but says nothing about where
+    // in it the pointer is), so the node's bounds are measured against the pointer.
+    facts: ClickFacts,
     mut commands: Commands,
 ) {
     // **On the release**, a frame after the press: the editor puts the caret where the pointer went down in its own system, and a read on the
@@ -1052,13 +1111,25 @@ fn follow_on_primary_click(
         return;
     }
     let primary = [KeyCode::SuperLeft, KeyCode::SuperRight, KeyCode::ControlLeft, KeyCode::ControlRight].into_iter().any(|k| keys.pressed(k));
-    if !primary {
+    if !primary || !may_follow(facts.live.as_deref(), facts.confirm.as_deref()) {
         return;
     }
-    let found = editors
+    // **Inside the editor, by the node's own bounds.** `ComputedNode` and `UiGlobalTransform` are in physical pixels and the pointer is
+    // in the window's logical ones, so the pointer is scaled by the window's factor before the test. A click with no pointer place at
+    // all follows nothing: there is no way to tell it from one on the tree.
+    let (Some(pointer), scale) = (facts.at.0, facts.windows.iter().next().map_or(1.0, Window::scale_factor)) else {
+        return;
+    };
+    let found = facts
+        .open
+        .editors
         .iter()
-        .next()
-        .and_then(|(editor, widget, value)| reference_under_caret(&mut files, editor, widget, value));
+        .find(|(_, _, _, node, place)| {
+            let offset = pointer * scale - place.translation;
+            let half = node.size() * 0.5;
+            offset.x.abs() <= half.x && offset.y.abs() <= half.y
+        })
+        .and_then(|(editor, widget, value, _, _)| reference_under_caret(&mut files, editor, widget, value));
     if let Some(found) = found {
         follow_reference_later(&mut commands, found);
     }

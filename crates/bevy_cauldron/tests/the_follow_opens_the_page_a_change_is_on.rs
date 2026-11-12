@@ -495,21 +495,19 @@ fn a_notes_page_opens_on_the_notes_panel_with_that_note_selected() {
     );
 }
 
-/// **A `Shown` with no page raises a problem naming the operation and its shown.**
+/// **A project file's change opens the Files workspace on that file.**
 ///
-/// `rules_set` rewrites `assets/grimoire/rules.ron`, and the editor has no page that shows a project
-/// file yet — the Files workspace is GD-11 (#373). Doing nothing is the bug this closes: the person
-/// would read `the Familiar changed a rule` and have nowhere to look.
+/// **Owner exception (2026-11-12): tests/the_follow_opens_the_page_a_change_is_on.rs::
+/// a_change_the_editor_has_no_page_for_raises_a_problem_naming_it: the "no page" this asserted was the
+/// Files workspace being unbuilt (GD-11, #373), and it is now built** (review M1). `rules_set` rewrites
+/// `assets/grimoire/rules.ron`; the follow opens it there instead of raising a problem, which is the same
+/// intent the test held — a change takes the person to where it is seen — with the page the refusal stood
+/// in for. The name changed with it so no line is left claiming a page is missing.
 #[test]
-fn a_change_the_editor_has_no_page_for_raises_a_problem_naming_it() {
+fn a_project_files_change_opens_the_files_workspace_on_that_file() {
     let root = project("reveal_no_page");
     let mut app = editor(&root);
-    let before = app
-        .world()
-        .resource::<EditorState>()
-        .status
-        .problems()
-        .len();
+    let before = app.world().resource::<EditorState>().status.problems().len();
     let answer = apply(
         &mut app,
         "rules_set",
@@ -518,10 +516,16 @@ fn a_change_the_editor_has_no_page_for_raises_a_problem_naming_it() {
     assert_eq!(answer["outcome"], "applied", "{answer}");
     settle(&mut app);
 
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Files, "a rules change is shown in the Files workspace");
+    assert_eq!(
+        bevy_cauldron::files::active_file(app.world().resource::<bevy_cauldron::session::Session>()).as_deref(),
+        Some("assets/grimoire/rules.ron"),
+        "on the file the operation wrote"
+    );
     let status = &app.world().resource::<EditorState>().status;
     let raised = &status.problems()[before..];
     assert!(
-        raised.iter().any(|p| p.text.contains("rules_set") && p.text.contains("rules.ron")),
-        "a change with no page said nothing about it. The problems raised were {raised:?}"
+        raised.is_empty(),
+        "a change with a page needs no problem to say so, and these were raised: {raised:?}"
     );
 }

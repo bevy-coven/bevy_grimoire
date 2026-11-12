@@ -712,13 +712,9 @@ pub fn show_in_world(world: &mut World, entry: &Entry) {
     if let Some(mut following) = world.get_resource_mut::<crate::follow::Following>() {
         following.look_now();
     }
-    // **A project file is the Files workspace's**, which the reveal has no page for (`reveal::page_of` refuses a file it cannot place), so
-    // it is opened the way a tree click opens it.
-    if let (Kind::File | Kind::Script, Shown::File { path, lines }) = (entry.kind, &entry.shown) {
-        let line = lines.map(|[first, _]| (first as usize).saturating_sub(1));
-        crate::crosslinks::open_in_files(world, path, line);
-        return;
-    }
+    // **A project file needs no branch of its own**: `reveal::page_of` answers a `Shown::File` with the Files workspace at
+    // the file and the line, so the reveal below is the one route a finder result, a cross-link and a followed change all
+    // take. A second branch here was two answers to the same question.
     // **Two mechanisms and one decision, exactly as an agent's change takes it**: the camera for a
     // place on the map, the reveal for a page. A second path here would be a second answer to "which
     // page is this thing on", and the two would disagree the first time a panel moved.

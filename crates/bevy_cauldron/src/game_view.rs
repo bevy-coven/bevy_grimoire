@@ -705,6 +705,12 @@ fn draw_the_game(
     });
 }
 
+/// **How the state view separates a component's name from its value**: `module::Type: value`, the engine's own wording.
+pub const STATE_VIEW_VALUE_SEP: &str = ": ";
+
+/// **How the engine separates a type's module from its own name.**
+pub const MODULE_SEP: &str = "::";
+
 /// **How often the entity files are read again for the chosen entity**, in seconds: they are read for the line each component stands on, and a file
 /// edited under the panel moves a line.
 pub const FIELD_FILES_POLL_S: f32 = 1.5;
@@ -736,8 +742,9 @@ fn draw_the_field_files(
             lines
                 .iter()
                 .filter_map(|line| {
-                    // The state view writes `module::Type: value`; the entity file's key is the type's own name.
-                    let component = line.split(": ").next()?.rsplit("::").next()?;
+                    // The state view writes a component's name as the engine words it; the entity file's key is the type's own
+                    // name, so both of the view's own separators are named here rather than spelled out.
+                    let component = line.split(STATE_VIEW_VALUE_SEP).next()?.rsplit(MODULE_SEP).next()?;
                     crate::crosslinks::component_line(&project.root, &entity.name, component).map(|(rel, at)| (component.to_owned(), rel, at))
                 })
                 .collect()
