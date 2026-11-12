@@ -119,6 +119,13 @@ tab, `Cmd/Ctrl+Shift+T` reopens the last one closed, and `Ctrl+Tab` (with Shift,
 - **A tab whose thing no longer exists** (a file deleted outside the editor) closes, and the status line
   names it.
 
+- The **activity bar** (NV-03, #380) is a vertical bar at the window's far left with one icon per
+  *registered* workspace, in the registry's order. The sliding selection indicator is on the open workspace,
+  its tooltip gives the workspace's name and shortcut, and a badge says what needs a person: the problems
+  count on Map and Files, the waiting wishes and lessons on Agent. A workspace with no source draws no
+  badge. It is a focus region, so F6 reaches it and the arrows move down it. **View ▸ Show activity bar**
+  takes it away entirely (it is spawned on demand, never hidden) and the choice is saved in the user's
+  settings. Agent's badge replaces the status band's wishes chip once the Agent workspace is registered.
 - The **viewport** is the `surface.rs` image and is a *host* focus region: arrow keys and Enter act on
   the map, as today. F6 and Shift+F6 cycle regions, Esc returns to the viewport.
 - The docks hold **panels**. Each panel has an id, a title and a spawn function in a `PanelRegistry`.

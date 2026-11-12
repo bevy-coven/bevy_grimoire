@@ -2618,6 +2618,7 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::empty_state::EmptyStatePlugin);
         app.add_plugins(crate::add_meshes::AddMeshesPlugin);
         app.add_plugins(crate::menu_bar::MenuBarPlugin);
+        app.add_plugins(crate::activity_bar::ActivityBarPlugin);
         app.add_plugins(crate::app_verbs::AppVerbsPlugin);
         // **Each panel header's "?"** (UI-91, #257): the guide page that covers what the panel holds.
         app.add_plugins(crate::help::HelpPlugin);

@@ -359,6 +359,7 @@ mod stamp_remove;
 mod terrain_preset_is_an_operation;
 mod terrain_stroke_is_an_operation;
 mod terrain_view_draws_water;
+mod the_activity_bar_lists_the_workspaces;
 mod the_arm_crosses_the_door;
 mod the_arm_survives_the_door_change;
 mod the_carved_ground_is_not_white;

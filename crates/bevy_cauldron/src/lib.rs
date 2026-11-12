@@ -50,6 +50,7 @@ pub mod anim_watch;
 pub mod args;
 #[cfg(feature = "asset_spike")]
 pub mod asset_spike;
+pub mod activity_bar;
 pub mod badges;
 pub mod build;
 pub mod build_view;
