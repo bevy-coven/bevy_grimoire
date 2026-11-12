@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-12
 
+- **gd-10-sample-game** `81f82273f` A sample game made of YAML and Rhai in games/sample, played by a test from the YAML and from the bake *No clip: visible, not yet recorded: fleet worker*
 - **gd-08-bake-for-release** `c19954bdb` cauldron bake turns every YAML file a game loads into binaries, proved against the YAML; a baked release refuses stale data naming the file *No clip: a build step; proved by a_bake_is_proved_against_the_yaml and the sample game's baked playthrough*
 - **gd-03-every-file-is-yaml** `6dc96b1cc` Every project file, and the user's own settings, recent and trusted files, are YAML; cauldron migrate moves an old project and an old project is refused at open naming the command *No clip: visible, not yet recorded: fleet worker*
 - **gd-14-agent-file-edit** `c071cc57d` An agent's file_edit lands live in the open file: comments kept, the person's caret untouched, the changed lines tinted *No clip: visible, not yet recorded: fleet worker*
