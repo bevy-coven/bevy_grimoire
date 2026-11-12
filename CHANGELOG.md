@@ -2,6 +2,12 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-12
+
+- **gd-14-agent-file-edit** `c071cc57d` An agent's file_edit lands live in the open file: comments kept, the person's caret untouched, the changed lines tinted *No clip: visible, not yet recorded: fleet worker*
+- **gd-13-project-replace** `c071cc57d` Find and replace across the project: a streaming, cancellable search, a diff preview, and Replace all as one operation with one undo *No clip: visible, not yet recorded: fleet worker*
+- **gd-12-file-editor-navigation** `c071cc57d` The file editor has a minimap, folding by structure, indent guides and find; the fold chords are the editor's own *No clip: visible, not yet recorded: fleet worker*
+
 ## 2026-11-11
 
 - **picker-operations** `e03ea6120` The composition picker's P and Shift+up/down keys are operations an agent calls too (composition_picker_toggle, composition_picker_walk) *No clip: an operation behind existing keys, no new picture; proved by composition_picker_is_an_operation*
