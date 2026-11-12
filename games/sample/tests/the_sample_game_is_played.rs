@@ -16,7 +16,7 @@ use std::time::Duration;
 use bevy::prelude::*;
 use bevy_grimoire::game::{GameDataPlugin, StartRefused};
 use bevy_grimoire_core::{bake, load};
-use bevy_grimoire_rhai::ScriptEvent;
+use bevy_grimoire_rhai::{ScriptEvent, ScriptProblem};
 
 /// **The most lines `src/main.rs` may have**: the game is data, and a game whose Rust grows past this has stopped being one.
 const SAMPLE_MAIN_MAX_LINES: usize = 10;
@@ -66,11 +66,18 @@ fn collect(mut events: MessageReader<ScriptEvent>, mut seen: ResMut<Seen>) {
     }
 }
 
+/// **A script's fault is part of what the test saw**, so a script that stops is a failure with its line.
+fn collect_faults(mut faults: MessageReader<ScriptProblem>, mut seen: ResMut<Seen>) {
+    for fault in faults.read() {
+        seen.0.push(format!("fault: {}", fault.line()));
+    }
+}
+
 fn game(root: &Path, bake: Option<PathBuf>) -> App {
     let mut app = App::new();
     app.init_resource::<Time>().init_resource::<ButtonInput<KeyCode>>().init_resource::<Seen>();
     app.add_plugins(bevy::transform::TransformPlugin).add_plugins(GameDataPlugin { root: root.to_path_buf(), bake });
-    app.add_systems(Last, collect);
+    app.add_systems(Last, (collect, collect_faults));
     app
 }
 
@@ -93,7 +100,11 @@ fn play(root: &Path, bake: Option<PathBuf>) -> (Vec<String>, usize) {
             break;
         }
     }
-    (app.world().resource::<Seen>().0.clone(), entities)
+    let mut names = app.world_mut().query::<(&Name, &Transform)>();
+    let standing: Vec<String> = names.iter(app.world()).map(|(n, t)| format!("{n}@{:.1}", t.translation.x)).collect();
+    let mut seen = app.world().resource::<Seen>().0.clone();
+    seen.push(format!("standing: {standing:?}"));
+    (seen, entities)
 }
 
 /// **The playthrough reaches `win` from the YAML and from the bake, and the world is the same size.**
