@@ -8228,6 +8228,40 @@ fn history_nodes(state: &EditorState) -> Vec<bevy_gooey::TreeNode> {
         .collect()
 }
 
+/// **The most rows a move of the history's current line may relabel one by one** before the list is built whole: an undo
+/// or a redo is one or two, a jump across a long stretch of the history is not.
+const MOST_HISTORY_ROWS_RELABELLED: usize = 16;
+
+/// **Put what a move of the two stacks changed into the history's tree row by row** (UI-93, #259), and `false` when the
+/// move is not one this can name, so the caller builds the whole list.
+///
+/// Two moves are named. **An entry recorded on the end** (nothing was waiting to be redone before or after) relabels the
+/// line that was `now:` and adds the new last line. **A move of the current line with the same number of lines** (an undo,
+/// a redo, a jump) relabels the lines between the two positions, both included: the line the editor stood on loses its
+/// `now:`, the one it stands on gains it, and an entry that crossed from one stack to the other says so in its own
+/// words. Every other line is what it was.
+fn patch_history(nodes: &mut bevy_gooey::Tree, state: &EditorState, was: (usize, usize), now: (usize, usize)) -> bool {
+    let ((was_depth, was_redo), (depth, redo)) = (was, now);
+    if was_redo == 0 && redo == 0 && depth == was_depth + 1 {
+        let Some(last) = history_line(state, depth, depth) else { return false };
+        if let Some(line) = history_line(state, was_depth, depth) {
+            nodes.relabel(was_depth as u64, line);
+        }
+        return nodes.insert(None, bevy_gooey::TreeNode::new(depth as u64, last));
+    }
+    // **Only while something is left to redo.** Recording an entry clears the redo stack, so a move that ends with nothing to
+    // redo and the same number of lines may be an undo of two and two new entries as well as a redo of everything: the lines
+    // between the positions are not all what they were, and the list is built whole.
+    if redo > 0 && was_depth + was_redo == depth + redo && was_depth.abs_diff(depth) < MOST_HISTORY_ROWS_RELABELLED {
+        for position in was_depth.min(depth)..=was_depth.max(depth) {
+            let Some(line) = history_line(state, position, depth) else { return false };
+            nodes.relabel(position as u64, line);
+        }
+        return true;
+    }
+    false
+}
+
 /// What a history row needs to jump: the same resources the keyboard's undo system takes. The map's two are
 /// `Option`s because the click observer is global and a click can land where no map is open.
 #[derive(bevy::ecs::system::SystemParam)]
@@ -8330,7 +8364,12 @@ fn refresh_history(
     let _rebuild = spent.rebuilding();
     let Ok(mut table) = tables.get_mut(tree) else { return };
     let Some(nodes) = table.source_mut::<bevy_gooey::Tree>() else { return };
-    nodes.set_nodes(history_nodes(&state));
+    // **A stack that moved by one entry or by the current line touches the rows it names** and leaves the other 5,000 alone.
+    // **A patch that leaves the list a different length than the stacks say has drifted**, and the list is built whole.
+    let patched = mark.seen.is_some_and(|was| patch_history(nodes, &state, was, (depth, redo))) && nodes.node_count() == depth + redo + 1;
+    if !patched {
+        nodes.set_nodes(history_nodes(&state));
+    }
     // **The line the editor stands on is the selected one**, and gooey keeps that row where the person is
     // reading: a selection it did not see change is not scrolled to, so a rebuild leaves the view alone.
     commands

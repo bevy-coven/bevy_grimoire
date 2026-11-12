@@ -4123,10 +4123,7 @@ fn spawn_tab_strip(
                         TextColor(crate::chrome::ink().danger),
                         crate::chrome::typed(crate::chrome::text::LABEL),
                         TextLayout::new(Justify::Left, LineBreak::NoWrap),
-                        Node {
-                            margin: UiRect::left(Val::Px(crate::chrome::GAP_ROW)),
-                            ..default()
-                        },
+                        crate::chrome::spaced(UiRect::left(Val::Px(crate::chrome::GAP_ROW))),
                         TabBadge,
                     ));
                 })
@@ -4149,15 +4146,8 @@ fn spawn_tab_strip(
             // **The name is here; the keys are the workspace chords'.** `=` was this cue's key
             // until #379 replaced it with `Cmd`/`Ctrl`+`1`…`9`, which are on the strip's badge
             // already, so this prints the *name* of where a click goes and the badge prints the keys.
-            p.spawn((
-                Node {
-                    align_items: AlignItems::Center,
-                    column_gap: Val::Px(crate::chrome::GAP_ROW),
-                    margin: UiRect::left(Val::Px(crate::chrome::GAP_GROUP)),
-                    ..default()
-                },
-                OtherWorkspaceMark,
-            ))
+            crate::chrome::gapped_row(p, crate::chrome::GAP_ROW_STEPS, UiRect::left(Val::Px(crate::chrome::GAP_GROUP)), AlignItems::Center)
+                .insert(OtherWorkspaceMark)
             // **A click on the name crosses.** The mark says where it goes, and a name that names
             // a place is a name that gets clicked (#288). The Rigs door hides the mark, so a click
             // is never aimed at it there.
@@ -4179,10 +4169,7 @@ fn spawn_tab_strip(
                     // 11 px, the readable default, and it is still a step below the panels: **the
                     // panels are the strip's subject, and the cue is a sentence beside them.**
                     crate::chrome::typed(crate::chrome::text::BODY),
-                    Node {
-                        margin: UiRect::right(Val::Px(crate::chrome::GAP_ROW)),
-                        ..default()
-                    },
+                    crate::chrome::spaced(UiRect::right(Val::Px(crate::chrome::GAP_ROW))),
                     OtherWorkspaceLabel,
                 ));
             });
@@ -4581,46 +4568,23 @@ fn spawn_tiles_panel(
     .with_children(|p| {
         crate::chrome::list_heading_in(p, "PIECES", heading);
         // **The batch, while it runs** — above the list it is filling. See `paint_label_progress`.
-        p.spawn((
-            Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                margin: UiRect::bottom(Val::Px(crate::chrome::GAP_ROW)),
-                display: Display::None,
-                ..default()
-            },
-            LabelProgress,
-        ))
-        .with_children(|b| {
+        let mut batch = p.spawn((bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS), LabelProgress));
+        // Hidden until a walk exists, and a row of room under it when it shows: the two things a gooey column does not say.
+        batch.entry::<Node>().and_modify(|mut node| {
+            node.margin = UiRect::bottom(Val::Px(crate::chrome::GAP_ROW));
+            node.display = Display::None;
+        });
+        batch.with_children(|b| {
             b.spawn((
                 Text::new(""),
                 TextColor(crate::chrome::ink().accent),
                 crate::chrome::typed(crate::chrome::text::LABEL),
                 LabelProgressText,
             ));
-            // The bar: a dim trough with a bright fill whose WIDTH is the fraction. Two nodes,
-            // because a bar is the one readout where the number is not the point — the eye reads
-            // "how much is left" without reading anything.
-            b.spawn((
-                Node {
-                    width: Val::Percent(100.0),
-                    // CHROME-OK: the progress bar's own thickness, not a spacing step.
-                    height: Val::Px(4.0),
-                    ..default()
-                },
-                BackgroundColor(crate::chrome::ink().slot_bg),
-            ))
-            .with_children(|trough| {
-                trough.spawn((
-                    Node {
-                        width: Val::Percent(0.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(crate::chrome::ink().accent),
-                    LabelProgressBar,
-                ));
-            });
+            // The bar is gooey's own `progress`: a trough with a fill whose width is the fraction, a readout where the number
+            // is not the point — the eye reads "how much is left" without reading anything. Its words line stays hidden: the
+            // head and the subject above and below it say what the batch is on.
+            b.spawn((bevy_gooey::progress(0.0), LabelProgressBar));
             b.spawn((
                 Text::new(""),
                 TextColor(crate::chrome::ink().dim),
@@ -8310,24 +8274,11 @@ fn shelf_strip(
     candidates: (usize, usize),
     kit: (usize, usize),
 ) {
-    p.spawn(Node {
-        flex_direction: FlexDirection::Row,
-        column_gap: Val::Px(crate::chrome::GAP_ROW),
-        // A flex item's automatic minimum size is its content, so without this the strip refuses
-        // to narrow and its last chip is clipped by the panel's right edge — the 2026-09-03
-        // audit's F7, measured in a capture.
-        // CHROME-OK: zero is not a spacing step.
-        min_width: Val::Px(0.0),
-        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-        align_items: AlignItems::Center,
-        // **Wraps, because two counted chips and a hint do not fit `LIST_W`.** Measured in a
-        // capture: `left / right` was clipped at the panel edge, which is the same class of defect
-        // as the kit row that wrapped into its own value column — a fixed width and content that
-        // outgrew it. The hint drops to a second line rather than being cut, and on a wider panel
-        // it stays where it was.
-        flex_wrap: FlexWrap::Wrap,
-        ..default()
-    })
+    // **Wraps, because two counted chips and a hint do not fit `LIST_W`.** Measured in a capture: `left / right` was clipped at
+    // the panel edge, which is the same class of defect as the kit row that wrapped into its own value column — a fixed
+    // width and content that outgrew it. The hint drops to a second line rather than being cut, and on a wider panel it stays
+    // where it was.
+    crate::chrome::wrapping_row(p, crate::chrome::GAP_ROW_STEPS, crate::chrome::GAP_TIGHT, UiRect::ZERO, AlignItems::Center)
     .with_children(|row| {
         // A tab shows the two shelves its own keys reach: `Meshes` imports (candidates <-> library),
         // `Tiles` composes (library <-> kit). Drawing all three everywhere would offer a chip whose
@@ -8552,7 +8503,7 @@ struct LabelProgress;
 /// `LABELING 16/778`, or `HELD AT 16/778`.
 #[derive(Component)]
 struct LabelProgressText;
-/// The filled part of the bar; its width is the fraction done.
+/// The batch's gooey `progress` bar; its value is the fraction done.
 #[derive(Component)]
 struct LabelProgressBar;
 /// The subject in hand right now.
@@ -8568,7 +8519,7 @@ struct LabelProgressNow;
 fn paint_label_progress(
     queue: Res<crate::labels::LabelQueue>,
     mut roots: Query<&mut Node, (With<LabelProgress>, Without<LabelProgressBar>)>,
-    mut bars: Query<&mut Node, (With<LabelProgressBar>, Without<LabelProgress>)>,
+    mut bars: Query<&mut bevy_gooey::Progress, With<LabelProgressBar>>,
     mut heads: Query<&mut Text, (With<LabelProgressText>, Without<LabelProgressNow>)>,
     mut nows: Query<&mut Text, (With<LabelProgressNow>, Without<LabelProgressText>)>,
 ) {
@@ -8590,15 +8541,10 @@ fn paint_label_progress(
         return;
     }
     let (done, total) = queue.progress();
-    let fraction = if total == 0 {
-        0.0
-    } else {
-        done as f32 / total as f32 * 100.0
-    };
+    let fraction = if total == 0 { 0.0 } else { done as f32 / total as f32 };
     for mut bar in &mut bars {
-        let want = Val::Percent(fraction);
-        if bar.width != want {
-            bar.width = want;
+        if bar.0 != fraction {
+            bar.0 = fraction;
         }
     }
     for mut text in &mut heads {
@@ -8944,22 +8890,10 @@ fn draw_ink(
                         }),
                         crate::chrome::typed(crate::chrome::text::BODY),
                     ));
-                    row.spawn((
-                        Node {
-                            flex_grow: 1.0,
-                            // See [`count_cell`]: a long mesh name wraps inside its own column
-                            // rather than widening the row.
-                            // CHROME-OK: zero is not a spacing step.
-                            min_width: Val::Px(0.0),
-                            ..default()
-                        },
-                        // The file's own name, not the full path — the pack heading already said
-                        // where it came from, and repeating it on 145 rows is the same word 145
-                        // times.
-                        Text::new(leaf.clone()),
-                        TextColor(words.read),
-                        crate::chrome::typed(crate::chrome::text::LABEL),
-                    ));
+                    // The file's own name, not the full path — the pack heading already said where it came from, and
+                    // repeating it on 145 rows is the same word 145 times. A long mesh name wraps inside its own column
+                    // rather than widening the row (see [`count_cell`]).
+                    crate::chrome::fill_text(row, leaf.clone(), words.read, crate::chrome::text::LABEL);
                 });
             }
             RowInk::Library {
@@ -8978,33 +8912,23 @@ fn draw_ink(
                     .entry::<Node>()
                     .and_modify(|mut n| n.align_items = AlignItems::Center);
                 library_row.with_children(|row| {
+                    // **A gooey `image_box` of the slot's size**, holding its room while the thumbnail is baked. The ink carries only
+                    // `portrait: bool` — a `Handle<Image>` in a compared value would make the comparison about handle identity — so
+                    // the handle is looked up here, by id, never by index. **Until a portrait exists the slot holds Bevy's
+                    // transparent image**, which the UI renderer skips: the default handle is a real white pixel and would paint
+                    // white over the slot's fill.
+                    let image = if *portrait { thumbs.and_then(|t| t.image(id)) } else { None };
                     let mut slot = row.spawn((
-                        Node {
-                            width: Val::Px(crate::chrome::THUMB_SLOT),
-                            height: Val::Px(crate::chrome::THUMB_SLOT),
-                            margin: UiRect::right(Val::Px(crate::chrome::GAP_ROW)),
-                            flex_shrink: 0.0,
-                            ..default()
-                        },
+                        bevy_gooey::image_box(image.unwrap_or(bevy::image::TRANSPARENT_IMAGE_HANDLE), Vec2::splat(crate::chrome::THUMB_SLOT)),
                         BackgroundColor(crate::chrome::ink().slot_bg),
                     ));
-                    // The ink carries only `portrait: bool` — a `Handle<Image>` in a compared
-                    // value would make the comparison about handle identity — so the handle is
-                    // looked up here, by id, never by index.
-                    if *portrait && let Some(image) = thumbs.and_then(|t| t.image(id)) {
-                        slot.insert(ImageNode::new(image));
-                    }
-                    row.spawn((
-                        Node {
-                            flex_grow: 1.0,
-                            // CHROME-OK: zero, not a spacing step — see [`count_cell`].
-                            min_width: Val::Px(0.0),
-                            ..default()
-                        },
-                        Text::new(id.clone()),
-                        TextColor(if *judged { crate::chrome::ink().labeled } else { crate::chrome::ink().text }),
-                        crate::chrome::typed(crate::chrome::text::LABEL),
-                    ));
+                    slot.entry::<Node>().and_modify(|mut n| n.margin = UiRect::right(Val::Px(crate::chrome::GAP_ROW)));
+                    crate::chrome::fill_text(
+                        row,
+                        id.clone(),
+                        if *judged { crate::chrome::ink().labeled } else { crate::chrome::ink().text },
+                        crate::chrome::text::LABEL,
+                    );
                 });
             }
             // **One row of the Tiles page, in the shape every other list in this editor uses.**
@@ -9026,26 +8950,20 @@ fn draw_ink(
                 open,
             } => {
                 crate::chrome::list_row(p, false, KitRow(*i)).with_children(|row| {
-                    row.spawn((
-                        Node {
-                            flex_grow: 1.0,
-                            // CHROME-OK: zero, not a spacing step — see [`count_cell`].
-                            min_width: Val::Px(0.0),
-                            ..default()
-                        },
-                        Text::new(id.clone()),
-                        // `MUTED` for a composition this page cannot open — present on purpose
-                        // and deliberately not participating, which is exactly what that ink is
-                        // for.
-                        TextColor(if *open {
+                    // `MUTED` for a composition this page cannot open — present on purpose and deliberately not
+                    // participating, which is exactly what that ink is for.
+                    crate::chrome::fill_text(
+                        row,
+                        id.clone(),
+                        if *open {
                             crate::chrome::ink().accent
                         } else if *openable {
                             crate::chrome::ink().text
                         } else {
                             crate::chrome::ink().muted
-                        }),
-                        crate::chrome::typed(crate::chrome::text::BODY),
-                    ));
+                        },
+                        crate::chrome::text::BODY,
+                    );
                     if *openable {
                         count_cell(row, format!("{members} member(s)"), crate::chrome::ink().label);
                     } else {
@@ -9134,21 +9052,16 @@ fn draw_pack_band(
         // An excluded pack keeps its words because it names a state the chevron does NOT show,
         // and the way out of it (`docs/ui.md` §1.4). They live in the growing column beside the
         // name rather than in the count's column, because a sentence wraps and a tally must not.
-        row.spawn((
-            Node {
-                flex_grow: 1.0,
-                // CHROME-OK: zero, not a spacing step — see [`count_cell`].
-                min_width: Val::Px(0.0),
-                ..default()
-            },
-            Text::new(if excluded {
+        crate::chrome::fill_text(
+            row,
+            if excluded {
                 format!("{pack}  -  {} restores", keys::chord(Action::ExcludePack))
             } else {
                 pack.to_owned()
-            }),
-            TextColor(if excluded { crate::chrome::ink().muted } else { crate::chrome::ink().label }),
-            crate::chrome::typed(crate::chrome::text::LABEL),
-        ));
+            },
+            if excluded { crate::chrome::ink().muted } else { crate::chrome::ink().label },
+            crate::chrome::text::LABEL,
+        );
         // **The count, and nothing else.** A folded pack used to say "{n} hidden — click to
         // open"; removed at the keyboard, 2026-08-18: that is a whole sentence on every folded
         // row of a list an author is scrolling, and the chevron to the left of the name (`>`
@@ -9198,20 +9111,12 @@ fn draw_excluded_band(p: &mut ChildSpawnerCommands, packs: usize, meshes: usize,
         // out of it both stay on the band (`docs/ui.md` §1.4) — what changed is that they now
         // share the *growing* column, so the count can hold a column of its own rather than
         // being the last words of a sentence that wraps around it (F6).
-        row.spawn((
-            Node {
-                flex_grow: 1.0,
-                // CHROME-OK: zero, not a spacing step — see [`count_cell`].
-                min_width: Val::Px(0.0),
-                ..default()
-            },
-            Text::new(format!(
-                "EXCLUDED  -  {} restores one",
-                keys::chord(Action::ExcludePack)
-            )),
-            TextColor(crate::chrome::ink().muted),
-            crate::chrome::typed(crate::chrome::text::LABEL),
-        ));
+        crate::chrome::fill_text(
+            row,
+            format!("EXCLUDED  -  {} restores one", keys::chord(Action::ExcludePack)),
+            crate::chrome::ink().muted,
+            crate::chrome::text::LABEL,
+        );
         count_cell(row, format!("{packs} pack(s), {meshes} mesh(es)"), crate::chrome::ink().muted);
     });
 }
@@ -9575,17 +9480,7 @@ fn build_detail(p: &mut ChildSpawnerCommands, build: &crate::build::Build, proje
         // Selection is the row's fill and its accent rail now, so the ASCII marker goes with the
         // amber — a cursor drawn into the text as well would be one fact said twice.
         crate::chrome::list_row(p, focused, MemberRow(i)).with_children(|row| {
-            row.spawn((
-                Node {
-                    flex_grow: 1.0,
-                    // CHROME-OK: zero, not a spacing step — see [`count_cell`].
-                    min_width: Val::Px(0.0),
-                    ..default()
-                },
-                Text::new(what),
-                TextColor(crate::chrome::ink().text),
-                crate::chrome::typed(crate::chrome::text::LABEL),
-            ));
+            crate::chrome::fill_text(row, what, crate::chrome::ink().text, crate::chrome::text::LABEL);
             count_cell(
                 row,
                 format!("({:+.2}, {:+.2}) +{:.2}{yaw}", m.at.0, m.at.1, m.lift),
@@ -9840,10 +9735,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 Text::new(id_text),
                 TextColor(id_tint),
                 crate::chrome::typed(crate::chrome::text::TAB),
-                Node {
-                    margin: UiRect::bottom(Val::Px(crate::chrome::GAP_ROW)),
-                    ..default()
-                },
+                crate::chrome::spaced(UiRect::bottom(Val::Px(crate::chrome::GAP_ROW))),
                 // The line `I` types into, so that is where its badge goes.
                 crate::chrome::Control(crate::keys::ControlId::IdField),
             ));
@@ -10033,12 +9925,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 }
                 None => "  no measured footprint to size".to_owned(),
             };
-            p.spawn(Node {
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                margin: UiRect::top(Val::Px(crate::chrome::GAP_GROUP)),
-                ..default()
-            })
+            crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_GROUP)), AlignItems::Center)
             .with_children(|row| {
                 crate::chrome::row_label(row, crate::chrome::COL_LABEL, "size");
                 crate::chrome::text_field(
@@ -10065,12 +9952,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             // changes; a file that does not parse is named, never read as no rules.
             let standards_lines = standards_lines(placed, &project.project_dir);
             if !standards_lines.is_empty() {
-                p.spawn(Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::FlexStart,
-                    margin: UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
-                    ..default()
-                })
+                crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_ROW)), AlignItems::FlexStart)
                 .with_children(|row| {
                     crate::chrome::row_label(row, crate::chrome::COL_LABEL, "standards");
                     row.spawn(bevy_gooey::column(0.0))
@@ -10114,12 +9996,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     })
                     .collect();
             if !dead.is_empty() {
-                p.spawn(Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::FlexStart,
-                    margin: UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
-                    ..default()
-                })
+                crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_ROW)), AlignItems::FlexStart)
                 .with_children(|row| {
                     crate::chrome::row_label(row, crate::chrome::COL_LABEL, "dead ends");
                     row.spawn(bevy_gooey::column(0.0))
@@ -10174,16 +10051,9 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 (None, Some(f)) => (format!("{} face", f.label()), crate::chrome::ink().text),
                 (None, None) => ("none".to_owned(), crate::chrome::ink().label),
             };
-            p.spawn((
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    margin: UiRect::top(Val::Px(crate::chrome::GAP_GROUP)),
-                    ..default()
-                },
+            crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_GROUP)), AlignItems::Center)
                 // The row `M` cycles.
-                crate::chrome::Control(crate::keys::ControlId::Mount),
-            ))
+                .insert(crate::chrome::Control(crate::keys::ControlId::Mount))
             .with_children(|row| {
                 // **"mount", not "layer".** The subgrid below has its own `layer y` picker, and
                 // one panel saying "layer" twice about two different things is the confusion the
@@ -10219,12 +10089,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 // that case — so the row reads as an absence, not an error.
                 None => ("—".to_owned(), crate::chrome::ink().label),
             };
-            p.spawn(Node {
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
-                ..default()
-            })
+            crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)), AlignItems::Center)
             .with_children(|row| {
                 crate::chrome::row_label(row, crate::chrome::COL_LABEL, "mesh");
                 crate::chrome::row_value(row, mesh_text, mesh_ink, ());
@@ -10295,12 +10160,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     }
                 }
             };
-            p.spawn(Node {
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
-                ..default()
-            })
+            crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)), AlignItems::Center)
             .with_children(|row| {
                 crate::chrome::row_label(row, crate::chrome::COL_LABEL, "labels");
                 // **Wraps, like the mesh row above it.** The value used to be one no-wrap line clipped
@@ -10318,12 +10178,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     height_edit.active.as_ref().map(|(_, raw)| raw.as_str()),
                     (format!("{now:.2}"), crate::chrome::ink().text),
                 );
-                p.spawn(Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
-                    ..default()
-                })
+                crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)), AlignItems::Center)
                 .with_children(|row| {
                     crate::chrome::row_label(row, crate::chrome::COL_LABEL, "height");
                     crate::chrome::text_field(
@@ -10372,18 +10227,9 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             // between, and the pane already scrolls.
             //
             // So the block is an ordinary column again and the pane's own scroll carries it.
-            let mut tags = p.spawn((
-                Node {
-                    flex_direction: FlexDirection::Column,
-                    // The tag block is the ancestor of four wrapping chip rows, and a flex item's
-                    // automatic minimum size is its content — so a chip row that would not fit
-                    // widened this column instead of wrapping inside it (F7).
-                    // CHROME-OK: zero is not a spacing step.
-                    min_width: Val::Px(0.0),
-                    ..default()
-                },
-                crate::chrome::Control(crate::keys::ControlId::Tags),
-            ));
+            // The tag block is the ancestor of four wrapping chip rows, and a flex item's automatic minimum size is its
+            // content — a gooey column floors its width at nothing, so a chip row that would not fit wraps inside it (F7).
+            let mut tags = p.spawn((bevy_gooey::column(0.0), crate::chrome::Control(crate::keys::ControlId::Tags)));
             // **What survives the filter, worked out before anything is spawned.**
             //
             // The count line has to stand *under the box* and above the axes — a count printed after
@@ -10435,10 +10281,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         Text::new(line),
                         TextColor(crate::chrome::ink().dim),
                         crate::chrome::typed(crate::chrome::text::HINT),
-                        Node {
-                            margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
-                            ..default()
-                        },
+                        crate::chrome::spaced(UiRect::top(Val::Px(crate::chrome::GAP_TIGHT))),
                     ));
                 }
                 for (axis, _, kept) in &surviving {
@@ -10499,20 +10342,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     // and "the filter matched nothing" is precisely the moment an author wants to add
                     // the word they just typed. So the row is spawned unconditionally and the dash
                     // moves inside it, where it can stand beside the `+` alone.
-                    p.spawn(Node {
-                        flex_direction: FlexDirection::Row,
-                        flex_wrap: FlexWrap::Wrap,
-                        // Without it the row's automatic minimum is its widest chip run, so
-                        // `KIND`'s last chip and `LOOKS`'s `+` were clipped by the panel edge
-                        // (F7). `chrome::scroll_list` owns the right gutter that keeps them out
-                        // from under the scrollbar.
-                        // CHROME-OK: zero is not a spacing step.
-                        min_width: Val::Px(0.0),
-                        align_items: AlignItems::Center,
-                        column_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                        ..default()
-                    })
+                    crate::chrome::wrapping_row(p, crate::chrome::GAP_TIGHT_STEPS, crate::chrome::GAP_TIGHT, UiRect::ZERO, AlignItems::Center)
                     .with_children(|chips| {
                         if kept.is_empty() {
                             chips.spawn((
@@ -10658,10 +10488,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     Text::new("what the importer noticed about this mesh"),
                     TextColor(crate::chrome::ink().dim),
                     crate::chrome::typed(crate::chrome::text::HINT),
-                    Node {
-                        margin: UiRect::bottom(Val::Px(crate::chrome::GAP_ROW)),
-                        ..default()
-                    },
+                    crate::chrome::spaced(UiRect::bottom(Val::Px(crate::chrome::GAP_ROW))),
                 ));
                 for f in findings {
                     let (tint, word) = crate::chrome::severity_style(f.severity);
@@ -10687,10 +10514,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                                 TextColor(quiet_ink),
                                 crate::chrome::typed(crate::chrome::text::LABEL),
                                 bevy::text::LineHeight::RelativeToFont(1.35),
-                                Node {
-                                    margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
-                                    ..default()
-                                },
+                                crate::chrome::spaced(UiRect::top(Val::Px(crate::chrome::GAP_TIGHT))),
                             ));
                         }
                     });
@@ -10749,10 +10573,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 )),
                 TextColor(crate::chrome::ink().dim),
                 crate::chrome::typed(crate::chrome::text::HINT),
-                Node {
-                    margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
-                    ..default()
-                },
+                crate::chrome::spaced(UiRect::top(Val::Px(crate::chrome::GAP_TIGHT))),
             ));
 
             // **Every layer at once, side by side, bottom on the left.** A picker showed one slice
@@ -10763,26 +10584,18 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             // Side by side rather than stacked because three 3x3 grids in a column is a tall thin
             // strip the eye has to scan, while three in a row is one picture. Bottom on the left, and
             // the labels say so rather than leaving `y = 0` to be inferred.
-            p.spawn((
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::FlexStart,
-                    column_gap: Val::Px(crate::chrome::GAP_GROUP),
-                    // Wraps rather than overflowing: a finer lattice, or a narrower panel, puts the
-                    // last layer on a second line instead of off the edge.
-                    flex_wrap: FlexWrap::Wrap,
-                    // See the tag rows above: a wrapping container has to be allowed to narrow,
-                    // or it overflows the pane instead of wrapping inside it.
-                    // CHROME-OK: zero is not a spacing step.
-                    min_width: Val::Px(0.0),
-                    row_gap: Val::Px(crate::chrome::GAP_ROW),
-                    margin: UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
-                    ..default()
-                },
-                // What the cell cursor walks and what solid/edge/clear paints — all eleven of those
-                // chords belong here rather than against the pane's edge.
-                crate::chrome::Control(crate::keys::ControlId::CellGrid),
-            ))
+            // Wraps rather than overflowing: a finer lattice, or a narrower panel, puts the last layer on a second line instead
+            // of off the edge.
+            crate::chrome::wrapping_row(
+                p,
+                crate::chrome::GAP_GROUP_STEPS,
+                crate::chrome::GAP_ROW,
+                UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
+                AlignItems::FlexStart,
+            )
+            // What the cell cursor walks and what solid/edge/clear paints — all eleven of those chords belong here rather
+            // than against the pane's edge.
+            .insert(crate::chrome::Control(crate::keys::ControlId::CellGrid))
             .with_children(|layers| {
                 for y in 0..dy {
                     layers
@@ -10913,23 +10726,15 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 }),
                 crate::chrome::typed(crate::chrome::text::HINT),
                 SelectedCellLine,
-                Node {
-                    margin: UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
-                    ..default()
-                },
+                crate::chrome::spaced(UiRect::top(Val::Px(crate::chrome::GAP_ROW))),
             ));
-            p.spawn(Node {
-                flex_direction: FlexDirection::Row,
-                flex_wrap: FlexWrap::Wrap,
-                // See the tag rows: a wrapping row of controls must be allowed to narrow, or its
-                // last member is clipped (F7).
-                // CHROME-OK: zero is not a spacing step.
-                min_width: Val::Px(0.0),
-                column_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
-                ..default()
-            })
+            crate::chrome::wrapping_row(
+                p,
+                crate::chrome::GAP_TIGHT_STEPS,
+                crate::chrome::GAP_TIGHT,
+                UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
+                AlignItems::Center,
+            )
             .insert(
                 // Where turning and rescanning the mesh live, so `B N O P` land on the chips a
                 // pointer would click rather than against the pane's edge.
@@ -11011,10 +10816,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         Text::new(format!("{} tris", c.triangles)),
                         TextColor(crate::chrome::ink().dim),
                         crate::chrome::typed(crate::chrome::text::HINT),
-                        Node {
-                            margin: UiRect::left(Val::Px(crate::chrome::GAP_GROUP)),
-                            ..default()
-                        },
+                        crate::chrome::spaced(UiRect::left(Val::Px(crate::chrome::GAP_GROUP))),
                     ));
                 }
             });

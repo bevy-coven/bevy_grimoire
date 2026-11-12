@@ -12,11 +12,12 @@
 //!
 //! # Why a count and not zero
 //!
-//! A `bevy_gooey::row` carries no margin, and about twenty of `tiles.rs`'s remaining literals are rows
-//! whose whole reason for existing is a block or half-step gap above them (`margin: top(GAP_GROUP)`).
-//! Converting those would silently close the spacing between a panel's blocks, which is a visible
-//! regression in a commit whose subject is "no raw `Node`". They wait for a gooey that can say a
-//! layout's own margin, and this file says how many there are so the number cannot grow.
+//! A `bevy_gooey::row` carries no margin of its own, but the skin writes only a row's gap and its floor width, so a margin, an
+//! alignment or a wrap set over the bundle (`chrome::spaced_row`, `chrome::wrapping_row`) is kept: the margin-carrying rows
+//! are gooey rows now. What stays raw is what gooey has no widget for (a hit target's floor, a tab's inset, a band that is
+//! also a button, a fixed-pixel column), and this file says how many there are so the number cannot grow. **The helpers'
+//! own literals are counted too**, in `the_chrome_helpers_keep_their_raw_nodes_counted.rs`, so raw layout cannot move into
+//! `chrome.rs` to leave this count.
 
 use bevy::prelude::*;
 use bevy_cauldron::harness;
@@ -27,7 +28,10 @@ use crate::fixtures;
 /// The number of raw `Node {` literals `tiles.rs` may carry. Every one that goes is a step of #245;
 /// nothing may raise it.
 // 43 -> 42: #379 removed the strip chips' digit label (a `Node` margin), with the slot keys it printed.
-const TILES_NODES_LEFT: usize = 42;
+// 42 -> 10: #245 moved the margin rows, the fill texts, the wrapping chip rows, the batch progress and the thumbnail slot onto
+// gooey's `row`, `column`, `progress` and `image_box` through the `chrome` helpers (`spaced`, `spaced_row`, `gapped_row`,
+// `wrapping_row`, `fill_text`). Owner exception (2026-11-12): a ratchet tightened to the real count.
+const TILES_NODES_LEFT: usize = 10;
 /// The number `compose.rs` may carry: a world-space slot label, the flex item the 2026-08-17
 /// measurement sized, and one `Node::default()` that is a bundle's own direction.
 const COMPOSE_NODES_LEFT: usize = 3;

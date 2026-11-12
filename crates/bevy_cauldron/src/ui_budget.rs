@@ -15,12 +15,15 @@
 //! A frame where nothing moved is **settled**, and a settled frame must cost nothing that grows with the content: a long
 //! session would otherwise lose the headroom the acting frame needs. That is what [`MAX_MS_PER_FRAME`] is asserted on.
 //!
-//! A frame where a piece arrived or a search was typed is a **rebuild** (the outliner's and the history's lists are rebuilt
-//! from their content), and it is reported separately ([`UiFrame::last_rebuild_ms`]) rather than held to the settled
-//! ceiling: it is one frame of work a person asked for, and its cost is what it buys (ten thousand rows in the tree).
-//! `UiFrame::within_budget` refuses to answer for a frame that had a rebuild in it at all, so a caller cannot pass the
-//! settled gate on a frame that was not settled. The rebuild frame has a number of its own, asserted in
-//! `tests/the_ui_frame_covers_a_change_and_the_input_path.rs` (the measured floor with headroom, not the 2 ms).
+//! A frame where a piece arrived or a search was typed is a **rebuild**: the outliner's and the history's lists changed (a
+//! search builds the outliner's tree whole; a piece placed, taken back or marked, and a step of the history, put the one
+//! row or two they touch into gooey's tree and leave the rest, `Outliner::patches`). It is reported separately
+//! ([`UiFrame::last_rebuild_ms`]) rather than held to the settled ceiling by [`UiFrame::within_budget`], which refuses to
+//! answer for a frame that had a rebuild in it at all, so a caller cannot pass the settled gate on a frame that was not
+//! settled. **A change has numbers of its own**: every frame from a piece placed to the settled frame is held to
+//! [`MAX_MS_PER_FRAME`], at 10,000 outliner nodes and 5,000 history lines, in
+//! `tests/the_frame_a_change_lands_on_stays_inside_two_milliseconds.rs`; and the frame where the lists are built whole (a
+//! search) is held to its measured floor with headroom in `tests/the_ui_frame_covers_a_change_and_the_input_path.rs`.
 //!
 //! **What is not measured here**: the present and the display, which a headless test cannot see. The editor's share of
 //! the 0.1 s — a keystroke to the frame the narrowed tree stands in — is measured by the same file, and named as the
