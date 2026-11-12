@@ -43,31 +43,6 @@ pub const WHY_MAX_CHARS: usize = 280;
 /// project's guide and this module appends below it, so the two cannot drift.
 pub const LESSONS_HEADING: &str = "## Lessons";
 
-/// **What a lesson follows**: the hand-back it was learned from, and nothing else.
-///
-/// The same two kinds a wish cites (#353): a presentation's id, or a note's. The kind is part of the
-/// value so `{note: "present-1"}` does not find a presentation.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "lowercase")]
-pub enum After {
-    /// A presentation, by its id (`present-1`).
-    Presentation(String),
-    /// A note the agent resolved, by its id (`n3`).
-    Note(String),
-}
-
-impl After {
-    /// **The id as the queue records it**: the bare presentation or note id, with the kind dropped.
-    ///
-    /// A lesson's `after` is one string in `grimoire_state.lessons`, so this is what the one-lesson
-    /// rule compares; which *kind* it was is the parameter it matched.
-    pub fn recorded_id(&self) -> String {
-        match self {
-            After::Presentation(id) | After::Note(id) => id.clone(),
-        }
-    }
-}
-
 /// **One lesson**, as the agent proposes it and as the guide carries it.
 ///
 /// `id`, `after` and `state` are the editor's; `lesson` and `why` are the agent's. `client` is the
@@ -102,7 +77,7 @@ impl Lesson {
                      what the task taught, or make no lesson."
                 ));
             }
-            if field != "why" && value.contains('\n') {
+            if value.contains('\n') {
                 return Err(format!(
                     "`{field}` has a newline in it. A lesson is one line: a second line would be a \
                      paragraph in a list of lines, so write it as one sentence and propose it again."
@@ -139,24 +114,35 @@ impl Lesson {
 /// **Where in `text` the Lessons section's body ends**, as a byte offset, or `None` when the text has
 /// no [`LESSONS_HEADING`].
 ///
-/// The section runs to the next line that starts a heading of its own level or higher — `## ` for
-/// [`LESSONS_HEADING`]'s level — so a `### ` inside it is still inside it and a `## Rules` after it
-/// is not.
+/// The section runs to the next heading of its own level or higher — `## ` or `# ` for
+/// [`LESSONS_HEADING`]'s level — so a `### ` inside it is still inside it and a `## Rules` or a
+/// `# Reference` after it is not. A `#Reference` with no space is not a heading, as in CommonMark.
 pub fn lessons_end(text: &str) -> Option<usize> {
     let start = find_heading(text, LESSONS_HEADING)?;
     let after = start + LESSONS_HEADING.len();
     let mut at = after;
     for line in text[after..].split_inclusive('\n') {
-        let trimmed = line.trim_start();
-        let heading = trimmed.starts_with('#');
-        // The section ends at a heading of the same level or higher: `## `, and not `### `.
-        let same_or_higher = trimmed.starts_with("## ") || trimmed.trim_end() == "##";
-        if heading && same_or_higher {
+        // The section ends at a heading of the same level or higher: `# ` and `## `, and not `### `.
+        if heading_level(line).is_some_and(|level| level <= LESSONS_LEVEL) {
             return Some(at);
         }
         at += line.len();
     }
     Some(text.len())
+}
+
+/// The level of [`LESSONS_HEADING`]: the number of `#` it starts with.
+const LESSONS_LEVEL: usize = 2;
+
+/// **The level of the ATX heading `line` is, or `None` when it is not one.**
+///
+/// One to six `#`, then a space, a tab or the end of the line — so `#Reference` is **not** a heading,
+/// as CommonMark has it, and a deeper heading is a larger number.
+fn heading_level(line: &str) -> Option<usize> {
+    let line = line.trim_start().trim_end_matches(['\n', '\r']);
+    let level = line.chars().take_while(|c| *c == '#').count();
+    let rest = &line[level..];
+    ((1..=6).contains(&level) && (rest.is_empty() || rest.starts_with([' ', '\t']))).then_some(level)
 }
 
 /// **The byte offset of `heading` as a whole line**, or `None`.
@@ -295,5 +281,38 @@ mod tests {
         let guide = "## Lessons\n\n*An old line.*\n\n## Rules\n\nAlways close the door.\n";
         let kept = append(guide, "- A kept line. (2026-11-11, omp 0.4.1)");
         assert_eq!(kept, "## Lessons\n\n*An old line.*\n- A kept line. (2026-11-11, omp 0.4.1)\n\n## Rules\n\nAlways close the door.\n");
+    }
+
+    #[test]
+    fn a_why_with_a_newline_or_past_its_limit_is_refused_like_a_lesson() {
+        let mut lesson = one();
+        lesson.why = "one line\ntwo lines".to_owned();
+        let refused = lesson.validate().expect_err("a newline in `why` is refused");
+        assert!(refused.contains("`why`") && refused.contains("newline"), "{refused}");
+
+        lesson.why = "y".repeat(WHY_MAX_CHARS + 1);
+        let refused = lesson.validate().expect_err("281 characters of `why` is refused");
+        assert!(refused.contains("`why`") && refused.contains("281") && refused.contains("limit is 280"), "{refused}");
+    }
+
+    #[test]
+    fn a_heading_of_a_higher_level_ends_the_section_too() {
+        let guide = "## Lessons\n\n*old*\n\n# Reference\n\nstuff\n";
+        let kept = append(guide, "- Measure first. (2026-11-11, omp 0.4.1)");
+        assert_eq!(kept, "## Lessons\n\n*old*\n- Measure first. (2026-11-11, omp 0.4.1)\n\n# Reference\n\nstuff\n");
+        // A bare `#` or `##` line is an empty heading of its level and ends the section as well.
+        for bare in ["#", "##"] {
+            let guide = format!("## Lessons\n\n*old*\n{bare}\nstuff\n");
+            let kept = append(&guide, "- A kept line. (2026-11-11, omp 0.4.1)");
+            assert_eq!(kept, format!("## Lessons\n\n*old*\n- A kept line. (2026-11-11, omp 0.4.1)\n{bare}\nstuff\n"), "`{bare}` did not end the section");
+        }
+    }
+
+    #[test]
+    fn a_hash_without_a_space_is_not_a_heading_and_a_deeper_heading_stays_inside() {
+        // CommonMark: `#Reference` is a paragraph, so it does not end the section.
+        let guide = "## Lessons\n\n#Reference\n### A deeper one\n\n## Rules\n";
+        let kept = append(guide, "- A kept line. (2026-11-11, omp 0.4.1)");
+        assert_eq!(kept, "## Lessons\n\n#Reference\n### A deeper one\n- A kept line. (2026-11-11, omp 0.4.1)\n\n## Rules\n");
     }
 }
