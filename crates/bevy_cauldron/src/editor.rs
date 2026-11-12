@@ -9848,6 +9848,11 @@ pub struct RunDrag {
     grab: Option<(String, bool)>,
 }
 
+/// **What a click may not replace**, asked of the library, the map and the indices of the blockers a placement or a box fill
+/// would take out of the way (UI-51, #237): `Err` is the sentence for the status line.
+#[allow(clippy::type_complexity)]
+type ReplaceGuard<'a> = dyn Fn(&bevy_grimoire_core::library::Library, &bevy_grimoire_core::map::Map, &[usize]) -> Result<(), String> + 'a;
+
 /// The three map resources a placement writes: the project, the open map, and the editor's state.
 /// They always travel together, so a placement helper takes them as one.
 struct MapEdit<'a> {
@@ -9870,7 +9875,7 @@ fn box_fill_between(
     corners: ((f32, f32), (f32, f32)),
     pitch: f32,
     // **What a click may not replace** (UI-51, #237): asked of the blockers the fill would take out of the way.
-    guard: &dyn Fn(&bevy_grimoire_core::library::Library, &bevy_grimoire_core::map::Map, &[usize]) -> Result<(), String>,
+    guard: &ReplaceGuard<'_>,
 ) {
     let MapEdit { project, open, state } = edit;
     let mut n = state.next_id;
