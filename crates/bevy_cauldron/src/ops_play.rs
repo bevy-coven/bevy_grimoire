@@ -59,14 +59,83 @@ pub fn last_exit(root: &std::path::Path) -> Option<Exit> {
     with_exits(|t| t.get(root).copied())
 }
 
-/// **Where the game's output goes**: one file per project in the temporary directory, named by a hash of the root,
-/// so the log of a project is never inside it (a project is a folder a person shares) and two projects never share one.
-/// `play` truncates it, so it holds the last run only.
+/// **The most bytes the game's log file holds.** A game that prints for an hour must not fill a disk: past this the file is
+/// cut back to nothing and the run goes on, with one line saying so.
+pub const LOG_CAP_BYTES: u64 = 1024 * 1024;
+
+/// The line written where the log was cut.
+const LOG_CUT: &[u8] = b"[the game's log passed its size cap and was cut here]\n";
+
+/// **Where the game's output goes**: one file per project in a directory of the user's own in the temporary directory, named by a
+/// hash of the root, so the log of a project is never inside it (a project is a folder a person shares), two projects never share
+/// one and another user's files are never followed into. `play` truncates it, so it holds the last run only; `play_stop` and
+/// closing the project remove it ([`remove_log`]).
 pub fn log_path(root: &std::path::Path) -> PathBuf {
     const BASIS: u64 = 0xcbf2_9ce4_8422_2325;
     const PRIME: u64 = 0x0100_0000_01b3;
     let hash = root.to_string_lossy().bytes().fold(BASIS, |h, b| (h ^ u64::from(b)).wrapping_mul(PRIME));
-    std::env::temp_dir().join(format!("grimoire-game-{hash:016x}.log"))
+    let user: String = std::env::var("USER")
+        .or_else(|_| std::env::var("USERNAME"))
+        .unwrap_or_else(|_| "user".to_owned())
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    std::env::temp_dir().join(format!("grimoire-game-logs-{user}")).join(format!("{hash:016x}.log"))
+}
+
+/// **Open the game's log for a new run**, or say why not. The directory is made private to the user (mode 700 where there are modes).
+fn open_log(root: &std::path::Path) -> Result<std::fs::File, String> {
+    let path = log_path(root);
+    let cannot = |e: std::io::Error| format!("could not open the game's log file {}: {e}", path.display());
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(cannot)?;
+        #[cfg(unix)]
+        std::fs::set_permissions(dir, std::os::unix::fs::PermissionsExt::from_mode(0o700)).map_err(cannot)?;
+    }
+    std::fs::OpenOptions::new().create(true).write(true).truncate(true).open(&path).map_err(cannot)
+}
+
+/// **Remove the game's log** — when the game is stopped and when the project closes. A file that is not there is already removed.
+pub fn remove_log(root: &std::path::Path) {
+    let path = log_path(root);
+    if let Err(e) = std::fs::remove_file(&path)
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        bevy::log::warn!("could not remove the game's log {}: {e}", path.display());
+    }
+}
+
+/// **Copy one of the game's pipes into the log**, cutting the file back past [`LOG_CAP_BYTES`].
+fn pump(mut from: impl std::io::Read, log: std::sync::Arc<Mutex<(std::fs::File, u64)>>) {
+    use std::io::{Seek, SeekFrom, Write};
+    let mut buffer = [0_u8; 8192];
+    loop {
+        let read = match from.read(&mut buffer) {
+            Ok(0) => return,
+            Ok(n) => n,
+            Err(e) => {
+                bevy::log::warn!("the game's output could not be read: {e}");
+                return;
+            }
+        };
+        let mut guard = log.lock().unwrap_or_else(|e| e.into_inner());
+        let (file, written) = &mut *guard;
+        let wrote = (|| {
+            if *written + read as u64 > LOG_CAP_BYTES {
+                file.set_len(0)?;
+                file.seek(SeekFrom::Start(0))?;
+                file.write_all(LOG_CUT)?;
+                *written = LOG_CUT.len() as u64;
+            }
+            file.write_all(&buffer[..read])?;
+            *written += read as u64;
+            Ok::<(), std::io::Error>(())
+        })();
+        if let Err(e) = wrote {
+            bevy::log::warn!("the game's log could not be written: {e}");
+            return;
+        }
+    }
 }
 
 /// The pid of the game this editor started for `root`, if it is still running. A game that has ended has its
@@ -201,16 +270,20 @@ impl Operation for Play {
         // **Its own process group**, so `play_stop` can end what the launcher started as well as the launcher.
         #[cfg(unix)]
         std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
-        // **Its output goes to the project's game log** ([`log_path`]), which the Game workspace reads: a game
-        // started from a window has no terminal, and what it printed before it died is what says why. A file
-        // that cannot be made leaves the output where it was, rather than refusing to play.
-        if let Ok(file) = std::fs::File::create(log_path(&root))
-            && let Ok(again) = file.try_clone()
-        {
-            cmd.stdout(std::process::Stdio::from(file)).stderr(std::process::Stdio::from(again));
-        }
+        // **Its output goes to the project's game log** ([`log_path`]), which the Game workspace reads: a game started from a
+        // window has no terminal, and what it printed before it died is what says why. **A log that cannot be opened refuses
+        // Play**, with the reason, rather than starting a game whose output is lost.
+        let log = std::sync::Arc::new(Mutex::new((open_log(&root).map_err(|why| Refusal::new(format!("{why}. Nothing was started.")))?, 0_u64)));
+        cmd.stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
         #[allow(clippy::zombie_processes)]
-        let child = cmd.spawn().map_err(|e| Refusal::new(format!("could not start `{}`: {e}. Nothing is running.", argv[0])))?;
+        let mut child = cmd.spawn().map_err(|e| Refusal::new(format!("could not start `{}`: {e}. Nothing is running.", argv[0])))?;
+        if let Some(out) = child.stdout.take() {
+            let log = std::sync::Arc::clone(&log);
+            std::thread::spawn(move || pump(out, log));
+        }
+        if let Some(err) = child.stderr.take() {
+            std::thread::spawn(move || pump(err, log));
+        }
         let pid = child.id();
         with_exits(|e| e.remove(&root));
         with_table(|t| t.insert(root.clone(), child));
@@ -273,6 +346,7 @@ impl Operation for PlayStop {
             .status();
         let killed = child.kill();
         let _ = child.wait();
+        remove_log(&root);
         with_exits(|e| e.insert(root.clone(), Exit { code: None, stopped: true }));
         killed
             .or_else(|e| if e.kind() == std::io::ErrorKind::InvalidInput { Ok(()) } else { Err(e) })
@@ -304,4 +378,30 @@ pub fn spawn_section(s: &mut bevy::prelude::ChildSpawnerCommands) {
         button(r, PlayButton::Play, "Play", Severity::Plain);
         button(r, PlayButton::Stop, "Stop", Severity::Plain);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **The game's log is bounded**: a pipe that carries more than [`LOG_CAP_BYTES`] leaves a file under it, cut with the line that
+    /// says so, and the last bytes written are the pipe's last.
+    #[test]
+    fn a_log_past_its_cap_is_cut_back_and_keeps_the_newest_output() {
+        let path = std::env::temp_dir().join(format!("grimoire-log-cap-{}.log", std::process::id()));
+        let file = std::fs::OpenOptions::new().create(true).write(true).truncate(true).open(&path).unwrap_or_else(|e| panic!("{e}"));
+        let log = std::sync::Arc::new(Mutex::new((file, 0_u64)));
+        let chunk = vec![b'x'; 1000];
+        let mut input = Vec::new();
+        for _ in 0..(LOG_CAP_BYTES / 1000 + 50) {
+            input.extend_from_slice(&chunk);
+        }
+        input.extend_from_slice(b"last line\n");
+        pump(std::io::Cursor::new(input), log);
+        let text = std::fs::read(&path).unwrap_or_else(|e| panic!("{e}"));
+        let _ = std::fs::remove_file(&path);
+        assert!((text.len() as u64) <= LOG_CAP_BYTES, "the log holds {} bytes, over its cap of {LOG_CAP_BYTES}", text.len());
+        assert!(text.starts_with(LOG_CUT), "a cut log says where it was cut");
+        assert!(text.ends_with(b"last line\n"), "the newest output is kept");
+    }
 }

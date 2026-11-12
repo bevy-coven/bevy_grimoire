@@ -203,6 +203,7 @@ fn game_badge(app: &mut App) -> usize {
 #[test]
 fn play_stop_and_build_moved_to_the_game_workspace() {
     let root = project("moved", GAME, free_port());
+    let _log = LogGuard(root.clone());
     let mut app = editor(&root);
     assert_eq!(app.world().resource::<Workspace>(), &Workspace::Map);
     for label in ["PLAY", "BUILD", "Play", "Stop", "Build"] {
@@ -221,6 +222,7 @@ fn play_stop_and_build_moved_to_the_game_workspace() {
 fn a_game_is_played_watched_and_stopped_from_the_game_workspace() {
     let port = free_port();
     let root = project("run", GAME, port);
+    let _log = LogGuard(root.clone());
     let mut app = editor(&root);
     switch_to(&mut app, Workspace::Game);
     assert_eq!(game_badge(&mut app), 0, "no game has run, so the Game icon says nothing");
@@ -266,6 +268,7 @@ fn a_game_is_played_watched_and_stopped_from_the_game_workspace() {
 #[test]
 fn a_crash_stays_on_screen_with_its_exit_code_and_a_badge() {
     let root = project("crash", CRASH, free_port());
+    let _log = LogGuard(root.clone());
     let mut app = editor(&root);
     switch_to(&mut app, Workspace::Game);
     press(&mut app, PlayButton::Play);
@@ -288,4 +291,33 @@ fn a_crash_stays_on_screen_with_its_exit_code_and_a_badge() {
     let pid = ops_play::running_pid(&root).unwrap_or_else(|| panic!("the second Play did not start"));
     let _cleanup = crate::play_starts_and_stops_the_game::KillGroupOnDrop(u64::from(pid));
     until(&mut app, "the badge to clear on a new run", |app| game_badge(app) == 0);
+}
+
+/// Removes the project's game log when the test ends, however it ends, so a run leaves nothing in the temporary directory.
+struct LogGuard(PathBuf);
+
+impl Drop for LogGuard {
+    fn drop(&mut self) {
+        ops_play::remove_log(&self.0);
+    }
+}
+
+/// **A game that never answers BRP says why, and its log is cleaned up.** The status names the reason the connection gave
+/// rather than "not answering yet", and the frame line says what it could not read.
+#[test]
+fn a_game_that_does_not_answer_brp_says_why_and_the_log_cleans_up() {
+    let quiet = "import time\nprint('quiet game up', flush=True)\ntime.sleep(60)\n";
+    let root = project("quiet", quiet, free_port());
+    let _log = LogGuard(root.clone());
+    let mut app = editor(&root);
+    switch_to(&mut app, Workspace::Game);
+    press(&mut app, PlayButton::Play);
+    let pid = ops_play::running_pid(&root).unwrap_or_else(|| panic!("Play did not start the quiet game"));
+    let _cleanup = crate::play_starts_and_stops_the_game::KillGroupOnDrop(u64::from(pid));
+    until(&mut app, "the reason the game does not answer", |app| shows_part(app, "not answering over BRP on port") && !shows_part(app, "no answer yet"));
+    until(&mut app, "the quiet game's log line", |app| shows_part(app, "quiet game up"));
+    let log = ops_play::log_path(&root);
+    assert!(log.exists(), "the log file is there while the game runs");
+    press(&mut app, PlayButton::Stop);
+    assert!(!log.exists(), "Stop removes the game's log file");
 }
