@@ -71,6 +71,17 @@ fn read(ctx: &Ctx, map: &str) -> Option<String> {
     std::fs::read_to_string(path_of(ctx, map).ok()?).ok()
 }
 
+/// **The water plan file of the map called `name`**: `<grimoire_dir>/water/<name>.yaml`. The one place the path is built.
+pub fn plan_path(project: &crate::project::Project, name: &str) -> std::path::PathBuf {
+    project.grimoire_dir.join("water").join(format!("{name}.yaml"))
+}
+
+/// **The water plan file of the open map**, named after the map's own file (`<name>.map.yaml`).
+pub fn plan_path_of(project: &crate::project::Project, open: &crate::project::OpenMap) -> Option<std::path::PathBuf> {
+    let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.yaml")?;
+    Some(plan_path(project, name))
+}
+
 /// **The saved water plan of the open map**, or `None` when it has none.
 pub fn plan_of(project: &crate::project::Project, open: &crate::project::OpenMap) -> Option<WaterPlan> {
     let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.yaml")?;

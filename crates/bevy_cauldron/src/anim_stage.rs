@@ -46,6 +46,13 @@ pub struct BenchStage;
 #[derive(Component)]
 pub(crate) struct BenchStageOf(String);
 
+impl BenchStageOf {
+    /// Whether the staged model is the one at `mesh`: the answer a clip reveal waits for before it solos a slot (NV-11, #391).
+    pub(crate) fn is_of(&self, mesh: &str) -> bool {
+        self.0 == mesh
+    }
+}
+
 /// The scrub state.
 #[derive(Resource)]
 pub struct BenchScrub {

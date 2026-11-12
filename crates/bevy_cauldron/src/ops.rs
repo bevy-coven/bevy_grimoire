@@ -272,6 +272,10 @@ pub enum Shown {
     Composition { id: String },
     /// **One rig**, on the Anim tab.
     Rig { id: String },
+    /// **One of a rig's clips** (NV-11, #391): slot `slot` of the rig's manifest entry, on the Anim tab. The bench plays a slot when its
+    /// chip is soloed, so this page is the rig selected with that slot soloed. No operation answers it: the Go to anything finder does,
+    /// for the clips it lists.
+    Clip { rig: String, slot: usize },
     /// **A project file**, and the lines changed when the operation knows them (GD-14, #376).
     File {
         /// Relative to the project root, the way a refusal names one: `assets/grimoire/vocab.yaml`.
@@ -311,6 +315,7 @@ impl Shown {
             Shown::Tile { id } => format!("the lattice of `{id}`"),
             Shown::Composition { id } => format!("the composition `{id}`"),
             Shown::Rig { id } => format!("the rig `{id}`"),
+            Shown::Clip { rig, slot } => format!("slot {slot} (a clip) of the rig `{rig}`"),
             Shown::File { path, lines } => match lines {
                 Some([first, last]) => format!("the file `{path}` at lines {first}..{last}"),
                 _ => format!("the file `{path}`"),
@@ -5065,7 +5070,7 @@ pub mod rig_adopt_measured {
     }
 
     fn manifest(project: &Project) -> PathBuf {
-        project.root.join("assets/grimoire/rigs.yaml")
+        project.root.join(crate::anim_tab::RIGS_FILE)
     }
 
     /// **FNV-1a of the manifest text**: stable across runs, because an undo compares it with what the log
