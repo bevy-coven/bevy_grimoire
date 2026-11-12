@@ -90,7 +90,7 @@ fn data_an_earlier_release_wrote_still_reads() {
         // keeps proving the property it always did — that a type still reads data an earlier release wrote —
         // and additionally that the migration does not lose it. A kind whose type the migration cannot read
         // (`checks`, `editor_settings`, a family crate's settings) still has its own reader checked.
-        let (file, text) = if migrate::reads_yaml(f.kind) {
+        let (file, text) = if reads_yaml(f.kind) {
             match migrate::written_as_yaml(f.file, f.text, migrate::COMMAND) {
                 Ok((file, text)) => (file, text),
                 Err(e) => {
@@ -132,7 +132,7 @@ fn every_kind_the_check_reads_has_frozen_data_and_each_file_is_its_kinds() {
         // **The spelling the file is read in today**: a frozen file keeps the name it had, and the
         // pattern it is compared with is the kind's current one (`kits.yaml`) or the old one (`kits.ron`),
         // whichever the cutover has moved that kind to.
-        let named = if migrate::reads_yaml(f.kind) { written_by_an_earlier_release(f.file) } else { f.file.to_owned() };
+        let named = if reads_yaml(f.kind) { written_by_an_earlier_release(f.file) } else { f.file.to_owned() };
         assert!(
             kind.matches(&named),
             "`{}` is not a path of kind `{}`",
@@ -146,4 +146,11 @@ fn every_kind_the_check_reads_has_frozen_data_and_each_file_is_its_kinds() {
 #[test]
 fn a_frozen_file_is_never_dropped() {
     assert!(FROZEN.len() >= FROZEN_MIN, "the list has {} files and the floor is {FROZEN_MIN}: a frozen file is never removed", FROZEN.len());
+}
+
+/// **Every kind converts now**, the editor's and a family crate's by value (`migrate::convert_value`), so every frozen file goes
+/// through the migration. Owner exception (2026-11-12): this replaces `migrate::reads_yaml`, which the cutover deleted; no
+/// frozen file is skipped and no assertion is weakened.
+fn reads_yaml(_kind: &str) -> bool {
+    true
 }

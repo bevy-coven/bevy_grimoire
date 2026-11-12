@@ -1,17 +1,13 @@
 //! **Moving a project's files from RON to YAML, losslessly** (GD-03, #365).
 //!
 //! A project used to be RON (`kits.yaml`, `maps/town.map.yaml`, `editor.yaml`, …). [`migrate`] turns one
-//! into YAML, [`migrate_moved`] is the narrower run a person's command takes while the cutover is
-//! unfinished, and [`leftover`] is the refusal an open raises when a project has not been converted.
+//! into YAML, and [`leftover`] is the refusal an open raises when a project has not been converted.
 //!
-//! # One kind at a time, and why the command is the narrow one
+//! # Every kind, one command
 //!
-//! The cutover moves one file kind at a time, so a build reads some kinds as YAML and the rest as RON.
-//! Converting a kind whose reader has not moved would write a file nothing reads *and* archive the RON
-//! everything needs, which is a project that opens empty with its content in the archive. So the command a
-//! person runs converts only the kinds on [`READS_YAML`], and [`migrate`] — every kind, refusing what it
-//! cannot read — is what the finished cutover runs. The list only grows, and the last kind to join it is
-//! the commit that deletes the RON readers.
+//! Nothing reads RON now, so [`migrate_as`] converts every file a kind names: a kind whose type this crate has is read as
+//! that type, any other (the editor's, the checks', a family crate's, a game's own data) is converted by value
+//! ([`convert_value`]). [`leftover`] refuses an open on any of them.
 //!
 //! # Two rules, and neither is a suggestion
 //!
@@ -77,7 +73,7 @@ pub const ARCHIVE_DIR: &str = ".dark_factory/migrated-ron";
 /// **The program's own name is not this crate's to spell.** It is `bevy_cauldron`, and
 /// `tests/engine_free.rs` refuses that identifier in this crate's sources; a refusal naming a command a
 /// person cannot run is worse than one naming no command at all. So every entry point takes the line as
-/// an argument ([`migrate`], [`migrate_moved`], [`leftover`]), the editor passes `args::PROGRAM` — the
+/// an argument ([`migrate`], [`migrate_as`], [`leftover`]), the editor passes `args::PROGRAM` — the
 /// name of the binary it is built as — and this constant is only what an engine-free caller gets.
 pub const COMMAND: &str = "<the editor> migrate <project folder>";
 
@@ -319,7 +315,7 @@ fn io_problem(path: &Path, e: std::io::Error) -> Problem {
 /// A difference at either step refuses, and the caller writes nothing. `file` is only what a refusal
 /// names.
 #[allow(clippy::result_large_err)]
-fn convert<T>(text: &str, file: &str, command: &str) -> Result<Converted, Problem>
+pub fn convert<T>(text: &str, file: &str, command: &str) -> Result<Converted, Problem>
 where
     T: Serialize + DeserializeOwned,
 {
@@ -387,6 +383,40 @@ fn first_difference(before: &str, after: &str) -> String {
     )
 }
 
+/// **Convert a file by value**: RON into a [`crate::ron_tree::Tree`], written as YAML, the YAML read back and compared.
+///
+/// For a kind whose type is another crate's, and for a game's own data file (which has no type here at all). A difference
+/// refuses, naming the file, and the caller writes nothing.
+#[allow(clippy::result_large_err)]
+pub fn convert_value(text: &str, file: &str, command: &str) -> Result<Converted, Problem> {
+    let tree = crate::ron_tree::parse(text).map_err(|e| {
+        Problem::with(
+            format!("{file} did not read as RON, so nothing was migrated"),
+            Detail::default()
+                .at(Location::file(file.to_owned()))
+                .because(e)
+                .fix(format!("a file this old is read by the build that wrote it; `{command}` refuses rather than guessing"))
+                .docs(DOCS),
+        )
+    })?;
+    let plain = yaml::to_string(&tree.to_yaml())
+        .map_err(|p| Problem::with(format!("{file} did not write as YAML, so nothing was migrated"), p.detail()))?;
+    let (written, comments_carried, unplaced) = carry_comments(text, &plain, file);
+    let back = yaml::to_json(&written, file)
+        .map_err(|p| Problem::with(format!("{file} wrote as YAML and did not read back, so nothing was migrated"), p.detail()))?;
+    if back != tree.to_json() {
+        return Err(Problem::with(
+            format!("{file} would change value if it were written as YAML, so nothing was migrated"),
+            Detail::default()
+                .at(Location::file(file.to_owned()))
+                .because("the YAML reads to a different value than the RON held".to_owned())
+                .fix("the file is not changed; report it with the file".to_owned())
+                .docs(DOCS),
+        ));
+    }
+    Ok(Converted { rom: String::new(), yaml: String::new(), kind: "", comments_carried, unplaced, text: written })
+}
+
 /// **The YAML text a project file of `kind` becomes**, or a refusal naming the file.
 ///
 /// One arm per kind this crate owns a type for. A kind whose type lives above this crate is refused here
@@ -419,29 +449,9 @@ fn write_kind(kind: &FileKind, text: &str, file: &str, command: &str) -> Result<
         "play" => convert::<PlayConfig>(text, file, command),
         "destructible_marks" => convert::<Marks>(text, file, command),
         "destructible_bake" => convert::<Bake>(text, file, command),
-        other => Err(Problem::with(
-            format!("{file} is a `{other}` file, whose type this crate does not declare, so nothing was migrated"),
-            Detail::default()
-                .at(Location::file(file.to_owned()))
-                .because(format!(
-                    "`{other}` is read by the crate that declares its type ({})",
-                    unowned_by(other).unwrap_or("a layer above this one")
-                ))
-                .fix(format!("run `{command}` from that layer, which can compare the value it reads"))
-                .docs(DOCS),
-        )),
-    }
-}
-
-/// **Which crate declares the type a kind this crate cannot read is**, for a refusal that says who can.
-fn unowned_by(kind: &str) -> Option<&'static str> {
-    match kind {
-        "forest" | "people" | "scripts" | "trees" => Some("the editor"),
-        "checks" => Some("the checks crate"),
-        "family" => Some("the editor's family host"),
-        "editor_settings" => Some("the editor's settings"),
-        "game_data" => Some("the game that registers it in `data.yaml`"),
-        _ => None,
+        // **A kind whose type lives above this crate is converted by value** ([`crate::ron_tree`]): the YAML is read back and
+        // compared with what the RON held, which is the check no type is needed for.
+        _ => convert_value(text, file, command),
     }
 }
 
@@ -451,30 +461,16 @@ fn unowned_by(kind: &str) -> Option<&'static str> {
 /// written; then the RON originals are moved into [`ARCHIVE_DIR`]. So a refusal leaves the project
 /// byte for byte as it was, and a success leaves no `.ron` project file behind.
 ///
-/// **This is the whole cutover's migration**, for every kind this crate has a type for. A kind whose type
-/// lives above this crate stops it and is named, which is right when the layers migrate together and
-/// wrong for one build that has moved one kind at a time: [`migrate_moved`] is the narrower entry point a
-/// person's command runs until the last kind moves.
+/// **Every kind is converted**: one whose type this crate has as that type, any other by value ([`convert_value`]).
 #[allow(clippy::result_large_err)]
 pub fn migrate(root: &Path) -> Result<Report, Problem> {
-    migrate_where(root, COMMAND, |_| true)
+    migrate_as(root, COMMAND)
 }
 
-/// **Convert the project files whose kind already reads YAML** ([`READS_YAML`]), and leave every other
-/// kind exactly where it is.
-///
-/// **This is what a person's command runs**, and the difference from [`migrate`] is not a convenience.
-/// The cutover moves one kind at a time, so this build reads `play.yaml` and still reads `kits.yaml`:
-/// converting `kits.yaml` would write a `kits.yaml` nothing reads *and* archive the `kits.yaml` everything
-/// does, which is a project that opens empty with its content in `.dark_factory/migrated-ron/`. Likewise a
-/// kind whose type belongs to another crate (`editor.yaml`, `checks.ron`, a forest) is not this command's
-/// work and must not block the work it can do.
-///
-/// **The list only grows.** A kind joins [`READS_YAML`] in the commit that moves its reader, and the last
-/// kind to join is the commit that deletes the RON readers — after which this and [`migrate`] agree.
+/// **The same, naming `command` in what it says**: what `bevy_cauldron migrate <folder>` runs.
 #[allow(clippy::result_large_err)]
-pub fn migrate_moved(root: &Path, command: &str) -> Result<Report, Problem> {
-    migrate_where(root, command, |kind| reads_yaml(kind.id))
+pub fn migrate_as(root: &Path, command: &str) -> Result<Report, Problem> {
+    migrate_where(root, command, |_| true)
 }
 
 /// **The one migration body**: every file `wants` accepts, converted or nothing written at all.
@@ -642,6 +638,8 @@ fn carry_comments(text: &str, written: &str, file: &str) -> (String, usize, Vec<
     }
     // **Every comment that found a place**: a header is one, so it counts here and not only above a field.
     let carried = placements.len() + usize::from(!headers.is_empty());
+    // Reversed first, so two comments above one line keep the order they were written in once both are inserted.
+    placements.reverse();
     placements.sort_by_key(|(at, _)| std::cmp::Reverse(*at));
     let mut lines: Vec<String> = lines;
     for (at, block) in placements {
@@ -789,16 +787,38 @@ fn ron_comments(text: &str) -> Vec<Comment> {
     };
 
     for (at, line) in all.iter().enumerate() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("/*") {
-            pending_block = true;
-            continue;
-        }
+        let mut trimmed = line.trim_start();
+        // **A block comment is a comment** (review M4): its lines join the run above the next field, a one-line `/* x */` ends on
+        // its own line, and whatever follows the `*/` on that line is read as code.
         if pending_block {
-            if trimmed.contains("*/") {
-                pending_block = false;
+            let (inside, ended) = match trimmed.find("*/") {
+                Some(i) => (&trimmed[..i], true),
+                None => (trimmed, false),
+            };
+            run.get_or_insert_with(Vec::new).push(inside.trim_start_matches('*').trim().to_owned());
+            if !ended {
+                continue;
             }
-            continue;
+            pending_block = false;
+            trimmed = trimmed[trimmed.find("*/").map_or(0, |i| i + 2)..].trim_start();
+            if trimmed.is_empty() {
+                continue;
+            }
+        } else if let Some(body) = trimmed.strip_prefix("/*") {
+            match body.find("*/") {
+                Some(i) => {
+                    run.get_or_insert_with(Vec::new).push(body[..i].trim().to_owned());
+                    trimmed = body[i + 2..].trim_start();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                }
+                None => {
+                    run.get_or_insert_with(Vec::new).push(body.trim_start_matches('*').trim().to_owned());
+                    pending_block = true;
+                    continue;
+                }
+            }
         }
         if let Some(rest) = trimmed.strip_prefix("//") {
             run.get_or_insert_with(Vec::new).push(rest.trim().to_owned());
@@ -809,13 +829,48 @@ fn ron_comments(text: &str) -> Vec<Comment> {
         if trimmed.is_empty() {
             continue;
         }
-        if field_name(trimmed).is_some() {
+        let trailing = trailing_comment(trimmed);
+        let code = trailing.map_or(trimmed, |(code, _)| code);
+        let key = field_name(code);
+        if key.is_some() {
             seen_field = true;
         }
         flush(&mut run, Some(at), seen_field, &mut out);
+        // **A trailing same-line comment** (`scale: 2.0, // metres`) stands above the field it was written beside; one beside no
+        // field (a closer, a list item) is listed rather than dropped.
+        if let Some((_, comment)) = trailing {
+            let lines = vec![comment.trim().to_owned()];
+            out.push(match key {
+                Some(key) => Comment { lines, key: Some(key), header: false, above_an_element: false, item_name: None },
+                None => Comment { lines, key: None, header: false, above_an_element: true, item_name: item_name_from(&all, at) },
+            });
+        }
     }
     flush(&mut run, None, seen_field, &mut out);
     out
+}
+
+/// **Split a code line at a `//` that is not inside a string**: `(code, comment)`, or `None` when the line has no trailing comment.
+fn trailing_comment(line: &str) -> Option<(&str, &str)> {
+    let mut in_string = false;
+    let mut escaped = false;
+    let bytes = line.as_bytes();
+    for (i, b) in bytes.iter().enumerate() {
+        if in_string {
+            match (escaped, *b) {
+                (true, _) => escaped = false,
+                (false, b'\\') => escaped = true,
+                (false, b'"') => in_string = false,
+                _ => {}
+            }
+        } else if *b == b'"' {
+            in_string = true;
+        } else if *b == b'/' && bytes.get(i + 1) == Some(&b'/') {
+            let code = line[..i].trim_end();
+            return (!code.is_empty()).then(|| (code, &line[i + 2..]));
+        }
+    }
+    None
 }
 
 /// **The field name a RON line opens**, or `None` for a line that opens no field.
@@ -862,28 +917,6 @@ fn item_name_from(all: &[&str], at: usize) -> Option<String> {
         }
     }
     None
-}
-
-/// **The kinds whose reader parses YAML**: every kind this crate owns a type for.
-///
-/// It began as a two-entry list and grew one kind per commit as the cutover moved each reader off RON; it
-/// is complete now, which is the state its own note said it would end in — the commit that adds the last
-/// kind is the commit that deletes the RON readers. **It stays a list rather than being deleted** because
-/// three things ask it: [`migrate_moved`] (the command a person runs), [`leftover`] (the refusal an open
-/// raises), and `reload_check`, which has nothing to say about a kind whose reader another crate owns.
-///
-/// **A kind not on this list belongs to a layer above**: `checks`, `editor_settings`, `family` (a crate's own
-/// settings), `forest`, `people`, `scripts`, `trees` and `game_data`. Each of those moves in the crate that
-/// declares its type, in its own commit, and joins this list there.
-pub const READS_YAML: &[&str] = &[
-    "kits", "vocab", "library", "policy", "rules", "compositions", "standards", "repetition", "rigs",
-    "map", "notes", "plan", "references", "relations", "terrain", "water_plan", "water_field", "volume",
-    "data_registry", "family_list", "agent", "play", "destructible_marks", "destructible_bake",
-];
-
-/// **Whether `kind`'s reader parses YAML now**, per [`READS_YAML`].
-pub fn reads_yaml(kind: &str) -> bool {
-    READS_YAML.contains(&kind)
 }
 
 /// **Read `text` as a `T` from the RON an earlier release wrote**, which is what a frozen fixture is.
@@ -959,12 +992,8 @@ pub fn written_as_yaml(rel: &str, text: &str, command: &str) -> Result<(String, 
 #[allow(clippy::result_large_err)]
 pub fn leftover(root: &Path, command: &str) -> Result<Option<Problem>, Problem> {
     let plan = plan(root)?;
-    // **Only a kind whose reader has moved to YAML refuses an open.** A kind the cutover has not reached
-    // still reads its RON, so a `kits.yaml` is a file this build reads and no reason to refuse a project;
-    // the refusal is for the spelling nothing reads any more, which is what [`READS_YAML`] answers. The
-    // list grows one kind at a time, and the last kind to leave it is the commit that deletes the RON
-    // readers entirely.
-    let Some((_, rel, _)) = plan.iter().find(|(_, _, kind)| reads_yaml(kind.id)) else { return Ok(None) };
+    // **Every kind refuses an open**: nothing reads RON any more, so a `.ron` file a kind names is a file no reader will take.
+    let Some((_, rel, _)) = plan.first() else { return Ok(None) };
     let rel = rel.clone();
     Ok(Some(Problem::with(
         format!("{rel} is still RON, so this project has not been migrated"),

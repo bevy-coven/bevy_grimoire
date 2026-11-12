@@ -25,5 +25,9 @@
 #![deny(missing_docs)]
 
 pub mod migrate;
+pub mod ron_tree;
+pub mod user_files;
 
-pub use migrate::{ARCHIVE_DIR, COMMAND, Converted, GRIMOIRE_DIR, READS_YAML, RON_EXT, Report, Unplaced, YAML_EXT, leftover, migrate as convert_project, migrate_moved, plan, read_ron, reads_as_ron, reads_yaml, written_as_yaml, yaml_path};
+pub use migrate::{ARCHIVE_DIR, COMMAND, Converted, GRIMOIRE_DIR, RON_EXT, Report, Unplaced, YAML_EXT, leftover, migrate as convert_project, migrate_as, convert_value, plan, read_ron, reads_as_ron, written_as_yaml, yaml_path};
+
+pub use user_files::{USER_ARCHIVE_DIR, upgrade_user_files};

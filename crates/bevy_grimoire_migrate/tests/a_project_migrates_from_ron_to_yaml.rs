@@ -175,10 +175,10 @@ fn a_migration_that_would_change_a_value_stops_names_the_file_and_writes_nothing
     // migration converts and a `kits.yaml` would be a file already in the new spelling.
     std::fs::write(grimoire.join("kits.ron"), "(version: 3, bind: [], bash: [], authoring: None)")
         .unwrap_or_else(|e| panic!("{e}"));
-    // A kind it does not: a forest is read by the editor, and only the editor can compare its value.
-    // A forest of a KIT: `<kit>/forest/<name>.ron`, which is where the kind's pattern points.
+    // A forest of a KIT: `<kit>/forest/<name>.ron`, which is where the kind's pattern points. Owner exception (2026-11-12): the
+    // forest converts by value now, so the file that stops the migration is one that is not RON at all.
     std::fs::create_dir_all(grimoire.join("site/forest")).unwrap_or_else(|e| panic!("{e}"));
-    std::fs::write(grimoire.join("site/forest/yard.ron"), "(trees: [])\n").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(grimoire.join("site/forest/yard.ron"), "(trees: [\n").unwrap_or_else(|e| panic!("{e}"));
 
     let refusal = match migrate::convert_project(&root) {
         Ok(_) => panic!("a file the command cannot verify stops the migration"),

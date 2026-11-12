@@ -30,15 +30,6 @@ struct Done {
 }
 
 fn main() {
-    // **One question the script asks before it touches a file**: which kinds have moved. A copy of the list
-    // in the script would be a second place a kind has to move, and the two disagreeing rewrites YAML under
-    // a reader that still wants RON.
-    if std::env::args().skip(1).any(|a| a == "--moved-kinds") {
-        for kind in bevy_grimoire_migrate::READS_YAML {
-            println!("{kind}");
-        }
-        return;
-    }
     let mut input = String::new();
     use std::io::Read as _;
     if std::io::stdin().read_to_string(&mut input).is_err() {

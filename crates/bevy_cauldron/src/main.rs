@@ -41,6 +41,12 @@ fn main() -> AppExit {
         return bake_and_exit(&argv, args::PROGRAM);
     }
 
+    // **A person's old `.ron` files are converted once, here** (M3 of the review): settings, recent projects and trusted guides
+    // would otherwise reset on upgrade. A file that cannot be converted is said out loud, never skipped.
+    for notice in bevy_cauldron::legacy::upgrade_user_files(bevy_grimoire_core::user_dirs::config_dir(), bevy_grimoire_core::user_dirs::data_dir()) {
+        eprintln!("{notice}");
+    }
+
     // **`bevy_audio` is opened only when something plays a sound.** The editor links
     // `bevy_audio` through `DefaultPlugins`, and an audio device that fails is what loops
     // (`crate::log_filter` has the measurement: 13.5 GB in five minutes). The only thing in this
@@ -299,10 +305,8 @@ fn bake_and_exit(argv: &[String], program: &str) -> AppExit {
 ///   or one line saying there was nothing to convert;
 /// - on a refusal, the `Problem`'s own line, which names the file and the fix, and a non-zero exit.
 ///
-/// **It converts the kinds that already read YAML, and no others** ([`migrate::migrate_moved`]). The
-/// cutover moves one kind at a time, so this build reads `play.yaml` and still reads `kits.yaml`:
-/// converting the second would write a file nothing reads and archive the one everything does. The list
-/// grows as kinds move, and the last kind to join it is the commit that deletes the RON readers.
+/// **It converts every kind a project names**: a kind whose type the migration crate has as that type, any other (the
+/// editor's, the checks', a family crate's, a game's own data) by value, each read back and compared before anything is written.
 ///
 /// **The folder is required and is the first positional.** A missing one is a refusal rather than a guess
 /// at the current folder: `migrate` moves a person's files, and running it in the wrong directory is a
@@ -314,9 +318,7 @@ fn migrate_and_exit(argv: &[String], program: &str) -> AppExit {
             "usage: {command}\n\n\
              Moves a project's files from RON to YAML. Every file is converted in memory and read back \
              before anything is written, so a project this refuses is left exactly as it was, and the \
-             old files are moved to .dark_factory/migrated-ron/ rather than deleted.\n\n\
-             Only the kinds this build already reads as YAML are converted; a kind still read as RON is \
-             left where it is, so a project is never left with a file nothing reads."
+             old files are moved to .dark_factory/migrated-ron/ rather than deleted."
         );
         return AppExit::error();
     };
@@ -327,7 +329,7 @@ fn migrate_and_exit(argv: &[String], program: &str) -> AppExit {
         return AppExit::error();
     }
     let root = std::path::Path::new(root);
-    match bevy_grimoire_migrate::migrate_moved(root, &command) {
+    match bevy_grimoire_migrate::migrate_as(root, &command) {
         Ok(report) => {
             let lines = report.lines();
             if lines.is_empty() {
