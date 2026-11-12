@@ -109,7 +109,7 @@ pub fn toggle_the_preview(
             panel.spawn((
                 GameUiPreviewNote,
                 Text::new(""),
-                crate::chrome::font(crate::chrome::text::HINT),
+                crate::chrome::typed(crate::chrome::text::HINT),
                 TextColor(crate::chrome::ink().label),
             ));
             // **What a game's screen is made of**, on gooey's own widgets: a heading, body words, the

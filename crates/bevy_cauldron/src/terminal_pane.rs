@@ -1123,7 +1123,7 @@ fn spawn_the_find_box(commands: &mut Commands, body: Entity) {
                     Text::new(String::new()),
                     TextColor(chrome::ink().muted),
                     TextLayout::no_wrap(),
-                    chrome::font(chrome::text::LABEL),
+                    chrome::typed(chrome::text::LABEL),
                     TerminalFindCount,
                     Pickable::IGNORE,
                     Name::new("terminal find count"),
@@ -1145,7 +1145,7 @@ fn spawn_the_find_box(commands: &mut Commands, body: Entity) {
 fn spawn_the_agent_card(commands: &mut Commands, body: Entity, post: &crate::terminal_agent::AgentPost) {
     let ink = crate::terminal_agent::AgentInk::of(None);
     let row = |words: String, ink: Color, which: TerminalAgentCardRow| {
-        (Text::new(words), TextColor(ink), chrome::font(chrome::text::LABEL), which, Pickable::IGNORE)
+        (Text::new(words), TextColor(ink), chrome::typed(chrome::text::LABEL), which, Pickable::IGNORE)
     };
     let card = commands
         .spawn((

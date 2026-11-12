@@ -46,6 +46,8 @@ const FORWARDING: &[(&str, &str)] = &[
     ("grimoire/project_open", "ProjectOpenParams"),
     // #353: the wish body forwards its four text fields and the hand-back it follows.
     ("grimoire/wish", "WishParams"),
+    // #351: the lesson body forwards the hand-back it follows and its two text fields.
+    ("grimoire/lesson", "LessonParams"),
 ];
 
 /// **The field names of a struct's body**, as the source text spells them.

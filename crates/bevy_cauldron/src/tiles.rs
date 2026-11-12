@@ -48,6 +48,16 @@ crate::keys::enumerated! {
         Anim,
         /// Build reusable groups, and see what they present and what has gone stale under them.
         Compose,
+        /// **The world under the level** (NV-08, #385): terrain, the environment and the lights.
+        World,
+        /// **Cue tables and buses** (NV-08, #385): the audio panel.
+        Sound,
+        /// **The running game** (NV-09, #386): play, stop, build, its log and its state.
+        Game,
+        /// **The Familiar** (NV-10, #387): what it is doing, and what it waits on.
+        Agent,
+        /// **The project's files and the editor for them** (GD-11, #373): the file tree and a code editor.
+        Files,
     }
     /// **Every panel there is**, in strip order — for the ratchets that have to visit all of them.
     ///
@@ -57,113 +67,27 @@ crate::keys::enumerated! {
     /// `checked >= TABS.len()` anti-vacuity floor in them got *easier* to clear in the same commit.
     /// A new panel made the suite weaker and nothing said so.
     ///
-    /// [`Door::tabs`] is the other list of `Mode`s and is deliberately not this: it answers *"which
-    /// panels does this door show"*, which is a different question with three different answers.
+    /// [`Workspace::panels`](crate::workspace::Workspace::panels) is the other list of `Mode`s and is
+    /// deliberately not this: it answers *"which panels does this workspace show"*, which is a
+    /// different question with five different answers.
     ALL;
 }
 
-/// **Which door the editor was entered by.**
+/// **Which panel of the current workspace is showing** — the second axis of the editor's
+/// navigation (NV-02, #379).
 ///
-/// A door is one *entity* you can work on, and it shows the panels that entity needs — no more.
-/// Reported at the keyboard, 2026-08-16: *"when I select a kit and I press enter, I'm still getting
-/// [map], meshes, tiles, compose, anim. we really need this to reflect just what's needed to put
-/// kits together."*
+/// `Mode` did not go when the doors did. A workspace is the *job* ([`crate::workspace::Workspace`]);
+/// a mode is *which panel of that job is on screen*, and the Kit workspace shows three of them at
+/// once. So the strip is still made of modes, `Mode::context` is still what the key census calls a
+/// tab, and the door that used to own them is now
+/// [`Workspace::showing`](crate::workspace::Workspace::showing).
 ///
-/// # Why two and not five
-///
-/// The first cut was one door per panel, and building it produced the measurement that ruled that
-/// out: **four shipped guides cross doors mid-flow**, `room_from_nothing.json` seven times. Meshes,
-/// Tiles and Compose are not three jobs — they are one job at three levels of assembly
-/// (`docs/research/2026-08-08-kitbashing-guidance.md`: *"parts -> sub-assemblies -> assemblies"*),
-/// and an author moves between them constantly while making one kit. Splitting them put a process
-/// boundary inside a single act.
-///
-/// So the boundary goes where the *entity* changes rather than where the panel does: **making
-/// reusable content** on one side, **using it to build a level** on the other. Chosen at the
-/// keyboard, 2026-08-16: *"Kit and Map, two doors."*
-///
-/// [`Door::Rigs`] is a third because it crosses with neither — no guide enters it, and a rig is a
-/// character asset rather than level content. It was already its own door by an earlier decision and
-/// nothing in the crossing measurement argued against it.
-#[derive(Resource, Clone, Copy, PartialEq, Eq, Default, Debug)]
-pub enum Door {
-    /// Make reusable content: meshes → tiles → compositions.
-    Kit,
-    /// Build the level out of it.
-    #[default]
-    Map,
-    /// The rig bench.
-    Rigs,
-}
-
-impl Door {
-    /// The doors, in the order the menu lists them.
-    pub const ALL: [Door; 3] = [Door::Kit, Door::Map, Door::Rigs];
-
-    /// **The panels this door shows**, in hierarchy order.
-    ///
-    /// The Kit door shows three, and that is the point of the two-door shape: a mesh is a part, a
-    /// tile is a sub-assembly, a composition is an assembly, and an author walks up and down that
-    /// ladder while making one kit. What it does *not* show is the Map.
-    pub fn tabs(self) -> &'static [Mode] {
-        match self {
-            Door::Kit => &[Mode::Meshes, Mode::Tiles, Mode::Compose],
-            Door::Map => &[Mode::Map],
-            Door::Rigs => &[Mode::Anim],
-        }
-    }
-
-    /// Where this door opens. The first of [`Self::tabs`], which is never empty.
-    pub fn opens_on(self) -> Mode {
-        self.tabs().first().copied().unwrap_or_default()
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Door::Kit => "KIT",
-            Door::Map => "MAP",
-            Door::Rigs => "RIGS",
-        }
-    }
-
-    /// The `--door` spelling. Lowercase of [`Self::label`], so the flag and the title cannot drift.
-    pub fn from_flag(flag: &str) -> Option<Door> {
-        Door::ALL
-            .into_iter()
-            .find(|d| d.label().eq_ignore_ascii_case(flag))
-    }
-
-    /// **Run condition: is the Maps door open?**
-    ///
-    /// A condition rather than a check in `Plugin::build`, and that distinction cost a crash. The
-    /// door used to be known before the app ran — it was a process — so `EditorPlugin` could read it
-    /// at build time and simply not register the map-only half. With both screens in one application
-    /// the door is chosen at runtime, so at build time there is none: the check read
-    /// `unwrap_or_default()`, got `Map`, and registered `spawn_existing` on every door — which then
-    /// panicked on the Kit door for a `Res<OpenMap>` that does not exist there.
-    ///
-    /// `Option<Res<Door>>`, because **every run condition is evaluated** and this one is asked in the
-    /// menu too, where there is no door at all.
-    pub fn map_door_is_open(door: Option<Res<Door>>) -> bool {
-        door.is_some_and(|d| *d == Door::Map)
-    }
-
-    /// Does this door show that panel? The one place `Mode` and `Door` are compared.
-    pub fn shows(self, mode: Mode) -> bool {
-        self.tabs().contains(&mode)
-    }
-
-    /// **The door that shows this panel.** Every `Mode` belongs to exactly one, by construction of
-    /// [`Self::tabs`] — so a caller can name the panel it wants and let the door follow, rather than
-    /// stating both and risking a pair that disagree.
-    pub fn showing(mode: Mode) -> Door {
-        Door::ALL
-            .into_iter()
-            .find(|d| d.shows(mode))
-            .unwrap_or_default()
-    }
-}
-
+/// **The panels are one job at three levels of assembly.** Measured when the doors were built: four
+/// shipped guides cross between Meshes, Tiles and Compose mid-flow, `room_from_nothing.json` seven
+/// times, because a kit is *"parts -> sub-assemblies -> assemblies"*
+/// (`docs/research/2026-08-08-kitbashing-guidance.md`) and an author moves between the three
+/// constantly while making one. Splitting them across workspaces would put a boundary inside a
+/// single act; that is why they share the Kit workspace.
 impl Mode {
     pub fn label(self) -> &'static str {
         match self {
@@ -172,6 +96,11 @@ impl Mode {
             Mode::Tiles => "TILES",
             Mode::Anim => "ANIM",
             Mode::Compose => "COMPOSE",
+            Mode::World => "WORLD",
+            Mode::Sound => "SOUND",
+            Mode::Game => "GAME",
+            Mode::Agent => "AGENT",
+            Mode::Files => "FILES",
         }
     }
 
@@ -185,6 +114,11 @@ impl Mode {
             Mode::Tiles => crate::keys::Context::Tiles,
             Mode::Anim => crate::keys::Context::Anim,
             Mode::Compose => crate::keys::Context::Compose,
+            Mode::World => crate::keys::Context::World,
+            Mode::Sound => crate::keys::Context::Sound,
+            Mode::Game => crate::keys::Context::Game,
+            Mode::Agent => crate::keys::Context::Agent,
+            Mode::Files => crate::keys::Context::Files,
         }
     }
 }
@@ -550,7 +484,7 @@ fn stage_camera(
                 crate::compose::carousel_height(&carousel.0).min(crate::view::MAX_ZOOM);
             rig.elevation = crate::view::ISO_ELEVATION;
         }
-        Mode::Map => {
+        Mode::Map | Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files => {
             if let Some(was) = saved.0.take() {
                 rig.focus = was.focus;
                 rig.height = was.height;
@@ -947,6 +881,10 @@ pub struct ScaleReadout;
 /// in `library.yaml` as an authored fact where there is none — the same rule `rotate_mesh` follows when
 /// it writes `(want != (0,0,0)).then_some(want)`. The bound is a tenth of a millimetre on a 1 m piece,
 /// which is finer than anything the importer can measure.
+/// **A row's rhythm at half the skin's step**: the 3 px [`crate::chrome::GAP_TIGHT`] the hand-built
+/// strips used, over the skin's 5 px gap — 0.6, not 0.5, which would be 2.5 px (review of #245).
+const GAP_HALF: f32 = crate::chrome::GAP_TIGHT / crate::chrome::SKIN_GAP_PX;
+
 const SCALE_EPS: f32 = 1e-4;
 
 
@@ -1618,7 +1556,7 @@ fn header_button(row: &mut ChildSpawnerCommands, header: FillHeader, glyph: &str
         b.spawn((
             Text::new(glyph.to_owned()),
             TextColor(crate::chrome::ink().label),
-            crate::chrome::font(crate::chrome::text::HINT),
+            crate::chrome::typed(crate::chrome::text::HINT),
         ));
     });
 }
@@ -3695,16 +3633,12 @@ pub struct Tab(pub Mode);
 #[derive(Component)]
 pub struct TabLabel;
 
-/// The tab's shortcut, styled a step quieter than the name.
-#[derive(Component)]
-struct TabKey;
-
 /// The tab's badge — the anim bench's stale count, in its own text so it can hold its own colour.
 ///
 /// Its own node rather than a suffix on [`TabLabel`], because `style_tabs` owns every label's
 /// `TextColor` per frame (active/inactive), so a colour written into the label is stomped on the
 /// next frame. The badge carries no `TabLabel`, so the frame-owner never touches it — the same
-/// division that keeps [`TabKey`] a step quieter than the name.
+/// division that keeps the badge apart from the name.
 ///
 /// `Ink::danger`, and only the count: a persistent peripheral element wants medium intensity, not
 /// maximum (Lewandowska, Dziśko & Jankowski 2022, `10.1038/s41598-022-16284-2` — high contrast is
@@ -3865,7 +3799,7 @@ pub struct TilesPlugin;
 
 impl Plugin for TilesPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Door>()
+        app.init_resource::<crate::workspace::Workspace>()
             .init_resource::<Mode>()
             .init_resource::<ImportState>()
             .init_resource::<MapView>()
@@ -3899,10 +3833,7 @@ impl Plugin for TilesPlugin {
                     // now refuses every one of these unless the Tiles tab owns the keyboard, so the
                     // `not_typing` conditions that used to say the same thing are gone rather than
                     // duplicated. `Phase::Act` puts them all ahead of the text fields below.
-                    (
-                        tab_shortcuts.in_set(crate::keys::Phase::Act),
-                        rescan_key.in_set(crate::keys::Phase::Act),
-                    ),
+                    rescan_key.in_set(crate::keys::Phase::Act),
                     move_selection.in_set(crate::keys::Phase::Act),
                     // **The two lattice walkers, nested as one.** A system tuple caps at twenty and
                     // this pair is one idea on two tabs: Meshes walks a mesh's own lattice, Tiles
@@ -4099,38 +4030,37 @@ impl Plugin for TilesPlugin {
     }
 }
 
-/// **The strip of panels this door holds** — three on the Kit door, one on the others.
+/// **The strip of panels this workspace holds** — three on the Kit workspace, one on Map and
+/// Animation, and none on a workspace whose part is not built.
 ///
 /// The strip exists because a mode reachable only by a keypress is a mode you have to be told about,
 /// and an editor that has to be explained has a bug in its front page. What changed with the doors
-/// is its *scope*: it lists what this door shows rather than everything the binary can do, so the
-/// Kit door never offers the Map.
+/// is its *scope*: it lists what this workspace shows rather than everything the binary can do, so
+/// the Kit workspace never offers the Map.
 ///
-/// A one-tab door draws a one-entry strip, which reads as a title. That is deliberate rather than a
-/// special case — one loop, one shape, and a door that gains a panel is one arm in [`Door::tabs`].
+/// A one-panel workspace draws a one-entry strip, which reads as a title. That is deliberate rather than a
+/// special case — one loop, one shape, and a workspace that gains a panel is one arm in
+/// [`Workspace::panels`](crate::workspace::Workspace::panels).
 ///
-/// **`Option<Res<Door>>`, like every other `OnEnter(Editor)` spawner here**
-/// (`anim_cache::load_bench_cache`, `thumbs::setup`): the door is a door's resource, so a screen
-/// entered without one draws no strip rather than aborting the process. `screen::open_the_door`
-/// already says so on the log in the one case that reaches it.
+/// **`Option<Res<Workspace>>`, like every other `OnEnter(Editor)` spawner here**
+/// (`anim_cache::load_bench_cache`, `thumbs::setup`): the workspace is a workspace's resource, so a
+/// screen entered without one draws no strip rather than aborting the process.
+/// `screen::open_the_door` already says so on the log in the one case that reaches it.
 fn spawn_tab_strip(
     mut commands: Commands,
-    door: Option<Res<Door>>,
+    workspace: Option<Res<crate::workspace::Workspace>>,
     frame: Res<crate::chrome::Frame>,
 ) {
-    let Some(door) = door else { return };
+    let Some(workspace) = workspace else { return };
     // **Into the frame's own band, not floating over the window.** It was absolute at
     // `left: MARGIN, top: MARGIN` with `GlobalZIndex(101)` to sit above the panels it overlapped —
     // a strip that had to out-rank the thing beneath it because both were competing for the same
     // ground. In the frame nothing overlaps, so neither number is needed.
     let strip = commands
+        // **A gooey row** (UI-59, #245). `AlignItems::Stretch` was the default it names; the strip's
+        // half-step gap is `row(0.5)`.
         .spawn((
-            Node {
-                flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                align_items: AlignItems::Stretch,
-                ..default()
-            },
+            bevy_gooey::row(GAP_HALF),
             // **The editor's first accessibility, and the strip is the right place to start.**
             //
             // There was none at all — `AccessibilityNode` appeared zero times in `src/`. A screen
@@ -4145,18 +4075,14 @@ fn spawn_tab_strip(
             // itself, permanently, so a badge per chip would state the same fact twice — and the
             // digits are one idea in the census (`panel: first / second / third of this door`), so
             // they are one badge here.
-            crate::chrome::Control(crate::keys::ControlId::DoorStrip),
+            crate::chrome::Control(crate::keys::ControlId::WorkspaceStrip),
         ))
         .id();
     commands.entity(frame.door_strip).add_child(strip);
     commands
         .entity(strip)
         .with_children(|p| {
-            for (i, &mode) in door.tabs().iter().enumerate() {
-                // **The key this door gives that slot**, which is why it is read off the index and
-                // not off the mode: `tab_shortcuts` walks `door.tabs()` and takes
-                // `Action::tab_slot(i)`, so `1` is the door's first panel whichever panel that is.
-                let chord = Action::tab_slot(i).map(crate::keys::chord);
+            for &mode in workspace.panels() {
                 p.spawn((
                     // **Deliberately not a `UiButton`** — see [`click_tab`]. `Hovered` is what
                     // `style_tabs` lights it with, and it is all that was ever needed.
@@ -4188,31 +4114,10 @@ fn spawn_tab_strip(
                     BackgroundColor(crate::chrome::ink().row_bg),
                 ))
                 .with_children(|tab| {
-                    // **The tab states its key.** Cockburn et al. 2014 on the intermodal-transition
-                    // failure: offering a fast path beside a slow one does not work on its own, and
-                    // users plateau on the slow one. The key has to be visible at the moment of use,
-                    // which is `docs/ui.md` §4.2's "each chip states its key".
-                    //
-                    // It went missing when the strip became per-door and `Mode::action` — a key per
-                    // panel — stopped existing; the citation above stayed, and `style_tabs` kept
-                    // querying a marker nothing spawned. A one-tab door has a slot key too, so the
-                    // `Option` is only ever `None` past the fourth panel.
-                    if let Some(chord) = chord {
-                        tab.spawn((
-                            Text::new(chord),
-                            TextColor(crate::chrome::ink().label),
-                            crate::chrome::font(crate::chrome::text::LABEL),
-                            Node {
-                                margin: UiRect::right(Val::Px(crate::chrome::GAP_ROW)),
-                                ..default()
-                            },
-                            TabKey,
-                        ));
-                    }
                     tab.spawn((
                         Text::new(mode.label()),
                         TextColor(crate::chrome::ink().label),
-                        crate::chrome::font(crate::chrome::text::TAB),
+                        crate::chrome::typed(crate::chrome::text::TAB),
                         TextLayout::new(Justify::Left, LineBreak::NoWrap),
                         TabLabel,
                     ));
@@ -4220,12 +4125,9 @@ fn spawn_tab_strip(
                     tab.spawn((
                         Text::new(String::new()),
                         TextColor(crate::chrome::ink().danger),
-                        crate::chrome::font(crate::chrome::text::LABEL),
+                        crate::chrome::typed(crate::chrome::text::LABEL),
                         TextLayout::new(Justify::Left, LineBreak::NoWrap),
-                        Node {
-                            margin: UiRect::left(Val::Px(crate::chrome::GAP_ROW)),
-                            ..default()
-                        },
+                        crate::chrome::spaced(UiRect::left(Val::Px(crate::chrome::GAP_ROW))),
                         TabBadge,
                     ));
                 })
@@ -4245,21 +4147,12 @@ fn spawn_tab_strip(
             // rather than to switch to one particular alternative task"* — so the same words and the
             // same key mean the same thing on both doors. The strip says which way is other.
             //
-            // **The name is here; the key is the badge's.** The strip's own convention is that a
-            // control states its key in its own text and the badge cluster repeats it — the tab
-            // chips print `1`, `2`, `3` and the badges print them again. So this prints the *name*
-            // and the badge prints the *key*, and the two are complementary rather than two
-            // statements of the same fact.
-            p.spawn((
-                Node {
-                    align_items: AlignItems::Center,
-                    column_gap: Val::Px(crate::chrome::GAP_ROW),
-                    margin: UiRect::left(Val::Px(crate::chrome::GAP_GROUP)),
-                    ..default()
-                },
-                OtherDoorMark,
-            ))
-            // **A click on the name is the key.** The mark says where `=` goes, and a name that names
+            // **The name is here; the keys are the workspace chords'.** `=` was this cue's key
+            // until #379 replaced it with `Cmd`/`Ctrl`+`1`…`9`, which are on the strip's badge
+            // already, so this prints the *name* of where a click goes and the badge prints the keys.
+            crate::chrome::gapped_row(p, crate::chrome::GAP_ROW_STEPS, UiRect::left(Val::Px(crate::chrome::GAP_GROUP)), AlignItems::Center)
+                .insert(OtherWorkspaceMark)
+            // **A click on the name crosses.** The mark says where it goes, and a name that names
             // a place is a name that gets clicked (#288). The Rigs door hides the mark, so a click
             // is never aimed at it there.
             .observe(cross_on_click)
@@ -4269,7 +4162,7 @@ fn spawn_tab_strip(
                 m.spawn((
                     Text::new(SWITCH_TO),
                     TextColor(crate::chrome::ink().muted),
-                    crate::chrome::font(crate::chrome::text::BODY),
+                    crate::chrome::typed(crate::chrome::text::BODY),
                 ));
                 m.spawn((
                     // Written every frame by [`name_the_other_door`], which says the other workspace's name.
@@ -4279,20 +4172,17 @@ fn spawn_tab_strip(
                     // `TAB`'s 13 — so at `LABEL` the phrase is a whisper beside a shout. `BODY` is
                     // 11 px, the readable default, and it is still a step below the panels: **the
                     // panels are the strip's subject, and the cue is a sentence beside them.**
-                    crate::chrome::font(crate::chrome::text::BODY),
-                    Node {
-                        margin: UiRect::right(Val::Px(crate::chrome::GAP_ROW)),
-                        ..default()
-                    },
-                    OtherDoorLabel,
+                    crate::chrome::typed(crate::chrome::text::BODY),
+                    crate::chrome::spaced(UiRect::right(Val::Px(crate::chrome::GAP_ROW))),
+                    OtherWorkspaceLabel,
                 ));
             });
         });
 }
 
-/// **A click on the other door's name crosses to it**, by the one path `=` takes. Deferred, because
-/// the crossing takes the whole `World`; the `EditorState` check is for the same reason `click_tab`
-/// has it: a global pointer observer fires on every screen.
+/// **A click on the other workspace's name switches to it**, by the one path the workspace chords take. Deferred,
+/// because the switch takes the whole `World`; the `EditorState` check is for the same reason
+/// `click_tab` has it: a global pointer observer fires on every screen.
 fn cross_on_click(_click: On<PointerClick>, mut commands: Commands) {
     commands.queue(|world: &mut World| {
         if world.contains_resource::<crate::editor::EditorState>() {
@@ -4301,43 +4191,47 @@ fn cross_on_click(_click: On<PointerClick>, mut commands: Commands) {
     });
 }
 
-/// **The mark that names the other door** — the cue the crossing hangs on.
+/// **The mark that names the other workspace** — the cue the switch hangs on.
 ///
 /// A component rather than plain text, because the *name* of the other door changes with the door
 /// that is open, and a text node that is written once cannot be written again without being
 /// rebuilt.
 #[derive(Component)]
-pub struct OtherDoorMark;
+pub struct OtherWorkspaceMark;
 
-/// The name, inside [`OtherDoorMark`].
+/// The name, inside [`OtherWorkspaceMark`].
 #[derive(Component)]
-pub struct OtherDoorLabel;
+pub struct OtherWorkspaceLabel;
 
 /// The verb the door cue opens with, in a node of its own so the destination keeps its exact name.
 const SWITCH_TO: &str = "Switch to";
 
-/// The door the cue leads to: the Map and Kit doors lead to each other, and the Rigs door leads nowhere.
-pub fn other_door(door: Door) -> Option<Door> {
-    match door {
-        Door::Map => Some(Door::Kit),
-        Door::Kit => Some(Door::Map),
-        Door::Rigs => None,
+/// **The workspace the cue leads to**: Map and Kit lead to each other, and every other one goes to
+/// Map — the level is the one place everything else is about.
+///
+/// It used to be Map and Kit and *nowhere* (the Rigs door had no other side), which was the price of
+/// the doors being places. With nine workspaces the cue is a short walk rather than the only road,
+/// so a workspace with no partner would be a dead mark on the strip; the level is the answer for
+/// all of them, and the strip says which one it is leading to.
+pub fn the_other_workspace(workspace: crate::workspace::Workspace) -> Option<crate::workspace::Workspace> {
+    use crate::workspace::Workspace;
+    match workspace {
+        Workspace::Map => Some(Workspace::Kit),
+        Workspace::Kit => Some(Workspace::Map),
+        _ => Some(Workspace::Map),
     }
 }
 
 /// **Name the other door**, so the cue says which way is other.
 ///
-/// **The Rigs door is not a door the author crosses to.** It is the rig bench — a character asset
-/// rather than level content — and `screen.rs` says it *"crosses with neither"*. So the mark names
-/// the **Map** door from the Kit door and the **Kit** door from the Map door, and the Rigs door
-/// names nothing: there is nowhere for the author to go, and a cue that leads nowhere is a lie.
+/// **The mark names a workspace and its key crosses to it** — see [`the_other_workspace`] for which.
 fn name_the_other_door(
-    door: Option<Res<Door>>,
-    mut labels: Query<&mut Text, With<OtherDoorLabel>>,
-    mut marks: Query<&mut Node, With<OtherDoorMark>>,
+    workspace: Option<Res<crate::workspace::Workspace>>,
+    mut labels: Query<&mut Text, With<OtherWorkspaceLabel>>,
+    mut marks: Query<&mut Node, With<OtherWorkspaceMark>>,
 ) {
-    let Some(door) = door else { return };
-    let other = other_door(*door);
+    let Some(workspace) = workspace else { return };
+    let other = the_other_workspace(*workspace);
     for mut label in &mut labels {
         let text = match other {
             // **The workspace's own name** (#302): the tab says `Map` or `Kit`, as the title of the
@@ -4353,8 +4247,8 @@ fn name_the_other_door(
             label.0 = text;
         }
     }
-    // **And the whole mark goes when there is no other door**, rather than showing an empty name
-    // beside a key that does nothing.
+    // **And the whole mark goes when there is no other workspace**, rather than showing an empty
+    // name beside a key that does nothing.
     for mut node in &mut marks {
         let want = if other.is_some() {
             Display::Flex
@@ -4387,8 +4281,7 @@ fn style_tabs(
         &mut BorderColor,
         &Children,
     )>,
-    mut names: Query<&mut TextColor, (With<TabLabel>, Without<TabKey>)>,
-    mut chords: Query<&mut TextColor, (With<TabKey>, Without<TabLabel>)>,
+    mut names: Query<&mut TextColor, With<TabLabel>>,
 ) {
     for (tab, hovered, mut bg, mut border, children) in &mut tabs {
         let active = tab.0 == *mode;
@@ -4415,12 +4308,6 @@ fn style_tabs(
         for child in children.iter() {
             if let Ok(mut colour) = names.get_mut(child) {
                 let want = if active { crate::chrome::ink().text } else { crate::chrome::ink().dim };
-                if colour.0 != want {
-                    colour.0 = want;
-                }
-            }
-            if let Ok(mut colour) = chords.get_mut(child) {
-                let want = if active { crate::chrome::ink().accent } else { crate::chrome::ink().label };
                 if colour.0 != want {
                     colour.0 = want;
                 }
@@ -4466,8 +4353,15 @@ fn focus_filter(
             Mode::Map => crate::filter::Pane::Palette,
             Mode::Anim => crate::filter::Pane::Rigs,
             Mode::Compose => crate::filter::Pane::Candidates,
+            // **No list of their own** (NV-08, #385; NV-09, #386): the World, Sound and Game panels are fields, so the
+            // key has no box to take; the Map's is the nearest honest answer and focusing it is harmless.
+            Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files => crate::filter::Pane::Palette,
         };
-        filters.take_focus(pane);
+        // **The Files workspace has no filter box at all** (GD-11, #373): the key takes nothing there, rather than focusing a
+        // box of the Map's that is not on screen.
+        if *mode != Mode::Files {
+            filters.take_focus(pane);
+        }
     }
     if crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::FocusTagFilter) {
         filters.take_focus(crate::filter::Pane::Tags);
@@ -4621,7 +4515,7 @@ fn spawn_tiles_panel(
         p.spawn((
             Text::new(""),
             TextColor(crate::chrome::ink().dim),
-            crate::chrome::font(crate::chrome::text::LABEL),
+            crate::chrome::typed(crate::chrome::text::LABEL),
             // No `Node` of its own any more: `chrome::title` carries the gap below itself and
             // `panel_root`'s `row_gap` carries the rest. The bare 6 that stood here was one of the
             // four different margins the audit counted above a heading, one per file (F8).
@@ -4652,7 +4546,7 @@ fn spawn_tiles_panel(
         p.spawn((
             Text::new(""),
             TextColor(crate::chrome::ink().accent),
-            crate::chrome::font(crate::chrome::text::LABEL),
+            crate::chrome::typed(crate::chrome::text::LABEL),
             ActionLine,
         ));
     });
@@ -4682,62 +4576,34 @@ fn spawn_tiles_panel(
     .with_children(|p| {
         crate::chrome::list_heading_in(p, "PIECES", heading);
         // **The batch, while it runs** — above the list it is filling. See `paint_label_progress`.
-        p.spawn((
-            Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                margin: UiRect::bottom(Val::Px(crate::chrome::GAP_ROW)),
-                display: Display::None,
-                ..default()
-            },
-            LabelProgress,
-        ))
-        .with_children(|b| {
+        let mut batch = p.spawn((bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS), LabelProgress));
+        // Hidden until a walk exists, and a row of room under it when it shows: the two things a gooey column does not say.
+        batch.entry::<Node>().and_modify(|mut node| {
+            node.margin = UiRect::bottom(Val::Px(crate::chrome::GAP_ROW));
+            node.display = Display::None;
+        });
+        batch.with_children(|b| {
             b.spawn((
                 Text::new(""),
                 TextColor(crate::chrome::ink().accent),
-                crate::chrome::font(crate::chrome::text::LABEL),
+                crate::chrome::typed(crate::chrome::text::LABEL),
                 LabelProgressText,
             ));
-            // The bar: a dim trough with a bright fill whose WIDTH is the fraction. Two nodes,
-            // because a bar is the one readout where the number is not the point — the eye reads
-            // "how much is left" without reading anything.
-            b.spawn((
-                Node {
-                    width: Val::Percent(100.0),
-                    // CHROME-OK: the progress bar's own thickness, not a spacing step.
-                    height: Val::Px(4.0),
-                    ..default()
-                },
-                BackgroundColor(crate::chrome::ink().slot_bg),
-            ))
-            .with_children(|trough| {
-                trough.spawn((
-                    Node {
-                        width: Val::Percent(0.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(crate::chrome::ink().accent),
-                    LabelProgressBar,
-                ));
-            });
+            // The bar is gooey's own `progress`: a trough with a fill whose width is the fraction, a readout where the number
+            // is not the point — the eye reads "how much is left" without reading anything. Its words line stays hidden: the
+            // head and the subject above and below it say what the batch is on.
+            b.spawn((bevy_gooey::progress(0.0), LabelProgressBar));
             b.spawn((
                 Text::new(""),
                 TextColor(crate::chrome::ink().dim),
-                crate::chrome::font(crate::chrome::text::HINT),
+                crate::chrome::typed(crate::chrome::text::HINT),
                 LabelProgressNow,
             ));
         });
         crate::filter::spawn(p, crate::filter::Pane::Candidates, None);
         // The strip sits OUTSIDE the scroll container, so it cannot scroll away — see [`ListHeader`].
-        p.spawn((
-            Node {
-                flex_direction: FlexDirection::Column,
-                ..default()
-            },
-            ListHeader,
-        ));
+        // **A gooey column** (UI-59, #245).
+        p.spawn((bevy_gooey::column(0.0), ListHeader));
         crate::chrome::scroll_list(
             p,
             (
@@ -4750,30 +4616,8 @@ fn spawn_tiles_panel(
     });
 }
 
-/// **The number keys jump straight to a panel of this door**, in strip order.
-///
-/// `1` is this door's first panel, not the binary's — so on the Kit door `1` is Meshes. Everything
-/// reachable by mouse is reachable by keyboard (`docs/ui.md` §4.2), and the strip is what both read.
-fn tab_shortcuts(world: &mut World) {
-    let Some(door) = world.get_resource::<Door>().copied() else {
-        return;
-    };
-    // **The slot that was pressed**, read here and acted on below, so the `World` borrow ends first.
-    let want = {
-        let keyboard = world.resource::<ButtonInput<KeyCode>>();
-        let live = *world.resource::<crate::keys::Live>();
-        door.tabs().iter().enumerate().find_map(|(i, &want)| {
-            let action = Action::tab_slot(i)?;
-            keys::just_pressed(keyboard, live, action).then_some(want)
-        })
-    };
-    if let Some(want) = want {
-        crate::editor::open_door(world, door, Some(want));
-    }
-}
-
-/// **Enter a tab for the operation that asked for it** (`door_open` with a tab). It is the same entry
-/// as the slot key and the chip click, so the scan-on-arrival and the receipt clearing happen once.
+/// **Enter a panel for the operation that asked for it** (`door_open` with a tab). It is the same entry
+/// as the chip click, so the scan-on-arrival and the receipt clearing happen once.
 pub fn go_to_tab(
     In(want): In<Mode>,
     project: Option<Res<Project>>,
@@ -4796,7 +4640,7 @@ pub fn go_to_tab(
 /// **It takes the `ResMut`s, not `&mut Mode`.** Passing `&mut mode` where the parameter is
 /// `&mut Mode` deref-*muts* the `ResMut` at the call site, and `Mut::deref_mut` calls
 /// `set_changed()` — so `Mode` was marked changed before this function could refuse, on every press
-/// of the slot key you are already on and every click of the chip you are already standing on.
+/// of the operation that finds you already on the panel and every click of the chip you are already standing on.
 /// `stage_camera` reads exactly that flag, so it restored the canonical stage framing and threw
 /// away the author's pan and zoom, which is the discard `MapView` exists to prevent. Measured:
 /// a helper taking `&mut T` reports `is_changed()` after a no-op, an in-place compare does not.
@@ -4818,7 +4662,7 @@ fn enter_tab(
     // never cleared — outlived every switch between them. See `chrome::Status::clear_note` for the
     // report that closes and the BRP measurement showing the rotation it seemed to announce was not
     // happening. Cleared here rather than in a system watching `Mode`, because this is the one door
-    // both the slot key and the chip click come through, and because clearing *before* the scan
+    // both the chip click and the operation come through, and because clearing *before* the scan
     // below means a tab that has something to say still gets to say it.
     //
     // Only the note. A problem is a state the editor is in and outlives a tab on purpose.
@@ -4860,13 +4704,13 @@ fn click_tab(click: On<PointerClick>, tabs: Query<&Tab>, mut commands: Commands)
     // Deferred, because `open_door` takes the whole `World`. A global `Pointer` observer fires on any
     // screen, so the door and the editor state are checked where the command runs, not assumed here.
     commands.queue(move |world: &mut World| {
-        let Some(door) = world.get_resource::<Door>().copied() else {
+        let Some(workspace) = world.get_resource::<crate::workspace::Workspace>().copied() else {
             return;
         };
         if !world.contains_resource::<crate::editor::EditorState>() {
             return;
         }
-        crate::editor::open_door(world, door, Some(want));
+        crate::editor::open_door(world, workspace, Some(want));
     });
 }
 
@@ -4891,13 +4735,13 @@ fn rescan_key(
 /// switching removed rather than a new behaviour.
 fn scan_on_entering_the_kits_door(
     project: Option<Res<Project>>,
-    door: Option<Res<Door>>,
+    workspace: Option<Res<crate::workspace::Workspace>>,
     mut state: ResMut<ImportState>,
 ) {
-    let (Some(project), Some(door)) = (project, door) else {
+    let (Some(project), Some(workspace)) = (project, workspace) else {
         return;
     };
-    if door.opens_on() == Mode::Meshes && !state.scanned {
+    if workspace.opens_on() == Mode::Meshes && !state.scanned {
         scan(&project, &mut state);
     }
 }
@@ -5869,7 +5713,7 @@ fn apply_what_arrives(
 ///
 /// Two, because one is the answer and the second is the correction: an odd turn taken the wrong way
 /// round comes back as "still not upright" and the second attempt fixes it (see
-/// [`crate::vlm::NeedsTurn::turns`] for why the direction is not asked for). A third means the model
+/// [`crate::label_suggestion::NeedsTurn::turns`] for why the direction is not asked for). A third means the model
 /// and the mesh disagree about which way is up, and four quarter turns is where it started.
 pub(crate) const MAX_RIGHTINGS: u8 = 2;
 
@@ -7884,6 +7728,7 @@ fn apply_mode(
             Mode::Meshes | Mode::Tiles => is_tiles,
             Mode::Anim => is_anim,
             Mode::Compose => is_compose,
+            Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files => false,
         };
         // A panel belonging to no tab is not ours to touch — the tab strip and the cost readout are
         // both unmarked and must stay visible in every mode.
@@ -8437,24 +8282,11 @@ fn shelf_strip(
     candidates: (usize, usize),
     kit: (usize, usize),
 ) {
-    p.spawn(Node {
-        flex_direction: FlexDirection::Row,
-        column_gap: Val::Px(crate::chrome::GAP_ROW),
-        // A flex item's automatic minimum size is its content, so without this the strip refuses
-        // to narrow and its last chip is clipped by the panel's right edge — the 2026-09-03
-        // audit's F7, measured in a capture.
-        // CHROME-OK: zero is not a spacing step.
-        min_width: Val::Px(0.0),
-        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-        align_items: AlignItems::Center,
-        // **Wraps, because two counted chips and a hint do not fit `LIST_W`.** Measured in a
-        // capture: `left / right` was clipped at the panel edge, which is the same class of defect
-        // as the kit row that wrapped into its own value column — a fixed width and content that
-        // outgrew it. The hint drops to a second line rather than being cut, and on a wider panel
-        // it stays where it was.
-        flex_wrap: FlexWrap::Wrap,
-        ..default()
-    })
+    // **Wraps, because two counted chips and a hint do not fit `LIST_W`.** Measured in a capture: `left / right` was clipped at
+    // the panel edge, which is the same class of defect as the kit row that wrapped into its own value column — a fixed
+    // width and content that outgrew it. The hint drops to a second line rather than being cut, and on a wider panel it stays
+    // where it was.
+    crate::chrome::wrapping_row(p, crate::chrome::GAP_ROW_STEPS, crate::chrome::GAP_TIGHT, UiRect::ZERO, AlignItems::Center)
     .with_children(|row| {
         // A tab shows the two shelves its own keys reach: `Meshes` imports (candidates <-> library),
         // `Tiles` composes (library <-> kit). Drawing all three everywhere would offer a chip whose
@@ -8500,7 +8332,7 @@ fn shelf_strip(
         row.spawn((
             Text::new("right: meshes / left: tiles"),
             TextColor(crate::chrome::ink().label),
-            crate::chrome::font(crate::chrome::text::HINT),
+            crate::chrome::typed(crate::chrome::text::HINT),
             TextLayout::new(Justify::Left, LineBreak::NoWrap),
         ));
     });
@@ -8645,7 +8477,7 @@ pub(crate) fn count_cell(row: &mut ChildSpawnerCommands, text: String, ink: Colo
         },
         Text::new(text),
         TextColor(ink),
-        crate::chrome::font(crate::chrome::text::LABEL),
+        crate::chrome::typed(crate::chrome::text::LABEL),
         TextLayout::new(Justify::Left, LineBreak::NoWrap),
     ));
 }
@@ -8679,7 +8511,7 @@ struct LabelProgress;
 /// `LABELING 16/778`, or `HELD AT 16/778`.
 #[derive(Component)]
 struct LabelProgressText;
-/// The filled part of the bar; its width is the fraction done.
+/// The batch's gooey `progress` bar; its value is the fraction done.
 #[derive(Component)]
 struct LabelProgressBar;
 /// The subject in hand right now.
@@ -8695,7 +8527,7 @@ struct LabelProgressNow;
 fn paint_label_progress(
     queue: Res<crate::labels::LabelQueue>,
     mut roots: Query<&mut Node, (With<LabelProgress>, Without<LabelProgressBar>)>,
-    mut bars: Query<&mut Node, (With<LabelProgressBar>, Without<LabelProgress>)>,
+    mut bars: Query<&mut bevy_gooey::Progress, With<LabelProgressBar>>,
     mut heads: Query<&mut Text, (With<LabelProgressText>, Without<LabelProgressNow>)>,
     mut nows: Query<&mut Text, (With<LabelProgressNow>, Without<LabelProgressText>)>,
 ) {
@@ -8717,15 +8549,10 @@ fn paint_label_progress(
         return;
     }
     let (done, total) = queue.progress();
-    let fraction = if total == 0 {
-        0.0
-    } else {
-        done as f32 / total as f32 * 100.0
-    };
+    let fraction = if total == 0 { 0.0 } else { done as f32 / total as f32 };
     for mut bar in &mut bars {
-        let want = Val::Percent(fraction);
-        if bar.width != want {
-            bar.width = want;
+        if bar.0 != fraction {
+            bar.0 = fraction;
         }
     }
     for mut text in &mut heads {
@@ -9069,24 +8896,12 @@ fn draw_ink(
                             Some(s) => crate::chrome::severity_style(*s).0,
                             None => crate::chrome::ink().label,
                         }),
-                        crate::chrome::font(crate::chrome::text::BODY),
+                        crate::chrome::typed(crate::chrome::text::BODY),
                     ));
-                    row.spawn((
-                        Node {
-                            flex_grow: 1.0,
-                            // See [`count_cell`]: a long mesh name wraps inside its own column
-                            // rather than widening the row.
-                            // CHROME-OK: zero is not a spacing step.
-                            min_width: Val::Px(0.0),
-                            ..default()
-                        },
-                        // The file's own name, not the full path — the pack heading already said
-                        // where it came from, and repeating it on 145 rows is the same word 145
-                        // times.
-                        Text::new(leaf.clone()),
-                        TextColor(words.read),
-                        crate::chrome::font(crate::chrome::text::LABEL),
-                    ));
+                    // The file's own name, not the full path — the pack heading already said where it came from, and
+                    // repeating it on 145 rows is the same word 145 times. A long mesh name wraps inside its own column
+                    // rather than widening the row (see [`count_cell`]).
+                    crate::chrome::fill_text(row, leaf.clone(), words.read, crate::chrome::text::LABEL);
                 });
             }
             RowInk::Library {
@@ -9105,33 +8920,23 @@ fn draw_ink(
                     .entry::<Node>()
                     .and_modify(|mut n| n.align_items = AlignItems::Center);
                 library_row.with_children(|row| {
+                    // **A gooey `image_box` of the slot's size**, holding its room while the thumbnail is baked. The ink carries only
+                    // `portrait: bool` — a `Handle<Image>` in a compared value would make the comparison about handle identity — so
+                    // the handle is looked up here, by id, never by index. **Until a portrait exists the slot holds Bevy's
+                    // transparent image**, which the UI renderer skips: the default handle is a real white pixel and would paint
+                    // white over the slot's fill.
+                    let image = if *portrait { thumbs.and_then(|t| t.image(id)) } else { None };
                     let mut slot = row.spawn((
-                        Node {
-                            width: Val::Px(crate::chrome::THUMB_SLOT),
-                            height: Val::Px(crate::chrome::THUMB_SLOT),
-                            margin: UiRect::right(Val::Px(crate::chrome::GAP_ROW)),
-                            flex_shrink: 0.0,
-                            ..default()
-                        },
+                        bevy_gooey::image_box(image.unwrap_or(bevy::image::TRANSPARENT_IMAGE_HANDLE), Vec2::splat(crate::chrome::THUMB_SLOT)),
                         BackgroundColor(crate::chrome::ink().slot_bg),
                     ));
-                    // The ink carries only `portrait: bool` — a `Handle<Image>` in a compared
-                    // value would make the comparison about handle identity — so the handle is
-                    // looked up here, by id, never by index.
-                    if *portrait && let Some(image) = thumbs.and_then(|t| t.image(id)) {
-                        slot.insert(ImageNode::new(image));
-                    }
-                    row.spawn((
-                        Node {
-                            flex_grow: 1.0,
-                            // CHROME-OK: zero, not a spacing step — see [`count_cell`].
-                            min_width: Val::Px(0.0),
-                            ..default()
-                        },
-                        Text::new(id.clone()),
-                        TextColor(if *judged { crate::chrome::ink().labeled } else { crate::chrome::ink().text }),
-                        crate::chrome::font(crate::chrome::text::LABEL),
-                    ));
+                    slot.entry::<Node>().and_modify(|mut n| n.margin = UiRect::right(Val::Px(crate::chrome::GAP_ROW)));
+                    crate::chrome::fill_text(
+                        row,
+                        id.clone(),
+                        if *judged { crate::chrome::ink().labeled } else { crate::chrome::ink().text },
+                        crate::chrome::text::LABEL,
+                    );
                 });
             }
             // **One row of the Tiles page, in the shape every other list in this editor uses.**
@@ -9153,26 +8958,20 @@ fn draw_ink(
                 open,
             } => {
                 crate::chrome::list_row(p, false, KitRow(*i)).with_children(|row| {
-                    row.spawn((
-                        Node {
-                            flex_grow: 1.0,
-                            // CHROME-OK: zero, not a spacing step — see [`count_cell`].
-                            min_width: Val::Px(0.0),
-                            ..default()
-                        },
-                        Text::new(id.clone()),
-                        // `MUTED` for a composition this page cannot open — present on purpose
-                        // and deliberately not participating, which is exactly what that ink is
-                        // for.
-                        TextColor(if *open {
+                    // `MUTED` for a composition this page cannot open — present on purpose and deliberately not
+                    // participating, which is exactly what that ink is for.
+                    crate::chrome::fill_text(
+                        row,
+                        id.clone(),
+                        if *open {
                             crate::chrome::ink().accent
                         } else if *openable {
                             crate::chrome::ink().text
                         } else {
                             crate::chrome::ink().muted
-                        }),
-                        crate::chrome::font(crate::chrome::text::BODY),
-                    ));
+                        },
+                        crate::chrome::text::BODY,
+                    );
                     if *openable {
                         count_cell(row, format!("{members} member(s)"), crate::chrome::ink().label);
                     } else {
@@ -9193,7 +8992,7 @@ fn draw_ink(
                         row.spawn((
                             Text::new("+ New Tile"),
                             TextColor(words.accent),
-                            crate::chrome::font(crate::chrome::text::BODY),
+                            crate::chrome::typed(crate::chrome::text::BODY),
                         ));
                     })
                     .observe(on_new_tile_click);
@@ -9202,7 +9001,7 @@ fn draw_ink(
                 p.spawn((
                     Text::new(say.clone()),
                     TextColor(words.quiet),
-                    crate::chrome::font(crate::chrome::text::BODY),
+                    crate::chrome::typed(crate::chrome::text::BODY),
                 ));
             }
             RowInk::AddMeshes => {
@@ -9254,28 +9053,23 @@ fn draw_pack_band(
             },
             Text::new(if folded { ">" } else { "v" }),
             TextColor(crate::chrome::ink().label),
-            crate::chrome::font(crate::chrome::text::LABEL),
+            crate::chrome::typed(crate::chrome::text::LABEL),
         ));
         // **The pack's name, and — when it is excluded — the way back.**
         //
         // An excluded pack keeps its words because it names a state the chevron does NOT show,
         // and the way out of it (`docs/ui.md` §1.4). They live in the growing column beside the
         // name rather than in the count's column, because a sentence wraps and a tally must not.
-        row.spawn((
-            Node {
-                flex_grow: 1.0,
-                // CHROME-OK: zero, not a spacing step — see [`count_cell`].
-                min_width: Val::Px(0.0),
-                ..default()
-            },
-            Text::new(if excluded {
+        crate::chrome::fill_text(
+            row,
+            if excluded {
                 format!("{pack}  -  {} restores", keys::chord(Action::ExcludePack))
             } else {
                 pack.to_owned()
-            }),
-            TextColor(if excluded { crate::chrome::ink().muted } else { crate::chrome::ink().label }),
-            crate::chrome::font(crate::chrome::text::LABEL),
-        ));
+            },
+            if excluded { crate::chrome::ink().muted } else { crate::chrome::ink().label },
+            crate::chrome::text::LABEL,
+        );
         // **The count, and nothing else.** A folded pack used to say "{n} hidden — click to
         // open"; removed at the keyboard, 2026-08-18: that is a whole sentence on every folded
         // row of a list an author is scrolling, and the chevron to the left of the name (`>`
@@ -9319,26 +9113,18 @@ fn draw_excluded_band(p: &mut ChildSpawnerCommands, packs: usize, meshes: usize,
             },
             Text::new(if open { "v" } else { ">" }),
             TextColor(crate::chrome::ink().muted),
-            crate::chrome::font(crate::chrome::text::LABEL),
+            crate::chrome::typed(crate::chrome::text::LABEL),
         ));
         // **The name column wraps within itself; the tally does not.** The state and the way
         // out of it both stay on the band (`docs/ui.md` §1.4) — what changed is that they now
         // share the *growing* column, so the count can hold a column of its own rather than
         // being the last words of a sentence that wraps around it (F6).
-        row.spawn((
-            Node {
-                flex_grow: 1.0,
-                // CHROME-OK: zero, not a spacing step — see [`count_cell`].
-                min_width: Val::Px(0.0),
-                ..default()
-            },
-            Text::new(format!(
-                "EXCLUDED  -  {} restores one",
-                keys::chord(Action::ExcludePack)
-            )),
-            TextColor(crate::chrome::ink().muted),
-            crate::chrome::font(crate::chrome::text::LABEL),
-        ));
+        crate::chrome::fill_text(
+            row,
+            format!("EXCLUDED  -  {} restores one", keys::chord(Action::ExcludePack)),
+            crate::chrome::ink().muted,
+            crate::chrome::text::LABEL,
+        );
         count_cell(row, format!("{packs} pack(s), {meshes} mesh(es)"), crate::chrome::ink().muted);
     });
 }
@@ -9479,7 +9265,7 @@ fn rebuild_candidates(
 /// map palette, and for the same measured reason.
 ///
 /// **Exactly one row is ever highlighted**, which is the audit's M4 held at the layer that
-/// draws: `Selected::now` ranks the headings above the mesh cursor, so crossing onto a heading
+/// draws: `Selected::now` ranks the headings above the mesh cursor, so switching onto a heading
 /// cannot leave the row you came from wearing a rail. Compares before writing: all three carriers
 /// are change-detected and this runs every frame over every row in the list.
 #[allow(clippy::type_complexity)]
@@ -9565,7 +9351,7 @@ fn build_detail(p: &mut ChildSpawnerCommands, build: &crate::build::Build, proje
                 text: String,
                 colour: Color,
                 role: crate::chrome::text::Role| {
-        p.spawn((Text::new(text), TextColor(colour), crate::chrome::font(role)));
+        p.spawn((Text::new(text), TextColor(colour), crate::chrome::typed(role)));
     };
 
     // **The TILE heading is spawned once, above the branches**, because every branch opens with
@@ -9702,17 +9488,7 @@ fn build_detail(p: &mut ChildSpawnerCommands, build: &crate::build::Build, proje
         // Selection is the row's fill and its accent rail now, so the ASCII marker goes with the
         // amber — a cursor drawn into the text as well would be one fact said twice.
         crate::chrome::list_row(p, focused, MemberRow(i)).with_children(|row| {
-            row.spawn((
-                Node {
-                    flex_grow: 1.0,
-                    // CHROME-OK: zero, not a spacing step — see [`count_cell`].
-                    min_width: Val::Px(0.0),
-                    ..default()
-                },
-                Text::new(what),
-                TextColor(crate::chrome::ink().text),
-                crate::chrome::font(crate::chrome::text::LABEL),
-            ));
+            crate::chrome::fill_text(row, what, crate::chrome::ink().text, crate::chrome::text::LABEL);
             count_cell(
                 row,
                 format!("({:+.2}, {:+.2}) +{:.2}{yaw}", m.at.0, m.at.1, m.lift),
@@ -9899,7 +9675,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
     let accent_ink = skin.as_deref().map_or(crate::chrome::ink().accent, |s| s.accent);
     let unchecked_ink = unchecked_ink(skin.as_deref());
     // **A quiet note's ink** (UI-02, #210, slice 5): the "m up the wall", the size note, a remedy under
-    // a warning, a layer's label. All five used `chrome::ink().label` beside `chrome::font(text::LABEL)` — a
+    // a warning, a layer's label. All five used `chrome::ink().label` beside `chrome::typed(text::LABEL)` — a
     // colour and a *font size* that share a name, which is what made the colour table's ratchet count
     // them twice. `quiet` is the skin's `text_muted`, falling back to the constant.
     let quiet_ink = skin.as_deref().map_or(crate::chrome::ink().label, |s| s.text_muted);
@@ -9937,7 +9713,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 p.spawn((
                     Text::new("no mesh selected — walk NOT IMPORTED and press Enter to bring one in"),
                     TextColor(crate::chrome::ink().dim),
-                    crate::chrome::font(crate::chrome::text::BODY),
+                    crate::chrome::typed(crate::chrome::text::BODY),
                 ));
                 return;
             };
@@ -9966,11 +9742,8 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             p.spawn((
                 Text::new(id_text),
                 TextColor(id_tint),
-                crate::chrome::font(crate::chrome::text::TAB),
-                Node {
-                    margin: UiRect::bottom(Val::Px(crate::chrome::GAP_ROW)),
-                    ..default()
-                },
+                crate::chrome::typed(crate::chrome::text::TAB),
+                crate::chrome::spaced(UiRect::bottom(Val::Px(crate::chrome::GAP_ROW))),
                 // The line `I` types into, so that is where its badge goes.
                 crate::chrome::Control(crate::keys::ControlId::IdField),
             ));
@@ -9993,10 +9766,11 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             // question rather than an answer — one `apply_what_arrives` settles on its own a frame
             // later (`Cmd+Z` undoes it; `Shift+Y` abandons a batch with everything it staged). What
             // is being typed always wins over both, because that is the author speaking now.
-            // `description()` rather than `note`: the model answers `what` and leaves `note` null
-            // often enough that reading `note` alone left this box empty with a full identification
-            // printed underneath it. `vlm::Suggestion::description` is where that choice is made,
-            // and `labels::apply_fields` writes whatever it returns.
+            // `description()` rather than `note`, so this box and `labels::apply_fields` cannot
+            // disagree about what a proposal offers. **Since the decision path is the only
+            // labeller, that is usually `None`** — it answers a probability per token and has no
+            // sentence to offer, and its `what` is the token list, which is not a description of
+            // anything. An empty box with a full identification beside it is the honest state.
             let (note_text, note_tint) = note_field_text(
                 note_edit.active.as_ref().map(|(_, raw)| raw.as_str()),
                 d.note.as_deref(),
@@ -10041,13 +9815,13 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         p_.date, s.confidence
                     )),
                     TextColor(suggest_ink),
-                    crate::chrome::font(crate::chrome::text::LABEL),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
                 ));
                 // **The identification is not a second line here.** It used to be, in a third
                 // colour between the header and the proposed note — *"you have proposal in light
                 // blue, and then you have the old text description in white, and the more proposal
                 // below it… there's no intuition to be drawn."* `what` is now what the description
-                // box says when the model offered nothing better (`vlm::Suggestion::description`),
+                // box says when the model offered nothing better (`label_suggestion::Suggestion::description`),
                 // so printing it again here would be the same sentence twice.
                 // The proposed note as a ghost line — never in the editable buffer.
                 // A righting turn changes what U does: it turns the piece (the same re-measure
@@ -10063,7 +9837,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                             turn.why
                         )),
                         TextColor(suggest_ink),
-                        crate::chrome::font(crate::chrome::text::HINT),
+                        crate::chrome::typed(crate::chrome::text::HINT),
                     ));
                 }
                 // Vocabulary the model wanted and could not have — a human's decision, elsewhere.
@@ -10078,7 +9852,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                             t.token, t.axis, t.why
                         )),
                         TextColor(suggest_ink),
-                        crate::chrome::font(crate::chrome::text::HINT),
+                        crate::chrome::typed(crate::chrome::text::HINT),
                     ));
                 }
             }
@@ -10159,12 +9933,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 }
                 None => "  no measured footprint to size".to_owned(),
             };
-            p.spawn(Node {
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                margin: UiRect::top(Val::Px(crate::chrome::GAP_GROUP)),
-                ..default()
-            })
+            crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_GROUP)), AlignItems::Center)
             .with_children(|row| {
                 crate::chrome::row_label(row, crate::chrome::COL_LABEL, "size");
                 crate::chrome::text_field(
@@ -10178,7 +9947,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 row.spawn((
                     Text::new(size_note),
                     TextColor(quiet_ink),
-                    crate::chrome::font(crate::chrome::text::LABEL),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
                 ));
             });
 
@@ -10191,24 +9960,16 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             // changes; a file that does not parse is named, never read as no rules.
             let standards_lines = standards_lines(placed, &project.project_dir);
             if !standards_lines.is_empty() {
-                p.spawn(Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::FlexStart,
-                    margin: UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
-                    ..default()
-                })
+                crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_ROW)), AlignItems::FlexStart)
                 .with_children(|row| {
                     crate::chrome::row_label(row, crate::chrome::COL_LABEL, "standards");
-                    row.spawn(Node {
-                        flex_direction: FlexDirection::Column,
-                        ..default()
-                    })
+                    row.spawn(bevy_gooey::column(0.0))
                     .with_children(|col| {
                         for line in standards_lines {
                             col.spawn((
                                 Text::new(line),
                                 TextColor(danger_ink),
-                                crate::chrome::font(crate::chrome::text::LABEL),
+                                crate::chrome::typed(crate::chrome::text::LABEL),
                             ));
                         }
                     });
@@ -10243,24 +10004,16 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     })
                     .collect();
             if !dead.is_empty() {
-                p.spawn(Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::FlexStart,
-                    margin: UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
-                    ..default()
-                })
+                crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_ROW)), AlignItems::FlexStart)
                 .with_children(|row| {
                     crate::chrome::row_label(row, crate::chrome::COL_LABEL, "dead ends");
-                    row.spawn(Node {
-                        flex_direction: FlexDirection::Column,
-                        ..default()
-                    })
+                    row.spawn(bevy_gooey::column(0.0))
                     .with_children(|col| {
                         for line in dead {
                             col.spawn((
                                 Text::new(line),
                                 TextColor(danger_ink),
-                                crate::chrome::font(crate::chrome::text::LABEL),
+                                crate::chrome::typed(crate::chrome::text::LABEL),
                             ));
                         }
                     });
@@ -10306,16 +10059,9 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 (None, Some(f)) => (format!("{} face", f.label()), crate::chrome::ink().text),
                 (None, None) => ("none".to_owned(), crate::chrome::ink().label),
             };
-            p.spawn((
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    margin: UiRect::top(Val::Px(crate::chrome::GAP_GROUP)),
-                    ..default()
-                },
+            crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_GROUP)), AlignItems::Center)
                 // The row `M` cycles.
-                crate::chrome::Control(crate::keys::ControlId::Mount),
-            ))
+                .insert(crate::chrome::Control(crate::keys::ControlId::Mount))
             .with_children(|row| {
                 // **"mount", not "layer".** The subgrid below has its own `layer y` picker, and
                 // one panel saying "layer" twice about two different things is the confusion the
@@ -10351,12 +10097,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 // that case — so the row reads as an absence, not an error.
                 None => ("—".to_owned(), crate::chrome::ink().label),
             };
-            p.spawn(Node {
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
-                ..default()
-            })
+            crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)), AlignItems::Center)
             .with_children(|row| {
                 crate::chrome::row_label(row, crate::chrome::COL_LABEL, "mesh");
                 crate::chrome::row_value(row, mesh_text, mesh_ink, ());
@@ -10427,12 +10168,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     }
                 }
             };
-            p.spawn(Node {
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
-                ..default()
-            })
+            crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)), AlignItems::Center)
             .with_children(|row| {
                 crate::chrome::row_label(row, crate::chrome::COL_LABEL, "labels");
                 // **Wraps, like the mesh row above it.** The value used to be one no-wrap line clipped
@@ -10450,12 +10186,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     height_edit.active.as_ref().map(|(_, raw)| raw.as_str()),
                     (format!("{now:.2}"), crate::chrome::ink().text),
                 );
-                p.spawn(Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
-                    ..default()
-                })
+                crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)), AlignItems::Center)
                 .with_children(|row| {
                     crate::chrome::row_label(row, crate::chrome::COL_LABEL, "height");
                     crate::chrome::text_field(
@@ -10469,7 +10200,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     row.spawn((
                         Text::new("  m up the wall, from the map floor"),
                         TextColor(quiet_ink),
-                        crate::chrome::font(crate::chrome::text::LABEL),
+                        crate::chrome::typed(crate::chrome::text::LABEL),
                     ));
                 });
             }
@@ -10504,18 +10235,9 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             // between, and the pane already scrolls.
             //
             // So the block is an ordinary column again and the pane's own scroll carries it.
-            let mut tags = p.spawn((
-                Node {
-                    flex_direction: FlexDirection::Column,
-                    // The tag block is the ancestor of four wrapping chip rows, and a flex item's
-                    // automatic minimum size is its content — so a chip row that would not fit
-                    // widened this column instead of wrapping inside it (F7).
-                    // CHROME-OK: zero is not a spacing step.
-                    min_width: Val::Px(0.0),
-                    ..default()
-                },
-                crate::chrome::Control(crate::keys::ControlId::Tags),
-            ));
+            // The tag block is the ancestor of four wrapping chip rows, and a flex item's automatic minimum size is its
+            // content — a gooey column floors its width at nothing, so a chip row that would not fit wraps inside it (F7).
+            let mut tags = p.spawn((bevy_gooey::column(0.0), crate::chrome::Control(crate::keys::ControlId::Tags)));
             // **What survives the filter, worked out before anything is spawned.**
             //
             // The count line has to stand *under the box* and above the axes — a count printed after
@@ -10566,11 +10288,8 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     p.spawn((
                         Text::new(line),
                         TextColor(crate::chrome::ink().dim),
-                        crate::chrome::font(crate::chrome::text::HINT),
-                        Node {
-                            margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
-                            ..default()
-                        },
+                        crate::chrome::typed(crate::chrome::text::HINT),
+                        crate::chrome::spaced(UiRect::top(Val::Px(crate::chrome::GAP_TIGHT))),
                     ));
                 }
                 for (axis, _, kept) in &surviving {
@@ -10631,26 +10350,13 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     // and "the filter matched nothing" is precisely the moment an author wants to add
                     // the word they just typed. So the row is spawned unconditionally and the dash
                     // moves inside it, where it can stand beside the `+` alone.
-                    p.spawn(Node {
-                        flex_direction: FlexDirection::Row,
-                        flex_wrap: FlexWrap::Wrap,
-                        // Without it the row's automatic minimum is its widest chip run, so
-                        // `KIND`'s last chip and `LOOKS`'s `+` were clipped by the panel edge
-                        // (F7). `chrome::scroll_list` owns the right gutter that keeps them out
-                        // from under the scrollbar.
-                        // CHROME-OK: zero is not a spacing step.
-                        min_width: Val::Px(0.0),
-                        align_items: AlignItems::Center,
-                        column_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                        ..default()
-                    })
+                    crate::chrome::wrapping_row(p, crate::chrome::GAP_TIGHT_STEPS, crate::chrome::GAP_TIGHT, UiRect::ZERO, AlignItems::Center)
                     .with_children(|chips| {
                         if kept.is_empty() {
                             chips.spawn((
                                 Text::new("-"),
                                 TextColor(quiet_ink),
-                                crate::chrome::font(crate::chrome::text::LABEL),
+                                crate::chrome::typed(crate::chrome::text::LABEL),
                             ));
                         }
                         for (ix, name) in kept.iter().map(|(i, n)| (*i, n.as_str())) {
@@ -10738,10 +10444,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     crate::chrome::section(p, "PLACEMENT");
                 }
                 let mut line = |label: &str, now: String, prop: Option<String>| {
-                    p.spawn(Node {
-                        flex_direction: FlexDirection::Row,
-                        ..default()
-                    })
+                    p.spawn(bevy_gooey::row(0.0))
                     .with_children(|row| {
                         crate::chrome::row_label(row, 48.0, label);
                         // 11 px like every other value beside a label — this pane rendered 10/10
@@ -10792,11 +10495,8 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 p.spawn((
                     Text::new("what the importer noticed about this mesh"),
                     TextColor(crate::chrome::ink().dim),
-                    crate::chrome::font(crate::chrome::text::HINT),
-                    Node {
-                        margin: UiRect::bottom(Val::Px(crate::chrome::GAP_ROW)),
-                        ..default()
-                    },
+                    crate::chrome::typed(crate::chrome::text::HINT),
+                    crate::chrome::spaced(UiRect::bottom(Val::Px(crate::chrome::GAP_ROW))),
                 ));
                 for f in findings {
                     let (tint, word) = crate::chrome::severity_style(f.severity);
@@ -10804,12 +10504,12 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         block.spawn((
                             Text::new(word),
                             TextColor(tint),
-                            crate::chrome::font(crate::chrome::text::HINT),
+                            crate::chrome::typed(crate::chrome::text::HINT),
                         ));
                         block.spawn((
                             Text::new(f.message.clone()),
                             TextColor(crate::chrome::ink().text),
-                            crate::chrome::font(crate::chrome::text::LABEL),
+                            crate::chrome::typed(crate::chrome::text::LABEL),
                             // Wrapped prose at 10 px needs the leading; the 1.2 default packs these
                             // into the block of text the screenshot showed.
                             bevy::text::LineHeight::RelativeToFont(1.35),
@@ -10820,12 +10520,9 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                             block.spawn((
                                 Text::new(fix.clone()),
                                 TextColor(quiet_ink),
-                                crate::chrome::font(crate::chrome::text::LABEL),
+                                crate::chrome::typed(crate::chrome::text::LABEL),
                                 bevy::text::LineHeight::RelativeToFont(1.35),
-                                Node {
-                                    margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
-                                    ..default()
-                                },
+                                crate::chrome::spaced(UiRect::top(Val::Px(crate::chrome::GAP_TIGHT))),
                             ));
                         }
                     });
@@ -10849,7 +10546,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     p.spawn((
                         Text::new(why),
                         TextColor(crate::chrome::ink().accent),
-                        crate::chrome::font(crate::chrome::text::HINT),
+                        crate::chrome::typed(crate::chrome::text::HINT),
                     ));
                     return;
                 }
@@ -10869,7 +10566,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             p.spawn((
                 Text::new(format!("{dx} x {dy} x {dz} cells of {subunit_mm:.0} mm")),
                 TextColor(crate::chrome::ink().text),
-                crate::chrome::font(crate::chrome::text::BODY),
+                crate::chrome::typed(crate::chrome::text::BODY),
                 DivReadout,
             ));
             p.spawn((
@@ -10883,11 +10580,8 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     bevy_grimoire_core::grid::SNAP,
                 )),
                 TextColor(crate::chrome::ink().dim),
-                crate::chrome::font(crate::chrome::text::HINT),
-                Node {
-                    margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
-                    ..default()
-                },
+                crate::chrome::typed(crate::chrome::text::HINT),
+                crate::chrome::spaced(UiRect::top(Val::Px(crate::chrome::GAP_TIGHT))),
             ));
 
             // **Every layer at once, side by side, bottom on the left.** A picker showed one slice
@@ -10898,49 +10592,33 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             // Side by side rather than stacked because three 3x3 grids in a column is a tall thin
             // strip the eye has to scan, while three in a row is one picture. Bottom on the left, and
             // the labels say so rather than leaving `y = 0` to be inferred.
-            p.spawn((
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::FlexStart,
-                    column_gap: Val::Px(crate::chrome::GAP_GROUP),
-                    // Wraps rather than overflowing: a finer lattice, or a narrower panel, puts the
-                    // last layer on a second line instead of off the edge.
-                    flex_wrap: FlexWrap::Wrap,
-                    // See the tag rows above: a wrapping container has to be allowed to narrow,
-                    // or it overflows the pane instead of wrapping inside it.
-                    // CHROME-OK: zero is not a spacing step.
-                    min_width: Val::Px(0.0),
-                    row_gap: Val::Px(crate::chrome::GAP_ROW),
-                    margin: UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
-                    ..default()
-                },
-                // What the cell cursor walks and what solid/edge/clear paints — all eleven of those
-                // chords belong here rather than against the pane's edge.
-                crate::chrome::Control(crate::keys::ControlId::CellGrid),
-            ))
+            // Wraps rather than overflowing: a finer lattice, or a narrower panel, puts the last layer on a second line instead
+            // of off the edge.
+            crate::chrome::wrapping_row(
+                p,
+                crate::chrome::GAP_GROUP_STEPS,
+                crate::chrome::GAP_ROW,
+                UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
+                AlignItems::FlexStart,
+            )
+            // What the cell cursor walks and what solid/edge/clear paints — all eleven of those chords belong here rather
+            // than against the pane's edge.
+            .insert(crate::chrome::Control(crate::keys::ControlId::CellGrid))
             .with_children(|layers| {
                 for y in 0..dy {
                     layers
-                        .spawn(Node {
-                            flex_direction: FlexDirection::Column,
-                            row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                            ..default()
-                        })
+                        .spawn(bevy_gooey::column(GAP_HALF))
                         .with_children(|col| {
                             col.spawn((
                                 Text::new(layer_label(y, dy)),
                                 TextColor(quiet_ink),
-                                crate::chrome::font(crate::chrome::text::HINT),
+                                crate::chrome::typed(crate::chrome::text::HINT),
                             ));
 
                             // The column headers, with the layer header in the corner above the row
                             // ones — the spreadsheet arrangement, because that is where a hand
                             // already looks for them.
-                            col.spawn(Node {
-                                flex_direction: FlexDirection::Row,
-                                column_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                                ..default()
-                            })
+                            col.spawn(bevy_gooey::row(GAP_HALF))
                             .with_children(|row| {
                                 header_button(
                                     row,
@@ -10963,11 +10641,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                             });
 
                             for z in 0..dz {
-                                col.spawn(Node {
-                                    flex_direction: FlexDirection::Row,
-                                    column_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                                    ..default()
-                                })
+                                col.spawn(bevy_gooey::row(GAP_HALF))
                                 .with_children(|row| {
                                     header_button(
                                         row,
@@ -11021,7 +10695,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                                                     } else {
                                                         crate::chrome::ink().label
                                                     }),
-                                                    crate::chrome::font(crate::chrome::text::BODY),
+                                                    crate::chrome::typed(crate::chrome::text::BODY),
                                                     CellGlyph(x, z),
                                                     CellLayer(y),
                                                 ));
@@ -11058,25 +10732,17 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 } else {
                     crate::chrome::ink().dim
                 }),
-                crate::chrome::font(crate::chrome::text::HINT),
+                crate::chrome::typed(crate::chrome::text::HINT),
                 SelectedCellLine,
-                Node {
-                    margin: UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
-                    ..default()
-                },
+                crate::chrome::spaced(UiRect::top(Val::Px(crate::chrome::GAP_ROW))),
             ));
-            p.spawn(Node {
-                flex_direction: FlexDirection::Row,
-                flex_wrap: FlexWrap::Wrap,
-                // See the tag rows: a wrapping row of controls must be allowed to narrow, or its
-                // last member is clipped (F7).
-                // CHROME-OK: zero is not a spacing step.
-                min_width: Val::Px(0.0),
-                column_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
-                ..default()
-            })
+            crate::chrome::wrapping_row(
+                p,
+                crate::chrome::GAP_TIGHT_STEPS,
+                crate::chrome::GAP_TIGHT,
+                UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
+                AlignItems::Center,
+            )
             .insert(
                 // Where turning and rescanning the mesh live, so `B N O P` land on the chips a
                 // pointer would click rather than against the pane's edge.
@@ -11157,11 +10823,8 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     chips.spawn((
                         Text::new(format!("{} tris", c.triangles)),
                         TextColor(crate::chrome::ink().dim),
-                        crate::chrome::font(crate::chrome::text::HINT),
-                        Node {
-                            margin: UiRect::left(Val::Px(crate::chrome::GAP_GROUP)),
-                            ..default()
-                        },
+                        crate::chrome::typed(crate::chrome::text::HINT),
+                        crate::chrome::spaced(UiRect::left(Val::Px(crate::chrome::GAP_GROUP))),
                     ));
                 }
             });
@@ -11367,7 +11030,7 @@ mod righting_tests {
 
     /// **A turn count steps ninety degrees at a time, and two of them is upside down.**
     ///
-    /// The count is what the labeler now sends (`vlm::NeedsTurn::turns`), and this is the whole of
+    /// The count is what the labeler now sends (`label_suggestion::NeedsTurn::turns`), and this is the whole of
     /// what it means: `bumped` is the only place `align.rotate` moves, so a wrong step here is a
     /// mesh stored at an orientation it does not have — the invariant `rotate_mesh` exists to hold.
     #[test]
@@ -11395,7 +11058,7 @@ mod righting_tests {
     /// **The ceiling is two, and the second attempt is the one that has to be allowed.**
     ///
     /// An odd turn taken the wrong way round comes back as "still not upright" — the direction is
-    /// not asked for (`vlm::NeedsTurn::turns`) — so a ceiling of one would leave every 3-turn piece
+    /// not asked for (`label_suggestion::NeedsTurn::turns`) — so a ceiling of one would leave every 3-turn piece
     /// unrighted and blame the model.
     #[test]
     fn the_righting_ceiling_leaves_room_for_the_correction() {
@@ -11730,14 +11393,19 @@ mod write_library_tests {
 }
 
 #[cfg(test)]
-mod other_door_tests {
+mod the_other_workspace_tests {
     use super::*;
 
-    /// The cue is a way across: Map and Kit lead to each other, never to themselves, and Rigs leads nowhere.
+    /// The cue is a way across: Map and Kit lead to each other, never to themselves. The Rigs door
+    /// led nowhere; it is the Animation workspace now, and its cue leads to the Map (every workspace
+    /// that is neither has the level for its other side, so the mark is never a dead control).
     #[test]
     fn the_cue_leads_across_and_never_to_itself() {
-        assert_eq!(other_door(Door::Map), Some(Door::Kit));
-        assert_eq!(other_door(Door::Kit), Some(Door::Map));
-        assert_eq!(other_door(Door::Rigs), None);
+        use crate::workspace::Workspace;
+        assert_eq!(the_other_workspace(Workspace::Map), Some(Workspace::Kit));
+        assert_eq!(the_other_workspace(Workspace::Kit), Some(Workspace::Map));
+        // Owner exception (2026-11-10): the old `other_door(Door::Rigs) == None` follows the
+        // deliberate change of #379 (nine workspaces, no door with no other side).
+        assert_eq!(the_other_workspace(Workspace::Animation), Some(Workspace::Map));
     }
 }

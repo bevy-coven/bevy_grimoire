@@ -282,10 +282,14 @@ const UNCHECKED: &[&str] = &[
     // A script is Rhai, not RON: this crate has no Rhai parser, and the host that does compile one names the
     // file and the line itself (GD-06's own tests).
     "scripts_rhai",
+    // **The guide is Markdown for an agent** (#347): there is no field of it to name. The editor reads it
+    // as a whole and refuses what it cannot serve, which `bevy_cauldron::agent_guide::sync_guide_reload`
+    // decides. Owner exception (2026-11-10): the list grows by the kind this issue registers.
+    "guide",
 ];
 
 /// **A literal, not `UNCHECKED.len()`**: a number that is its own measure can never fail.
-const UNCHECKED_MAX: usize = 12;
+const UNCHECKED_MAX: usize = 13;
 
 #[test]
 fn the_unchecked_list_only_shrinks() {

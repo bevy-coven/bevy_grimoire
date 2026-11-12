@@ -653,7 +653,7 @@ fn draw_the_terminal(
         commands.entity(*first).with_child((
             Text::new(problem.to_owned()),
             TextColor(chrome::ink().danger),
-            chrome::font(chrome::text::LABEL),
+            chrome::typed(chrome::text::LABEL),
             TextLayout::no_wrap(),
             Pickable::IGNORE,
         ));

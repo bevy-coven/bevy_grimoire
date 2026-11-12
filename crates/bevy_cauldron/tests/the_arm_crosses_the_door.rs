@@ -76,7 +76,7 @@ fn the_arms_type_is_not_in_the_door_reset_list() {
 ///
 /// The whole feature in one assertion: the arm is set, the door changes, and the arm is *the same
 /// composition's id* afterwards. On the unfixed code the arm was a field of `ComposeState`, which
-/// `Ownership::Door` resets — so this fails there, with the arm empty.
+/// `Ownership::Workspace` resets — so this fails there, with the arm empty.
 #[test]
 fn an_armed_composition_is_still_armed_after_the_door_changes() {
     let root = own_project("arm-crosses-keeps");

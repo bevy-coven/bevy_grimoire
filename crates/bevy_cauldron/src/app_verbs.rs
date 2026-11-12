@@ -182,25 +182,33 @@ pub fn run(world: &mut World, verb: AppVerb) {
 
 /// **Window ▸ Reset layout**: the default arrangement back, and the person's file made to agree with it.
 ///
-/// Two writes, one intent. The running `Dock` is set to `ui::shell_layout` so the change is on screen
-/// this frame; the user's file loses its `shell_layout` key, which is what the default *is* (a person
-/// who has never moved a panel has no key). Writing the file is what makes it survive a restart; the
+/// Two writes, one intent. The running `Dock` is set to the current workspace's default so the change
+/// is on screen this frame; the user's file loses that workspace's entry, which is what its default
+/// *is* (a person who has never moved a panel has no key). Writing the file is what makes it survive a restart; the
 /// key goes rather than being written out as the default's RON, because a saved copy of the default
 /// would stop tracking a change to it.
 fn reset_the_layout(world: &mut World) {
-    let default = crate::ui::shell_layout();
-    let mut docks = world.query_filtered::<&mut bevy_gooey::Dock, ()>();
+    let workspace = world
+        .get_resource::<crate::workspace::Workspace>()
+        .copied()
+        .unwrap_or_default();
+    let default = crate::ui::shell_layout(workspace);
+    // **The arrangement's dock, and only it** (review of #247). The frame holds a second gooey `Dock`
+    // at the foot of the workbench (UI-61), and an unfiltered loop wrote the workspace's *split* into
+    // it: Window ▸ Reset layout then deleted the reload panel and built three placeholder pages in a
+    // 148-px strip. The workspace arrangement is `chrome::ArrangementDock`'s alone.
+    let mut docks = world.query_filtered::<&mut bevy_gooey::Dock, With<crate::chrome::ArrangementDock>>();
     for mut dock in docks.iter_mut(world) {
         if dock.0 != default {
             dock.0 = default.clone();
         }
     }
     if let Some(settings) = world.get_resource_mut::<crate::settings::EditorSettings>() {
-        settings.into_inner().shell_layout = None;
+        settings.into_inner().workspace_layout.remove(workspace.id());
     }
     let Some(file) = world.get_resource::<crate::settings::UserSettingsFile>().map(|f| f.0.clone()) else { return };
     if let Err(why) = crate::setting_catalogue::edit_layer(&file, |layer| {
-        layer.shell_layout = None;
+        layer.workspace_layout.remove(workspace.id());
         Ok(())
     }) {
         world.resource_mut::<EditorState>().status.problem(format!("cannot reset the layout: {why}"));
@@ -326,7 +334,7 @@ fn quit_requested(
     if confirm.is_open() {
         return;
     }
-    if open.is_some_and(|open| open.dirty()) {
+    if open.is_some_and(|open| open.dirty()) || crate::files::any_unsaved() {
         state.leaving = true;
         confirm.ask_three(
             Asked::QuitApp,
@@ -349,9 +357,18 @@ fn answer_the_quit_question(
     open: Option<ResMut<OpenMap>>,
     mut state: ResMut<EditorState>,
     mut exit: MessageWriter<AppExit>,
+    mut files: Option<ResMut<crate::files::Files>>,
 ) {
     let Some(choice) = confirm.answer_choice(Asked::QuitApp) else { return };
     state.leaving = false;
+    // **The files' unsaved edits are asked about with the map's** (GD-11, #373): saved with it, or let go with it.
+    if choice == Choice::Yes
+        && let (Some(files), Some(project)) = (files.as_deref_mut(), project.as_deref())
+        && let Err(e) = files.save_all(&project.root)
+    {
+        state.status.problem(format!("NOT SAVED: {e} — staying on this map"));
+        return;
+    }
     match choice {
         Choice::No => state.status.note("staying on this map"),
         Choice::Alt => {

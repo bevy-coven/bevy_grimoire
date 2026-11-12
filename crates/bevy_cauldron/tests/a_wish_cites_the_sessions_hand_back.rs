@@ -10,7 +10,7 @@
 //!
 //! # M4 — the queue lives in the session
 //!
-//! `Wishes` and `HandBacks` were `Ownership::Door`, so a door change emptied the queue and dropped
+//! `Wishes` and `HandBacks` were `Ownership::Workspace`, so a door change emptied the queue and dropped
 //! every hand-back a wish could cite, and presentation ids restarted at `present-1` on the next
 //! door — which made `present-1` on one door and `present-1` on the next the same words for two
 //! different hand-backs. The fix is the smallest one that keeps `after: {presentation: "present-N"}`

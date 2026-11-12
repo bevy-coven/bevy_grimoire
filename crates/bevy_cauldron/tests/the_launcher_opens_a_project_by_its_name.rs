@@ -1,7 +1,7 @@
 //! **The Projects home lists the projects the editor opened as cards and opens one by its name** (UI-10, #216; #295).
 //!
 //! A bare `bevy_cauldron` shows `Screen::Launcher`: one card per recent project (its name, its folder and when it was opened).
-//! A first press on a card chooses it and a second opens that folder in this process. A folder that is gone is a card that
+//! **A press on a card opens that folder** in this process (feedback-1794103491165, #344). A folder that is gone is a card that
 //! does not open and offers Locate… and Remove; a folder that is not a project is a toast that offers to make it one. A first
 //! run with nothing opened yet is a welcome whose one accent button is **Open the example**.
 
@@ -130,12 +130,9 @@ fn the_home_lists_two_recent_projects_as_cards_and_opens_the_second_by_its_name(
     let said = all_text(&mut app);
     assert!(said.iter().any(|t| t.starts_with("Opened ")), "a card says when the project was opened: {said:?}");
     assert!(said.iter().any(|t| t.contains("alpha")), "and where it is: {said:?}");
-    assert_eq!(screen_of(&app), Screen::Launcher, "nothing opens until a card is chosen");
+    assert_eq!(screen_of(&app), Screen::Launcher, "nothing opens until a card is pressed");
 
-    // The first press chooses the card; the second opens it.
-    press(&mut app, "alpha");
-    assert_eq!(app.world().resource::<Launcher>().selected.as_ref(), Some(&alpha), "one press chooses");
-    assert_eq!(screen_of(&app), Screen::Launcher, "and opens nothing");
+    // **One press opens it**, as every other control on this home does (#344).
     press(&mut app, "alpha");
     assert_eq!(pointed_at(&app), (Some(alpha.clone()), alpha.clone()), "the window opens that folder, in this process");
     assert_eq!(screen_of(&app), Screen::Project, "and goes on to its kits and maps");

@@ -8,8 +8,8 @@
 use bevy::prelude::*;
 use bevy_cauldron::chrome::BODY_LINE_H;
 use bevy_cauldron::editor::{
-    EditorState, HistorySlot, jump_for_test, place_for_test, plant_stale_move_for_test,
-    redo_for_test, undo_for_test,
+    EditorState, jump_for_test, place_for_test, plant_stale_move_for_test, redo_for_test,
+    undo_for_test,
 };
 use bevy_cauldron::harness;
 use bevy_cauldron::project::OpenMap;
@@ -208,12 +208,17 @@ fn clicking_a_history_row_jumps_there_as_one_group() {
     }
     assert_eq!(pieces(&app), 4);
 
-    // The row that jumps to position 1: the one spawned for offset -2 from the current position.
+    // The row that jumps to position 1: gooey's pool row whose key is that line's position.
+    let tree = app
+        .world_mut()
+        .query_filtered::<Entity, With<bevy_cauldron::editor::HistoryTree>>()
+        .single(app.world())
+        .expect("the INSPECTOR draws one history list");
     let row = {
         let world = app.world_mut();
-        let mut rows = world.query::<(Entity, &HistorySlot)>();
+        let mut rows = world.query::<(Entity, &bevy_gooey::TableRow)>();
         rows.iter(world)
-            .find(|(_, slot)| slot.position == Some(1))
+            .find(|(_, row)| row.table == tree && row.key == 1)
             .map(|(entity, _)| entity)
             .expect("a history row for position 1 is on screen")
     };
@@ -267,46 +272,60 @@ fn clicking_a_history_row_jumps_there_as_one_group() {
     assert_eq!(pieces(&app), 2, "one undo removes the whole group");
 }
 
-/// **A row that is not a click target does not take the pointer (E-018).** A spare row (no position)
-/// and the current row are refused by the click observer, so they must not light up on hover either:
-/// the hover state is read from the pointer's hit, and an entity with `Pickable::IGNORE` is never hit.
-/// A live row keeps its pickable state so it still takes the click. The row's text is ignored too,
-/// because an unignored child is hit and marks the row hovered through its descendant.
+/// **A row is a pointer target unless it is the line the editor stands on, and no row's text is (E-018, UI-53).**
+///
+/// The window's rule, kept on the list: a spare or current row was refused by the click observer, so it must not
+/// light up under the pointer either — `Hovered` is read from the pointer's hit, and an entity with
+/// `Pickable::IGNORE` is never hit. On gooey's virtualized list the current line is the row whose key is the undo
+/// depth (`mark_the_current_line` in `editor.rs`), and every other drawn row is a jump target. A row's
+/// text is ignored too, because an unignored child is hit and marks the row hovered through its descendant.
 #[test]
-fn a_spare_or_current_row_is_not_a_pointer_target() {
+fn the_current_line_is_not_a_pointer_target_and_no_rows_text_is() {
     use bevy::picking::Pickable;
     let mut app = booted("rowpick");
     place_for_test(app.world_mut(), "tile_a", (1.5, 0.5));
     app.update();
+    let tree = app
+        .world_mut()
+        .query_filtered::<Entity, With<bevy_cauldron::editor::HistoryTree>>()
+        .single(app.world())
+        .expect("the INSPECTOR draws one history list");
+    // **One frame for the pool to settle**: gooey rebinds its rows in `GooeySystems::Style` and the marking system
+    // writes the `Pickable` from the same frame's commands, so the answer a person's pointer meets is the one after
+    // that flush.
+    app.update();
+    let depth = state(&app).undo_depth();
+    let selected = app.world().get::<bevy_gooey::TableSelection>(tree).cloned().unwrap_or_default();
+    assert_eq!(
+        selected,
+        bevy_gooey::TableSelection::of(depth as u64),
+        "the line the editor stands on is the selected row"
+    );
     let rows: Vec<_> = {
         let world = app.world_mut();
         world
-            .query::<(&HistorySlot, Option<&Pickable>, &Children)>()
+            .query::<(&bevy_gooey::TableRow, Option<&Pickable>, &Children)>()
             .iter(world)
-            .map(|(slot, pick, children)| {
-                (
-                    slot.offset,
-                    slot.position,
-                    slot.current,
-                    pick.is_none_or(|p| p.is_hoverable),
-                    children.iter().collect::<Vec<Entity>>(),
-                )
+            .filter(|(row, _, _)| row.table == tree)
+            .map(|(row, pick, children)| {
+                (row.key, pick.is_none_or(|p| p.is_hoverable), children.iter().collect::<Vec<Entity>>())
             })
             .collect()
     };
-    assert_eq!(rows.len(), 7, "the list has 2N+1 rows: {rows:?}");
+    assert!(!rows.is_empty(), "the list draws the lines it holds");
     let world = app.world();
-    for (offset, position, current, hoverable, children) in rows {
-        let target = position.is_some() && !current;
+    for (key, hoverable, children) in rows {
+        let target = key != depth as u64;
         assert_eq!(
             hoverable, target,
-            "row at offset {offset} (position {position:?}, current {current}) is a pointer target"
+            "the row for line {key} is a pointer target: {} (the editor stands on {depth})",
+            target
         );
         for child in children {
             assert_eq!(
                 world.get::<Pickable>(child).copied(),
                 Some(Pickable::IGNORE),
-                "the text under the row at offset {offset} must not be a hit of its own"
+                "what the row for line {key} draws must not be a hit of its own"
             );
         }
     }
@@ -333,13 +352,13 @@ fn a_native_row_names_the_change_on_both_sides_of_undo() {
     assert_eq!(rows[0].label, "place 1 again");
 }
 
-/// **A history row holds its inset and one line of text (E-018).** The row's wrapper clips to its own
-/// height, so anything of the row taller than that loses its far edge.
+/// **A history row holds its inset and one line of text (E-018, UI-53).** The rule the hand-built window needed
+/// still has to hold for gooey's rows: a row is one line tall with its own inset inside it, so a label can never
+/// be cut and a row can never grow the list.
 ///
-/// Failed before the fix: the wrapper was `BODY_LINE_H` tall, and the row's 3 px top inset plus its
-/// 13.2 px line is 16.2 px, so the wrapper that clips the row was 2.2 px short of it. The pre-fix
-/// live still showed no visible cut in the descenders; the shortfall is what the layout guarantees,
-/// so this asserts the layout's own lengths rather than drawn boxes (headless text measures shorter).
+/// Failed before the window's fix: its wrapper was `BODY_LINE_H` tall, and the row's 3 px top inset plus its
+/// 13.2 px line is 16.2 px, so the wrapper that clipped the row was 2.2 px short of it. This asserts the layout's
+/// own lengths rather than drawn boxes (headless text measures shorter).
 #[test]
 fn a_history_row_holds_its_inset_and_one_line() {
     let mut app = booted("rowclip");
@@ -348,30 +367,27 @@ fn a_history_row_holds_its_inset_and_one_line() {
         app.update();
     }
 
+    let tree = app
+        .world_mut()
+        .query_filtered::<Entity, With<bevy_cauldron::editor::HistoryTree>>()
+        .single(app.world())
+        .expect("the INSPECTOR draws one history list");
     let world = app.world_mut();
     let rows: Vec<Entity> = world
-        .query_filtered::<Entity, With<HistorySlot>>()
+        .query::<(Entity, &bevy_gooey::TableRow)>()
         .iter(world)
+        .filter(|(_, row)| row.table == tree)
+        .map(|(entity, _)| entity)
         .collect();
     assert!(!rows.is_empty(), "no history row is in the world");
     for row in rows {
-        let wrapper = world
-            .get::<ChildOf>(row)
-            .expect("a history row sits in a wrapper")
-            .parent();
-        let clip = px(
-            world
-                .get::<Node>(wrapper)
-                .expect("a wrapper has a node")
-                .height,
-            "wrapper height",
-        );
+        let clip = px(world.get::<Node>(row).expect("a row has a node").height, "row height");
         let pad = world.get::<Node>(row).expect("a row has a node").padding;
         let inset = px(pad.top, "row top inset") + px(pad.bottom, "row bottom inset");
         let need = inset + BODY_LINE_H;
         assert!(
             clip >= need - 0.01,
-            "a history row's wrapper clips to {clip} px, but the row needs {need} px: its {inset} px \
+            "a history row is {clip} px tall, but the row needs {need} px: its {inset} px \
              inset and a {BODY_LINE_H} px line"
         );
     }

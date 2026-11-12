@@ -6,7 +6,7 @@
 //!   would be a different value — and the `Ownership` table says a same-kit crossing keeps it.
 //!   The test proves the project **survives** a crossing, by identity.
 //! - **The crossing tears the old door down.** Every entity the old door made is gone and every
-//!   `Ownership::Door` resource is back at its opening value. **The teardown stays a teardown.**
+//!   `Ownership::Workspace` resource is back at its opening value. **The teardown stays a teardown.**
 //! - **A crossing that cannot complete says so and stays put.** The same door, the same project,
 //!   the same map, the same arm.
 //! - **The unsaved question.** A crossing with unsaved map edits asks first.
@@ -20,7 +20,7 @@ use crate::fixtures;
 use bevy_cauldron::harness;
 use bevy_cauldron::project::{OpenMap, Project};
 use bevy_cauldron::screen::Ownership;
-use bevy_cauldron::tiles::Door;
+use bevy_cauldron::workspace::Workspace;
 use fixtures::Fixture;
 
 /// A project with a composition, a piece and a map.
@@ -63,7 +63,7 @@ fn the_crossing_keeps_the_project() {
     // is about, and it is called directly so the test does not depend on the key.
     {
         let world = app.world_mut();
-        bevy_cauldron::screen::cross(world, Door::Kit)
+        bevy_cauldron::screen::cross(world, Workspace::Kit)
             .unwrap_or_else(|e| panic!("the crossing must succeed: {e}"));
     }
     // **Two updates**: the first applies the pending transition, the second lets the editor settle.
@@ -111,19 +111,19 @@ fn the_crossing_tears_the_old_door_down() {
 
     {
         let world = app.world_mut();
-        bevy_cauldron::screen::cross(world, Door::Kit)
+        bevy_cauldron::screen::cross(world, Workspace::Kit)
             .unwrap_or_else(|e| panic!("the crossing must succeed: {e}"));
     }
     app.update();
     app.update();
 
     // **The door's own working state is back at its opening value.** `EditorState` is
-    // `Ownership::Door`, so a door change resets it — and the crossing is a door change.
+    // `Ownership::Workspace`, so a door change resets it — and the crossing is a door change.
     let state = app.world().resource::<bevy_cauldron::editor::EditorState>();
     assert_eq!(
         state.grouping, None,
         "the door's own working state survived the crossing, so a stale value carried into the new \
-         door. `Ownership::Door` means it is reset."
+         door. `Ownership::Workspace` means it is reset."
     );
 }
 
@@ -140,7 +140,7 @@ fn a_crossing_that_cannot_complete_stays_put() {
     // has nothing to open.
     {
         let world = app.world_mut();
-        bevy_cauldron::screen::cross(world, Door::Kit)
+        bevy_cauldron::screen::cross(world, Workspace::Kit)
             .unwrap_or_else(|e| panic!("the crossing must succeed: {e}"));
     }
     app.update();
@@ -148,12 +148,15 @@ fn a_crossing_that_cannot_complete_stays_put() {
     {
         let world = app.world_mut();
         world.resource_mut::<Project>().open_map_name = None;
+        // The Kit crossing used to take the map away by itself; it keeps it now (NV-02, #379), so
+        // the premise this test states — no map open — is set here.
+        world.remove_resource::<bevy_cauldron::project::OpenMap>();
     }
     app.update();
 
     let refused = {
         let world = app.world_mut();
-        bevy_cauldron::screen::cross(world, Door::Map)
+        bevy_cauldron::screen::cross(world, Workspace::Map)
     };
     let refusal = refused.expect_err("a crossing with no map to open must be refused");
     assert!(
@@ -164,8 +167,8 @@ fn a_crossing_that_cannot_complete_stays_put() {
     // **And the editor is untouched.** The door is still the Kit door, and the project is still
     // there.
     assert_eq!(
-        *app.world().resource::<Door>(),
-        Door::Kit,
+        *app.world().resource::<Workspace>(),
+        Workspace::Kit,
         "a refused crossing changed the door. A refusal is a refusal: the editor stays exactly where \
          it was."
     );
@@ -180,7 +183,8 @@ fn a_crossing_that_cannot_complete_stays_put() {
 #[test]
 fn the_crossing_and_the_menu_are_different_verbs() {
     use bevy_cauldron::keys::{binding, Action};
-    let cross = binding(Action::SwitchDoor);
+    // **The crossing is the Kit workspace's chord now** (`=`, `view.switch_door`, went with #379).
+    let cross = binding(Action::WorkspaceKit);
     let menu = binding(Action::MainMenu);
     assert_ne!(
         cross.action, menu.action,
@@ -195,7 +199,7 @@ fn the_crossing_and_the_menu_are_different_verbs() {
     // open, which is where the literature says a switching cue belongs.
     assert_eq!(
         cross.home,
-        bevy_cauldron::keys::Home::Control(bevy_cauldron::keys::ControlId::DoorStrip),
+        bevy_cauldron::keys::Home::Control(bevy_cauldron::keys::ControlId::WorkspaceStrip),
         "the crossing's badge is not on the door strip, so the cue is not where the author looks to \
          see which door is open."
     );
@@ -243,14 +247,14 @@ fn a_crossing_reopens_the_map_that_was_renamed() {
     // **Leave the Map door, then come back.**
     {
         let world = app.world_mut();
-        bevy_cauldron::screen::cross(world, Door::Kit)
+        bevy_cauldron::screen::cross(world, Workspace::Kit)
             .unwrap_or_else(|e| panic!("the crossing to the Kit door must succeed: {e}"));
     }
     app.update();
     app.update();
     {
         let world = app.world_mut();
-        bevy_cauldron::screen::cross(world, Door::Map).unwrap_or_else(|e| {
+        bevy_cauldron::screen::cross(world, Workspace::Map).unwrap_or_else(|e| {
             panic!("the crossing back must reopen the renamed map, and it refused: {e}")
         });
     }

@@ -30,11 +30,11 @@ use crate::fixtures;
 const FRAME: f32 = 1.0 / 60.0;
 
 /// **A stub build that takes its time**, so the job is in the band while the test looks. It says what a
-/// real cargo says and takes about half a second over it.
+/// real cargo says and takes four seconds over it: the test steps 20 frames while the job runs, and under load (the gate shares big with other builds) 20 debug-build frames can take longer than half a second, which ended the job before the test looked.
 const STUB_BUILD: &str = r#"
 import json, time
 print(json.dumps({"reason": "compiler-artifact", "target": {"name": "the_game", "kind": ["lib"]}, "fresh": False, "filenames": []}), flush=True)
-time.sleep(0.4)
+time.sleep(4)
 print(json.dumps({"reason": "build-finished", "success": True}), flush=True)
 "#;
 

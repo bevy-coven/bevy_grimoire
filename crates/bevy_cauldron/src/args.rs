@@ -11,14 +11,15 @@ use std::path::PathBuf;
 use bevy::prelude::*;
 
 use crate::project::{OpenMap, Project};
-use crate::tiles::{Door, Mode};
+use crate::tiles::Mode;
+use crate::workspace::Workspace;
 
 /// A door, loaded and ready to insert.
 pub struct Opened {
     pub project: Project,
     /// `None` on every door but Maps — see [`crate::project::OpenMap`].
     pub open_map: Option<OpenMap>,
-    pub door: Door,
+    pub workspace: Workspace,
     /// Which of the door's panels it opens on.
     pub mode: Mode,
 }
@@ -41,7 +42,7 @@ impl Opened {
             bevy::log::warn!(target: "cauldron::schema", "{}", e.line());
         }
         world.insert_resource(self.project);
-        world.insert_resource(self.door);
+        world.insert_resource(self.workspace);
         world.insert_resource(self.mode);
         match self.open_map {
             Some(m) => world.insert_resource(m),
@@ -61,15 +62,15 @@ impl Opened {
     pub fn remove_from(world: &mut World) {
         world.remove_resource::<Project>();
         world.remove_resource::<OpenMap>();
-        world.remove_resource::<Door>();
+        world.remove_resource::<Workspace>();
         world.remove_resource::<Mode>();
     }
 }
 
-/// **What the door needs, out of the argv both callers speak.**
+/// **What the workspace needs, out of the argv both callers speak.**
 ///
-/// `--door` is required for anything but the Maps door, because a bare positional cannot say which
-/// door it names. A missing `--door` with a map name is the Maps door, which is what
+/// `--workspace` is required for anything but the Map workspace, because a bare positional cannot say
+/// which workspace it names. A missing `--workspace` with a map name is the Map workspace, which is what
 /// `bevy_cauldron . site_67` always meant.
 /// **What an argv says, split once.**
 ///
@@ -82,28 +83,28 @@ impl Opened {
 pub struct Split<'a> {
     pub positional: Vec<&'a str>,
     pub kit: Option<&'a str>,
-    pub door: Option<&'a str>,
+    pub workspace: Option<&'a str>,
     /// `--live`: write every committed change to disk at once, so a running game that watches the
     /// project reloads it (see [`crate::live`]).
     pub live: bool,
 }
 
 /// Split an argv into its positionals and the three flags this editor takes: `--kit` and
-/// `--door`, which take a value, and `--live`, which does not.
+/// `--workspace` and `--kit`, which take a value, and `--live`, which does not.
 ///
 /// A flag's value is consumed with it, so it can never be mistaken for a positional.
 pub fn split(args: &[String]) -> Split<'_> {
     let mut out = Split {
         positional: Vec::new(),
         kit: None,
-        door: None,
+        workspace: None,
         live: false,
     };
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--kit" => out.kit = it.next().map(String::as_str),
-            "--door" => out.door = it.next().map(String::as_str),
+            "--workspace" | "--door" => out.workspace = it.next().map(String::as_str),
             "--live" => out.live = true,
             other => out.positional.push(other),
         }
@@ -121,17 +122,17 @@ pub fn open_staged(args: &[String], at: &mut dyn FnMut(crate::project::Stage)) -
     let Split {
         positional,
         kit,
-        door: door_flag,
+        workspace: workspace_flag,
         ..
     } = split(args);
     let root = root_from(&positional);
 
-    let door = match door_flag {
-        None => Door::default(),
-        Some(name) => Door::from_flag(name).ok_or_else(|| {
+    let workspace = match workspace_flag {
+        None => Workspace::default(),
+        Some(name) => Workspace::from_flag(name).ok_or_else(|| {
             format!(
-                "no door called `{name}`. The doors are {}.",
-                Door::ALL
+                "no workspace called `{name}`. The workspaces are {}.",
+                Workspace::ALL
                     .iter()
                     .map(|d| d.label().to_lowercase())
                     .collect::<Vec<_>>()
@@ -139,18 +140,23 @@ pub fn open_staged(args: &[String], at: &mut dyn FnMut(crate::project::Stage)) -
             )
         })?,
     };
+    // **An unbuilt workspace is refused as `door_open` refuses it**, with the sentence that names the
+    // issue bringing it, rather than opening an editor on a screen that has nothing to show.
+    if let Some(missing) = workspace.missing() {
+        return Err(format!("cannot open the {} workspace: {missing}", workspace.title().to_lowercase()));
+    }
 
     let mut project = Project::open_staged(&root, kit, at)
         .map_err(|e| format!("cannot open {}: {e}", root.display()))?;
     at(crate::project::Stage::Maps);
 
-    // **Only the Maps door takes a map**, and it is the only one that needs the second positional.
-    let open_map = if door == Door::Map {
+    // **Only the Map workspace takes a map**, and it is the only one that needs the second positional.
+    let open_map = if workspace == Workspace::Map {
         let name = positional.get(1).copied().unwrap_or("untitled_map");
         let m =
             OpenMap::open(&project, name).map_err(|e| format!("cannot open map `{name}`: {e}"))?;
-        // **And the project remembers the map's name**, so a crossing from the Kit door back to the
-        // Map door knows which map to open. See `Project::open_map_name`.
+        // **And the project remembers the map's name**, so switching from the Kit workspace back to
+        // the Map workspace knows which map to open. See `Project::open_map_name`.
         project.open_map_name = Some(m.map.name.clone());
         Some(m)
     } else {
@@ -158,10 +164,10 @@ pub fn open_staged(args: &[String], at: &mut dyn FnMut(crate::project::Stage)) -
     };
 
     Ok(Opened {
-        mode: door.opens_on(),
+        mode: workspace.opens_on(),
         project,
         open_map,
-        door,
+        workspace,
     })
 }
 
@@ -177,12 +183,13 @@ fn root_from(positional: &[&str]) -> PathBuf {
 pub const USAGE: &str = "\
 Cauldron: the editor that writes a grimoire, the book your game loads.
 
-usage: bevy_cauldron [ROOT] [MAP] [--door kit|map|rigs] [--kit NAME] [--live]
+usage: bevy_cauldron [ROOT] [MAP] [--workspace <id>] [--kit NAME] [--live]
        bevy_cauldron migrate <project folder>
 
   ROOT          the project's root, the folder holding assets/grimoire (default: the current folder)
-  MAP           the map to open on the Map door; naming one, or a --door, skips the launcher
-  --door DOOR   open a door directly: kit (reusable content), map (the level) or rigs (the rig bench)
+  MAP           the map to open on the Map workspace; naming one, or a --workspace, skips the launcher
+  --workspace W open a workspace directly: project, map, world, kit, animation, sound, files, game or agent.
+                `--door` is still read, so a recorded run keeps working.
   --kit NAME    the kit to author in, when the project binds more than one
   --live        write every committed change to disk at once, for a game that watches the project
   -h, --help    print this and exit
@@ -239,13 +246,14 @@ pub fn root_of(args: &[String]) -> PathBuf {
     root_from(&split(args).positional)
 }
 
-/// **Whether these arguments name a door directly**, rather than asking for the menu.
+/// **Whether these arguments name a workspace directly**, rather than asking for the menu.
 ///
-/// A `--door`, or a second positional — which is the map name, and only the Maps door takes one.
+/// A `--workspace`, or a second positional — which is the map name, and only the Map workspace takes
+/// one.
 /// Counted off [`split`], so `--kit site` is a flag and its value, never "a second positional".
 pub fn names_a_door(args: &[String]) -> bool {
     let split = split(args);
-    split.door.is_some() || split.positional.len() >= 2
+    split.workspace.is_some() || split.positional.len() >= 2
 }
 
 /// **Whether these arguments ask for the launcher**: no project and no door named, so a person who ran the
@@ -254,5 +262,5 @@ pub fn names_a_door(args: &[String]) -> bool {
 /// screen (`loading.rs`). `--live` names no project, so a bare `--live` opens the launcher, which keeps it for the hand-off.
 pub fn opens_the_launcher(args: &[String]) -> bool {
     let split = split(args);
-    split.positional.is_empty() && split.door.is_none() && split.kit.is_none()
+    split.positional.is_empty() && split.workspace.is_none() && split.kit.is_none()
 }

@@ -399,7 +399,7 @@ fn rebuild_picker(
                     row.spawn((
                         Text::new(c.id.clone()),
                         TextColor(ink.read),
-                        crate::chrome::font(crate::chrome::text::BODY),
+                        crate::chrome::typed(crate::chrome::text::BODY),
                     ));
                     if is_armed {
                         // **The armed mark in its own ink** — the same `*` the COMPOSE tab's rows
@@ -408,7 +408,7 @@ fn rebuild_picker(
                         row.spawn((
                             Text::new("  *"),
                             TextColor(ink.accent),
-                            crate::chrome::font(crate::chrome::text::BODY),
+                            crate::chrome::typed(crate::chrome::text::BODY),
                         ));
                     }
                 })
@@ -628,7 +628,7 @@ fn spawn_compose_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>)
             ComposeReceipt,
             Text::new(""),
             TextColor(crate::chrome::ink().accent),
-            crate::chrome::font(crate::chrome::text::LABEL),
+            crate::chrome::typed(crate::chrome::text::LABEL),
         ));
     });
 }
@@ -1570,6 +1570,7 @@ const LABEL_PX: (crate::chrome::text::Role, crate::chrome::text::Role) =
 /// belongs to. See [`crate::chrome::BODY_CHAR_W`] for why it lives there.
 const LABEL_CHAR_W: f32 = crate::chrome::BODY_CHAR_W;
 
+
 /// **Stand the focal group up, with its neighbours either side, each through `composition::expand`.**
 ///
 /// The same three calls `editor::redraw_stamps` makes — build a scratch map, expand a stamp of the
@@ -1900,7 +1901,7 @@ fn rebuild_labels(
             Text::new(if armed { format!("{} *", c.id) } else { c.id.clone() }),
             // The miniatures name themselves in smaller type, so the strip reads as one focal group
             // among neighbours rather than as five equal things.
-            crate::chrome::font(if slot.offset == 0 { LABEL_PX.0 } else { LABEL_PX.1 }),
+            crate::chrome::typed(if slot.offset == 0 { LABEL_PX.0 } else { LABEL_PX.1 }),
             TextColor(if slot.offset == 0 { ink.accent } else { ink.quiet }),
             Node {
                 // PLACES-ITSELF-OK: a world-space slot label, put where `place_labels` projects it. Flow
@@ -2540,7 +2541,7 @@ fn rebuild(input: ComposeInput<'_, '_>) {
                             row.spawn((
                                 Text::new(text),
                                 TextColor(ink.read),
-                                crate::chrome::font(ROW_PX),
+                                crate::chrome::typed(ROW_PX),
                             ));
                             if armed {
                                 // The armed mark in its own ink — the same `*` the stage labels
@@ -2548,7 +2549,7 @@ fn rebuild(input: ComposeInput<'_, '_>) {
                                 row.spawn((
                                     Text::new("  *"),
                                     TextColor(ink.accent),
-                                    crate::chrome::font(ROW_PX),
+                                    crate::chrome::typed(ROW_PX),
                                 ));
                             }
                         },
@@ -2560,20 +2561,15 @@ fn rebuild(input: ComposeInput<'_, '_>) {
                             row.spawn((
                                 Text::new(text),
                                 TextColor(ink.read),
-                                crate::chrome::font(ROW_PX),
+                                crate::chrome::typed(ROW_PX),
                             ));
                         },
                     );
                 }
                 Line::Face { name, band } => {
-                    p.spawn((
-                        Node {
-                            flex_direction: FlexDirection::Row,
-                            column_gap: Val::Px(crate::chrome::GAP_ROW),
-                            ..default()
-                        },
-                        ComposeLine,
-                    ))
+                    // **A gooey row** (UI-59, #245): the label column and its value, with the skin's
+                    // own spacing step between them.
+                    p.spawn((bevy_gooey::row(crate::chrome::GOOEY_GAP_ONE), ComposeLine))
                     .with_children(|row| {
                         crate::chrome::row_label(row, crate::chrome::COL_LABEL, name);
                         crate::chrome::row_value(row, band, ink.read, ());
@@ -2687,35 +2683,34 @@ fn spawn_line(p: &mut ChildSpawnerCommands, text: &str, colour: Color) {
     // No stated width: the body is a column whose default `align_items: Stretch` already hands
     // every row the pane's full width. `Val::Percent` here is worse than redundant — inside the
     // scroll pane's measure pass a percent can resolve against nothing and collapse the row.
-    p.spawn((
-        Node {
-            flex_direction: FlexDirection::Row,
-            ..default()
-        },
-        ComposeLine,
-    ))
+    p.spawn((bevy_gooey::row(0.0), ComposeLine))
     .with_children(|row| {
         if indent > 0 {
-            row.spawn(Node {
-                min_width: Val::Px(indent as f32 * LABEL_CHAR_W * ROW_PX.px() / LABEL_PX.0.px()),
-                flex_shrink: 0.0,
-                ..default()
-            });
+            // **The indent is a `cell`** (UI-59, #245), whose width is in body text sizes: the px it
+            // stood for is divided by the row's own type size, so the gutter keeps its share of the
+            // row and grows with the person's text size rather than falling short of it.
+            // **The indent, as a cell** (review of #245): the character advance over the row's own
+            // type size is the ratio the old expression reduced to (0.6), written as what it is.
+            row.spawn(bevy_gooey::cell(indent as f32 * LABEL_CHAR_W / ROW_PX.px()));
         }
+        // **The line itself, with no `Node` of its own** (UI-59, #245). `flex_grow` hands the text the
+        // row's remaining width as a DEFINITE size and `min_width: 0` lets it shrink below its longest
+        // line — the pair that was measured in the live window on 2026-08-17 (without them the text's
+        // flex base resolved to zero width and every row laid out one glyph per line, clipped, over 38
+        // healthy rows). Neither is reachable from a bundle: `row`'s `align_items` is the row's, and a
+        // text item's grow is not a widget's look. So this is the one `Node` left in the module, and the
+        // marker says why it is not a second layout path.
         row.spawn((
+            // CHROME-OK: a flex item's own measure (grow and a zero minimum), which no widget's bundle
+            // carries; the 2026-08-17 measurement above is what chose it.
             Node {
-                // `flex_grow` hands the text the row's remaining width as a DEFINITE size, and
-                // `min_width: 0` lets it shrink below its longest line. Measured in the live
-                // window (uidump, 2026-08-17): without the grow, the text item's flex base
-                // resolved to zero width and every row laid out one glyph per line, clipped —
-                // an empty-looking pane over 38 healthy rows.
                 flex_grow: 1.0,
                 min_width: Val::Px(0.0),
                 ..default()
             },
             Text::new(content.to_owned()),
             TextColor(colour),
-            crate::chrome::font(ROW_PX),
+            crate::chrome::typed(ROW_PX),
             // The default, stated: this is the column that wraps, against the spacer that never
             // does.
             TextLayout::new(Justify::Left, LineBreak::WordOrCharacter),
@@ -2854,21 +2849,50 @@ pub mod picker {
         input: Res<ButtonInput<KeyCode>>,
     ) {
         let by = if crate::keys::just_pressed(&input, *keys, crate::keys::Action::CompositionPrev) {
-            -1
+            "prev"
         } else if crate::keys::just_pressed(&input, *keys, crate::keys::Action::CompositionNext) {
-            1
+            "next"
         } else {
             return;
         };
-        let n = project.compositions.compositions.len();
-        if n == 0 {
-            return;
+        // **The key dispatches the operation an agent calls** (E-002, #129 slice 22), and the rule that the walk clamps
+        // at the ends — *"an author holding an arrow at the end of a list should stop there rather than wrap to the
+        // other end of it"* — lives there once. A refusal (no compositions) leaves the cursor where it was, as the key did.
+        let _ = dispatch(&project, &mut picker, "composition_picker_walk", &serde_json::json!({ "by": by }));
+    }
+
+    /// **Dispatch a picker operation** with the picker's cursor in `Ctx::view`, and write the answer back only when it
+    /// moved (a `ResMut` write marks the picker changed). Returns the operation's sentence, or its refusal.
+    fn dispatch(
+        project: &Project,
+        picker: &mut ResMut<Picker>,
+        operation: &str,
+        params: &serde_json::Value,
+    ) -> Result<String, String> {
+        let mut ctx = crate::ops::Ctx {
+            project: Some(project.clone()),
+            source: crate::ops::Source::Human,
+            session: crate::ops::session_id(),
+            view: Some(crate::ops_view::View {
+                picker_selected: picker.selected,
+                picker_active: picker.active,
+                ..Default::default()
+            }),
+            ..crate::ops::Ctx::default()
+        };
+        let outcome = crate::ops::dispatch(&mut ctx, operation, params);
+        if let Some(view) = ctx.view.take() {
+            if picker.selected != view.picker_selected {
+                picker.selected = view.picker_selected;
+            }
+            if picker.active != view.picker_active {
+                picker.active = view.picker_active;
+            }
         }
-        // **It clamps at the ends, where it used to wrap.** The crate has already argued this twice,
-        // in the two places it made the choice: *"an author holding an arrow at the end of a list
-        // should stop there rather than wrap to the other end of it"*. One editor cannot answer one
-        // keystroke two ways.
-        picker.selected = (picker.selected as i64 + by).clamp(0, n as i64 - 1) as usize;
+        match outcome {
+            Ok(crate::ops::Applied::Done { outcome, .. }) => Ok(outcome.summary),
+            Ok(crate::ops::Applied::Refused(e)) | Err(e) => Err(e.0),
+        }
     }
 
     /// **`P` takes the arrows to the picker**, and `Enter` arms what the cursor is on.
@@ -2881,13 +2905,10 @@ pub mod picker {
         input: Res<ButtonInput<KeyCode>>,
     ) {
         if crate::keys::just_pressed(&input, *keys, crate::keys::Action::PickComposition) {
-            picker.active = !picker.active;
-            let said = if picker.active {
-                "Shift+up and Shift+down walk the compositions — Enter arms one"
-            } else {
-                "the arrows walk the palette"
-            };
-            state.status.note(said.to_owned());
+            match dispatch(&project, &mut picker, "composition_picker_toggle", &serde_json::json!({})) {
+                Ok(said) => state.status.note(said),
+                Err(why) => state.status.problem(why),
+            }
             return;
         }
         if !picker.active {

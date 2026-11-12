@@ -340,6 +340,17 @@ impl Plugin for EditorUiPlugin {
             Update,
             follow_the_text_size.after(crate::settings::sync_settings).before(bevy_gooey::GooeySystems::Style),
         );
+        // **And a label that was already drawn follows it** (UI-73, #251): `follow_the_text_size`
+        // moves the atomic `chrome::font` reads, which is every label spawned *after* the change. A
+        // label spawned before it keeps the size it was built at, so this rewrites every `TypeRole`
+        // from its role the frame the setting differs from the one last drawn. After
+        // `follow_the_text_size`, so the two agree about the scale being applied.
+        app.add_systems(
+            Update,
+            crate::chrome::resize_the_labels
+                .after(follow_the_text_size)
+                .before(bevy_gooey::GooeySystems::Style),
+        );
         // **The player's Reduced motion reaches gooey** (UI-R01): travel lands, colours and fades still ease.
         app.add_systems(
             Update,
@@ -484,6 +495,10 @@ fn clear_stale_rails(rails: Query<(Entity, &ChildOf), With<SelectedRail>>, selec
 /// **Registered once, at `PreStartup`.** The spawn closure fills the panel; a region whose contents
 /// the editor draws elsewhere — the viewport is a texture — gets the node that holds them, so the
 /// dock's own arrangement is what a person drags.
+/// **The reload panel's own rhythm**, in multiples of the skin's gap: half a step, because its lines
+/// are one datum each and a full step reads as separate paragraphs (UI-61, #247).
+pub const RELOAD_ROW_GAP: f32 = 0.5;
+
 fn register_the_shell_panels(mut registry: ResMut<bevy_gooey::PanelRegistry>) {
     for (id, title) in [
         ("inspector", "INSPECTOR"),
@@ -495,34 +510,60 @@ fn register_the_shell_panels(mut registry: ResMut<bevy_gooey::PanelRegistry>) {
             c.insert(bevy_gooey::DockPanel(id.to_owned()));
         });
     }
+    // **The bottom dock's own panel, and the first one with contents** (UI-61, #247).
+    //
+    // The four above are placeholders: the editor draws those regions itself, so their pages are empty
+    // by design. This one is a real panel — gooey's dock builds it, gooey's tab names it and gooey's
+    // body sizes it — and `editor::refresh_reload_list` fills the column it spawns with what became of
+    // each file's latest edit. The lines keep the editor's ink because gooey has no per-severity text
+    // role (its `Role::Tone` is a fill): the *panel* is the crate's, and that is what this issue asks.
+    registry.register("reload", "RELOAD", |c| {
+        c.insert((
+            bevy_gooey::DockPanel("reload".to_owned()),
+            crate::editor::ReloadPanel,
+        ))
+        .with_child((bevy_gooey::column(RELOAD_ROW_GAP), crate::editor::ReloadList));
+    });
 }
 
-/// **The shell's arrangement**, as a dock layout a divider can move (UI-30, #224).
+/// **The shell's arrangement for a workspace**, as a dock layout a divider can move (UI-30, #224;
+/// per workspace since NV-02, #379).
 ///
-/// A left dock, the viewport in the middle with the most room, and a right dock — the shape the
-/// hand-built frame has had since 2026-08-17, now data that gooey keeps and a person edits.
+/// Each workspace has its own — Map gives the inspector a column, Kit gives the library more room,
+/// World puts its panels under the view. The shape the hand-built frame has had since 2026-08-17 is
+/// Map's, because that is where a person lands.
 /// **A person moved a divider or a tab: their arrangement is saved** (UI-33, #227).
 ///
 /// `bevy_gooey` reports every change a person makes to a `Dock` with `DockLayoutChanged`, carrying the
 /// layout it now shows. Writing it to the user's file is what makes the arrangement survive a restart;
-/// the editor reads it back through `SettingsLayer::shell_layout` on the next start.
+/// the editor reads it back through `SettingsLayer::workspace_layout` on the next start.
 ///
 /// **Nothing is written to a test or to a run with no file**: no `UserSettingsFile` means no place the
 /// person asked the editor to keep anything, so the event is taken and dropped, and a headless test
 /// that drags a divider does not write the real config.
 pub fn save_the_layout(
     changed: On<bevy_gooey::DockLayoutChanged>,
+    arrangement: Query<(), With<crate::chrome::ArrangementDock>>,
     file: Option<Res<crate::settings::UserSettingsFile>>,
+    workspace: Option<Res<crate::workspace::Workspace>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
 ) {
     let Some(file) = file else { return };
+    // **A drag in the bottom dock is not the workspace's arrangement** (UI-61, #247): it is that dock's
+    // own, and it does not move the split that places the inspector and the viewport.
+    if arrangement.get(changed.entity).is_err() {
+        return;
+    }
     // **`edit_layer`, not `write_key`.** `write_key` speaks the Settings screen's value vocabulary
     // (a switch, a number, a named choice), and a layout is none of those; `edit_layer` is the same
     // primitive underneath it — the file is read as the editor reads it, refused if it does not
     // read, checked to read back, and written atomically — with the layer itself in hand.
+    // **Keyed by the workspace that is open**, so a drag in Map moves nothing in Kit.
+    let Some(workspace) = workspace.map(|w| *w) else { return };
     let layout = changed.layout.clone();
+    let key = workspace.id().to_owned();
     if let Err(why) = crate::setting_catalogue::edit_layer(&file.0, move |layer| {
-        layer.shell_layout = Some(layout);
+        layer.workspace_layout.insert(key, layout);
         Ok(())
     }) && let Some(state) = state.as_deref_mut()
     {
@@ -539,10 +580,21 @@ pub fn save_the_layout(
 /// editor costs one comparison.
 pub fn follow_the_saved_layout(
     settings: Option<Res<crate::settings::EditorSettings>>,
-    mut docks: Query<&mut bevy_gooey::Dock>,
+    workspace: Option<Res<crate::workspace::Workspace>>,
+    // **The arrangement's dock, and only it** (UI-61, #247): a second gooey `Dock` stands at the foot
+    // of the workbench, and writing the workspace's layout into that one would replace the panels it
+    // holds with the split that arranges the shell.
+    mut docks: Query<&mut bevy_gooey::Dock, With<crate::chrome::ArrangementDock>>,
 ) {
     let Some(settings) = settings else { return };
-    let want = settings.shell_layout.clone().unwrap_or_else(shell_layout);
+    let workspace = workspace.as_deref().copied().unwrap_or_default();
+    // **This workspace's arrangement, else its own default.** The `Dock` is rebuilt in the same
+    // frame a workspace is entered, so the layout on screen is the one the person left.
+    let want = settings
+        .workspace_layout
+        .get(workspace.id())
+        .cloned()
+        .unwrap_or_else(|| workspace.default_layout());
     for mut dock in &mut docks {
         if dock.0 != want {
             dock.0 = want.clone();
@@ -578,19 +630,8 @@ pub fn follow_the_motion_setting(settings: Option<Res<crate::settings::EditorSet
     }
 }
 
-pub fn shell_layout() -> bevy_gooey::DockLayout {
-    use bevy_gooey::{DockLayout, SplitAxis};
-    DockLayout::split(
-        SplitAxis::Horizontal,
-        0.22,
-        DockLayout::group(["inspector"]),
-        DockLayout::split(
-            SplitAxis::Horizontal,
-            0.78,
-            DockLayout::group(["viewport"]),
-            DockLayout::group(["place"]),
-        ),
-    )
+pub fn shell_layout(workspace: crate::workspace::Workspace) -> bevy_gooey::DockLayout {
+    workspace.default_layout()
 }
 
 #[cfg(test)]

@@ -41,7 +41,7 @@ use bevy::prelude::*;
 
 use crate::editor::{FrameTarget, MapFraming, apply_frame, resolve_frame};
 use crate::project::{OpenMap, Project};
-use crate::tiles::Door;
+use crate::workspace::Workspace;
 use crate::view::{MainCamera, Rig};
 
 /// **How long the camera takes to reach a change**, seconds. Long enough to read as one movement,
@@ -156,7 +156,7 @@ struct Ease {
 ///
 /// **A `Session` resource** (`screen::OWNERSHIP`): a follow raised on another door opens the Map and
 /// is carried out there, and a door change resets the door's own state — a request kept there would
-/// be erased by the very crossing it asked for.
+/// be erased by the very switching it asked for.
 #[derive(Resource, Default)]
 pub struct Following {
     /// Each request with the words the chip says it in (`None` for one raised without a sentence) and
@@ -216,9 +216,13 @@ pub struct Following {
     outline_box: Option<[f32; 4]>,
     /// The `Time<Real>` second the ring comes down at.
     outline_until: f64,
-    /// **Whether the Map has been asked for on this request's behalf.** A `Door::Map` that does not
+    /// **Whether the Map has been asked for on this request's behalf.** A `Workspace::Map` that does not
     /// follow drops the request instead of asking again every frame.
     asked_for_the_map: bool,
+    /// **The places a follow has moved the camera away from and `nav` has not yet pushed** (NV-06,
+    /// #383). Recorded here because this is the system that writes the camera; drained by `nav`
+    /// because this system is at Bevy's parameter cap.
+    leaving: Vec<crate::nav::Place>,
 }
 
 impl Following {
@@ -324,6 +328,11 @@ impl Following {
         self.busy
     }
 
+    /// **Take the places a follow is leaving**, so `nav` can push them. Empties the list.
+    pub fn take_leaving(&mut self) -> Vec<crate::nav::Place> {
+        std::mem::take(&mut self.leaving)
+    }
+
     /// **Whether the camera is on its way somewhere.**
     pub fn settling(&self) -> bool {
         self.ease.is_some()
@@ -349,6 +358,11 @@ impl Following {
 /// still followed, and a person who does nothing is still shown it.
 fn a_persons_input_takes_the_camera_back(
     keys: Option<Res<ButtonInput<KeyCode>>>,
+    // **The one press that is not a gesture**: Look asks the camera to move, so reading its own chord
+    // as "the person is working the view" would have the follow drop the very change the person just
+    // asked to be shown (AF-04, #360). Asked as the key edge, so holding the chord is not a second
+    // gesture and a drag on the same frame still counts.
+    live: Option<Res<crate::keys::Live>>,
     mouse: Option<Res<ButtonInput<MouseButton>>>,
     time: Res<Time<Real>>,
     // **The wheel**, read here for the reason the zoom reads it: it is the person's hand on the view.
@@ -360,6 +374,28 @@ fn a_persons_input_takes_the_camera_back(
     // person working", and the two would disagree the first time one of them changed.
     mut revealing: Option<ResMut<crate::reveal::Revealing>>,
 ) {
+    // **The Look chord is a request, not a gesture** (AF-04, #360): `look_on_the_key` runs first and
+    // sets the follow's clocks aside, and this system would set them straight back from the same
+    // press — measured on the first version, where Look framed nothing while the queue was cleared
+    // under it. One reading of the key, here, because this is the system that decides what "working"
+    // means for every other verb.
+    // **Held, not only pressed.** The first cut skipped only the frame the chord went down on, and
+    // that was wrong in the way this system punishes: frame two of the same hold fell through to
+    // `working`, took the "a gesture's first frame" branch, and cleared the ease, the outline and the
+    // queue — so a person leaning on Look for two frames cancelled the Look they had just asked for.
+    // The release frame counts too: `just_released` is in `working` below, and letting go is not a
+    // gesture either.
+    if keys
+        .as_deref()
+        .zip(live.as_deref())
+        .is_some_and(|(keys, live)| {
+            crate::keys::pressed(keys, *live, crate::keys::Action::LookAtAgentChange)
+                || crate::keys::just_pressed(keys, *live, crate::keys::Action::LookAtAgentChange)
+                || just_released_on_the_chord(keys, *live)
+        })
+    {
+        return;
+    }
     // **`pressed`, not `just_pressed`**: the press state is what survives the frame it was made on,
     // and a person holding a key is working just as much as one who tapped it. It is also the only
     // honest answer in a headless run — `ButtonInput`'s `just_pressed` is cleared in `PreUpdate`, so
@@ -416,7 +452,7 @@ fn a_persons_input_takes_the_camera_back(
     following.asked_for_the_map = false;
     following.waiting = None;
     if let Some(revealing) = revealing.as_mut() {
-        revealing.clear();
+        revealing.drop_what_the_agent_queued();
     }
 }
 
@@ -537,6 +573,56 @@ pub fn look_at_the_change(
     }
 }
 
+/// **Was the Look chord let go of this frame?** The release is a frame of the same press, and
+/// `working` below counts any released key as the person acting — which it is for every other verb,
+/// and is not for the one chord whose whole job is to move the camera.
+///
+/// Asked of the chord's own key rather than of `Action`s, because there is no `keys::just_released`
+/// and a second gate here could disagree with `pressed`: the key and the modifiers are what the
+/// census row holds.
+fn just_released_on_the_chord(keys: &ButtonInput<KeyCode>, live: crate::keys::Live) -> bool {
+    let binding = crate::keys::binding(crate::keys::Action::LookAtAgentChange);
+    // A rebound chord is the person's own, and the census row no longer fires; the release of the
+    // census's key must not hold the follow back in an app where it means something else.
+    if live.3.chord(crate::keys::Action::LookAtAgentChange).is_some() {
+        return false;
+    }
+    // **The key and the context are enough on the release.** The modifiers are not asked: a person
+    // letting go of all three keys in one frame has already released the modifier by the time this
+    // reads, so requiring `mod_held` would miss exactly the release it is here for. The frame is one
+    // long, and the census row's key is not `L` in any context but this one.
+    keys.just_released(binding.key) && crate::keys::fires_in(binding.context, live.0)
+}
+
+/// **Look now, from the chord** (AF-04, #360): the third of the three routes the issue names, beside
+/// the look chip's button and the AGENT block's Look.
+///
+/// **The one that works with no chip on screen.** The chip exists only while something waits, and a
+/// person with View ▸ Follow the agent off sees it and may dismiss it; this says *"show me what the
+/// agent changed"* anyway. **One answer to "show it"**, exactly as the chip's button is: it calls
+/// [`Following::look_now`] and nothing else, so the three routes cannot come to wait on different
+/// things.
+///
+/// **Behind a key EDGE**, so the write below happens once per press: `just_pressed` is false on every
+/// frame but the one the chord went down on.
+fn look_on_the_key(
+    keyboard: Option<Res<ButtonInput<KeyCode>>>,
+    live: Option<Res<crate::keys::Live>>,
+    mut following: ResMut<Following>,
+    mut state: Option<ResMut<crate::editor::EditorState>>,
+) {
+    let (Some(keyboard), Some(live)) = (keyboard, live) else {
+        return;
+    };
+    if !crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::LookAtAgentChange) {
+        return;
+    }
+    following.look_now();
+    if let Some(state) = state.as_mut() {
+        state.status.note(format!("looking at what {FAMILIAR} changed"));
+    }
+}
+
 /// **The plugin that owns the follow**: the resource, the system that carries one request a frame,
 /// and the ring drawn round the changed pieces.
 pub struct FollowPlugin;
@@ -557,7 +643,7 @@ impl Plugin for FollowPlugin {
                 // drawn on: `view::drive` reads the rig every frame to build the transform.
                 //
                 // **And before the whole-map frame on entry**, which is one shot per door: a change
-                // that arrives just after a crossing would otherwise be framed by the follow and
+                // that arrives just after a switching would otherwise be framed by the follow and
                 // then overwritten by the whole map a frame later.
                 // **Before the request is taken**, so a follow never carries the last map's ease or
                 // ring onto the new map.
@@ -566,6 +652,12 @@ impl Plugin for FollowPlugin {
                 // **And before it too**, so the frame a person presses a key on is a frame the
                 // camera does not move on: the press and the follow would otherwise land together
                 // and the click after it would aim at where things used to be.
+                //
+                // **The Look chord is read before that system**, so a Look pressed on this frame is
+                // shown on this frame rather than counting as the person working the view: it clears
+                // the clocks the gesture check reads, and a check run after it would set them again
+                // from the very key press that asked to be shown.
+                look_on_the_key.before(a_persons_input_takes_the_camera_back),
                 a_persons_input_takes_the_camera_back.before(take_the_follow_request),
                 take_the_follow_request
                     .before(crate::view::drive)
@@ -606,7 +698,7 @@ fn at(ease: &Ease) -> (Vec3, f32) {
 /// **A change made from another door opens the Map first.** The camera is the Map door's, so the
 /// request waits while the editor crosses — through [`crate::editor::DoorRequest`], the same
 /// mechanism `door_open` uses, so a question on screen holds both the same way. A question open, or a
-/// crossing already waiting, holds the request rather than stacking a second one.
+/// switching already waiting, holds the request rather than stacking a second one.
 #[allow(clippy::too_many_arguments)]
 fn take_the_follow_request(
     mut following: ResMut<Following>,
@@ -614,7 +706,7 @@ fn take_the_follow_request(
     mut framing: ResMut<MapFraming>,
     project: Option<Res<Project>>,
     open: Option<Res<OpenMap>>,
-    door: Option<Res<Door>>,
+    door: Option<Res<Workspace>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
     confirm: Option<Res<crate::confirm::Confirm>>,
     cameras: Query<&Camera, With<MainCamera>>,
@@ -748,15 +840,15 @@ fn take_the_follow_request(
         following.note_what_waits();
         return;
     }
-    // **The camera is the Map door's.** A crossing is the editor's own request mechanism, so a
+    // **The camera is the Map door's.** A switching is the editor's own request mechanism, so a
     // follow from another door asks for it and waits.
     //
     // **Once per request, and never for ever** (review of #358, nit g). The request below is asked
     // for on the frame the queue first has something to carry, and marked asked; a frame that then
-    // finds the door still not the Map — the crossing was refused, or a question on screen held it —
-    // **drops the request** rather than asking again every frame. Asking again would be a crossing
+    // finds the door still not the Map — the switching was refused, or a question on screen held it —
+    // **drops the request** rather than asking again every frame. Asking again would be a switching
     // asked for by a camera move nobody is waiting on any more, and it would never end.
-    let on_the_map = door.as_deref().is_none_or(|door| *door == Door::Map);
+    let on_the_map = door.as_deref().is_none_or(|door| *door == Workspace::Map);
     if !on_the_map {
         if following.asked_for_the_map {
             following.queue.pop_front();
@@ -768,12 +860,12 @@ fn take_the_follow_request(
         });
         if asking {
             // **Held, not asked for**: a question is on screen, or the editor is already leaving, and
-            // this frame is not one that can start a crossing. The request waits for a frame that can.
+            // this frame is not one that can start a switching. The request waits for a frame that can.
             return;
         }
         if let Some(state) = state.as_mut() {
             state.door_request = Some(crate::editor::DoorRequest {
-                door: Door::Map,
+                workspace: Workspace::Map,
                 tab: Some(crate::tiles::Mode::Map),
             });
             following.asked_for_the_map = true;
@@ -823,12 +915,19 @@ fn take_the_follow_request(
         FrameTarget::Rect(rect) => *rect,
         _ => framed_rect(&settled),
     };
-    // **Where the ease starts from**, read before `apply_frame` writes the rig.
+    // **Where the ease starts from**, read before `apply_frame` writes the rig — and the place the
+    // person was reading is pushed first, for the same reason: `Place::of` reads the rig this frame's
+    // camera is still the person's.
     let from_focus = rig.focus;
     let from_height = rig.height;
+    // **The person's place goes onto the Back history before the camera moves** (NV-06, #383): one Back
+    // undoes one yank. Recorded here and pushed by `nav`'s own system — this system is at Bevy's
+    // parameter cap. The follow's own steps are not places: the ease writes `Rig` every frame, and a
+    // push per frame would make one arrival a hundred Backs.
+    following.leaving.push(crate::nav::Place::of(door.as_deref(), None, Some(&rig), None));
     let (to_focus, to_height) = apply_frame(&mut rig, &settled, aspect, open, FOLLOW_MARGIN_FRAC);
     // **The map's own open-frame must not fight this one.** `frame_map_on_open` frames the whole map
-    // once per door entry; a change that arrives just after a crossing would be framed by the follow
+    // once per door entry; a change that arrives just after a switching would be framed by the follow
     // and then overwritten by the whole map.
     framing.settle();
     if lands {
@@ -1083,7 +1182,7 @@ fn draw_the_look_chip(
             chip_node.spawn((
                 Text::new(sentence),
                 TextColor(crate::chrome::ink().text),
-                crate::chrome::font(crate::chrome::text::BODY),
+                crate::chrome::typed(crate::chrome::text::BODY),
                 bevy::picking::Pickable::IGNORE,
             ));
             // **Look**, the button the issue names: show the oldest change now rather than waiting out

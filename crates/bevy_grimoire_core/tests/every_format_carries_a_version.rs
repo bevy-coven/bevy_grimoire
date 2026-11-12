@@ -67,6 +67,8 @@ const OWNED_ELSEWHERE: &[(&str, &str)] = &[
     // text rather than a record this project reads back. What a script may *touch* is versioned by the game's
     // registry (GD-04), not by a header in the file.
     ("scripts_rhai", "a script in the Rhai language: the crate that parses it owns its syntax, and the script has no header of its own"),
+    // **The guide is prose for an agent** (#347): a person writes it by hand, so it has no header to version.
+    ("guide", "Markdown prose a person writes for an agent: it has no record shape, so no version"),
 ];
 
 /// **Versioned kinds that are a cache**: a file of another version is stale, never damaged, and the

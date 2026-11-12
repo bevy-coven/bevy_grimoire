@@ -501,7 +501,7 @@ fn another_project_clears_the_follows_queue() {
     let mut app = editor(&root);
     // **A door the follow cannot cross to**, so the request stays queued: on the Map door the very
     // next frame would take it and an empty queue would prove nothing.
-    app.world_mut().insert_resource(bevy_cauldron::tiles::Door::Kit);
+    app.world_mut().insert_resource(bevy_cauldron::workspace::Workspace::Kit);
     app.world_mut()
         .resource_mut::<Following>()
         .request(bevy_cauldron::follow::FollowRequest {

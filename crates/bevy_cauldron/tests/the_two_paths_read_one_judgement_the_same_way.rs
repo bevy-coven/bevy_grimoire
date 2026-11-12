@@ -1,23 +1,34 @@
-//! **One recorded judgement, read by both wired paths; they agree on every token it names** (D5, #113).
+//! **One judgement, read by the one wired labelling path; it names exactly the tokens it was given**
+//! (D5, #113).
 //!
-//! `labels.rs` runs one of two paths, chosen by `GRIMOIRE_LABEL_PATH`:
+//! `labels.rs` labels through `decide_labels::label_with_decisions`: one `noul` question per
+//! vocabulary token, answered with a probability, plus a `choice` for the mount and (only when the
+//! mesh has no measurable front) one for the front.
 //!
-//! * `chat` — `vlm::parse_reply` over the JSON a chat model writes;
-//! * `decide` — `decide_labels::label_with_decisions` over a probability per token.
+//! This feeds the path **the judgement a person's label names** and asks what it suggests. Nothing
+//! calls a model: the transport answers P(yes) from the same token list.
 //!
-//! This feeds **the same judgement** to both — the tokens a person's label names — and compares what
-//! each suggests. Neither calls a model: the chat path is given the JSON that judgement would be
-//! written as, and the decision path a transport that answers P(yes) from the same token list.
+//! **What changed, and why it is not a weakening.** Until 2026-11-11 this file compared two paths —
+//! the chat path's `parse_reply` + `validate` against the decision path's threshold — because the
+//! issue's rule was that the old path is removed only once the new one measures equal. **This file
+//! was that measurement**: the two wired paths read one recorded judgement the same way, on every
+//! axis. The owner approved removing the chat path on 2026-11-11 without waiting for a live-model
+//! percentage, so there is no second path to compare against. Every check that is not about the chat
+//! path is kept below: the tokens suggested are exactly the ones the judgement named, and a token the
+//! project lacks is never asked about, so it can never be suggested.
 //!
-//! The point of the comparison is the *interpretation*. `parse_reply` must reject what the vocabulary
-//! lacks and re-sort into vocabulary order; the decision path must respect the threshold. If the two
-//! disagree, one of them is reading the same judgement differently from the other, and the person
-//! cannot tell which path labelled their piece.
+//! Owner exception (2026-11-11): `the_two_paths_read_one_judgement_the_same_way.rs
+//! ::both_paths_suggest_the_same_tokens_for_one_recorded_judgement` — the chat path's half of the
+//! comparison is deleted with the path it measured; the decision path's half is kept and asserted
+//! unchanged. Owner exception (2026-11-11):
+//! `the_two_paths_read_one_judgement_the_same_way.rs::both_paths_refuse_a_token_the_project_lacks_the_same_way`
+//! — the chat path's rejection is deleted with `validate`; the decision path's half (the request
+//! carries no room for a foreign token) is kept and asserted unchanged.
 
 use std::collections::BTreeMap;
 
-use bevy_cauldron::decide_labels::{DEFAULT_THRESHOLD, label_with_decisions};
-use bevy_cauldron::vlm::{parse_reply, validate, PromptCtx};
+use bevy_cauldron::decide_labels::{DEFAULT_THRESHOLD, build_requests, label_with_decisions};
+use bevy_cauldron::label_suggestion::PromptCtx;
 use bevy_grimoire_core::vocab::{Vocabularies, Vocabulary};
 use bevy_oracle::{Answer, Error, Request, Response, Transport};
 
@@ -100,32 +111,11 @@ fn png() -> Vec<u8> {
     out.into_inner()
 }
 
-/// The JSON the chat path is handed for a judgement naming `tokens`.
-fn reply(tokens: &[&str]) -> String {
-    let of = |axis: &[&str]| {
-        let named: Vec<&str> = tokens.iter().copied().filter(|t| axis.contains(t)).collect();
-        format!("{:?}", named).replace('\'', "\"")
-    };
-    format!(
-        r#"{{"what":"a piece","kind":{},"effects":{},"look":{},"offers_surfaces":{}}}"#,
-        of(&["seating", "light"]),
-        of(&["emit", "seat-one"]),
-        of(&["brown", "metal"]),
-        of(&["table-top", "seat"]),
-    )
-}
-
 #[test]
-fn both_paths_suggest_the_same_tokens_for_one_recorded_judgement() {
+fn the_path_names_exactly_the_tokens_the_recorded_judgement_named() {
     // **A chair's judgement**, named the way a person's label would name it.
     let tokens = ["seating", "seat-one", "seat", "brown"];
 
-    // The chat path: parse the JSON that judgement is written as, then validate it against the
-    // vocabulary — the two steps `vlm::label_with_retry` runs on a reply.
-    let raw = parse_reply(&reply(&tokens)).expect("the reply is the schema's JSON");
-    let chat = validate(raw, &vocab()).expect("every token named is in the vocabulary");
-
-    // The decision path: the same judgement as P(yes) per token.
     let (decide, _) = label_with_decisions(
         &Recorded { yes_tokens: tokens.to_vec() },
         &[png(), png()],
@@ -136,41 +126,44 @@ fn both_paths_suggest_the_same_tokens_for_one_recorded_judgement() {
     )
     .expect("a replayed decision endpoint labels the piece");
 
+    // Compared as sets, because the path's own order is the request's (vocabulary order) and this
+    // assertion is about WHICH tokens, not which first.
     let sorted = |v: &Vec<String>| {
         let mut c = v.clone();
         c.sort();
         c
     };
-    assert_eq!(
-        sorted(&chat.kind),
-        sorted(&decide.kind),
-        "kind: chat {:?} vs decide {:?}",
-        chat.kind,
-        decide.kind
-    );
-    assert_eq!(sorted(&chat.effects), sorted(&decide.effects), "effects differ");
-    assert_eq!(sorted(&chat.look), sorted(&decide.look), "look differs");
-    assert_eq!(
-        sorted(&chat.offers_surfaces),
-        sorted(&decide.offers_surfaces),
-        "surfaces differ"
-    );
+    assert_eq!(sorted(&decide.kind), vec!["seating".to_owned()], "kind");
+    assert_eq!(sorted(&decide.effects), vec!["seat-one".to_owned()], "effects");
+    assert_eq!(sorted(&decide.look), vec!["brown".to_owned()], "look");
+    assert_eq!(sorted(&decide.offers_surfaces), vec!["seat".to_owned()], "surfaces");
 }
 
 #[test]
-fn both_paths_refuse_a_token_the_project_lacks_the_same_way() {
-    // A reply naming `throne` is rejected by `validate`, which is the chat path's guard…
-    let raw = parse_reply(r#"{"what":"a chair","kind":["throne"]}"#).expect("schema-valid JSON");
-    let refused = validate(raw, &vocab()).expect_err("`throne` is not a kind this project has");
-    assert!(refused.contains("throne"), "the refusal names the token: {refused}");
-
-    // …and the decision path cannot name it at all: the request's options *are* the vocabulary, so
-    // `throne` is not among the questions and no answer can carry it. That asymmetry is the point of
-    // D5 — one path rejects after generation, the other has nothing to reject.
-    let request = bevy_cauldron::decide_labels::build_requests(&vocab(), &ctx("chair"), &[]);
+fn a_token_the_project_lacks_has_no_room_in_the_request() {
+    // A judgement naming `throne` cannot be read as one, because the request's options *are* the
+    // vocabulary: `throne` is not among the questions and no answer can carry it. That asymmetry is
+    // the point of D5 — the decision path has nothing to reject, because nothing foreign can arrive.
+    let request = build_requests(&vocab(), &ctx("chair"), &[]);
     let ids: Vec<&String> = request.iter().flat_map(|r| r.questions.keys()).collect();
     assert!(
         !ids.iter().any(|id| id.ends_with(":throne")),
         "the decision path asked about `throne`, which the project does not have"
     );
+    // And the guard is not vacuous: an answer that volunteers it anyway is ignored rather than
+    // trusted, because `suggest` reads back only the ids it built.
+    let mut answers = BTreeMap::new();
+    for request in &request {
+        for id in request.questions.keys() {
+            answers.insert(id.clone(), Answer::Noul { noul: 0.01 });
+        }
+    }
+    answers.insert("kind:seating".to_owned(), Answer::Noul { noul: 0.97 });
+    answers.insert("kind:throne".to_owned(), Answer::Noul { noul: 0.99 });
+    let d = bevy_cauldron::decide_labels::suggest(
+        &vocab(),
+        &[Response { model: Some("recorded".into()), answers, usage: None }],
+        DEFAULT_THRESHOLD,
+    );
+    assert_eq!(d.suggestion.kind, vec!["seating".to_owned()], "`throne` was accepted");
 }

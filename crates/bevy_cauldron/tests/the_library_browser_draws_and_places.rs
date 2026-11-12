@@ -123,7 +123,7 @@ fn drop_a_card(app: &mut App, index: usize, pointer: Vec2) {
     };
     let dock = {
         let world = app.world_mut();
-        world.query_filtered::<Entity, With<Dock>>().single(world).expect("one dock covers the viewport")
+        world.query_filtered::<Entity, (With<Dock>, With<bevy_cauldron::chrome::ArrangementDock>)>().single(world).expect("the arrangement dock covers the viewport")
     };
     assert!(app.world().entity(dock).contains::<DropTarget<PieceDrag>>(), "the dock takes a library piece");
     app.world_mut().trigger(Dropped { target: dock, source: Entity::PLACEHOLDER, payload: PieceDrag(id), pointer });

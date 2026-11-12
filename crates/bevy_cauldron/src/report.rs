@@ -1205,7 +1205,7 @@ fn report_overlay(
         root.spawn((
             ReportPart,
             Text::new(hint.to_owned()),
-            chrome::font(chrome::text::LABEL),
+            chrome::typed(chrome::text::LABEL),
             TextColor(chrome::ink().text),
             TextLayout::default().with_no_wrap(),
             Node {

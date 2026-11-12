@@ -661,6 +661,86 @@ pub fn font(role: text::Role) -> TextFont {
     TextFont::from_font_size(role.px() * text_scale())
 }
 
+/// **The role a drawn label was made at, so a change of text size can redraw it** (UI-73, #251).
+///
+/// A `TextFont` is written once, when a widget is spawned. [`font`] reads the running
+/// [`text_scale`] at that moment, so a label spawned after a person chose 175% is drawn at 175% —
+/// and one that was **already on screen** keeps the size it was built at, which is exactly what the
+/// review of #251 measured and what this component exists to fix.
+///
+/// The marker is the role, not the size: a role is a fact of the type scale and does not go stale,
+/// and [`resize_the_labels`] can therefore recompute every label from `role.px() * scale` when the
+/// person's multiple changes, without knowing what any of them says.
+///
+/// **Spawn through [`typed`]**, which puts this beside the `TextFont` in one bundle. A label that
+/// calls [`font`] alone is drawn at the size it was made and never follows the setting.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct TypeRole(text::Role);
+
+impl TypeRole {
+    /// The role this label is drawn at.
+    pub fn role(self) -> text::Role {
+        self.0
+    }
+}
+
+/// **A hand-drawn label's type: the `TextFont` it is drawn with *and* the role to redraw it at.**
+///
+/// The pair is one bundle because they are one fact — a label's size — stated twice on purpose: the
+/// `TextFont` is what `bevy_text` lays out, and the [`TypeRole`] is what [`resize_the_labels`] reads
+/// when the person's text size changes. Every `chrome::font` call site in this crate spawns through
+/// this, so no label can carry the one without the other.
+pub fn typed(role: text::Role) -> impl Bundle {
+    (font(role), TypeRole(role))
+}
+
+/// **A label already on screen is redrawn when the text size changes** (UI-73, #251).
+///
+/// `chrome::font` reads [`text_scale`] when it builds a `TextFont`, so a label spawned after the
+/// setting changed is already right; a label spawned before it is not, and a person who chose 175%
+/// would have half an editor at 175% and the chrome they read most at 100%. This rewrites every
+/// [`TypeRole`]'s `TextFont` from its role the frame the resolved setting differs from the one last
+/// applied, and does nothing at all on a settled editor (one float comparison).
+///
+/// **It reads the resolved `EditorSettings`, not the atomic**: the atomic exists so a spawn closure
+/// with no system parameters can read the scale, while this needs the value the settings file
+/// resolved to and a place to remember what it last drew.
+///
+/// **A `TextSpan` child is not rewritten.** No `TextSpan` in this editor is spawned through
+/// [`typed`]; a span carries its own `TextFont` and would need its own marker, and nothing asks for
+/// one today.
+pub fn resize_the_labels(
+    settings: Option<Res<crate::settings::EditorSettings>>,
+    mut applied: Local<Option<f32>>,
+    mut labels: Query<(&TypeRole, &mut TextFont)>,
+    mut rooms: Query<(&LinesRoom, &mut Node), Without<TypeRole>>,
+) {
+    let Some(settings) = settings else { return };
+    if applied.is_some_and(|last| (last - settings.text_scale).abs() < f32::EPSILON) {
+        return;
+    }
+    *applied = Some(settings.text_scale);
+    let scale = settings.text_scale;
+    for (role, mut font) in &mut labels {
+        let want = FontSize::Px(role.0.px() * scale);
+        if font.font_size != want {
+            font.font_size = want;
+        }
+    }
+    // **The room the labels are drawn in follows them**, or the label that grew is clipped by the
+    // box that did not. Same one comparison, same frame.
+    for (room, mut node) in &mut rooms {
+        let want = Val::Px(room.at(scale));
+        if room.fixed {
+            if node.height != want {
+                node.height = want;
+            }
+        } else if node.min_height != want {
+            node.min_height = want;
+        }
+    }
+}
+
 /// **The person's text size, as every `chrome::font` call sees it** (UI-73, #251).
 ///
 /// `chrome::font` has 117 call sites, every one of them a label the editor draws by hand, and none of
@@ -715,6 +795,45 @@ pub const BODY_CHAR_W: f32 = 6.6;
 /// [`BODY_CHAR_W`], for the same reason that one is not a type role.
 pub const BODY_LINE_H: f32 = text::BODY.px() * 1.2;
 
+/// **One line of [`text::BODY`] at the person's text size** — [`BODY_LINE_H`] times [`text_scale`].
+///
+/// A box that reserves room for text has to reserve it at the size the text is drawn, or a person
+/// at 200% gets a row one line tall holding a two-line-tall label: the text is clipped, and
+/// `every_label_fits_its_panel_at_two_hundred_percent_text` measures exactly that. Spawn sites use
+/// this; a box that has to follow a *live* change carries [`LinesRoom`] and [`resize_the_labels`]
+/// rewrites it.
+pub fn body_line_h() -> f32 {
+    BODY_LINE_H * text_scale()
+}
+
+/// **A box that reserves room for `lines` lines of [`text::BODY`]** (UI-73, #251).
+///
+/// [`body_line_h`] is read when the box is spawned; a person who changes the text size afterwards
+/// would leave the box the height it was built at, and the label inside it — which *does* resize,
+/// because it carries a [`TypeRole`] — would be clipped by its own room. So the reserve is a
+/// component too, and [`resize_the_labels`] rewrites it from the role-like numbers it holds.
+///
+/// **The padding is a number of its own**, because spacing does not follow the text size: a row
+/// inset is the interface's rhythm (`interface_scale`'s job), and scaling it with the type would
+/// double-thicken a row a person only asked to read better.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct LinesRoom {
+    /// How many lines of [`text::BODY`] the box reserves.
+    pub lines: f32,
+    /// Vertical padding added to the reserve, in logical pixels — not scaled with the text.
+    pub pad: f32,
+    /// Fill `Node::height` (a clipped row that keeps one height) rather than `Node::min_height`
+    /// (a box that may grow past its reserve).
+    pub fixed: bool,
+}
+
+impl LinesRoom {
+    /// The height this room is worth at `scale`.
+    pub fn at(self, scale: f32) -> f32 {
+        (self.lines * BODY_LINE_H * scale + self.pad).ceil()
+    }
+}
+
 // ── spacing ──────────────────────────────────────────────────────────────────────────────────────
 //
 // **A scale, used as a set.** van den Berg, Cornelissen & Roerdink 2009 (`10.1167/9.4.24`) find that
@@ -729,11 +848,26 @@ pub const BODY_LINE_H: f32 = text::BODY.px() * 1.2;
 // crowded panel is spacing and grouping, not deletion.
 
 /// Between items that belong to each other — chips in one axis, cells in one row.
+/// **One step of a gooey layout's gap**, as `bevy_gooey::row(1.0)` / `column(1.0)` ask for: a
+/// multiple of the running skin's `gap` (5 px in `editor_skin.ron`), so an interface-size change
+/// moves every row's rhythm together (UI-58/#244, UI-59/#245).
+pub const GOOEY_GAP_ONE: f32 = 1.0;
+
+/// **The skin's `gap`**, from `editor_skin.ron`: the pixel unit [`GOOEY_GAP_ONE`] is a multiple of,
+/// and the divisor a hand-built pixel gap is turned into one (`GAP_TIGHT / SKIN_GAP_PX` is 0.6).
+pub const SKIN_GAP_PX: f32 = 5.0;
+
 pub const GAP_TIGHT: f32 = 3.0;
 /// Between the rows of one block.
 pub const GAP_ROW: f32 = 5.0;
 /// Between blocks. Several times [`GAP_TIGHT`], which is the whole point.
 pub const GAP_GROUP: f32 = 16.0;
+/// [`GAP_TIGHT`] in steps of the skin's gap, which is what a gooey row's or column's `gap` takes (0.6).
+pub const GAP_TIGHT_STEPS: f32 = GAP_TIGHT / SKIN_GAP_PX;
+/// [`GAP_GROUP`] in steps of the skin's gap (3.2).
+pub const GAP_GROUP_STEPS: f32 = GAP_GROUP / SKIN_GAP_PX;
+/// [`GAP_ROW`] in steps of the skin's gap (1.0: the editor skin's gap is the row gap).
+pub const GAP_ROW_STEPS: f32 = GAP_ROW / SKIN_GAP_PX;
 
 /// **A chip's (and a compact list row's) inset.** The 6 × 3 pair was an undeclared constant at
 /// twelve sites in five files before it had this name — the exact drift this module's header
@@ -804,7 +938,7 @@ pub fn section<'a>(parent: &'a mut ChildSpawnerCommands, label: &str) -> EntityC
     parent.spawn((
         Text::new(label.to_owned()),
         TextColor(ink().label),
-        font(text::HEADING),
+        typed(text::HEADING),
         Node {
             margin: UiRect::top(Val::Px(GAP_GROUP)).with_bottom(Val::Px(GAP_TIGHT)),
             ..default()
@@ -982,6 +1116,11 @@ pub struct Frame {
     /// The hole the world is drawn through. Carries [`ViewportSlot`].
     pub viewport: Entity,
     pub right: Entity,
+    /// **The bottom dock** (UI-61, #247): a gooey `Dock` across the foot of the workbench, under the
+    /// body and above the status band. It holds the panels that say what became of the work —
+    /// `docs/ui/vision.md`'s "bottom dock: history · problems · notes · log", of which the reload
+    /// panel is the first to move here.
+    pub bottom: Entity,
     /// One band at the foot of the window: what happened, what went wrong, what the keys are.
     pub status: Entity,
 }
@@ -1146,11 +1285,18 @@ fn fit_docks_to_the_window(
     ui_scale: Res<UiScale>,
     mut panels: Query<(&PanelWidth, &mut Node, &ComputedNode), Without<ViewportSlot>>,
     owned: Query<(), (With<ShellSplit>, Without<SplitUnsized>)>,
+    collapsed: Query<(), (With<ShellSplit>, With<bevy_gooey::SplitSaved>)>,
+    bars: Query<&ComputedNode, With<crate::activity_bar::ActivityBar>>,
 ) {
     let Ok(window) = windows.single() else {
         return;
     };
     let scale = ui_scale.0.max(f32::EPSILON);
+    // **The activity bar (NV-03, #380) is paid by the docks, not by the map**: it stands in the body's row
+    // beside them, so its width comes out of what the two docks may take while the map's share stays what
+    // it was. Measured, because the bar's width is gooey's icon tab and its edge; absent, or not laid out
+    // yet, it is nothing.
+    let bar: f32 = bars.iter().map(|n| n.size().x * n.inverse_scale_factor()).sum();
     // The row's room in `Val::Px` units — the units the constants above are written in. `Window`'s
     // width is already logical, and `UiScale` multiplies every `Val::Px`, so dividing takes the
     // logical width back to the units the panel widths are expressed in.
@@ -1161,8 +1307,14 @@ fn fit_docks_to_the_window(
     // lay out to nothing. Two per door are visible on no door, so the two slots below are exactly
     // the two docks.
     let mut widest = [0.0f32; 2];
+    // **A collapsed left pane still has the panel's room counted** (UI-R06, #336): the pane slides to nothing and a peek floats it
+    // back over the viewport, and a right dock that was re-fitted to the room the hidden panel gave up would jump with the
+    // collapse and move the viewport again when a peek showed the panel. The panel is out of the layout (its dock is
+    // `Display::None`) and is what the right dock's share was worked out against, so that is still the answer.
+    let left_stands = !collapsed.is_empty();
     for (want, node, computed) in &panels {
-        if node.display == Display::None || computed.size().x <= 0.0 {
+        let counted = node.display != Display::None && (computed.size().x > 0.0 || (left_stands && want.side == Side::Left));
+        if !counted {
             continue;
         }
         let side = usize::from(want.side == Side::Right);
@@ -1192,6 +1344,8 @@ fn fit_docks_to_the_window(
     // the window once that is more than the floor, and the panels give the difference back.
     let room = room - DIVIDER_W;
     let owed = VIEWPORT_MIN_W.max(VIEWPORT_SHARE * room);
+    // (The map is owed its share of the room *before* the bar comes out, below.)
+    let room = room - bar;
     let squeeze = if room - (sum_pref + sum_overhead) >= owed {
         1.0
     } else {
@@ -1228,7 +1382,20 @@ const BAR_H: f32 = 26.0;
 /// The `Frame` resource is how [`panel_root`] finds the dock to put a panel in; BSN-style name
 /// lookup does not exist here and a marker query would need a flush between the frame and the first
 /// panel. Ordering is [`FrameSystems`], which every panel spawner runs `after`.
-pub fn spawn_frame(mut commands: Commands, settings: Option<Res<crate::settings::EditorSettings>>) {
+pub fn spawn_frame(
+    mut commands: Commands,
+    settings: Option<Res<crate::settings::EditorSettings>>,
+    workspace: Option<Res<crate::workspace::Workspace>>,
+) {
+    // **The workspace's own arrangement, else its default** (UI-33, #227; per workspace since
+    // NV-02, #379). `sync_settings` has read the files by the time a frame is built, so this is the
+    // layout the editor opens on — and it is keyed by the workspace, so Map's inspector being wide
+    // says nothing about Kit's.
+    let workspace = workspace.as_deref().copied().unwrap_or_default();
+    let layout = settings
+        .as_deref()
+        .and_then(|s| s.workspace_layout.get(workspace.id()).cloned())
+        .unwrap_or_else(|| crate::ui::shell_layout(workspace));
     let bar = |extra: Node| -> Node {
         Node {
             width: Val::Percent(100.0),
@@ -1430,20 +1597,79 @@ pub fn spawn_frame(mut commands: Commands, settings: Option<Res<crate::settings:
     // dragged. Moving the two docks onto gooey's `Dock` as well is the rest of this issue.
     let dock = commands
         .spawn((
-            // **The person's arrangement, else the default** (UI-33, #227). `sync_settings` has read
-            // the files by the time a frame is built, so this is the layout the editor opens on.
-            bevy_gooey::Dock(settings.and_then(|s| s.shell_layout.clone()).unwrap_or_else(crate::ui::shell_layout)),
+            ArrangementDock,
+            bevy_gooey::Dock(layout),
             // **The map is where a library piece may be let go** (UI-52, #238): the dock covers the viewport, so it is
             // the drop target, and `editor::drop_a_piece_on_the_map` places what lands on it.
             bevy_gooey::DropTarget::<crate::editor::PieceDrag>::new(),
             Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
         ))
         .id();
+    // **The dock's own body is the host's, and it is not laid out** (bevy-coven/bevy_gooey#85).
+    //
+    // The dock here is the arrangement's *data*: what `ui::save_the_layout` saves, what
+    // `ui::follow_the_saved_layout` restores, what `stage_panels::arrange` selects a tab in, and the node a
+    // library piece is let go on. The panels themselves are still drawn by this file's own spawners into
+    // `Frame`'s nodes — what `ui::register_the_shell_panels` registers is a placeholder that carries the
+    // panel's id, not its contents.
+    //
+    // **That was silently true until gooey #85.** `update_docks` used to return early when a dock the host
+    // had spawned had no `Role::DockBody` child, which is what this bare `Dock` was: it built nothing. Since
+    // #85 a host-placed dock grows its body, its landing and its ghost, and builds every page its layout
+    // names — so the shell grew three `panel()` cards (INSPECTOR at 22%, VIEWPORT, PLACE) filled with the
+    // skin's surface, stacked over the map between the author and the level. Measured before this: the
+    // viewport's own node was under a card, and `crate::view::OverUi` answered *yes* at its centre.
+    //
+    // gooey has no opt-out, and the path it does document is this one — *"a host that made one of them
+    // itself keeps it"* (`docs/guide/docks.md`) — so the body is the frame's, a `Display::None` node the
+    // layout is built into. A `Display::None` node has a zero rect, so nothing under it is laid out, drawn
+    // or picked: the pages exist and are inert. **When the panels themselves move into this dock** (the rest
+    // of UI-30, #224) this node becomes the real body and this paragraph goes with the change.
+    let silent_body = commands
+        .spawn((
+            Node { display: Display::None, ..default() },
+            Visibility::Hidden,
+            bevy_gooey::Role::DockBody,
+        ))
+        .id();
+    commands.entity(dock).add_child(silent_body);
     commands.entity(viewport).add_child(dock);
+
+    // **And the bottom dock** (UI-61, #247): a gooey `dock()` — the bundle, which brings its own real
+    // body, so its panels are built and laid out — across the foot of the workbench. A row of the root's
+    // own column between the body and the status band, so it takes its height from the window and every
+    // panel above it keeps the rest. It starts on the reload panel: what became of each file's last edit
+    // is the thing an author looks away from the map to read.
+    //
+    // **The `Node` is inserted after the spawn, not beside the bundle.** `bevy_gooey::dock()` brings a
+    // `Node` of its own (`dock()` is `Node { 100% x 100% }, Role::Dock, Dock(layout), children![..]`),
+    // and a bundle carrying the same component twice panics at spawn — every system that reads
+    // `Frame` then failed with "Resource does not exist", because `spawn_frame` never finished.
+    let bottom = commands
+        .spawn((
+            BottomDock,
+            bevy_gooey::dock(bevy_gooey::DockLayout::group(["reload"])),
+            bevy::picking::Pickable::IGNORE,
+        ))
+        .id();
+    commands.entity(bottom).insert((
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Px(BOTTOM_DOCK_H),
+            flex_shrink: 0.0,
+            // **Not shown until there is room** ([`crate::shell_view::give_the_bottom_dock_its_room`]
+            // opens it): a dock that is never laid out has no text for a label census to find drawn
+            // outside it, and takes nothing from the workbench.
+            display: Display::None,
+            border: UiRect::top(Val::Px(EDGE_W)),
+            ..default()
+        },
+        BorderColor::all(ink().panel_edge),
+    ));
 
     commands
         .entity(root)
-        .add_children(&[chrome_bar, door_strip, body, status]);
+        .add_children(&[chrome_bar, door_strip, body, bottom, status]);
 
     commands.insert_resource(Frame {
         root,
@@ -1453,9 +1679,36 @@ pub fn spawn_frame(mut commands: Commands, settings: Option<Res<crate::settings:
         left,
         viewport,
         right,
+        bottom,
         status,
     });
 }
+
+/// **The height of the bottom dock** (UI-61, #247), logical px: a panel's body at a comfortable
+/// reading size — a heading and six lines of the reload state.
+pub const BOTTOM_DOCK_H: f32 = 148.0;
+
+/// **The least height the workbench keeps while the bottom dock is shown**, logical px: the row of
+/// the left dock, the viewport and the inspector. The dock is the room the workbench can spare, so it
+/// is shown only when the workbench would still have this much beside it. Set from the editor's
+/// reference window (1280 x 720, which the headless harness's surface reproduces): with the terminal
+/// open the Map workbench measures 326 px there, and a 148-px dock took nearly half of that and left
+/// the inspector 24 px of visible height — a note being typed was off the panel — and in the Kit tabs
+/// it covered their badge legends.
+pub const WORKBENCH_FLOOR_H: f32 = 420.0;
+
+/// **The dock that holds the workspace's arrangement** (UI-30, #224; a second dock since #247).
+///
+/// `ui::save_the_layout` and `ui::follow_the_saved_layout` write and read the *workspace's* layout, so
+/// they must reach this dock and no other: with a bottom dock in the frame, an unfiltered query
+/// would write the arrangement into the bottom dock and read the bottom dock's layout back as the
+/// workspace's.
+#[derive(Component)]
+pub struct ArrangementDock;
+
+/// **The bottom dock** (UI-61, #247): the panels that say what became of the work.
+#[derive(Component)]
+pub struct BottomDock;
 
 /// **A panel's heading.**
 ///
@@ -1468,7 +1721,7 @@ pub fn title(parent: &mut ChildSpawnerCommands, text: &str) {
     parent.spawn((
         Text::new(text.to_owned()),
         TextColor(ink().text),
-        font(text::TITLE),
+        typed(text::TITLE),
         Node {
             margin: UiRect::bottom(Val::Px(GAP_ROW)),
             ..default()
@@ -2006,7 +2259,7 @@ pub fn journal_panel(mut commands: Commands, frame: Res<Frame>) {
                 keys::chord(keys::Action::CopyInfo)
             )),
             TextColor(ink().dim),
-            font(text::LABEL),
+            typed(text::LABEL),
         ));
         // Asks the project's after-edit checks about the picture on screen now. A person's click only:
         // nothing runs while they are simply editing.
@@ -2069,7 +2322,7 @@ pub fn problem_log_line(parent: &mut ChildSpawnerCommands, text: &str, colour: C
             row.spawn((
                 Text::new("•"),
                 TextColor(colour),
-                font(text::LABEL),
+                typed(text::LABEL),
                 TextLayout::new(Justify::Left, LineBreak::NoWrap),
             ));
             row.spawn((
@@ -2084,7 +2337,7 @@ pub fn problem_log_line(parent: &mut ChildSpawnerCommands, text: &str, colour: C
                 },
                 Text::new(text.to_owned()),
                 TextColor(colour),
-                font(text::LABEL),
+                typed(text::LABEL),
             ));
         });
 }
@@ -2494,7 +2747,7 @@ pub fn list_heading_in(parent: &mut ChildSpawnerCommands, text: &str, ink: ListH
     parent.spawn((
         Text::new(text.to_owned()),
         TextColor(ink.0),
-        font(text::HEADING),
+        typed(text::HEADING),
     ));
 }
 
@@ -2573,7 +2826,7 @@ pub fn row_label_with(
         },
         Text::new(label.to_owned()),
         TextColor(ink().label),
-        font(text::LABEL),
+        typed(text::LABEL),
         TextLayout::new(Justify::Left, LineBreak::NoWrap),
         marker,
     ))
@@ -2586,9 +2839,76 @@ pub fn row_value(row: &mut ChildSpawnerCommands, text: impl Into<String>, colour
     row.spawn((
         Text::new(text.into()),
         TextColor(colour),
-        font(text::BODY),
+        typed(text::BODY),
         marker,
     ));
+}
+
+/// **A margin for a text or a cell to stand off its neighbours by**, as the `Node` a text bundle needs (UI-59, #245).
+///
+/// A text carries a `Node` of its own, and a margin is the one thing about it a panel decides: the gap above a block, the
+/// half-step below a heading. The Kit panels used to spell it as a `Node` literal at each text; this is the one place that
+/// does, so a panel's spacing is read from a name and not from nine copies of the same four lines.
+pub fn spaced(margin: UiRect) -> Node {
+    Node { margin, ..default() }
+}
+
+/// **A gooey row with room around it** (UI-59, #245): [`bevy_gooey::row`] with no gap of its own, the margin outside it and
+/// its cells on `align` across.
+///
+/// gooey's row carries no margin and says nothing about alignment, and the skin writes only the fields a row owns (its gap
+/// and its floor width), so both are set over the bundle on the spawned entity, which keeps the one `Node` a bundle may
+/// hold. `.insert(..)` a marker on the returned commands, or `.with_children(..)` the row's cells.
+pub fn spaced_row<'a>(parent: &'a mut ChildSpawnerCommands, margin: UiRect, align: AlignItems) -> EntityCommands<'a> {
+    gapped_row(parent, 0.0, margin, align)
+}
+
+/// **A [`spaced_row`] whose cells stand `gap` steps of the skin's gap apart** (a gooey row's own rhythm: 1.0 is the skin's gap).
+pub fn gapped_row<'a>(parent: &'a mut ChildSpawnerCommands, gap: f32, margin: UiRect, align: AlignItems) -> EntityCommands<'a> {
+    let mut row = parent.spawn(bevy_gooey::row(gap));
+    row.entry::<Node>().and_modify(move |mut node| {
+        node.margin = margin;
+        node.align_items = align;
+    });
+    row
+}
+
+/// **A gooey row that wraps its cells onto a second line instead of running off the panel's edge** (UI-59, #245): the cells
+/// stand `gap` steps of the skin's gap apart and the lines `row_gap` px apart (gooey's rhythm is one number, so the line gap
+/// is the caller's), and the row may narrow below its widest run, which a gooey row always may (the skin floors its width at
+/// nothing), so a last chip is never clipped by the panel (the 2026-09-03 audit's F7).
+pub fn wrapping_row<'a>(
+    parent: &'a mut ChildSpawnerCommands,
+    gap: f32,
+    row_gap: f32,
+    margin: UiRect,
+    align: AlignItems,
+) -> EntityCommands<'a> {
+    let mut row = gapped_row(parent, gap, margin, align);
+    row.entry::<Node>().and_modify(move |mut node| {
+        node.flex_wrap = FlexWrap::Wrap;
+        node.row_gap = Val::Px(row_gap);
+    });
+    row
+}
+
+/// **A text that takes the rest of its row and wraps inside it** (UI-59, #245): a label column that grows with the row and
+/// may narrow below its words, so a long name wraps in its own column instead of widening the row past the panel.
+///
+/// A flex item's automatic minimum size is its content, so without the zero floor the column refuses to narrow and the
+/// row's last cell is clipped by the panel's edge (the 2026-09-03 audit's F7). Returns the commands so a caller can mark it.
+pub fn fill_text<'a>(row: &'a mut ChildSpawnerCommands, text: impl Into<String>, ink: Color, role: text::Role) -> EntityCommands<'a> {
+    row.spawn((
+        Node {
+            flex_grow: 1.0,
+            // CHROME-OK: zero is not a spacing step.
+            min_width: Val::Px(0.0),
+            ..default()
+        },
+        Text::new(text.into()),
+        TextColor(ink),
+        typed(role),
+    ))
 }
 
 /// **A chip** — one small clickable word. [`CHIP_PAD`] and a permanent 1 px border whose COLOUR
@@ -2634,7 +2954,7 @@ pub fn chip<'a>(
         chip.spawn((
             Text::new(label.to_owned()),
             TextColor(ink),
-            font(role),
+            typed(role),
             TextLayout::new(Justify::Left, LineBreak::NoWrap),
         ));
     });
@@ -2880,7 +3200,7 @@ pub fn button<'a>(
         b.spawn((
             Text::new(label.to_owned()),
             TextColor(severity.ink()),
-            font(text::CONTROL),
+            typed(text::CONTROL),
             TextLayout::new(Justify::Left, LineBreak::NoWrap),
         ));
     });
@@ -3003,7 +3323,7 @@ pub fn text_field<'a>(
         f.spawn((
             Text::new(initial.0),
             TextColor(initial.1),
-            font(role),
+            typed(role),
             readout,
         ));
     });
@@ -3133,19 +3453,19 @@ fn spawn_name_box(mut commands: Commands) {
             .with_children(|b| {
                 b.spawn((
                     Text::new(String::new()),
-                    font(text::BODY),
+                    typed(text::BODY),
                     TextColor(ink().label),
                     NameBoxTitle,
                 ));
                 b.spawn((
                     Text::new(String::new()),
-                    font(text::TITLE),
+                    typed(text::TITLE),
                     TextColor(ink().accent),
                     NameBoxValue,
                 ));
                 b.spawn((
                     Text::new(String::new()),
-                    font(text::BODY),
+                    typed(text::BODY),
                     TextColor(ink().dim),
                     NameBoxHint,
                 ));
@@ -3285,11 +3605,18 @@ fn paint_name_box(
 /// `[pane, divider, pane]`; the panes carry a `Node` and a `Role` and no `Pickable::IGNORE`, and the divider
 /// carries `Hovered` — all three forbidden under the frame, so both are corrected here.
 ///
+/// **While the split is collapsed, the divider has its `Hovered` back, and the first pane has its own** (UI-R06, #336).
+/// gooey's peek of a collapsed pane (#69) reads the pointer on the divider (the collapsed edge) and on the pane, and puts
+/// `Hovered` on the first pane for as long as the split is collapsed: that is what lets the pane be pointed at, so
+/// `Pickable::IGNORE` stays on a pane without it (an open split's panes must never mark the world as interface) and
+/// comes off the one that has it, so a floating pane's dock can be clicked. A collapsed split's divider is a sliver on
+/// the viewport's edge that is the interface, so it answers the pointer there; an open split's does not.
+///
 /// **Idempotent**, because the frame is spawned on each door.
 fn adopt_the_shell_split(
     mut commands: Commands,
     frame: Option<Res<Frame>>,
-    splits: Query<Entity, With<ShellSplit>>,
+    splits: Query<(Entity, Has<bevy_gooey::SplitSaved>), With<ShellSplit>>,
     roles: Query<&bevy_gooey::Role>,
     has_hover: Query<(), With<Hovered>>,
     pickable: Query<&bevy::picking::Pickable>,
@@ -3297,19 +3624,28 @@ fn adopt_the_shell_split(
 ) {
     let (children, parents) = tree;
     let Some(frame) = frame else { return };
-    for split in &splits {
+    for (split, collapsed) in &splits {
         let Some(kids) = children.get(split).ok() else { continue };
         for child in kids.iter() {
             match roles.get(child) {
                 Ok(bevy_gooey::Role::SplitDivider) => {
-                    if has_hover.get(child).is_ok() {
-                        commands.entity(child).remove::<Hovered>();
+                    if has_hover.get(child).is_ok() != collapsed {
+                        if collapsed {
+                            commands.entity(child).insert(Hovered::default());
+                        } else {
+                            commands.entity(child).remove::<Hovered>();
+                        }
                     }
                 }
-                Ok(bevy_gooey::Role::SplitPane)
-                    if !pickable.get(child).is_ok_and(|p| *p == bevy::picking::Pickable::IGNORE) =>
-                {
-                    commands.entity(child).insert(bevy::picking::Pickable::IGNORE);
+                Ok(bevy_gooey::Role::SplitPane) => {
+                    let want = if has_hover.get(child).is_ok() {
+                        bevy::picking::Pickable::default()
+                    } else {
+                        bevy::picking::Pickable::IGNORE
+                    };
+                    if pickable.get(child).ok() != Some(&want) {
+                        commands.entity(child).insert(want);
+                    }
                 }
                 _ => {}
             }
@@ -3395,6 +3731,9 @@ fn size_the_shell_split(
     }
 }
 
+/// The shell's split while its pane is collapsed, or sliding to or from it.
+type CollapsedOrGliding = (With<ShellSplit>, Or<(With<bevy_gooey::SplitSaved>, With<bevy_gooey::SplitGlide>)>);
+
 /// **Once a person drags the divider, the left panel is as wide as the pane they made** (#224).
 ///
 /// Before that, [`size_the_shell_split`] sizes the pane to the panel; after it the pane is the
@@ -3403,6 +3742,10 @@ fn size_the_shell_split(
 /// is the pane's less its margins, never under [`DOCK_MIN_W`] (the pane's own floor, `SplitMin`,
 /// keeps the two from disagreeing). [`fit_docks_to_the_window`] leaves the left panel to this once
 /// the split is the person's, so one system writes the number.
+///
+/// **Not while the split is collapsed or sliding** (UI-R06, #336): the pane is shrinking to nothing or growing back, and a panel that
+/// followed it would reflow every frame of the slide and be a different width when the peek floats it over the viewport.
+/// Collapsed, it keeps the width it had; a restore lands and this takes the number back from the pane, which is that width.
 fn the_left_panel_follows_its_pane(
     frame: Option<Res<Frame>>,
     owned: Query<(), (With<ShellSplit>, Without<SplitUnsized>)>,
@@ -3410,8 +3753,9 @@ fn the_left_panel_follows_its_pane(
     panes: Query<&ComputedNode>,
     mut panels: Query<(&PanelWidth, &mut Node)>,
     windows: Query<(), With<bevy::window::PrimaryWindow>>,
+    moving: Query<(), CollapsedOrGliding>,
 ) {
-    if owned.is_empty() || windows.is_empty() {
+    if owned.is_empty() || windows.is_empty() || !moving.is_empty() {
         return;
     }
     let Some(frame) = frame else { return };
@@ -3910,7 +4254,7 @@ pub fn subject(
 pub fn spawn_chrome_bar(
     mut commands: Commands,
     frame: Res<Frame>,
-    door: Option<Res<crate::tiles::Door>>,
+    door: Option<Res<crate::workspace::Workspace>>,
     open_map: Option<Res<crate::project::OpenMap>>,
     project: Option<Res<crate::project::Project>>,
 ) {
@@ -3945,14 +4289,14 @@ pub fn spawn_chrome_bar(
             b.spawn((
                 Text::new(format!("\u{2039} {back}")),
                 TextColor(ink().key),
-                font(text::BODY),
+                typed(text::BODY),
                 bevy::picking::Pickable::IGNORE,
             ));
             b.spawn((
                 BackChord,
                 Text::new(keys::chord(keys::Action::MainMenu)),
                 TextColor(ink().label),
-                font(text::BODY),
+                typed(text::BODY),
                 bevy::picking::Pickable::IGNORE,
             ));
         });
@@ -3974,7 +4318,7 @@ pub fn spawn_chrome_bar(
                 Control(keys::ControlId::Title),
                 Text::new(here),
                 TextColor(ink().dim),
-                font(text::BODY),
+                typed(text::BODY),
                 bevy::picking::Pickable::IGNORE,
             ));
         }
@@ -3997,7 +4341,7 @@ pub struct WhereYouAre;
 /// Compared before writing, per the standing rule — `Text` is change-detected and this runs every
 /// frame.
 pub fn repaint_where_you_are(
-    door: Option<Res<crate::tiles::Door>>,
+    door: Option<Res<crate::workspace::Workspace>>,
     open_map: Option<Res<crate::project::OpenMap>>,
     project: Option<Res<crate::project::Project>>,
     mut bar: Query<&mut Text, With<WhereYouAre>>,
@@ -4056,21 +4400,21 @@ pub fn spawn_status_band(mut commands: Commands, frame: Res<Frame>, project: Opt
             bevy_gooey::StatusKind::Info,
             Text::new(String::new()),
             TextColor(ink().dim),
-            font(text::LABEL),
+            typed(text::LABEL),
             bevy::picking::Pickable::IGNORE,
         ));
         band.spawn((
             SelectionCount,
             Text::new(String::new()),
             TextColor(ink().dim),
-            font(text::LABEL),
+            typed(text::LABEL),
             bevy::picking::Pickable::IGNORE,
         ));
         band.spawn((
             LabelerLine,
             Text::new(String::new()),
             TextColor(ink().dim),
-            font(text::LABEL),
+            typed(text::LABEL),
             bevy::picking::Pickable::IGNORE,
         ));
         band.spawn((
@@ -4328,7 +4672,7 @@ pub fn shortcut_hint(parent: &mut ChildSpawnerCommands, back: &str) {
             keys::chord(keys::Action::MainMenu),
         )),
         TextColor(ink().label),
-        font(text::LABEL),
+        typed(text::LABEL),
         // **And holding it puts that key's own badge on this line.** The one control whose verb is
         // "show me the verbs" — ExposeHK's admitted weakness is that a modifier-triggered overlay
         // *"has no visual representation to aid discovery until the user … presses its trigger"*, and

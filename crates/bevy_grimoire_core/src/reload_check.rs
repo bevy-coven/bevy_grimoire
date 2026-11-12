@@ -238,6 +238,24 @@ pub fn check(kind: &FileKind, file: &str, text: &str) -> Check {
     }
 }
 
+/// **The directory a project's own files live in, under its root** (`assets/grimoire`): a kind based at
+/// [`crate::reload::Base::Grimoire`] is found by what follows it.
+pub const GRIMOIRE_DIR: &str = "assets/grimoire";
+
+/// **The kind a project-relative file is** (GD-11, #373), or `None` for a path no kind owns.
+///
+/// `rel` is spelled with `/` and is relative to the project's root: a kind based at the game's root matches it
+/// as it stands, a kind based at the project's own directory ([`GRIMOIRE_DIR`]) matches what follows that
+/// directory. A file that is not YAML has no kind: nothing reads RON.
+pub fn kind_of_path(rel: &str) -> Option<&'static FileKind> {
+    use crate::reload::{kind_of, Base};
+    if let Some(kind) = kind_of(Base::Root, rel) {
+        return Some(kind);
+    }
+    let inside = rel.strip_prefix(GRIMOIRE_DIR)?.strip_prefix('/')?;
+    kind_of(Base::Grimoire, inside)
+}
+
 /// **The kinds [`check`] cannot read**, so a reader knows which refusals it has to find another way.
 pub fn unchecked() -> impl Iterator<Item = &'static FileKind> {
     KINDS.iter().filter(|k| matches!(check(k, "", ""), Check::Unchecked))

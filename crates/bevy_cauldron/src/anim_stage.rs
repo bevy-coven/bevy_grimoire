@@ -631,14 +631,47 @@ pub(crate) fn drive_bench_scrub(
 #[derive(Component)]
 pub(crate) struct GhostChip;
 
+/// **Toggle the bench's ghost through the operation** (E-002, #129), the one body the chip, `G` and an agent
+/// share: the operation decides on or off, and this carries the view in and applies the answer.
+///
+/// **The project's root travels with it**, because the operation is logged and a log with no place to be
+/// written is a refusal that takes the change back (#224).
+fn toggle_ghost(ab: &mut BenchAb, project: Option<&crate::project::Project>, state: Option<&mut crate::editor::EditorState>) {
+    let mut ctx = crate::ops::Ctx {
+        root: project.map(|p| p.root.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View { ghost: ab.0, ..Default::default() }),
+        ..crate::ops::Ctx::default()
+    };
+    let outcome = crate::ops::dispatch(&mut ctx, "view_toggle_ghost", &serde_json::json!({}));
+    match outcome {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => {
+            if let Some(view) = ctx.view {
+                ab.0 = view.ghost;
+            }
+            if let Some(state) = state {
+                state.status.note(outcome.summary);
+            }
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+            if let Some(state) = state {
+                state.status.problem(e.0);
+            }
+        }
+    }
+}
+
 /// The ghost chip: toggle the A/B overlay.
 pub(crate) fn on_ghost_chip_click(
     activate: On<Activate>,
     chips: Query<(), With<GhostChip>>,
     mut ab: ResMut<BenchAb>,
+    project: Option<Res<crate::project::Project>>,
+    mut state: Option<ResMut<crate::editor::EditorState>>,
 ) {
     if chips.get(activate.entity).is_ok() {
-        ab.0 = !ab.0;
+        toggle_ghost(&mut ab, project.as_deref(), state.as_deref_mut());
     }
 }
 
@@ -647,9 +680,11 @@ pub(crate) fn toggle_ghost_key(
     keyboard: Res<ButtonInput<KeyCode>>,
     live: Res<crate::keys::Live>,
     mut ab: ResMut<BenchAb>,
+    project: Option<Res<crate::project::Project>>,
+    mut state: Option<ResMut<crate::editor::EditorState>>,
 ) {
     if crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::ToggleGhost) {
-        ab.0 = !ab.0;
+        toggle_ghost(&mut ab, project.as_deref(), state.as_deref_mut());
     }
 }
 
@@ -794,12 +829,12 @@ pub(crate) fn spawn_chips(
     p.spawn((
         Text::new("click: solo · mod-click: mix in/out"),
         TextColor(ink.label),
-        crate::chrome::font(crate::chrome::text::HINT),
+        crate::chrome::typed(crate::chrome::text::HINT),
     ));
     p.spawn((
         Text::new(String::new()),
         TextColor(crate::chrome::ink().dim),
-        crate::chrome::font(crate::chrome::text::HINT),
+        crate::chrome::typed(crate::chrome::text::HINT),
         ScrubLine,
     ));
 }

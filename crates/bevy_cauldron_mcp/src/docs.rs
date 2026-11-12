@@ -22,6 +22,7 @@
 //! **So: change a tool's description in `main.rs` and in this table, then regenerate.** The test is
 //! what makes forgetting the second step a build failure rather than a document an agent believes.
 
+use bevy_grimoire_core::lesson::{LESSON_MAX_CHARS, WHY_MAX_CHARS};
 use bevy_grimoire_core::wish::{WISH_FIELD_MAX_CHARS, WISH_TOOL_MAX_CHARS};
 use serde_json::Value;
 
@@ -81,6 +82,27 @@ pub const TOOLS: &[ToolDoc] = &[
                       one citing the same hand-back, or one citing an id this editor never handed back, is refused \
                       with the reason. An empty field, or one past its limit, is refused naming the field — a wish is \
                       never trimmed. It writes nothing outside the editor's own queue.",
+        read_only: false,
+        destructive: false,
+        idempotent: false,
+    },
+    ToolDoc {
+        name: "grimoire_lesson",
+        description: "After a grimoire_present hand-back (or a note you resolved), propose one line \
+                      for this project's agent guide: what the task taught that the next agent \
+                      should know. Fields: after, the hand-back it follows ({presentation: \
+                      \"present-1\"} or {note: \"n3\"}); lesson, the one line the guide would \
+                      gain, inside the limit its schema states and with no newline; why, why it is \
+                      worth the line, also one line, inside its own. The editor queues the proposal \
+                      in the AGENT block and the person keeps or discards it; only their Keep \
+                      writes the line to .dark_factory/AGENTS.md, so this call writes nothing. It \
+                      returns at once with the lesson's id, the line it would add, and \"waiting\"; \
+                      read grimoire_state's lessons for what became of it. One lesson per \
+                      hand-back: a second citing the same hand-back, or one citing an id this \
+                      editor never handed back, is refused with the reason, as is a newline, an \
+                      empty field or one past its limit — a lesson is never trimmed. A project \
+                      with no agent guide is refused, and the person creates one on the project \
+                      page. A lesson is optional: one worth keeping beats one per task.",
         read_only: false,
         destructive: false,
         idempotent: false,
@@ -559,7 +581,7 @@ pub fn tool_table_and_count() -> (usize, String) {
 }
 
 pub fn schemas() -> Value {
-    serde_json::json!({
+    let mut document = serde_json::json!({
         "grimoire_guide": {
             "type": "object",
             "additionalProperties": false,
@@ -820,6 +842,36 @@ pub fn schemas() -> Value {
             "type": "object",
             "additionalProperties": false,
             "properties": {},
+        },
+    });
+    // **The lesson's schema, merged here rather than inside the literal above**:
+    // `serde_json::json!` expands one nesting level per value, and this table as a whole reaches the
+    // crate's `recursion_limit` before any single entry does. The document is the same either way —
+    // `every_tool_has_a_schema` reads the map, not the expression it came from.
+    if let Some(map) = document.as_object_mut() {
+        map.insert("grimoire_lesson".to_owned(), lesson_schema());
+    }
+    document
+}
+
+/// **The parameters of `grimoire_lesson`**, which the literal above cannot hold.
+fn lesson_schema() -> Value {
+    serde_json::json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["after", "lesson", "why"],
+        "properties": {
+            "after": {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "The hand-back the lesson follows: exactly one of presentation or note.",
+                "properties": {
+                    "presentation": {"type": ["string", "null"], "description": "A presentation's id, as grimoire_present returned it."},
+                    "note": {"type": ["string", "null"], "description": "A note's id, as the agent resolved it."},
+                },
+            },
+            "lesson": {"type": "string", "maxLength": LESSON_MAX_CHARS, "description": "The one line the guide would gain. No newline: a lesson is one line."},
+            "why": {"type": "string", "maxLength": WHY_MAX_CHARS, "description": "Why it is worth the line."},
         },
     })
 }

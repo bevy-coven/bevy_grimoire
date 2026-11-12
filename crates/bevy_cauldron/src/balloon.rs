@@ -106,7 +106,7 @@ pub fn show_balloon(
         Balloon,
         Text::new(text),
         TextColor(crate::chrome::ink().text),
-        crate::chrome::font(crate::chrome::text::LABEL),
+        crate::chrome::typed(crate::chrome::text::LABEL),
         BackgroundColor(crate::chrome::ink().overlay_bg),
         Node {
             // PLACES-ITSELF-OK: a balloon is anchored to a piece projected through the camera, not a panel.

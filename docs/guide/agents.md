@@ -120,9 +120,14 @@ Goal: know what an agent can change, and what undoes each change.
 | `placement_set_pose` | Sets a placement's yaw and tip together, as `V` does with `0` and `[0, 0]`; one change, one undo. Refuses a tip on a piece something rests on and on an unmeasured piece. | Puts the old yaw and tip back |
 | `placement_remove` | Removes a placement, and any piece standing on it. | Puts the pieces back |
 | `stamp_remove` | Removes a stamp from the map. | Puts the stamp back |
+| `placement_set_hidden` | Takes one placement out of the editor's viewport for this session, or puts it back, as the outliner's Hide does. The piece stays on the map and in the file, and a click cannot pick what is not drawn. | None: it changes the view, not the map |
+| `layer_set_visible` | Hides a whole layer (`floor`, `wall`, `ceiling`, `surface`, `opening` or `decal`, from each piece's mount) for this session, or shows it again, as the outliner's Hide layer does. | None: it changes the view, not the map |
+| `placement_set_locked` | Locks a placement against the viewport's move and removal clicks for this session, or unlocks it, as the outliner's Lock does. Operations such as `placement_remove` still act on it; this is not `placement_set_pin`. | None: it changes the view, not the map |
 | `map_rename` | Renames the open map. The name is forced to snake_case, so `Town Two` becomes `town_two`. | Puts the old name back |
 | `brush_arm` | Arms a library piece as the brush. `null` puts the brush down. | None: it changes the view, not the map |
 | `composition_arm` | Arms a composition, so the next click on the Map stamps it. `null` puts it down. | None: it changes the view, not the map |
+| `composition_picker_toggle` | Gives the arrow keys to the composition picker, or back to the palette, as `P` does. | None: it changes the view, not the map |
+| `composition_picker_walk` | Moves the composition picker's cursor one row, `by` `prev` or `next`, as Shift+up and Shift+down do. It stops at the ends of the list; `composition_arm` arms the composition it is on. | None: it changes the view, not the map |
 | `composition_rename` | Renames a composition, and every map that stamps it follows. The name is forced to snake_case per `/` segment. | Puts the old name back, in the compositions file and every map |
 | `door_open` | Opens the kit, map, or rigs door, and optionally one of its tabs. | None: it changes the view, not the map |
 | `piece_select` | Selects a library piece on the Meshes shelf. | None: it changes the view, not the map |

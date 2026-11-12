@@ -56,6 +56,16 @@
 
 **A wish is not a tool you already wished for in this session.** If you asked for it once, it is already queued and a second row is noise the person has to read and reject. Wish for a different tool, or make no wish.
 
+**Then propose a lesson, if the task taught one.** A wish is about what the editor lacked; a lesson is about what the *work* taught, and it goes into this project's own guide so the next agent reads it before touching anything. Call `grimoire_lesson` with `after` (the same hand-back the wish cites), `lesson` — the one line the guide would gain, 280 characters at most and **with no newline, because a lesson is one line** — and `why`, also one line, under the same limit.
+
+```text
+{"after": {"presentation": "present-1"}, "lesson": "Measure the walls before placing a door: a door placed blind overlapped one.", "why": "the overlap was found by rendering, three calls after the placement"}
+```
+
+**Only the person writes the guide.** Your call queues the line as a row in the AGENT block; **Keep** appends it to `.dark_factory/AGENTS.md` under `## Lessons`, and **Discard** drops it. `grimoire_lesson` returns at once with the line it would add, and `grimoire_state.lessons` reports `waiting`, `kept` or `discarded` — do not poll for the answer. **A project with no guide is refused**, and the person creates one on the project page; say so in your hand-back rather than retrying.
+
+**One lesson per hand-back, and a lesson is optional.** A second lesson citing the same hand-back is refused, as is a newline or a line past its limit — nothing is trimmed. If the task taught nothing the next agent needs, propose none: a filler line in someone's guide is worse than a gap.
+
 **Wish and move on.** `grimoire_wish` returns as soon as the wish is queued — it does not wait for a person to read it, because they may be away and your turn may be the last one. Do not poll `grimoire_state` for its answer, and do not repeat the wish because nothing happened yet. **If nothing was hard, make no wish at all**: an empty wish costs the person a row to read and reject, and it teaches them that the queue is not worth reading.
 
 ## Working a note

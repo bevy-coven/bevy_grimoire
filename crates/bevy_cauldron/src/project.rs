@@ -181,11 +181,11 @@ pub struct Project {
     pub maps_dir: PathBuf,
     /// **The map that was open**, by name — the last one this project had open.
     ///
-    /// **The Kit door has no map, and the crossing needs to know which one to come back to.**
-    /// Without this, crossing from the Kit door to the Map door has nothing to open — and the
+    /// **The Kit door has no map, and the switching needs to know which one to come back to.**
+    /// Without this, switching from the Kit door to the Map door has nothing to open — and the
     /// refusal it gives is *true* and useless: the author was on a map a moment ago.
     ///
-    /// So the name is **carried across the crossing**, the way the armed composition is: it is the
+    /// So the name is **carried across the switching**, the way the armed composition is: it is the
     /// author's intent about which map they are working on, and it outlives the door it was opened
     /// in. It is a name and not a path, so a map that has been renamed since is refused by name.
     pub open_map_name: Option<String>,
@@ -479,7 +479,7 @@ impl Project {
             masks: masks.into(),
             project_dir,
             maps_dir,
-            // **No map yet.** The Map door sets it when it opens one, and the crossing carries it.
+            // **No map yet.** The Map door sets it when it opens one, and the switching carries it.
             open_map_name: None,
             touched: Vec::new(),
             triangles,

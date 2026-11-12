@@ -152,7 +152,7 @@ pub fn arrange(world: &mut World, id: &str) -> Result<Staged, String> {
 /// positionals, then `--door` and `--kit`.
 fn re_open_argv(world: &World) -> Option<Vec<String>> {
     let project = world.get_resource::<crate::project::Project>()?;
-    let door = world.get_resource::<crate::tiles::Door>().copied().unwrap_or_default();
+    let door = world.get_resource::<crate::workspace::Workspace>().copied().unwrap_or_default();
     let mut argv = vec![project.root.to_string_lossy().into_owned()];
     if let Some(map) = world.get_resource::<crate::project::OpenMap>().map(|open| open.map.name.clone()).or_else(|| project.open_map_name.clone()) {
         argv.push(map);
@@ -188,7 +188,9 @@ fn stage_a_dock_panel(world: &mut World, panel: &str, now: Screen) -> Result<Sta
         return Err(format!("`{panel}` is a workbench panel and the editor is not open (the screen is {now:?})"));
     }
     let mut docked = false;
-    let mut docks = world.query_filtered::<&mut Dock, ()>();
+    // **The arrangement's dock, and only it** (review of #247): a tab is selected in the dock that
+    // arranges the shell, never in the bottom dock, whose one panel (`reload`) no capture stages.
+    let mut docks = world.query_filtered::<&mut Dock, With<crate::chrome::ArrangementDock>>();
     for mut dock in docks.iter_mut(world) {
         if let Some(next) = select(&dock.0, panel) {
             dock.0 = next;

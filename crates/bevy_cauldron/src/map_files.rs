@@ -35,8 +35,10 @@ pub const READ_HERE: &[&str] = &["forest", "people", "scripts", "trees"];
 /// `tests/a_damaged_oplog_line_is_named_and_the_rest_still_reads.rs`,
 /// `tests/a_game_data_file_that_does_not_read_is_named.rs`,
 /// `tests/a_reference_image_that_does_not_read_is_named.rs`, `tests/family_settings_typed_verdicts.rs` and
-/// `tests/a_key_set_in_both_settings_layers_takes_the_projects.rs` have their bad files instead. Like [`READ_HERE`] they are on core's unchecked list and on no other.
-pub const WATCHED_HERE: &[&str] = &["checks", "oplog", "game_data", "reference_images", "family", "editor_settings"];
+/// `tests/a_key_set_in_both_settings_layers_takes_the_projects.rs` have their bad files instead; `guide`: the
+/// project's agent guide, whose refusal [`crate::agent_guide::sync_guide_reload`] says (#347; its bad files
+/// are in `tests/the_guide_is_a_file_kind.rs`). Like [`READ_HERE`] they are on core's unchecked list and on no other.
+pub const WATCHED_HERE: &[&str] = &["checks", "oplog", "game_data", "reference_images", "family", "editor_settings", "guide"];
 
 /// **The path of `path` as the project's directory sees it**: what a verdict and a refusal name.
 pub fn file_name(project: &Project, path: &Path) -> String {

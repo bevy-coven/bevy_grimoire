@@ -56,7 +56,7 @@ pub(crate) struct Showing {
 /// the person dismissed must not come back because they changed tab.
 fn source_of(tab: Mode) -> u8 {
     match tab {
-        Mode::Map => 0,
+        Mode::Map | Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files => 0,
         Mode::Meshes | Mode::Tiles => 1,
         Mode::Anim => 2,
         Mode::Compose => 3,
@@ -110,8 +110,10 @@ impl Plugin for NoticePlugin {
                     paint_journal.after(record_problems).after(record_steps),
                     // After the verbs, so a problem raised this frame is on screen this frame.
                     paint_notices.after(keys::Phase::Act),
-                    // And after the paint, so a toast is raised in the frame its refusal is.
-                    (raise_toast, mark_the_words).chain().after(paint_notices),
+                    // And after the paint, so a toast is raised in the frame its refusal is. **Before gooey's style set** (UI-R06, #336):
+                    // gooey gives a toast its entrance (the slide in from its edge, `begin_entrances`) in the frame it first sees it, and a
+                    // toast raised after that set stood at its place for one drawn frame and then jumped to where the slide begins.
+                    (raise_toast, mark_the_words).chain().after(paint_notices).before(bevy_gooey::GooeySystems::Style),
                     finish_show,
                 ),)
                     .run_if(in_state(crate::screen::Screen::Editor)),
@@ -164,7 +166,7 @@ fn paint_notices(mode: Res<Mode>, tabs: TabStatuses, mut showing: ResMut<Showing
     let TabStatuses { editor, import, bench, compose } = tabs;
     let tab = *mode;
     let status = match tab {
-        Mode::Map => &editor.status,
+        Mode::Map | Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files => &editor.status,
         // **Both tabs report through `ImportState`.** The Tiles tab's own verbs write there too —
         // one status line for one file's worth of work, rather than a second channel to keep in step.
         Mode::Meshes | Mode::Tiles => &import.status,
@@ -300,7 +302,7 @@ fn dismiss(
         return;
     }
     match *mode {
-        Mode::Map => {}
+        Mode::Map | Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files => {}
         Mode::Meshes | Mode::Tiles => import.status.dismiss(),
         Mode::Anim => bench.status.dismiss(),
         Mode::Compose => compose.status.dismiss(),
@@ -356,7 +358,7 @@ fn copy_out(
     // rather than a helper returning `&mut Status`, because four `ResMut` params cannot be handed
     // to one function and returned from it without borrowing all four for the rest of the system.
     let status: &mut crate::chrome::Status = match tab {
-        Mode::Map => &mut editor.status,
+        Mode::Map | Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files => &mut editor.status,
         Mode::Meshes | Mode::Tiles => &mut import.status,
         Mode::Anim => &mut bench.status,
         Mode::Compose => &mut compose.status,
@@ -470,28 +472,28 @@ fn show(world: &mut World, id: &str) {
     let on_map = world.get_resource::<crate::project::OpenMap>().is_some_and(|o| o.map.placements.iter().any(|p| p.id == id));
     let in_library = world.get_resource::<crate::project::Project>().is_some_and(|p| p.library.get(id).is_some());
     let (door, tab) = if on_map {
-        (crate::tiles::Door::Map, None)
+        (crate::workspace::Workspace::Map, None)
     } else if in_library {
-        (crate::tiles::Door::Kit, Some(Mode::Meshes))
+        (crate::workspace::Workspace::Kit, Some(Mode::Meshes))
     } else {
         world.resource_mut::<crate::editor::EditorState>().status.note(format!("`{id}` is not on this map or in the library any more"));
         return;
     };
-    let here = world.get_resource::<crate::tiles::Door>() == Some(&door) && tab.is_none_or(|t| world.get_resource::<Mode>() == Some(&t));
+    let here = world.get_resource::<crate::workspace::Workspace>() == Some(&door) && tab.is_none_or(|t| world.get_resource::<Mode>() == Some(&t));
     if !here {
         crate::editor::open_door(world, door, tab);
     }
     world.spawn(ShowAfterDoor(id.to_owned()));
 }
 
-/// **What Show is waiting to do once the door it asked for is crossed.** A door crossing resets the
+/// **What Show is waiting to do once the door it asked for is crossed.** A door switching resets the
 /// state a selection lives in (`ImportState`, `TargetLock` and the status line are the door's own), so
 /// the selection is made on the far side. A component and not a resource: a resource would need a
 /// classification of what a door does to it, and this is gone in a frame or two.
 #[derive(Component)]
 struct ShowAfterDoor(String);
 
-/// **Select what Show named, once no door is waiting.** A crossing that was asked for and did not
+/// **Select what Show named, once no door is waiting.** A switching that was asked for and did not
 /// happen (the person answered "stay" to the leaving question) leaves nothing selected and says nothing:
 /// they chose to stay.
 fn finish_show(world: &mut World) {
@@ -506,10 +508,10 @@ fn finish_show(world: &mut World) {
     }
     for (entity, id) in waiting {
         world.entity_mut(entity).despawn();
-        let door = world.get_resource::<crate::tiles::Door>().copied();
-        if door == Some(crate::tiles::Door::Map) && crate::editor::lock_on_placement(world, &id) {
+        let door = world.get_resource::<crate::workspace::Workspace>().copied();
+        if door == Some(crate::workspace::Workspace::Map) && crate::editor::lock_on_placement(world, &id) {
             world.resource_mut::<crate::editor::EditorState>().status.note(format!("targeting `{id}`, which the refusal was about"));
-        } else if door == Some(crate::tiles::Door::Kit) && world.get_resource::<Mode>() == Some(&Mode::Meshes) {
+        } else if door == Some(crate::workspace::Workspace::Kit) && world.get_resource::<Mode>() == Some(&Mode::Meshes) {
             world.resource_scope(|world, mut import: Mut<crate::tiles::ImportState>| {
                 if let Some(project) = world.get_resource::<crate::project::Project>() {
                     crate::editor::select_piece(&mut import, project, &id);
@@ -756,7 +758,7 @@ fn paint_journal(
                 p.spawn((
                     bevy::prelude::Text::new("no steps and nothing has gone wrong yet".to_owned()),
                     bevy::prelude::TextColor(ink.quiet),
-                    crate::chrome::font(crate::chrome::text::LABEL),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
                     crate::chrome::ProblemLogLine,
                 ));
                 return;

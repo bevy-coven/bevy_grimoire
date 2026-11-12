@@ -12,12 +12,10 @@
     {"at": 1.2, "wheel": {"y": -1, "n": 3, "at": [640, 250]}},
     {"at": 2.2, "caption": "person: scrolls down; rows are hidden above too, so the top edge fades as well"},
     {"at": 3.2, "wheel": {"y": 1, "n": 3, "at": [640, 250]}},
-    {"at": 4.2, "click_label": "bravo"},
-    {"at": 4.3, "caption": "person: one press chooses a card, and it shrinks under the press"},
-    {"at": 5.4, "type": "al"},
-    {"at": 5.5, "caption": "person: typing `al` moves focus to the card named alpha"},
-    {"at": 7.2, "click_label": "alpha"},
-    {"at": 7.32, "click_label": "alpha"},
-    {"at": 7.4, "caption": "person: a double press opens the project"}
+    {"at": 4.0, "caption": "person: one press on a card opens it, so the home is read by typing to a card"},
+    {"at": 5.0, "type": "al"},
+    {"at": 5.2, "caption": "person: typing `al` moves focus to the card named alpha, and the rail says so"},
+    {"at": 7.0, "click_label": "alpha"},
+    {"at": 7.2, "caption": "person: one press opens the project"}
   ]
 }

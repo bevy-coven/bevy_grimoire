@@ -260,8 +260,12 @@ pub struct EditorState {
     /// same rule the chooser's delete prompt follows, where `Y` agrees and `Enter` does not.
     pub leaving: bool,
     /// **A door an operation asked for, waiting to be crossed to.** `door_open` sets it, from the keys
-    /// and from an agent alike. It is taken by the crossing, or held while the leaving question is up.
+    /// and from an agent alike. It is taken by the switching, or held while the leaving question is up.
     pub door_request: Option<DoorRequest>,
+    /// **A map a document tab asked for, waiting for the person's answer about the open one**
+    /// (NV-04, #381). Held while the leaving question is up, taken by [`answer_the_switch_prompt`]:
+    /// a decline drops it, and an agreed save opens it, as choosing it from the project page does.
+    pub map_request: Option<String>,
     /// **A command of the project's waiting for the person to allow it** (Send, Play), and where their
     /// trust store is. See [`crate::trusted`].
     pub trust: crate::trusted::TrustState,
@@ -915,8 +919,14 @@ pub fn arm_tool(state: &mut EditorState, tool: Tool, chord: &str) -> String {
 /// The view travels in `Ctx::view` and the operation's answer is written back; a refusal is said where a
 /// refused key already is. Nothing here restates the arming rule — `tool_arm` calls the same
 /// [`arm_tool_in`] this file does.
-fn arm_through_operation(state: &mut EditorState, tool: Tool, chord: &str) -> String {
+///
+/// **The project's root travels too**, because the operation is logged and a log with no place to be
+/// written is a refusal that takes the change back (#224): the clone and run keys said "the operation could
+/// not be logged" over the editor while the tool was armed all the same. The sentence is the key's own
+/// ([`arm_sentence`] with its chord), so what the person reads has not changed.
+fn arm_through_operation(state: &mut EditorState, project: &Project, tool: Tool, chord: &str) -> String {
     let mut ctx = crate::ops::Ctx {
+        root: Some(project.root.clone()),
         source: crate::ops::Source::Human,
         session: crate::ops::session_id(),
         view: Some(crate::ops_view::View { tool: state.tool, ..Default::default() }),
@@ -924,16 +934,12 @@ fn arm_through_operation(state: &mut EditorState, tool: Tool, chord: &str) -> St
     };
     let params = serde_json::json!({ "tool": crate::ops_view::tool_name(tool) });
     let outcome = crate::ops::dispatch(&mut ctx, "tool_arm", &params);
-    if let Some(view) = ctx.view {
-        state.tool = view.tool;
-    }
     match outcome {
-        Ok(crate::ops::Applied::Done { outcome, .. }) => {
-            if outcome.summary.is_empty() {
-                crate::editor::arm_tool_in(&mut state.tool, tool, chord)
-            } else {
-                outcome.summary
+        Ok(crate::ops::Applied::Done { .. }) => {
+            if let Some(view) = ctx.view {
+                state.tool = view.tool;
             }
+            arm_sentence(tool, state.tool == tool, chord)
         }
         Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
             state.status.problem(e.0);
@@ -947,12 +953,18 @@ fn arm_through_operation(state: &mut EditorState, tool: Tool, chord: &str) -> St
 pub fn arm_tool_in(slot: &mut Tool, tool: Tool, chord: &str) -> String {
     let was = *slot;
     *slot = if was == tool { Tool::Place } else { tool };
-    let on = *slot == tool;
+    arm_sentence(tool, *slot == tool, chord)
+}
+
+/// **What arming a tool, or putting it down, says.** `chord` is how the caller stops the tool; an agent has
+/// none, so the sentence then names `Esc` alone instead of leaving a gap where the key would be.
+fn arm_sentence(tool: Tool, on: bool, chord: &str) -> String {
+    let stop = if chord.is_empty() { "Esc".to_owned() } else { format!("{chord} or Esc") };
     match (tool, on) {
-        (Tool::Remove, true) => format!("removal mode: click a piece, or drag a box. {chord} or Esc to stop."),
+        (Tool::Remove, true) => format!("removal mode: click a piece, or drag a box. {stop} to stop."),
         (Tool::Remove, false) => "removal mode off".to_owned(),
         (Tool::Move, true) => format!(
-            "move mode: click a piece to pick it up, click again to put it down. {chord} or Esc to stop."
+            "move mode: click a piece to pick it up, click again to put it down. {stop} to stop."
         ),
         (Tool::Move, false) => "move mode off".to_owned(),
         (Tool::Clone, true) => {
@@ -973,7 +985,7 @@ pub fn arm_tool_in(slot: &mut Tool, tool: Tool, chord: &str) -> String {
 /// header moved the wall. The id, never an index, for `MoveDrag`'s reason; the cell, so the lock
 /// lapses the moment the cursor walks away rather than following it around the map.
 #[derive(Resource, Default)]
-pub struct TargetLock(Option<(String, (f32, f32))>, bool);
+pub struct TargetLock(Option<(String, (f32, f32))>, bool, std::collections::BTreeSet<String>);
 
 impl TargetLock {
     /// The id of the placement the lock holds, if it holds one. The agent's `"selection"` frame
@@ -988,6 +1000,20 @@ impl TargetLock {
     pub(crate) fn hold(&mut self, id: &str, at: (f32, f32)) {
         self.0 = Some((id.to_owned(), at));
         self.1 = true;
+    }
+
+    /// **The ids of the pieces the outliner's eye has taken out of the viewport**, mirrored here by
+    /// `outliner::mirror_the_unseen` because every piece-verb already carries this resource into
+    /// [`under_cursor_target`]: a key aimed at the cursor must not act on what is not drawn (UI-51, #237).
+    pub fn is_unseen(&self, id: &str) -> bool {
+        self.2.contains(id)
+    }
+
+    /// Replace the mirrored set, without marking the lock changed (it is read by the pick, never watched).
+    pub(crate) fn set_unseen(this: &mut ResMut<TargetLock>, ids: std::collections::BTreeSet<String>) {
+        if this.2 != ids {
+            this.bypass_change_detection().2 = ids;
+        }
     }
 }
 
@@ -1394,6 +1420,7 @@ impl Default for EditorState {
             tool: Tool::default(),
             leaving: false,
             door_request: None,
+            map_request: None,
             trust: crate::trusted::TrustState::default(),
             guide: crate::agent_guide::GuideTrust::default(),
         }
@@ -1586,8 +1613,16 @@ struct PlanList;
 struct NotesList;
 
 /// **The Reload panel's list** (#203): whether a game is connected, then a line per file with news.
+///
+/// `pub` since UI-61 (#247): the panel is a `bevy_gooey` dock panel now, so the column the lines go in
+/// is spawned by `ui::register_the_shell_panels` — a different module, on a different path.
 #[derive(Component, Clone, Copy)]
-struct ReloadList;
+pub struct ReloadList;
+
+/// **The Reload panel itself** (UI-61, #247): the page gooey's bottom dock builds, so a test can say
+/// "the reload panel is in the dock" rather than "some column holds these words".
+#[derive(Component, Clone, Copy)]
+pub struct ReloadPanel;
 
 /// **One row of the Notes list**, by the id the map's `.notes.yaml` names it.
 ///
@@ -2109,6 +2144,7 @@ fn drive_note(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut state: ResMut<EditorState>,
     mut note_box: ResMut<NoteBox>,
+    lock: Option<Res<TargetLock>>,
 ) {
     // A box of Shift-clicked pieces stays open to take more pieces; any other box holds the keys.
     let collecting = note_box.draft.as_ref().is_some_and(|d| d.editing.is_none() && !d.pieces.is_empty());
@@ -2134,7 +2170,7 @@ fn drive_note(
     let shift = keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
     if shift && mouse.just_pressed(MouseButton::Left) {
         // Shift-click: a piece joins (or leaves) the note's subject; the box opens at the selection.
-        match project.as_deref().and_then(|project| pick_at(project, &open, at)) {
+        match project.as_deref().and_then(|project| pick_at_seen(project, &open, at, &|p| lock.as_deref().is_some_and(|l| l.is_unseen(&p.id)))) {
             Some(i) => {
                 let id = open.map.placements[i].id.clone();
                 note_pick_piece(&open, &mut state, &mut note_box, id, true);
@@ -2573,7 +2609,7 @@ impl Plugin for EditorPlugin {
                     crate::light_overlay::follow_the_light_map_tick,
                     crate::light_overlay::draw_light_overlay
                         .after(crate::light_overlay::refresh_light_overlay)
-                        .run_if(in_map_mode)
+                        .run_if(in_map_or_world_mode)
                         .run_if(resource_exists::<OpenMap>)
                         .run_if(resource_exists::<Project>),
                 ),
@@ -2585,10 +2621,28 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::piece_menu::PieceMenuPlugin);
         app.add_plugins(crate::palette_menu::PaletteMenuPlugin);
         app.add_plugins(crate::command_palette::CommandPalettePlugin);
+        // **Go to anything** (NV-05, #382): the index the everything-finder searches, and the `>` that
+        // swaps it to the command registry. The palette's own plugin is above it, because this one's
+        // source swap reads the field that plugin spawns.
+        app.add_plugins(crate::goto::GotoPlugin);
+        // **Back and Forward across every reveal** (NV-06, #383): the one history, pushed where a view
+        // is about to move for the person. Registered after `RevealPlugin` and `FollowPlugin`, whose
+        // systems are its writers.
+        app.add_plugins(crate::nav::NavPlugin);
         app.add_plugins(crate::toolbar::ToolbarPlugin);
         app.add_plugins(crate::empty_state::EmptyStatePlugin);
         app.add_plugins(crate::add_meshes::AddMeshesPlugin);
         app.add_plugins(crate::menu_bar::MenuBarPlugin);
+        app.add_plugins(crate::activity_bar::ActivityBarPlugin);
+        // **The World and Sound workspaces' panels** (NV-08, #385): spawned when their workspace is entered.
+        app.add_plugins(crate::workspace_panels::WorkspacePanelsPlugin);
+        // **The Game workspace** (NV-09, #386): the running game's panel, its log and its state, and the watching of it.
+        app.add_plugins(crate::game_view::GameViewPlugin);
+        // **The Agent workspace** (NV-10, #387): the Familiar's block and history, in a workspace of their own.
+        app.add_plugins(crate::agent_view::AgentViewPlugin);
+        // **The Files workspace** (GD-11, #373): the file tree and the code editor.
+        app.add_plugins(crate::files::FilesPlugin);
+        app.add_plugins(crate::files_panel::FilesPanelPlugin);
         app.add_plugins(crate::app_verbs::AppVerbsPlugin);
         // **Each panel header's "?"** (UI-91, #257): the guide page that covers what the panel holds.
         app.add_plugins(crate::help::HelpPlugin);
@@ -2611,6 +2665,8 @@ impl Plugin for EditorPlugin {
         // relaunch a successful build makes.
         app.add_plugins(crate::build_view::BuildPlugin);
         app.add_plugins(crate::shell_view::ShellViewPlugin);
+        // **The documents each workspace has open** (NV-04, #381): tabs, restored with the project.
+        app.add_plugins(crate::session::SessionPlugin);
         app.add_observer(drop_a_piece_on_the_map);
         app.add_plugins(crate::selection::SelectionPlugin);
         #[cfg(feature = "bevy_siren")]
@@ -2642,7 +2698,7 @@ impl Plugin for EditorPlugin {
             .init_resource::<Rung>()
             .init_resource::<Proposal>()
             // **A resource, not a field on `EditorState`.** `EditorState` is rebuilt on every door
-            // crossing and the sync's `Local` is not, so a counter living there disagreed with the
+            // switching and the sync's `Local` is not, so a counter living there disagreed with the
             // thing comparing against it — see [`ProposalClock`].
             .init_resource::<ProposalClock>()
             .init_resource::<FineAnchor>()
@@ -2715,7 +2771,7 @@ impl Plugin for EditorPlugin {
         );
 
         // **Resources always; systems only on the door that has a map** — as a run condition, not
-        // a check here. See `Door::map_door_is_open` for what reading the door at build time cost.
+        // a check here. See `Workspace::map_is_open` for what reading the door at build time cost.
         app.add_systems(
                 Update,
                 ((
@@ -2729,7 +2785,7 @@ impl Plugin for EditorPlugin {
                     sense_fine_anchor.in_set(keys::Phase::Sense),
                 ),)
                     .run_if(in_state(crate::screen::Screen::Editor))
-                    .run_if(crate::tiles::Door::map_door_is_open),
+                    .run_if(crate::workspace::Workspace::map_is_open),
             )
             .add_observer(crate::filter::on_click)
             // **The way back is not the Maps door's**, and gating it there was how the Kit and Rigs
@@ -2747,27 +2803,26 @@ impl Plugin for EditorPlugin {
                 )
                     .run_if(in_state(crate::screen::Screen::Editor)),
             )
-            // **The door switch, and it is on every door.** The key says *"the other door"*, so it
-            // has to be live in both — and the crossing takes the project out of the world, which is
-            // why it is an exclusive system.
+            // **The workspace chords, and they are live in every workspace**, and the switching takes
+            // the project out of the world, which is why it is an exclusive system.
             //
             // **In `PreUpdate`, and that is the whole design.**
             //
             // **The live test found why.** The editor's Map-door systems are gated by
-            // `Door::map_door_is_open` — a **run condition on the tuple**, and Bevy evaluates a
+            // `Workspace::map_is_open` — a **run condition on the tuple**, and Bevy evaluates a
             // *set's* conditions **once per schedule** (`schedule/executor/multi_threaded.rs`:
-            // `evaluated_sets`). So a crossing that ran inside `Update` left that condition
+            // `evaluated_sets`). So a switching that ran inside `Update` left that condition
             // evaluated against the *old* door, and four systems that take a `Res<OpenMap>` ran on
             // the Kit door — which has no map — and Bevy 0.19 **panics a system whose `Res<T>` is
             // missing** rather than skipping it.
             //
             // **`PreUpdate` runs before `StateTransition`, which runs before `Update`.** So the
-            // crossing reads the key in `PreUpdate`, sets the pending state, and the transition —
+            // switching reads the key in `PreUpdate`, sets the pending state, and the transition —
             // the teardown and the rebuild — happens before any `Update` system evaluates its
             // conditions against the new door.
             .add_systems(
                 PreUpdate,
-                switch_door.run_if(in_state(crate::screen::Screen::Editor)),
+                go_to_a_workspace.run_if(in_state(crate::screen::Screen::Editor)),
             )
             // **The door switch's own answer**, and it is in `PreUpdate` for the same reason the
             // switch is: it crosses.
@@ -2799,7 +2854,7 @@ impl Plugin for EditorPlugin {
                     // The Map door's own furniture: a palette bound to a map, the bounds floor, the
                     // rows already placed. `spawn_existing` takes `Res<OpenMap>`, which no other
                     // door has.
-                    .run_if(crate::tiles::Door::map_door_is_open),
+                    .run_if(crate::workspace::Workspace::map_is_open),
             )
             .add_systems(
                 Update,
@@ -2818,7 +2873,7 @@ impl Plugin for EditorPlugin {
                         // goes down, rather than one where it is invisible and still eating keys.
                         leaving_a_tab_puts_the_name_prompt_down.in_set(keys::Phase::Sense),
                     ),
-                    (size_edit_keys, family_edit_keys, data_edit_keys, terrain_edit_keys, crowd_edit_keys, drop_reference).in_set(keys::Phase::Text),
+                    (size_edit_keys, family_edit_keys, data_edit_keys, crowd_edit_keys, drop_reference).in_set(keys::Phase::Text),
                     // No `not_typing`, no `in_map_mode`: `keys::just_pressed` now refuses on both
                     // counts, and a run condition repeating it would be a second census. Dropping
                     // `in_map_mode` also makes `Cmd+S` and `Cmd+Z` work from every tab, which is what
@@ -2898,7 +2953,7 @@ impl Plugin for EditorPlugin {
                             .after(apply_proposal),
                         draw_proposal,
                     ),
-                    (refresh_status, refresh_history),
+                    (refresh_status, refresh_history, keep_now_in_view),
                     // Nested — the tuple is at its twenty-system cap, and these are one rule: what
                     // the keys move must be on screen (the palette's row, the note box's text).
                     (
@@ -2937,7 +2992,6 @@ impl Plugin for EditorPlugin {
                         refresh_size,
                         refresh_family,
                         refresh_data,
-                        refresh_terrain,
                         refresh_crowd,
                         refresh_data_list,
                         refresh_notes_list,
@@ -2960,7 +3014,20 @@ impl Plugin for EditorPlugin {
                     (draw_edge_faults, draw_crowd_heat, crate::balloon::show_balloon).run_if(in_map_mode),
                 ),)
                     .run_if(in_state(crate::screen::Screen::Editor))
-                    .run_if(crate::tiles::Door::map_door_is_open),
+                    .run_if(crate::workspace::Workspace::map_is_open),
+            )
+            // **After gooey has rebound its pool** (UI-53, #239, M4): the rows are reused as the list scrolls, so the
+            // line the editor stands on must be named on whichever row carries it *after* that rebind, not before.
+            .add_systems(
+                Update,
+                // **Every frame, and the body costs a comparison per drawn row.** A settled list has about eight, and
+                // gooey recycles its rows as the list scrolls, so a row can become the current line without
+                // `EditorState` changing at all — which is why this cannot be gated on the change flag.
+                (
+                    mark_the_current_line.after(bevy_gooey::GooeySystems::Style),
+                    hand_the_wheel_on,
+                    hold_the_history_tall,
+                ),
             )
             // **Paint follows the map, not the edit.** A piece's drawn paint can change when a
             // different piece is laid, so this runs on every map change and redraws only what went
@@ -2969,7 +3036,16 @@ impl Plugin for EditorPlugin {
                 Update,
                 relevel_placements
                     .run_if(in_state(crate::screen::Screen::Editor))
-                    .run_if(crate::tiles::Door::map_door_is_open),
+                    .run_if(crate::workspace::Workspace::map_is_open),
+            )
+            // **The terrain line lives in the World workspace** (NV-08, #385), so its readout and its keys run
+            // there and nowhere else: the Map's INSPECTOR no longer draws it. Not behind `map_is_open`, which is
+            // the Map's alone; both take `Option` of the map, so a workspace with none is quiet.
+            .add_systems(
+                Update,
+                (terrain_edit_keys.in_set(keys::Phase::Text), refresh_terrain)
+                    .run_if(in_state(crate::screen::Screen::Editor))
+                    .run_if(crate::workspace::Workspace::world_is_open),
             )
             // **The ghost pair is NOT map-door gated** — the map block above was swallowing it. A
             // tile's picked-but-not-dropped mesh (`StagedTile` + `Ghost`) is assembled on the Tiles
@@ -2990,7 +3066,8 @@ impl Plugin for EditorPlugin {
             .add_observer(on_terrain_field_click)
             .add_observer(on_crowd_field_click)
             .add_observer(on_script_row_click)
-            .add_observer(on_notes_click);
+            .add_observer(on_notes_click)
+            .add_observer(history_row_clicked);
     }
 }
 
@@ -3040,7 +3117,7 @@ fn spawn_cost_readout(mut commands: Commands, frame: Res<crate::chrome::Frame>) 
             p.spawn((
                 Text::new(""),
                 TextColor(crate::chrome::ink().dim),
-                crate::chrome::font(crate::chrome::text::BODY),
+                crate::chrome::typed(crate::chrome::text::BODY),
                 TriangleTotal,
             ));
         });
@@ -3074,11 +3151,14 @@ fn spawn_cost_readout(mut commands: Commands, frame: Res<crate::chrome::Frame>) 
 /// **`dirty`, not `&OpenMap`, because two of the three doors have no map.** The Kit and Rigs doors
 /// carry no `OpenMap` at all (`args::Opened::insert_into` removes it), so a signature naming one
 /// forced every caller — and therefore every route back to the menu — behind
-/// `Door::map_door_is_open`. That left the Kit door with a `‹ kits & maps` button that lit on hover
+/// `Workspace::map_is_open`. That left the Kit door with a `‹ kits & maps` button that lit on hover
 /// and did nothing, a `Cmd+O` the shortcut overlay advertised and no system handled, and no exit but
 /// closing the window. Nothing to lose is `false`, which is the clean-map question.
 pub fn leave_for_menu(dirty: bool, state: &mut EditorState, confirm: &mut crate::confirm::Confirm) {
     state.leaving = true;
+    // **A file with unsaved edits is unsaved work too** (GD-11, #373): the Files workspace's text is asked about
+    // beside the map's, and the answers save or discard it with the map.
+    let dirty = dirty || crate::files::any_unsaved();
     // **One question, two keys, wherever it is asked** — see `crate::confirm`. This used to be a
     // line in the status bar answered by `S` save, `D` discard or `Esc` stay, while the chooser's
     // delete answered to `Y` and the labeller's overwrite answered to `Enter`. Three questions,
@@ -3162,7 +3242,7 @@ pub fn save_and_leave(
 /// **`Cmd+O` leaves this door for the chooser**, from whichever door is open.
 ///
 /// Its own system rather than a branch in [`keys`], because `keys` is Maps-door furniture — it takes
-/// `ResMut<OpenMap>` and `ResMut<Project>` and is registered behind `Door::map_door_is_open` — while
+/// `ResMut<OpenMap>` and `ResMut<Project>` and is registered behind `Workspace::map_is_open` — while
 /// `Action::MainMenu` is `Context::Global` in the census and `chrome::shortcut_hint` prints it on
 /// every panel. A globally advertised chord handled on one door in three is the dead key `keys.rs`
 /// refuses to ship, and it was the only chord out of the Kit door.
@@ -3211,48 +3291,53 @@ fn discard_changes(open: &mut OpenMap, project: &Project) -> Result<(), String> 
     Ok(())
 }
 
-/// **Cross to the other door, keeping the project.**
+/// **Go to the workspace a chord names, keeping the project.**
 ///
-/// **The same verb on both doors.** The key says *"the other door"* and never names a direction — a
-/// key that meant "the Map door" would mean the opposite thing on the Map door, which is a mode
-/// error wearing a chord. Braem & Egner's *Getting a grip on cognitive flexibility* (2018) is the
-/// instruction: a switching cue should be *"a general readiness to switch between tasks rather
-/// than to switch to one particular alternative task"*.
+/// `Cmd`/`Ctrl`+`1`…`9` are the nine `workspace.<id>` commands, and each is the same `door_open`
+/// operation the menu, the palette and an agent call, so there is one switch and no second one for the
+/// key (#379).
 ///
-/// **It asks before it goes, exactly as the menu route does.** Leaving the Map door for the Kit
-/// door leaves the map, and the map may hold unsaved edits — so the same question is raised, and
-/// the same answer path saves it.
+/// **It asks before it goes, exactly as the menu route does.** Leaving the Map workspace for the Kit
+/// leaves the map, and the map may hold unsaved edits — so the same question is raised, and the same
+/// answer path saves it.
 ///
-/// **A refusal is a refusal.** A crossing that cannot complete says so and **stays put**: the same
-/// door, the same project, the same map, the same arm. See [`crate::screen::cross`].
-fn switch_door(world: &mut World) {
-    // **The key first, and it is read the way every other verb reads it.**
-    let pressed = {
-        let keyboard = world.resource::<ButtonInput<KeyCode>>();
-        let live = *world.resource::<keys::Live>();
-        keys::just_pressed(keyboard, live, Action::SwitchDoor)
-    };
-    if !pressed {
-        return;
-    }
-    // **A prompt still owns the keyboard while it is up.**
+/// **A refusal is a refusal.** A switching that cannot complete says so and **stays put**: the same
+/// workspace, the same project, the same map, the same arm. See [`crate::screen::cross`].
+fn go_to_a_workspace(world: &mut World) {
+    // **A prompt still owns the keyboard while it is up**, and it owns it for the workspace chords
+    // too: a switch taken under the leaving question would change the screen a person is being
+    // asked about.
     if world.resource::<EditorState>().leaving {
         return;
     }
-    cross_to_the_other_door(world);
+    // **One read of the keyboard answers the nine workspace chords.** Each chord is one row of the
+    // census, so the search is over `Action::ALL` rather than a second list — and the order it
+    // searches is the order the bindings are declared in, which is the order the strip and the menus
+    // show.
+    let workspace = {
+        let keyboard = world.resource::<ButtonInput<KeyCode>>();
+        let live = *world.resource::<keys::Live>();
+        keys::Action::ALL.into_iter().find_map(|action| {
+            let target = action.workspace()?;
+            keys::just_pressed(keyboard, live, action).then_some(target)
+        })
+    };
+    if let Some(workspace) = workspace {
+        open_door(world, workspace, None);
+    }
 }
 
-/// **Cross to the other door** — what `=` does and what a click on the strip's name of it does (#288),
-/// so the two cannot disagree about which door is the other.
+/// **Cross to the other workspace** — what a click on the strip's name of it does (#288). `=` was the key
+/// for it until the workspace chords replaced it (#379), so the strip's cue is now the only way here.
 pub fn cross_to_the_other_door(world: &mut World) {
-    let Some(door) = world.get_resource::<crate::tiles::Door>().copied() else {
+    let Some(workspace) = world.get_resource::<crate::workspace::Workspace>().copied() else {
         return;
     };
-    let to = match door {
-        crate::tiles::Door::Map => crate::tiles::Door::Kit,
-        _ => crate::tiles::Door::Map,
+    let to = match workspace {
+        crate::workspace::Workspace::Map => crate::workspace::Workspace::Kit,
+        _ => crate::workspace::Workspace::Map,
     };
-    // **The crossing is the operation's**, so the key and the agent take one path. `open_door` runs
+    // **The switching is the operation's**, so the key and the agent take one path. `open_door` runs
     // `door_open`, asks the leaving question when the map is unsaved, and crosses.
     open_door(world, to, None);
 }
@@ -3278,6 +3363,7 @@ fn answer_the_leaving_prompt(
     mut state: ResMut<EditorState>,
     mut next: ResMut<NextState<crate::screen::Screen>>,
     mut confirm: ResMut<crate::confirm::Confirm>,
+    mut files: Option<ResMut<crate::files::Files>>,
 ) {
     let Some(choice) = confirm.answer_choice(crate::confirm::Asked::LeaveMap) else {
         return;
@@ -3286,6 +3372,15 @@ fn answer_the_leaving_prompt(
     if choice == crate::confirm::Choice::No {
         state.status.note("staying on this map".to_owned());
         return;
+    }
+    // **The files go the way the map goes**: saved with it, or let go with it; a file that will not save keeps the person here.
+    if let (Some(files), Some(project)) = (files.as_deref_mut(), project.as_deref()) {
+        if choice == crate::confirm::Choice::Alt {
+            files.discard_all(&project.root);
+        } else if let Err(e) = files.save_all(&project.root) {
+            state.status.problem(format!("NOT SAVED: {e} — staying on this map"));
+            return;
+        }
     }
     let mut open = open;
     if choice == crate::confirm::Choice::Alt
@@ -3310,11 +3405,11 @@ fn answer_the_leaving_prompt(
 /// **Answer the door switch's own question** — and it goes to the **other door**, not the menu.
 ///
 /// **A question of its own**, because the two answers go to different places: leaving goes to the
-/// menu and crossing goes to the other door, and one question with two destinations would need
+/// menu and switching goes to the other door, and one question with two destinations would need
 /// the answer to know which question it was answering.
 ///
 /// **Saving is the going**, exactly as it is on the menu's route — so a refused save keeps the
-/// author here with the reason, rather than crossing on a map that was never written.
+/// author here with the reason, rather than switching on a map that was never written.
 fn answer_the_switch_prompt(world: &mut World) {
     let Some(agreed) = world
         .resource_mut::<crate::confirm::Confirm>()
@@ -3325,6 +3420,7 @@ fn answer_the_switch_prompt(world: &mut World) {
     // **The request waits in `door_request` while the question is up**, so it is taken here whatever
     // the answer: a decline drops it, and an agreed save crosses to it.
     let request = world.resource_mut::<EditorState>().door_request.take();
+    let map_request = world.resource_mut::<EditorState>().map_request.take();
     world.resource_mut::<EditorState>().leaving = false;
     if !agreed {
         world
@@ -3375,16 +3471,21 @@ fn answer_the_switch_prompt(world: &mut World) {
     if let Some(request) = request {
         enter_door(world, request);
     }
+    if let Some(name) = map_request
+        && let Err(e) = crate::session::open_map_now(world, &name)
+    {
+        world.resource_mut::<EditorState>().status.problem(format!("NOT OPENED: {e}"));
+    }
 }
 
 /// **A door an operation asked for, waiting to be crossed to.**
 ///
-/// `door_open` answers with a door and, optionally, a tab. The keys reach the crossing through
+/// `door_open` answers with a door and, optionally, a tab. The keys reach the switching through
 /// [`open_door`] at once; an agent's request over BRP is stored in [`EditorState::door_request`] and
 /// crossed in the next frame by [`apply_pending_door`].
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct DoorRequest {
-    pub door: crate::tiles::Door,
+    pub workspace: crate::workspace::Workspace,
     pub tab: Option<crate::tiles::Mode>,
 }
 
@@ -3392,7 +3493,7 @@ pub struct DoorRequest {
 /// sentence, so a person and an agent read the same reason.
 pub const LEAVING_QUESTION_REFUSAL: &str = "the editor is asking the person a question first (\"Leave this map?\"). The person answers it, then the door can be asked for again.";
 /// **A door is already waiting.** The editor crosses to it first; a second request would replace it.
-pub const DOOR_ALREADY_WAITING_REFUSAL: &str = "another door is already waiting to be crossed to. The editor crosses to it first, then this door can be asked for.";
+pub const WORKSPACE_ALREADY_WAITING_REFUSAL: &str = "another door is already waiting to be crossed to. The editor crosses to it first, then this door can be asked for.";
 
 /// **Why a door may not be asked for right now, or `None` when it may.** `asking` is whether any
 /// question is on screen, the leaving question or another.
@@ -3400,7 +3501,7 @@ pub fn door_refusal(state: &EditorState, asking: bool) -> Option<&'static str> {
     if asking || state.leaving {
         Some(LEAVING_QUESTION_REFUSAL)
     } else if state.door_request.is_some() {
-        Some(DOOR_ALREADY_WAITING_REFUSAL)
+        Some(WORKSPACE_ALREADY_WAITING_REFUSAL)
     } else {
         None
     }
@@ -3416,14 +3517,11 @@ pub fn request_door(state: &mut EditorState, after: Option<&serde_json::Value>) 
     let Some(after) = after else {
         return;
     };
-    let door = after
+    let workspace = after
         .get("door")
+        .or_else(|| after.get("workspace"))
         .and_then(serde_json::Value::as_str)
-        .and_then(|d| {
-            crate::tiles::Door::ALL
-                .into_iter()
-                .find(|x| x.label().eq_ignore_ascii_case(d))
-        });
+        .and_then(crate::workspace::Workspace::from_flag);
     let tab = after
         .get("tab")
         .and_then(serde_json::Value::as_str)
@@ -3433,16 +3531,16 @@ pub fn request_door(state: &mut EditorState, after: Option<&serde_json::Value>) 
                 .copied()
                 .find(|m| m.label().eq_ignore_ascii_case(t))
         });
-    if let Some(door) = door {
-        state.door_request = Some(DoorRequest { door, tab });
+    if let Some(workspace) = workspace {
+        state.door_request = Some(DoorRequest { workspace, tab });
     }
 }
 
 /// **Open a door through the registered `door_open` operation.** The keys and the tab shortcuts call
 /// this, so a key and an agent get the same answer about what may be opened.
-pub fn open_door(world: &mut World, door: crate::tiles::Door, tab: Option<crate::tiles::Mode>) {
+pub fn open_door(world: &mut World, workspace: crate::workspace::Workspace, tab: Option<crate::tiles::Mode>) {
     let params = serde_json::json!({
-        "door": door.label().to_lowercase(),
+        "door": workspace.id(),
         "tab": tab.map(|m| m.label().to_lowercase()),
     });
     // **Copies, not the world's own.** A door press changes no document. Taking the resources out and
@@ -3475,7 +3573,7 @@ pub fn open_door(world: &mut World, door: crate::tiles::Door, tab: Option<crate:
 
 /// **Carry out the door an agent asked for**, when the editor is not asking a question.
 fn apply_pending_door(world: &mut World) {
-    // **A question on screen owns the frame (gap 6).** A crossing taken under any question acts on an
+    // **A question on screen owns the frame (gap 6).** A switching taken under any question acts on an
     // answer the person has not given, so the stored door waits until the question is answered.
     let asking = world
         .get_resource::<crate::confirm::Confirm>()
@@ -3493,11 +3591,11 @@ fn apply_door_request(world: &mut World) {
     let Some(request) = world.resource_mut::<EditorState>().door_request.take() else {
         return;
     };
-    let Some(current) = world.get_resource::<crate::tiles::Door>().copied() else {
+    let Some(current) = world.get_resource::<crate::workspace::Workspace>().copied() else {
         return;
     };
     let dirty = world.get_resource::<OpenMap>().is_some_and(|o| o.dirty());
-    if request.door != current && dirty {
+    if request.workspace != current && dirty {
         // **The request waits for the answer**, and the leaving question owns the next frame.
         world.resource_mut::<EditorState>().door_request = Some(request);
         world.resource_mut::<EditorState>().leaving = true;
@@ -3513,24 +3611,24 @@ fn apply_door_request(world: &mut World) {
     enter_door(world, request);
 }
 
-/// **Cross to a door and enter the tab it was asked for.** A refused crossing stops here, so a tab is
+/// **Cross to a door and enter the tab it was asked for.** A refused switching stops here, so a tab is
 /// never entered on a door the author did not reach.
 fn enter_door(world: &mut World, request: DoorRequest) {
-    // **The receipt is carried across a crossing (cycle 8, gap 7).** The crossing resets
+    // **The receipt is carried across a switching (cycle 8, gap 7).** The switching resets
     // `EditorState`, which erased the receipt of whoever asked for the door: an agent's `door_open`
     // changed the window's door with no word of who did it. It is posted again once the tab is
     // entered, so it stays the last word the person reads. Problems are not carried: the journal holds
-    // them already. A tab switch with no crossing still clears the note, as it always has.
+    // them already. A tab switch with no switching still clears the note, as it always has.
     let receipt = world.resource::<EditorState>().status.note_text().to_owned();
     let mut crossed = false;
-    if world.get_resource::<crate::tiles::Door>().copied() != Some(request.door) {
-        match crate::screen::cross(world, request.door) {
+    if world.get_resource::<crate::workspace::Workspace>().copied() != Some(request.workspace) {
+        match crate::screen::cross(world, request.workspace) {
             Ok(()) => {
                 crossed = true;
                 world
                     .resource_mut::<EditorState>()
                     .status
-                    .note(format!("the {} door", request.door.label().to_lowercase()));
+                    .note(format!("the {} workspace", request.workspace.title().to_lowercase()));
             }
             Err(e) => {
                 world
@@ -3710,13 +3808,16 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                         // Rounded up to a whole pixel: the text's measured box is rounded up, and
                         // an exact reserve laid out one pixel short of a two-line receipt.
                         min_height: match field {
-                            Field::Last => {
-                                Val::Px((RECEIPT_LINES * crate::chrome::BODY_LINE_H).ceil())
-                            }
+                            Field::Last => Val::Px(crate::chrome::LinesRoom { lines: RECEIPT_LINES, pad: 0.0, fixed: false }.at(crate::chrome::text_scale())),
                             _ => Val::Auto,
                         },
                         ..default()
                     });
+                    if field == Field::Last {
+                        // The receipt's two-line room follows the text size, or a receipt at 200%
+                        // is clipped by the reserve that did not grow (UI-73, #251).
+                        spawned.insert(crate::chrome::LinesRoom { lines: RECEIPT_LINES, pad: 0.0, fixed: false });
+                    }
                     if let Some(id) = field.control() {
                         spawned.insert(crate::chrome::Control(id));
                     }
@@ -3815,77 +3916,8 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 );
             });
 
-            // **Play (#97):** start the project's game on the open map at the camera, and stop it.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(crate::ops_play::spawn_section);
-
-            // **Build (#371, GD-09):** rebuild the project's game when a change needs Rust, watching
-            // it as a background job, and relaunch on the same map when it works.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(crate::build_view::spawn_section);
-
-            // **Environment (#98):** clock scrubber and forced weather, for a project that uses `bevy_elements`.
-            #[cfg(feature = "bevy_elements")]
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(crate::environment::spawn_section);
-
-            // **Lights (#103):** the pool's budget from where the camera looks.
-            #[cfg(feature = "bevy_lights")]
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(crate::ops_pool::spawn_section);
-
-            // **Audio (S-01):** `bevy_siren`'s buses and cues, with an audition and its log.
-            #[cfg(feature = "bevy_siren")]
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(crate::audio_panel::spawn_section);
-
-            // **Light map (#103):** show or hide `bevy_light_grid`'s field over the open map.
-            #[cfg(feature = "bevy_light_grid")]
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(crate::light_overlay::spawn_section);
-
-            // **Terrain (#99).** One line: `<brush> <x> <z> <radius_m> <strength>`, e.g.
-            // `raise 12 8 6 2`. Enter sculpts the open map's ground through `terrain_stroke`.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(|s| {
-                crate::chrome::section(s, "TERRAIN");
-                crate::chrome::text_field(
-                    s,
-                    Val::Percent(100.0),
-                    TerrainField,
-                    crate::chrome::text::BODY,
-                    ("brush x z radius strength".to_owned(), crate::chrome::ink().text),
-                    TerrainReadout,
-                );
-            });
+            // **Play and Build have moved to the Game workspace** (NV-09, #386): the same two sections, the same
+            // buttons and observers, spawned in `game_view::spawn_game_panel` — there is no second launcher.
 
             // **Crowd (#107).** One line: `<from_x> <from_z> <to_x> <to_z> <walkers>`, e.g. `-8 -8 8 8 40`.
             // Enter walks that many people between two 2 m squares round the open map's solid pieces.
@@ -3974,25 +4006,10 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 s.spawn((NotesEditor, Node { flex_direction: FlexDirection::Column, ..default() }));
             });
 
-            // **Reload (#203).** What became of each file's latest edit: whether a game is connected, and
-            // for every file a game or the editor has news on, applied, refused (with why), pending or
-            // needs restart, and how long ago.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(|s| {
-                crate::chrome::section(s, "RELOAD");
-                s.spawn((
-                    ReloadList,
-                    Node {
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                        ..default()
-                    },
-                ));
-            });
+            // **Reload (#203) has moved to the bottom dock** (UI-61, #247): the panel is
+            // `ui::register_the_shell_panels`' `reload` entry now, a `bevy_gooey` dock panel across the
+            // foot of the workbench. Its heading is the dock tab's and its column is the panel's own, so
+            // nothing of it is left here — a second copy would be two panels for one question.
 
             // **Plan (E-069).** What the agent means to do on this map and how far it has got: the
             // `.plan.yaml` that `plan_set` writes, read like the notes are.
@@ -4067,6 +4084,32 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 ));
             });
         });
+    });
+}
+
+/// **The TERRAIN section** (#99, NV-08 #385): one line, `<brush> <x> <z> <radius_m> <strength>`, e.g.
+/// `raise 12 8 6 2`; Enter sculpts the open map's ground through `terrain_stroke`.
+///
+/// **In the World workspace now, not in the Map's INSPECTOR.** Terrain is the ground under the level, and the
+/// world's panels are one job (`docs/ui/vision.md` §4); the field is the same node with the same observers, so
+/// only where it is spawned moved. Its function is here because [`TerrainField`] and [`TerrainReadout`] are
+/// this module's.
+pub(crate) fn spawn_terrain_section(p: &mut ChildSpawnerCommands) {
+    p.spawn(Node {
+        flex_direction: FlexDirection::Column,
+        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
+        ..default()
+    })
+    .with_children(|s| {
+        crate::chrome::section(s, "TERRAIN");
+        crate::chrome::text_field(
+            s,
+            Val::Percent(100.0),
+            TerrainField,
+            crate::chrome::text::BODY,
+            ("brush x z radius strength".to_owned(), crate::chrome::ink().text),
+            TerrainReadout,
+        );
     });
 }
 
@@ -4239,7 +4282,7 @@ fn rebuild_palette(
                         },
                         Text::new(if folded { ">" } else { "v" }),
                         TextColor(crate::chrome::ink().label),
-                        crate::chrome::font(crate::chrome::text::LABEL),
+                        crate::chrome::typed(crate::chrome::text::LABEL),
                     ));
                     row.spawn((
                         Node {
@@ -4250,7 +4293,7 @@ fn rebuild_palette(
                         },
                         Text::new(category.to_uppercase()),
                         TextColor(crate::chrome::ink().label),
-                        crate::chrome::font(crate::chrome::text::LABEL),
+                        crate::chrome::typed(crate::chrome::text::LABEL),
                     ));
                     // The count in a non-wrapping column of its own, through the one builder — F6
                     // was this same defect on the Kit door's pack headings.
@@ -4325,7 +4368,7 @@ fn rebuild_palette(
                                 },
                                 Text::new(bevy_grimoire_core::naming::display_name(&d.id)),
                                 TextColor(crate::chrome::ink().text),
-                                crate::chrome::font(crate::chrome::text::BODY),
+                                crate::chrome::typed(crate::chrome::text::BODY),
                                 // **A word longer than the column breaks inside itself** (#289): with
                                 // the default word-boundary break, `toilet_roll_holder` was one word
                                 // the row could not wrap, and it drew over the count beside it.
@@ -6631,7 +6674,7 @@ fn refresh_scripts_list(
                 p.spawn((
                     Text::new("no triggers on this map"),
                     TextColor(crate::chrome::ink().dim),
-                    crate::chrome::font(crate::chrome::text::LABEL),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
                 ));
             }
             for t in &rows {
@@ -6649,7 +6692,7 @@ fn refresh_scripts_list(
                         row.spawn((
                             Text::new(format!("{} · {}{}", t.id, t.on, who)),
                             TextColor(crate::chrome::ink().text),
-                            crate::chrome::font(crate::chrome::text::BODY),
+                            crate::chrome::typed(crate::chrome::text::BODY),
                         ));
                     });
             }
@@ -6690,7 +6733,7 @@ fn refresh_data_list(
                 p.spawn((
                     Text::new("no data files registered (data.yaml)"),
                     TextColor(ink.quiet),
-                    crate::chrome::font(crate::chrome::text::LABEL),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
                 ));
             });
         } else if let Ok(mut table) = tables.single_mut() {
@@ -6968,7 +7011,7 @@ fn refresh_reload_list(
                     Tone::Danger => crate::chrome::ink().danger,
                 };
                 let size = if *tone == Tone::Dim { crate::chrome::text::LABEL } else { crate::chrome::text::BODY };
-                p.spawn((Text::new(line.clone()), TextColor(colour), crate::chrome::font(size)));
+                p.spawn((Text::new(line.clone()), TextColor(colour), crate::chrome::typed(size)));
             }
         });
     }
@@ -7002,14 +7045,14 @@ fn refresh_plan_list(
         commands.entity(list).with_children(|p| {
             let lines = crate::ops_plan::plan_text(&now);
             if now.items.is_empty() {
-                p.spawn((Text::new(lines.join("\n")), TextColor(crate::chrome::ink().dim), crate::chrome::font(crate::chrome::text::LABEL)));
+                p.spawn((Text::new(lines.join("\n")), TextColor(crate::chrome::ink().dim), crate::chrome::typed(crate::chrome::text::LABEL)));
                 return;
             }
             let mut lines = lines.into_iter();
             p.spawn((
                 Text::new(lines.next().unwrap_or_default()),
                 TextColor(crate::chrome::ink().dim),
-                crate::chrome::font(crate::chrome::text::LABEL),
+                crate::chrome::typed(crate::chrome::text::LABEL),
             ));
             for (item, line) in now.items.iter().zip(lines) {
                 let colour = match item.status {
@@ -7017,7 +7060,7 @@ fn refresh_plan_list(
                     Status::Doing => crate::chrome::ink().accent,
                     Status::Done | Status::Skipped => crate::chrome::ink().dim,
                 };
-                p.spawn((Text::new(line), TextColor(colour), crate::chrome::font(crate::chrome::text::BODY)));
+                p.spawn((Text::new(line), TextColor(colour), crate::chrome::typed(crate::chrome::text::BODY)));
             }
         });
     }
@@ -7101,7 +7144,7 @@ fn refresh_notes_list(
                 p.spawn((
                     Text::new("no notes"),
                     TextColor(crate::chrome::ink().dim),
-                    crate::chrome::font(crate::chrome::text::LABEL),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
                 ));
             }
             for (id, status, text, waiting, review, auto) in rows {
@@ -7115,7 +7158,7 @@ fn refresh_notes_list(
                     row.spawn((
                         Text::new(format!("{id} [{status}] {text}")),
                         TextColor(crate::chrome::ink().text),
-                        crate::chrome::font(crate::chrome::text::BODY),
+                        crate::chrome::typed(crate::chrome::text::BODY),
                     ));
                     // **An auto note says so on its row** (E-070): the agent decides its minor
                     // choices itself instead of asking. A label, not a button: Tab in the note box
@@ -7134,13 +7177,13 @@ fn refresh_notes_list(
                             chip.spawn((
                                 Text::new("auto"),
                                 TextColor(crate::chrome::ink().suggest),
-                                crate::chrome::font(crate::chrome::text::LABEL),
+                                crate::chrome::typed(crate::chrome::text::LABEL),
                             ));
                         });
                     }
                 });
                 for line in &review.lines {
-                    p.spawn((Text::new(line.clone()), TextColor(crate::chrome::ink().dim), crate::chrome::font(crate::chrome::text::LABEL)));
+                    p.spawn((Text::new(line.clone()), TextColor(crate::chrome::ink().dim), crate::chrome::typed(crate::chrome::text::LABEL)));
                 }
                 let loaded: Vec<Handle<Image>> = review
                     .pictures
@@ -7508,8 +7551,8 @@ pub struct Proposed {
     /// the second proposal of the same length go undrawn. See [`sync_proposal_ghosts`].
     ///
     /// **Not `state.seed`.** That is a door-scoped field (`EditorState` is rebuilt on every door
-    /// crossing, `seed: 1`), and the sync's `Local` survives the reset — so the two disagreed after
-    /// a crossing and a proposal could be mistaken for the one already drawn. [`ProposalClock`] is a
+    /// switching, `seed: 1`), and the sync's `Local` survives the reset — so the two disagreed after
+    /// a switching and a proposal could be mistaken for the one already drawn. [`ProposalClock`] is a
     /// resource, so it outlives the door exactly as the `Local` does.
     pub generation: u64,
     /// **The part of the map this layout was laid in** (#192), or `None` for the whole map. Keeping
@@ -7943,7 +7986,7 @@ pub fn apply_frame(
     (focus, height)
 }
 
-/// **Whether the Map has been framed for this door** (backlog E-022). A door resource, so a crossing
+/// **Whether the Map has been framed for this door** (backlog E-022). A door resource, so a switching
 /// or a leave resets it with the rest of the door's state (`screen::door_state!`) and the next Map
 /// opens framed. `done` makes the framing one-shot: after it, the person's own camera moves are never
 /// overwritten. `last_size` is the viewport size seen on the previous update.
@@ -7956,7 +7999,7 @@ pub struct MapFraming {
 impl MapFraming {
     /// **The map has already been framed for this door**, so the one-shot entry frame never runs.
     ///
-    /// **Called by the follow** (`crate::follow`): a change that arrives just after a crossing is framed
+    /// **Called by the follow** (`crate::follow`): a change that arrives just after a switching is framed
     /// by the follow, and the entry frame — which is one shot per door and runs on the same frames —
     /// would then put the camera back on the whole map and leave the person looking at a room instead of
     /// the piece the agent just placed.
@@ -8129,203 +8172,406 @@ fn stack_row(next: Option<String>, depth: usize) -> (String, Color) {
     }
 }
 
-/// **How many history rows show on each side of the current position (E-018).** The list is
-/// `2 * HISTORY_EACH_WAY + 1` rows, always, so it never changes height and the rows below stay put.
-const HISTORY_EACH_WAY: isize = 3;
+/// **How many lines of the history the list stands tall (E-018, UI-53).** A half row is cut at the foot, which is
+/// gooey's own sign that there is more below, and `HISTORY_LIST_ROWS` rather than a count of rows means the panel
+/// keeps one height whatever the session holds: the rows below it never move.
+///
+/// **A screenful, where seven hand-spawned rows were.** The seven-row window had no scroll and no way to reach a
+/// line more than three steps either side of where the editor stood, so a session of 5,000 entries was a list a
+/// person could not read (UI-53's "5,000 log lines scroll within the UI frame budget").
+const HISTORY_LIST_ROWS: f32 = 6.5;
 
-/// **One row of the history list (E-018 option C).** `offset` is the row's distance from the
-/// current position, fixed at spawn. `refresh_history` writes the rest each time the history
-/// changes. A click jumps to `position` as one undo group (`jump`). The keyboard route to the same
-/// row is `|offset|` presses of Cmd+Z (rows behind) or Cmd+Shift+Z (rows ahead); see
-/// `docs/guide/building-maps.md`.
+/// **One line of the history, as gooey's virtualized `tree` draws it** (E-018, UI-53).
+///
+/// The tree holds one node per position — `0` is *before the first change*, then every entry of the session
+/// oldest-first — and its rows are gooey's pool: the rows in view and one more, rebound as the list scrolls.
+/// So a session of 5,000 entries is 5,000 nodes and about eight entities, instead of 5,000 labels rebuilt per
+/// change.
 #[derive(Component)]
-pub struct HistorySlot {
-    pub offset: isize,
-    /// The history position this row jumps to; `None` when the row is spare.
-    pub position: Option<usize>,
-    /// The row for the position the stacks are at now. A click on it does nothing.
-    pub current: bool,
+pub struct HistoryTree;
+
+/// **What the history list was last built from**: the two stack lengths. A change that alters the words
+/// of a line also moves one of these — every recorded, forgotten, grouped, undone, redone or jumped entry pushes
+/// or pops a stack — so two numbers are the fingerprint, and a settled frame costs two comparisons.
+#[derive(Component, Default)]
+struct HistoryBuilt {
+    seen: Option<(usize, usize)>,
 }
 
-/// The text of one history row.
-#[derive(Component)]
-struct HistoryText;
-
-/// **The history list under REDO (E-018).** Rows run from the redo side at the top to the undo side
-/// at the bottom.
+/// **The history list under REDO (E-018, UI-53): gooey's virtualized `tree` over the session's lines.**
+///
+/// Rows run oldest-first, from *before the first change* at the top to the line the editor stands on, and on to
+/// anything undone. `refresh_history` sets the nodes and the selection; `keep_now_in_view` scrolls the list so
+/// the line the person stands on is the one they see.
 fn history_block(s: &mut ChildSpawnerCommands) {
-    for offset in (-HISTORY_EACH_WAY..=HISTORY_EACH_WAY).rev() {
-        // **Exactly one line, clipped (E-018).** A label that wrapped grew its row, and every row
-        // below it, MAP SIZE included, moved down: `a_receipt_does_not_move_the_panel` caught it.
-        // So the row is one line tall, its text does not wrap, and what runs past the panel is
-        // clipped rather than pushing anything. The wrapper holds the row's own top and bottom inset
-        // as well as its line, or the line's far edge is cut.
-        s.spawn(Node {
-            height: Val::Px((crate::chrome::BODY_LINE_H + 2.0 * crate::chrome::GAP_TIGHT).ceil()),
-            overflow: bevy::ui::Overflow::clip(),
-            ..default()
-        })
-        .with_children(|wrap| {
-            let mut row = crate::chrome::quiet_row(
-                wrap,
-                false,
-                HistorySlot {
-                    offset,
-                    position: None,
-                    current: false,
-                },
-            );
-            row.observe(history_row_clicked);
-            // A spare or current row is not a pointer target: `refresh_history` sets this on each change.
-            row.insert(bevy::picking::Pickable::default());
-            row.with_children(|line| {
-                line.spawn((
-                    Text::new(""),
-                    TextColor(crate::chrome::ink().text),
-                    crate::chrome::font(crate::chrome::text::BODY),
-                    bevy::text::TextLayout::new(
-                        bevy::text::Justify::Left,
-                        bevy::text::LineBreak::NoWrap,
-                    ),
-                    HistoryText,
-                    // Ignored, so the pointer hits the row and not its text (see `refresh_history`).
-                    bevy::picking::Pickable::IGNORE,
-                ));
-            });
-        });
-    }
+    s.spawn((
+        bevy_gooey::tree(Vec::<bevy_gooey::TreeNode>::new()),
+        HistoryTree,
+        HistoryBuilt::default(),
+        bevy_gooey::TableRows(HISTORY_LIST_ROWS),
+        // **The selection stays on the line the editor stands on**, whoever moved it: a click jumps
+        // (`history_row_clicked`), and everything else gooey sends from the table is a look.
+        bevy_gooey::observe(history_selection_moved),
+    ));
 }
 
-/// What a history row needs to jump: the same resources the keyboard's undo system takes.
+/// The history's first line: the map before any change. Fits beside `now: ` in a list row at 200% text.
+const HISTORY_START_LINE: &str = "the original map";
+
+/// **The words of the history's line for `position`**, or `None` past the end. `0` is the map as it was before the first
+/// change, and the line the editor stands on says `now:`.
+///
+/// **The first line is short on purpose** ([`HISTORY_START_LINE`]): at 200% text a list row is about 22 characters wide, and
+/// "now: before the first change" was cut by its cell, which a person at that size could not read.
+fn history_line(state: &EditorState, position: usize, depth: usize) -> Option<String> {
+    let (what, who) = if position == 0 {
+        (HISTORY_START_LINE.to_owned(), "")
+    } else {
+        let row = state.history_row(position)?;
+        (row.label, if row.agent { "the Familiar" } else { "you" })
+    };
+    let now = if position == depth { "now: " } else { "" };
+    let who = if who.is_empty() { String::new() } else { format!("  \u{b7} {who}") };
+    Some(format!("{now}{what}{who}"))
+}
+
+/// **Every line of the session as tree nodes**, oldest first, with the position as the key so a row's identity
+/// survives a rebuild.
+fn history_nodes(state: &EditorState) -> Vec<bevy_gooey::TreeNode> {
+    let depth = state.undo_depth();
+    (0..=depth + state.redo_depth())
+        .filter_map(|position| history_line(state, position, depth).map(|line| bevy_gooey::TreeNode::new(position as u64, line)))
+        .collect()
+}
+
+/// **The most rows a move of the history's current line may relabel one by one** before the list is built whole: an undo
+/// or a redo is one or two, a jump across a long stretch of the history is not.
+const MOST_HISTORY_ROWS_RELABELLED: usize = 16;
+
+/// **Put what a move of the two stacks changed into the history's tree row by row** (UI-93, #259), and `false` when the
+/// move is not one this can name, so the caller builds the whole list.
+///
+/// Two moves are named. **An entry recorded on the end** (nothing was waiting to be redone before or after) relabels the
+/// line that was `now:` and adds the new last line. **A move of the current line with the same number of lines** (an undo,
+/// a redo, a jump) relabels the lines between the two positions, both included: the line the editor stood on loses its
+/// `now:`, the one it stands on gains it, and an entry that crossed from one stack to the other says so in its own
+/// words. Every other line is what it was.
+fn patch_history(nodes: &mut bevy_gooey::Tree, state: &EditorState, was: (usize, usize), now: (usize, usize)) -> bool {
+    let ((was_depth, was_redo), (depth, redo)) = (was, now);
+    if was_redo == 0 && redo == 0 && depth == was_depth + 1 {
+        let Some(last) = history_line(state, depth, depth) else { return false };
+        if let Some(line) = history_line(state, was_depth, depth) {
+            nodes.relabel(was_depth as u64, line);
+        }
+        return nodes.insert(None, bevy_gooey::TreeNode::new(depth as u64, last));
+    }
+    // **Only while something is left to redo.** Recording an entry clears the redo stack, so a move that ends with nothing to
+    // redo and the same number of lines may be an undo of two and two new entries as well as a redo of everything: the lines
+    // between the positions are not all what they were, and the list is built whole.
+    if redo > 0 && was_depth + was_redo == depth + redo && was_depth.abs_diff(depth) < MOST_HISTORY_ROWS_RELABELLED {
+        for position in was_depth.min(depth)..=was_depth.max(depth) {
+            let Some(line) = history_line(state, position, depth) else { return false };
+            nodes.relabel(position as u64, line);
+        }
+        return true;
+    }
+    false
+}
+
+/// What a history row needs to jump: the same resources the keyboard's undo system takes. The map's two are
+/// `Option`s because the click observer is global and a click can land where no map is open.
 #[derive(bevy::ecs::system::SystemParam)]
 struct HistoryJump<'w, 's> {
     commands: Commands<'w, 's>,
-    assets: Res<'w, AssetServer>,
-    project: ResMut<'w, Project>,
-    open: ResMut<'w, OpenMap>,
-    state: ResMut<'w, EditorState>,
+    assets: Option<Res<'w, AssetServer>>,
+    project: Option<ResMut<'w, Project>>,
+    open: Option<ResMut<'w, OpenMap>>,
+    state: Option<ResMut<'w, EditorState>>,
     placed: Query<'w, 's, (Entity, &'static Placement)>,
     /// **A drawn piece's own transform**, which is how the sweep tells a piece standing where the
     /// map wants it from one that is not (B-048).
     transforms: Query<'w, 's, &'static Transform>,
 }
 
-/// **A click on a history row jumps there, as one group (E-018).** Refused while the leaving
-/// question is up, as the undo chord is: a jump edits the map the question is asking about.
+/// **A click on a line of the history jumps there, as one group (E-018, UI-53).** The jump is the *click's*: it
+/// reads the row the pointer clicked (`TableRow.key` is the line's position) and nothing gooey sends from the table.
+///
+/// **Not the selection change, which a key also makes** (N4, N-M2). gooey's own keyboard walk — an arrow, a Page key,
+/// Home, End, a type-ahead character, `*`, a held key's auto-repeat, a pad's D-pad — sends the very same
+/// `ValueChange<TableSelection>` a click does, and jumping for each would walk the map back a line at a time while a
+/// person merely read down the list. A `PointerClick` has no keyboard form, so a jump taken from it cannot be one.
+///
+/// Refused while the leaving question is up, as the undo chord is: a jump edits the map the question is asking
+/// about. A click on the line the editor already stands on is no jump either.
 fn history_row_clicked(
     click: On<bevy::picking::events::PointerClick>,
-    slots: Query<&HistorySlot>,
+    rows: Query<&bevy_gooey::TableRow>,
+    trees: Query<(), With<HistoryTree>>,
     mut jump_to: HistoryJump,
 ) {
-    let Ok(slot) = slots.get(click.entity) else {
-        return;
-    };
-    if jump_to.state.leaving || slot.current {
+    if click.button != bevy::picking::pointer::PointerButton::Primary {
         return;
     }
-    let Some(position) = slot.position else {
+    let Ok(row) = rows.get(click.entity) else { return };
+    if !trees.contains(row.table) {
+        return;
+    }
+    let position = row.key as usize;
+    let HistoryJump { commands, assets, project, open, state, placed, transforms } = &mut jump_to;
+    let (Some(assets), Some(project), Some(open), Some(state)) =
+        (assets.as_deref(), project.as_deref_mut(), open.as_deref_mut(), state.as_deref_mut())
+    else {
         return;
     };
-    let j = &mut jump_to;
-    jump(
-        &mut j.commands,
-        &j.assets,
-        &mut j.project,
-        &mut j.open,
-        &mut j.state,
-        &j.placed,
-        &j.transforms,
-        position,
-    );
+    if state.leaving || position == state.undo_depth() {
+        return;
+    }
+    jump(commands, assets, project, open, state, placed, transforms, position);
 }
 
-/// **The history list's text (E-018).** Runs on the same change as the UNDO and REDO rows. Each row
-/// reads the history as it stands now, so a click means the row's current position.
+/// **The history's selection is the line the editor stands on, and a selection that is not a click puts it back**
+/// (N5, N-M2).
+///
+/// gooey moves the selection to the row a key walked onto or a pointer clicked, and sends the change. A click that
+/// jumped has just made that row the current line, so there is nothing to undo; any other change — a key walk, or a
+/// click the jump refused — would leave a row lit that the map is not at, which says the click happened and the
+/// history did not. The answer is read when the command runs, after a jump has moved the stacks.
+fn history_selection_moved(picked: On<bevy_gooey::ValueChange<bevy_gooey::TableSelection>>, mut commands: Commands) {
+    let tree = picked.source;
+    commands.queue(move |world: &mut World| {
+        let Some(depth) = world.get_resource::<EditorState>().map(|state| state.undo_depth() as u64) else { return };
+        let want = bevy_gooey::TableSelection::of(depth);
+        let Ok(mut tree) = world.get_entity_mut(tree) else { return };
+        if tree.get::<bevy_gooey::TableSelection>() != Some(&want) {
+            tree.insert(want);
+        }
+    });
+}
+
+/// **The history list's lines (E-018, UI-53).** Runs on the same change as the UNDO and REDO rows: the tree's
+/// nodes are the session's lines, rebuild only when a stack moved, and the line the editor stands on is the one
+/// selected and the one in view.
+///
+/// **A settled frame costs two numbers and nothing else.** A frame where no stack moved is where the budget is
+/// measured (UI-93, #259), so the depth pair is compared before anything is built: the 5,000 labels a session
+/// used to hold are built on the frame a change lands on and never again.
 fn refresh_history(
     state: Res<EditorState>,
     open: Res<OpenMap>,
-    mut slots: Query<(
-        &mut HistorySlot,
-        &Children,
-        &mut bevy::picking::Pickable,
-        &mut Visibility,
-    )>,
-    mut texts: Query<(&mut Text, &mut TextColor), With<HistoryText>>,
+    built: Query<(&HistoryBuilt, Entity)>,
+    mut tables: Query<&mut bevy_gooey::Table, With<HistoryTree>>,
+    mut commands: Commands,
     mut budget: ResMut<crate::ui_budget::UiFrame>,
 ) {
     // **This system's cost, into the frame's total** (UI-93, #259). The guard writes on drop, so the early return below
     // and every path after it are measured without the body having to remember to.
-    let _spent = crate::ui_budget::measure(&mut budget);
+    let spent = crate::ui_budget::measure(&mut budget);
+    let Ok((mark, tree)) = built.single() else { return };
     if !state.is_changed() && !open.is_changed() {
         return;
     }
     let depth = state.undo_depth();
-    // **The window, not the whole list** (UI-53): only the rows on screen are labelled, so a session
-    // with 5,000 entries costs seven labels a refresh rather than five thousand. The window is the
-    // same `2 * HISTORY_EACH_WAY + 1` the block spawns, around the current position.
-    let rows = state.history_window(
-        (depth as isize - HISTORY_EACH_WAY).max(1) as usize,
-        (depth as isize + HISTORY_EACH_WAY).max(1) as usize,
-    );
-    let first = rows.first().map_or(0, |r| r.position);
-    for (mut slot, children, mut pickable, mut visibility) in &mut slots {
-        let position = usize::try_from(depth as isize + slot.offset)
-            .ok()
-            .filter(|&p| p <= rows.len());
-        slot.position = position;
-        // **A spare row draws nothing, and still holds its height** (#302). The list is always
-        // `2 * HISTORY_EACH_WAY + 1` rows tall so nothing below it moves as the history grows; a
-        // row with no entry behind it was a blank bar. `Hidden`, not `Display::None`, keeps the room.
-        let shown = if position.is_some() {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
-        if *visibility != shown {
-            *visibility = shown;
+    let redo = state.redo_depth();
+    if mark.seen == Some((depth, redo)) {
+        return;
+    }
+    // **From here it is a rebuild of the history's nodes**, which the budget reports apart from a settled frame: 5,000
+    // labels are built on the frame a stack moves and never on one where nothing did.
+    let _rebuild = spent.rebuilding();
+    let Ok(mut table) = tables.get_mut(tree) else { return };
+    let Some(nodes) = table.source_mut::<bevy_gooey::Tree>() else { return };
+    // **A stack that moved by one entry or by the current line touches the rows it names** and leaves the other 5,000 alone.
+    // **A patch that leaves the list a different length than the stacks say has drifted**, and the list is built whole.
+    let patched = mark.seen.is_some_and(|was| patch_history(nodes, &state, was, (depth, redo))) && nodes.node_count() == depth + redo + 1;
+    if !patched {
+        nodes.set_nodes(history_nodes(&state));
+    }
+    // **The line the editor stands on is the selected one**, and gooey keeps that row where the person is
+    // reading: a selection it did not see change is not scrolled to, so a rebuild leaves the view alone.
+    commands
+        .entity(tree)
+        .insert(bevy_gooey::TableSelection::of(depth as u64));
+    commands.entity(tree).insert(HistoryBuilt { seen: Some((depth, redo)) });
+}
+
+/// **The line the editor stands on is the one in view** (E-018, UI-53).
+///
+/// gooey scrolls to its cursor only for a key or a click (`table::pick` arms the cache flag `update_tables`
+/// reads), so a cursor written from code names a row the list never brings into view. The scroll is computed here
+/// from the viewport's own numbers: a tree's content is exactly its rows, so the pitch is `content / nodes` — no
+/// measured row, no layout from the frame before.
+///
+/// **It scrolls once per new position, and then leaves the list alone.** The layout needs a frame or two to report
+/// the rebuilt list's content, so the scroll is attempted until it lands; after that the list is the person's, and
+/// a wheel or a drag that moved it stays where they put it. A reveal that re-aimed every frame would snap the list
+/// back under the pointer, which is exactly what this had to stop doing.
+#[allow(clippy::too_many_arguments)]
+fn keep_now_in_view(
+    state: Res<EditorState>,
+    trees: Query<Entity, With<HistoryTree>>,
+    rows: Query<(Entity, &bevy_gooey::TableRow)>,
+    row_node: Query<&ComputedNode>,
+    mut cursors: Query<&mut bevy_gooey::TableCursor>,
+    mut viewports: Query<(&ComputedNode, &bevy_gooey::ListView, &mut ScrollPosition)>,
+    children: Query<&Children>,
+    mut aimed: Local<(Option<usize>, bool)>,
+) {
+    let Ok(tree) = trees.single() else { return };
+    let depth = state.undo_depth();
+    // **A moved position re-aims the list**; a settled one has landed and is the person's now.
+    if aimed.0 != Some(depth) {
+        *aimed = (Some(depth), false);
+    }
+    if aimed.1 {
+        return;
+    }
+    let Some(viewport) = children.iter_descendants(tree).find(|e| viewports.contains(*e)) else { return };
+    let Ok((node, view, mut scroll)) = viewports.get_mut(viewport) else { return };
+    let inv = node.inverse_scale_factor();
+    let height = node.size().y;
+    if view.rows <= 0.0 || height <= 0.0 || inv <= 0.0 {
+        return;
+    }
+    // **One row's pitch, measured off a drawn row.** The list's content includes the room it reserves for the rows
+    // it has not drawn, so `content / drawn` is not a pitch; a `TableRow`'s own node is exactly one, which is the
+    // number `update_tables` lays every row out at.
+    //
+    // **Both in LOGICAL pixels**, which is what `ScrollPosition` holds: `ComputedNode` geometry is physical, and
+    // `inverse_scale_factor` is the conversion (the same one every follower in this crate makes, `chrome::scroll_bounds`
+    // included).
+    let Some(pitch) = rows
+        .iter()
+        .filter(|(_, row)| row.table == tree)
+        .filter_map(|(entity, _)| row_node.get(entity).ok().map(|node| node.size().y * inv))
+        .find(|pitch| *pitch > 0.0)
+    else {
+        return;
+    };
+    let height = height * inv;
+    let (_, max) = crate::chrome::scroll_bounds(node);
+    // **The line in the middle of the list**, which is where a reader's eye is on arriving, and never past either
+    // end.
+    let want = ((depth as f32 + 0.5) * pitch - height * 0.5).clamp(0.0, max.max(0.0));
+    if (scroll.0.y - want).abs() > 0.5 {
+        scroll.0.y = want;
+        return;
+    }
+    // **Landed**, so the list is the person's from the next frame: a wheel or a drag stays where they put it. A list
+    // whose content has not been laid out yet reports `max` zero and a target of zero, which is not a landing — the
+    // depth is still a screenful away and the next frame will say so.
+    if max <= 0.0 && depth > 0 {
+        return;
+    }
+    aimed.1 = true;
+    // The cursor sits on the same line, so the list's own keyboard steps start from where the person is.
+    if let Ok(mut cursor) = cursors.get_mut(tree)
+        && cursor.0 != Some(depth as u64)
+    {
+        cursor.0 = Some(depth as u64);
+    }
+}
+
+/// **The line the editor stands on is not a pointer target** (E-018, UI-53, M4).
+///
+/// The window's rule, kept on the list: a click on the line you are already on does nothing, so that row must not
+/// light up under the pointer either — `Hovered` is read from the pointer's hit, and an entity with
+/// `Pickable::IGNORE` is never hit. Every other row is a jump target and stays hoverable.
+///
+/// **The rows are a pool**, so the answer is written on every drawn row: a row rebound from the current line onto
+/// another gets its hover back, and one rebound onto the current line loses it. A settled frame compares and
+/// writes nothing.
+fn mark_the_current_line(
+    state: Res<EditorState>,
+    trees: Query<Entity, With<HistoryTree>>,
+    mut rows: Query<(Entity, &bevy_gooey::TableRow, Option<&bevy::picking::Pickable>)>,
+    mut commands: Commands,
+) {
+    let Ok(tree) = trees.single() else { return };
+    let depth = state.undo_depth() as u64;
+    // **The pool's rows are reused**, so the answer has to move with the key: a row rebound off the current line gets
+    // its hover back, and one rebound onto it loses it. gooey spawns a row with no `Pickable` at all, which is the
+    // same hit as `Pickable::default()`, so a missing component on a target row is already right and costs nothing.
+    for (entity, row, pickable) in &mut rows {
+        if row.table != tree {
+            continue;
         }
-        // **A spare or current row is not a pointer target** (the click observer refuses it), so it
-        // must not light up on hover either. `Hovered` is read from the pointer's hit, and an ignored
-        // entity is never hit, so the row goes non-pickable here and stays pickable when it is live.
-        let target = slot.position.is_some() && !slot.current;
-        let pick = if target {
-            bevy::picking::Pickable::default()
-        } else {
-            bevy::picking::Pickable::IGNORE
-        };
-        if *pickable != pick {
-            *pickable = pick;
-        }
-        let (want, tint) = match position {
-            None => (String::new(), crate::chrome::ink().text),
-            Some(p) => {
-                let (what, who) = if p == 0 {
-                    ("before the first change".to_owned(), "")
-                } else {
-                    match rows.get(p.saturating_sub(first)) {
-                        Some(row) => (row.label.clone(), if row.agent { "the Familiar" } else { "you" }),
-                        None => (String::new(), ""),
-                    }
-                };
-                let now = if slot.current { "now: " } else { "" };
-                let who = if who.is_empty() {
-                    String::new()
-                } else {
-                    format!("  \u{b7} {who}")
-                };
-                let tint = if p > depth { crate::chrome::ink().dim } else { crate::chrome::ink().text };
-                (format!("{now}{what}{who}"), tint)
+        let now = pickable.copied();
+        if row.key == depth {
+            if now != Some(bevy::picking::Pickable::IGNORE) {
+                commands.entity(entity).insert(bevy::picking::Pickable::IGNORE);
             }
-        };
-        for child in children.iter() {
-            if let Ok((mut text, mut colour)) = texts.get_mut(child) {
-                if text.0 != want {
-                    text.0 = want.clone();
-                }
-                colour.0 = tint;
-            }
+        } else if now == Some(bevy::picking::Pickable::IGNORE) {
+            commands.entity(entity).insert(bevy::picking::Pickable::default());
         }
     }
+}
+
+/// **The fewest pixels a wheel notch must move a list for the list to keep it**, so a list resting on an end does not
+/// swallow a notch that moved it by rounding.
+const LIST_WHEEL_MIN_MOVE_PX: f32 = 0.5;
+
+/// **This list takes its own wheel** ([`the_list_wheel`]) instead of carrying `ScrollArea`, which is the marker the
+/// "every pane that clips can scroll" census accepts in its place: the wheel handler exists, it is just not upstream's.
+#[derive(Component)]
+pub struct OwnsItsWheel;
+
+/// **The history list is as tall at the first line as at the hundredth** (UI-53).
+///
+/// gooey draws a table as tall as its rows, up to the rows it was asked to stand: one line is one row tall, two lines two.
+/// In the Map inspector that moved everything below the list down a row at the first edit and each of the next five, so
+/// the field an author had just typed into moved away from the pointer (`a_receipt_does_not_move_the_panel`). The old
+/// window was seven fixed rows; this holds the list at its screenful (`HISTORY_LIST_ROWS` of the skin's row pitch) from the
+/// start. Compared before written, so a settled frame writes nothing.
+fn hold_the_history_tall(skin: Res<bevy_gooey::GooeySkin>, mut trees: Query<&mut Node, With<HistoryTree>>) {
+    let want = Val::Px(HISTORY_LIST_ROWS * skin.table_pitch());
+    for mut node in &mut trees {
+        if node.min_height != want {
+            node.min_height = want;
+        }
+    }
+}
+
+/// **A list in the inspector hands the wheel on when it cannot use it** (UI-53, #239; UI-51, #237).
+///
+/// gooey's table list carries `ScrollArea`, whose handler takes every notch over it and stops it there — even a notch
+/// that moves nothing. The history list and the outliner sit in the middle of the Map inspector, so a wheel over one
+/// of them never reached the inspector: sixty notches down the pane left TERRAIN, DATA, PROBLEMS and NOTES unseen
+/// (`navigation::every_destination_is_measured_and_the_baseline_says_so` counted four destinations lost).
+///
+/// So these two lists take their own wheel ([`the_list_wheel`]) in place of `ScrollArea`'s: a notch the list can
+/// use moves it and stops there, and one it cannot — a list that fits its window, or one resting on the end the notch
+/// pushes toward — bubbles to the inspector, as a wheel over plain text does. Taken once: the marker is the missing
+/// `ScrollArea`.
+#[allow(clippy::type_complexity)]
+fn hand_the_wheel_on(
+    lists: Query<Entity, (With<bevy_gooey::ListView>, With<bevy::ui_widgets::ScrollArea>)>,
+    parents: Query<&ChildOf>,
+    owners: Query<(), Or<(With<HistoryTree>, With<crate::outliner::OutlinerTree>)>>,
+    mut commands: Commands,
+) {
+    for list in &lists {
+        if parents.iter_ancestors(list).any(|ancestor| owners.contains(ancestor)) {
+            commands.entity(list).remove::<bevy::ui_widgets::ScrollArea>().insert(OwnsItsWheel).observe(the_list_wheel);
+        }
+    }
+}
+
+/// **One wheel notch over a list the editor owns the wheel of**: the list moves if it can, else the notch goes on up.
+fn the_list_wheel(
+    mut scroll: On<bevy::picking::events::PointerScroll>,
+    mut lists: Query<(&ComputedNode, &mut ScrollPosition), With<bevy_gooey::ListView>>,
+    ratio: Res<bevy::input::mouse::MouseScrollPixelsPerLine>,
+) {
+    let Ok((computed, mut position)) = lists.get_mut(scroll.entity) else { return };
+    let scale = computed.inverse_scale_factor();
+    let range = ((computed.content_size().y - computed.size().y) * scale).max(0.0);
+    let moved_to = (position.y - scroll.to_pixels(&ratio).y).clamp(0.0, range);
+    if (moved_to - position.y).abs() < LIST_WHEEL_MIN_MOVE_PX {
+        // Nowhere to go: the notch is the inspector's.
+        return;
+    }
+    position.y = moved_to;
+    scroll.propagate(false);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -9044,9 +9290,16 @@ pub fn sense_context(
 /// it on the way out of a door, and **every run condition is evaluated** — a bare `Res<Mode>` here
 /// panicked on the first `Update` after `Esc` took the author back to the menu, even though the
 /// `in_state(Editor)` condition beside it had already answered false. Same shape as
-/// `Door::map_door_is_open`, and for the same reason.
+/// `Workspace::map_is_open`, and for the same reason.
 pub(crate) fn in_map_mode(mode: Option<Res<crate::tiles::Mode>>) -> bool {
     mode.is_some_and(|m| *m == crate::tiles::Mode::Map)
+}
+
+/// **Is the Map or the World panel showing?** (NV-08, #385.) What the light map's overlay draws under: its button is in the World
+/// workspace now, and a toggle whose result is drawn only in the Map would show nothing where it was pressed.
+#[cfg(feature = "bevy_light_grid")]
+pub(crate) fn in_map_or_world_mode(mode: Option<Res<crate::tiles::Mode>>) -> bool {
+    mode.is_some_and(|m| matches!(*m, crate::tiles::Mode::Map | crate::tiles::Mode::World))
 }
 
 /// **The rule seed the project states for this map**, or `none` when no rule names it.
@@ -9620,6 +9873,11 @@ pub struct RunDrag {
     grab: Option<(String, bool)>,
 }
 
+/// **What a click may not replace**, asked of the library, the map and the indices of the blockers a placement or a box fill
+/// would take out of the way (UI-51, #237): `Err` is the sentence for the status line.
+#[allow(clippy::type_complexity)]
+type ReplaceGuard<'a> = dyn Fn(&bevy_grimoire_core::library::Library, &bevy_grimoire_core::map::Map, &[usize]) -> Result<(), String> + 'a;
+
 /// The three map resources a placement writes: the project, the open map, and the editor's state.
 /// They always travel together, so a placement helper takes them as one.
 struct MapEdit<'a> {
@@ -9632,6 +9890,7 @@ struct MapEdit<'a> {
 ///
 /// Split out of [`drive_place`] so the release path reads as the two things it chooses between —
 /// place one, or fill a box — rather than as one function with a second half.
+#[allow(clippy::too_many_arguments)]
 fn box_fill_between(
     commands: &mut Commands,
     assets: &AssetServer,
@@ -9640,6 +9899,8 @@ fn box_fill_between(
     brush: &bevy_grimoire_core::descriptor::Descriptor,
     corners: ((f32, f32), (f32, f32)),
     pitch: f32,
+    // **What a click may not replace** (UI-51, #237): asked of the blockers the fill would take out of the way.
+    guard: &ReplaceGuard<'_>,
 ) {
     let MapEdit { project, open, state } = edit;
     let mut n = state.next_id;
@@ -9701,7 +9962,7 @@ fn box_fill_between(
         .collect();
     doomed.sort_unstable();
     doomed.dedup();
-    if let Err(e) = riders_refuse(&open.map, &doomed) {
+    if let Err(e) = riders_refuse(&open.map, &doomed).and_then(|()| guard(&project.library, &open.map, &doomed)) {
         // Refused whole: a fill that stopped at the first host would leave a half-painted box.
         //
         // **And it is a `problem`**, for the same reason as the refusal above: the editor could
@@ -9955,6 +10216,7 @@ fn drive_run(
     mut ghost_drag: ResMut<RunGhostDrag>,
     mut gizmos: Gizmos,
     placed: Query<(Entity, &Placement)>,
+    sight: crate::outliner::Sight,
     mut due: ResMut<crate::watch::Due>,
 ) {
     if state.tool != Tool::Run {
@@ -10064,6 +10326,10 @@ fn drive_run(
     if free || ((from.0 - at.0).abs() <= CLICK_EPS && (from.1 - at.1).abs() <= CLICK_EPS) {
         // **A click in run mode places one piece**, which is what the author meant by a click and
         // what the mode's own name promises not to swallow.
+        if let Err(e) = click_refuses(&project, &open, &state, &sight, &d, at) {
+            state.status.problem(e);
+            return;
+        }
         place_one(
             &mut commands,
             &assets,
@@ -10878,10 +11144,8 @@ fn spawn_removal_tile(
 fn drive_removal(
     mut commands: Commands,
     mouse: Res<ButtonInput<MouseButton>>,
-    over_ui: Res<crate::view::OverUi>,
-    pointer: Res<crate::view::Pointer>,
-    snip: Res<crate::snip::SnipEdit>,
-    report: Res<crate::report::ReportEdit>,
+    claim: Claim,
+    sight: crate::outliner::Sight,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
     placed: Query<(Entity, &Placement)>,
     mut marker: Query<(&mut Transform, &mut Visibility), With<RemovalTile>>,
@@ -10894,6 +11158,7 @@ fn drive_removal(
     keyboard: Res<ButtonInput<KeyCode>>,
     rung: Res<Rung>,
 ) {
+    let Claim { over_ui, pointer, snip, report } = claim;
     // Read, never write, unless something actually happened: `state` is watched by
     // `rebuild_palette`, so an unconditional deref here rebuilds the palette every frame.
     if state.tool != Tool::Remove {
@@ -10950,7 +11215,7 @@ fn drive_removal(
         // **Locked to the live rung** — see `removal_box`. The marker and the deletion below read
         // the one expression, so what the red box covers is what goes.
         Some(from) => Some(removal_box(from, at, pitch)),
-        None => pick_at(&project, &open, at).and_then(|i| {
+        None => pick_at_seen(&project, &open, at, &|p| sight.unseen(&project.library, p)).and_then(|i| {
             let p = open.map.placements.get(i)?;
             let d = descriptor_of(&project.library, p)?;
             let (w, depth) = crate::fill::cell_extents(&d, p.yaw, p.tip);
@@ -10992,8 +11257,18 @@ fn drive_removal(
     };
 
     if (from.0 - at.0).abs() <= CLICK_EPS && (from.1 - at.1).abs() <= CLICK_EPS {
-        match pick_subject(&project, &open, &picture, at) {
+        match pick_subject_seen(&project, &open, &picture, at, &|p| sight.unseen(&project.library, p)) {
             Some(Subject::Placement(i)) => {
+                // **A locked piece is not removed by a click** (UI-51, #237), nor is a stack that holds one: the
+                // removal takes the whole group. An operation still can.
+                let locked = bevy_grimoire_core::stack::group_of(&open.map, i)
+                    .into_iter()
+                    .filter_map(|member| open.map.placements.get(member))
+                    .find(|member| sight.locked(&member.id));
+                if let Some(locked) = locked {
+                    state.status.problem(format!("{} is locked, so a click will not remove it — unlock it in the outliner", locked.id));
+                    return;
+                }
                 delete_index(&mut commands, &project, i, &mut open, &mut state, &placed)
             }
             // **The instance, whole.** A click landed on one member of it; removing that member is
@@ -11016,13 +11291,24 @@ fn drive_removal(
     // be left pointing at a placement that no longer exists, and `resolve_y` refuses the whole map for
     // it. Sorted and deduped, so a composition caught twice — box over both a table and its lamp — is
     // removed once.
+    // **A locked piece stays, and so does the stack it is in** (UI-51, #237): the group goes whole or not at all. A
+    // piece the eye has hidden is not under the box either — it is not drawn, so it cannot be what was swept.
+    let mut skipped_locked = 0usize;
     let mut doomed: Vec<usize> = open
         .map
         .placements
         .iter()
         .enumerate()
         .filter(|(_, p)| p.at.0 >= x0 && p.at.0 <= x1 && p.at.1 >= z0 && p.at.1 <= z1)
-        .flat_map(|(i, _)| bevy_grimoire_core::stack::group_of(&open.map, i))
+        .filter(|(_, p)| !sight.unseen(&project.library, p))
+        .flat_map(|(i, _)| {
+            let group = bevy_grimoire_core::stack::group_of(&open.map, i);
+            if group.iter().any(|g| open.map.placements.get(*g).is_some_and(|member| sight.locked(&member.id))) {
+                skipped_locked += 1;
+                return Vec::new();
+            }
+            group
+        })
         .collect();
     doomed.sort_unstable();
     doomed.dedup();
@@ -11041,7 +11327,11 @@ fn drive_removal(
     stamps.dedup();
 
     if doomed.is_empty() && stamps.is_empty() {
-        state.status.note("nothing inside that box");
+        if skipped_locked > 0 {
+            state.status.note(format!("{skipped_locked} locked piece(s) in that box stayed — unlock them in the outliner to remove them by click"));
+        } else {
+            state.status.note("nothing inside that box");
+        }
         return;
     }
 
@@ -11233,6 +11523,7 @@ fn drop_a_piece_on_the_map(
     open: Option<ResMut<OpenMap>>,
     state: Option<ResMut<EditorState>>,
     placed: Query<(Entity, &Placement)>,
+    sight: crate::outliner::Sight,
 ) {
     let (Some(camera), Some(project), Some(mut open), Some(mut state)) = (camera, project, open, state) else { return };
     let Some(d) = project.library.get(&dropped.payload.0).cloned() else {
@@ -11242,7 +11533,29 @@ fn drop_a_piece_on_the_map(
     let (cam, cam_tf) = *camera;
     let Some(hit) = cursor_ground(Some(dropped.pointer), cam, cam_tf) else { return };
     let at = brush_at(&project, &open, &keyboard, rung.0, &anchor, hit, Pose { d: &d, yaw: state.brush_yaw, tip: state.brush_tip });
+    if let Err(e) = click_refuses(&project, &open, &state, &sight, &d, at) {
+        state.status.problem(e);
+        return;
+    }
     place_one(&mut commands, &assets, &placed, &project, &mut open, &mut state, &d, at, keys::alt_held(&keyboard));
+}
+
+/// **A click may not replace what is locked, or what it cannot see** (UI-51, #237): the placement the click would make is
+/// planned (the same plan `place_one` makes, which this does not run) and its blockers are asked of the lock and the eye.
+/// A refusal is the sentence for the status line; a plan that fails for another reason is left to `place_one` to say.
+/// Operations (`placement_add`) do not come through here, so an agent can still replace a locked piece.
+fn click_refuses(
+    project: &Project,
+    open: &OpenMap,
+    state: &EditorState,
+    sight: &crate::outliner::Sight,
+    d: &bevy_grimoire_core::descriptor::Descriptor,
+    at: (f32, f32),
+) -> Result<(), String> {
+    let Ok(planned) = plan_placement(project, open, d, at, state.brush_yaw, state.brush_tip, state.next_id + 1) else {
+        return Ok(());
+    };
+    sight.refuse_replacing(&project.library, &open.map, &planned.replaces)
 }
 
 /// **The placing tool**: a click puts one piece down, a dragged box fills the area with them.
@@ -11278,6 +11591,7 @@ fn drive_place(
     // `stamp_here`. Reading it does not mark it changed, so the picker is not rebuilt every frame.
     mut armed: ResMut<crate::compose::Armed>,
     placed: Query<(Entity, &Placement)>,
+    sight: crate::outliner::Sight,
 ) {
     // Placing is one tool among three, and a click belongs to whichever is armed. While removal is
     // armed a click removes and must not also place, or a box dragged over a crowded corner would
@@ -11442,7 +11756,12 @@ fn drive_place(
             &d,
             (from, at),
             pitch,
+            &|library, map, blockers| sight.refuse_replacing(library, map, blockers),
         );
+        return;
+    }
+    if let Err(e) = click_refuses(&project, &open, &state, &sight, &d, at) {
+        state.status.problem(e);
         return;
     }
     place_one(&mut commands, &assets, &placed, &project, &mut open, &mut state, &d, at, free);
@@ -12199,6 +12518,77 @@ pub fn plant_history_entry_for_test(state: &mut EditorState) {
     });
 }
 
+/// **Put one of the agent's entries on the history stack**, so a test can read what a row says about who made
+/// the change without driving the whole agent door (UI-53, #239). The entry is the one `record_logged` writes for
+/// an agent's turn, by the same path every edit site uses.
+pub fn record_agent_history_entry_for_test(state: &mut EditorState) {
+    state.record(Undo::Logged {
+        line: String::new(),
+        phrase: "a change the Familiar made".to_owned(),
+        agent: true,
+    });
+}
+
+/// **Click the history line for `position`, the way a click on the row gooey drew it does** (UI-53, #239).
+///
+/// The row is found by the component gooey names its pool rows with — `TableRow.key` is the line's identity, the
+/// same key the list's nodes use — and the click goes through the real `PointerClick` a mouse sends, so the
+/// observer, gooey's own selection and the jump are the ones an author meets.
+///
+/// **A line the list is not showing is scrolled to first**, which is what a person does: the wheel travels to it,
+/// the pool rebinds, and the row under the pointer is the line they want.
+pub fn click_history_line_for_test(world: &mut World, position: usize) {
+    use bevy::ecs::system::RunSystemOnce;
+    /// The key `position`'s row carries, if the pool is showing it.
+    fn shown_row(world: &mut World, position: usize) -> Option<(Entity, Entity)> {
+        world
+            .run_system_once(move |rows: Query<(Entity, &bevy_gooey::TableRow)>, trees: Query<Entity, With<HistoryTree>>| {
+                let Ok(tree) = trees.single() else { return None };
+                rows.iter().find(|(_, row)| row.table == tree && row.key == position as u64).map(|(entity, _)| (entity, tree))
+            })
+            .unwrap_or_else(|e| panic!("click_history_line_for_test: {e}"))
+    }
+    let mut row = shown_row(world, position);
+    if row.is_none() {
+        // **The cursor is the list's own way to a line it is not showing**: written from code it is the row the
+        // panel brings into view on the next frame (`keep_now_in_view`).
+        if let Some(tree) = world
+            .run_system_once(|trees: Query<Entity, With<HistoryTree>>| trees.single().ok())
+            .unwrap_or_else(|e| panic!("click_history_line_for_test: {e}"))
+        {
+            world.entity_mut(tree).insert(bevy_gooey::TableCursor(Some(position as u64)));
+        }
+        for _ in 0..6 {
+            world.run_schedule(bevy::app::Update);
+            row = shown_row(world, position);
+            if row.is_some() {
+                break;
+            }
+        }
+    }
+    let (entity, _) = row.unwrap_or_else(|| panic!("the history list draws no row for position {position}"));
+    use bevy::picking::backend::HitData;
+    use bevy::picking::events::{Pointer, PointerClick};
+    use bevy::picking::pointer::{Location, PointerButton, PointerId};
+    world.trigger(PointerClick {
+        entity,
+        pointer: Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target: bevy::camera::NormalizedRenderTarget::Image(bevy::camera::ImageRenderTarget {
+                    handle: Default::default(),
+                    scale_factor: 1.0,
+                }),
+                position: Vec2::ZERO,
+            },
+        ),
+        button: PointerButton::Primary,
+        hit: HitData { camera: Entity::PLACEHOLDER, depth: 0.0, position: None, normal: None, extra: None },
+        duration: std::time::Duration::ZERO,
+        count: 1,
+    });
+}
+
 /// One click of the place tool with `descriptor` as the brush, reachable from `tests/headless.rs`.
 ///
 /// The click's commit — host, replacement, undo entry, drawing — and not the cursor that aims it:
@@ -12244,7 +12634,7 @@ pub fn fill_for_test(world: &mut World, descriptor: &str, corners: ((f32, f32), 
                 };
                 state.brush_yaw = 0.0;
                 state.brush_tip = (0, 0);
-                box_fill_between(&mut commands, &assets, &placed, MapEdit { project: &mut project, open: &mut open, state: &mut state }, &d, corners, pitch);
+                box_fill_between(&mut commands, &assets, &placed, MapEdit { project: &mut project, open: &mut open, state: &mut state }, &d, corners, pitch, &|_, _, _| Ok(()));
             },
         )
         .unwrap_or_else(|e| panic!("fill_for_test: {e}"));
@@ -12489,7 +12879,7 @@ fn keys(
         // it "the piece under the cursor" would answer with whatever happens to stand behind the
         // PLACE list, which is the one place an author is certainly not aiming at.
         let under = (!on_ui)
-            .then(|| nearest_placement(*pointer, camera, &project, &open))
+            .then(|| nearest_placement(*pointer, camera, &project, &open, &|p| target.is_unseen(&p.id)))
             .flatten();
         let subject = edit_subject(&project, &open, &state, under);
         send_to_tiles(subject, &project, &mut state, mode, import);
@@ -12502,7 +12892,7 @@ fn keys(
     if keys::just_pressed(&keyboard, *live, Action::Remove) {
         // Toggles against `Remove` specifically, not against "any tool": pressing X while the move
         // tool is armed should reach removal, not return to placing.
-        let said = arm_tool(&mut state, Tool::Remove, keys::binding(Action::Remove).chord);
+        let said = arm_through_operation(&mut state, &project, Tool::Remove, keys::binding(Action::Remove).chord);
         state.status.note(said);
         // Arming one tool puts down whatever the other was holding, rather than leaving a piece in
         // hand that no click can now drop.
@@ -12530,7 +12920,8 @@ fn keys(
     // clears what was armed to place — an author who means to move something is not also asking to
     // drop a copy of the brush on their first click, and `drive_place` refuses while this is live.
     if keys::just_pressed(&keyboard, *live, Action::MoveMode) {
-        let said = arm_tool(&mut state, Tool::Move, keys::binding(Action::MoveMode).chord);
+        // **The key dispatches the operation an agent calls** (E-002, #129), as the clone and run keys do.
+        let said = arm_through_operation(&mut state, &project, Tool::Move, keys::binding(Action::MoveMode).chord);
         state.status.note(said);
         move_drag.held = None;
         clone_drag.held = None;
@@ -12542,7 +12933,7 @@ fn keys(
     if keys::just_pressed(&keyboard, *live, Action::CloneMode) {
         // **The key dispatches the operation an agent calls** (E-002, #129). `tool_arm` is the one place
         // that decides what arming means; this carries the view in and applies the answer.
-        let said = arm_through_operation(&mut state, Tool::Clone, keys::binding(Action::CloneMode).chord);
+        let said = arm_through_operation(&mut state, &project, Tool::Clone, keys::binding(Action::CloneMode).chord);
         state.status.note(said);
         move_drag.held = None;
         clone_drag.held = None;
@@ -12560,7 +12951,7 @@ fn keys(
     // repeats along it, at **its own pitch** — not the project's lattice, which is the whole
     // reason the tool exists.
     if keys::just_pressed(&keyboard, *live, Action::RunMode) {
-        let said = arm_through_operation(&mut state, Tool::Run, &crate::keys::chord(Action::RunMode));
+        let said = arm_through_operation(&mut state, &project, Tool::Run, &crate::keys::chord(Action::RunMode));
         state.status.note(said);
         move_drag.held = None;
         clone_drag.held = None;
@@ -15327,6 +15718,8 @@ fn hide_carried(
     // read here rather than written by a system of its own: two writers of one placement's `Visibility`
     // would take turns undoing each other.
     eyes: Option<Res<crate::outliner::Eyes>>,
+    project: Option<Res<Project>>,
+    mut in_a_hidden_layer: Local<std::collections::HashSet<String>>,
     mut placed: Query<(&Placement, &mut Visibility)>,
     mut instances: Query<(&StampInstance, &mut Visibility), Without<Placement>>,
 ) {
@@ -15364,8 +15757,22 @@ fn hide_carried(
         Some(Held::Stamp(_)) | None => Vec::new(),
     };
 
+    // **The pieces standing in a hidden layer** (UI-51, #237), kept between frames and found again only when the eye, the
+    // map or the library moved: the rule that says which layer a piece is in is `outliner::layer_of`, which reads the
+    // library, so a settled frame does no lookup at all, hidden layer or not.
+    let moved = eyes.as_ref().is_some_and(|e| e.is_changed())
+        || open.is_changed()
+        || project.as_ref().is_some_and(|p| p.is_changed());
+    if moved {
+        in_a_hidden_layer.clear();
+        if let (Some(eyes), Some(project)) = (eyes.as_deref(), project.as_deref())
+            && eyes.has_hidden_layers()
+        {
+            in_a_hidden_layer.extend(open.map.placements.iter().filter(|p| eyes.hides(&project.library, p)).map(|p| p.id.clone()));
+        }
+    }
     for (marker, mut vis) in &mut placed {
-        let behind_the_eye = eyes.as_ref().is_some_and(|eyes| eyes.is_hidden(&marker.0));
+        let behind_the_eye = eyes.as_ref().is_some_and(|eyes| eyes.is_hidden(&marker.0)) || in_a_hidden_layer.contains(marker.0.as_str());
         let want = if carried.contains(&marker.0) || behind_the_eye {
             Visibility::Hidden
         } else {
@@ -15607,6 +16014,8 @@ struct MoveInput<'w> {
     picture: Res<'w, StampPicture>,
     compose: Res<'w, crate::compose::Armed>,
     chosen: Chosen<'w>,
+    /// What the outliner has hidden and locked (UI-51, #237), which a grab asks before it picks.
+    sight: crate::outliner::Sight<'w>,
 }
 
 /// What the person has chosen on the map: the lock (the primary) and the selection set around it.
@@ -15679,6 +16088,7 @@ fn drive_move(
         picture,
         compose,
         chosen: Chosen { mut lock, mut selection },
+        sight,
     } = input;
     let Aim { over_ui, pointer, snip, report } = aim;
     let MapWrite {
@@ -15729,7 +16139,8 @@ fn drive_move(
             let probe = open.map.to_map_space((hit.x, hit.z));
             // **One competition over both lists** — see `pick_subject`. A stamped row resolves to
             // its stamp, so grabbing a member picks up the instance rather than reaching into it.
-            let picked = pick_subject(&project, &open, &picture, probe);
+            // **A piece the eye has hidden is not in the competition** (UI-51, #237): it is not drawn.
+            let picked = pick_subject_seen(&project, &open, &picture, probe, &|p| sight.unseen(&project.library, p));
             // **Shift-click selects; it does not carry** (#236, #89). Shift on a *drop* is the finer
             // snap and is untouched — only the grab is read, and only for a piece, since a stamp is
             // not a placement the pose operations address.
@@ -15751,6 +16162,17 @@ fn drive_move(
                     let Some(p) = open.map.placements.get(index) else {
                         return;
                     };
+                    // **A locked piece is not picked up** (UI-51, #237), nor is a stack that carries one: a move
+                    // takes the whole group, so a locked rider would be moved by the click that grabbed its host.
+                    // The status line says which piece, and an operation can still move it.
+                    let locked = bevy_grimoire_core::stack::group_of(&open.map, index)
+                        .into_iter()
+                        .filter_map(|i| open.map.placements.get(i))
+                        .find(|member| sight.locked(&member.id));
+                    if let Some(locked) = locked {
+                        state.status.problem(format!("{} is locked, so a click will not move it — unlock it in the outliner", locked.id));
+                        return;
+                    }
                     Held::Piece(p.id.clone())
                 }
                 Some(Subject::Stamp(id)) => Held::Stamp(id),
@@ -15955,8 +16377,21 @@ fn drop_piece(
 /// Ties break on the placement id, a total order that does not depend on authoring order.
 pub fn pick_at(project: &Project,
     open: &OpenMap, probe: (f32, f32)) -> Option<usize> {
+    pick_at_seen(project, open, probe, &|_| false)
+}
+
+/// **[`pick_at`], past the pieces `unseen` names** (UI-51, #237): the removal tool's preview marker asks it, so the
+/// red box sits on what a click would take and a piece the eye has hidden is not under it.
+pub fn pick_at_seen(project: &Project,
+    open: &OpenMap,
+    probe: (f32, f32),
+    unseen: &dyn Fn(&bevy_grimoire_core::map::Placed) -> bool,
+) -> Option<usize> {
     let mut covering: Option<(usize, f32, &str)> = None;
     for (i, p) in open.map.placements.iter().enumerate() {
+        if unseen(p) {
+            continue;
+        }
         let Some(d) = descriptor_of(&project.library, p) else {
             continue;
         };
@@ -15983,6 +16418,9 @@ pub fn pick_at(project: &Project,
 
     let mut nearest: Option<(usize, f32, &str)> = None;
     for (i, p) in open.map.placements.iter().enumerate() {
+        if unseen(p) {
+            continue;
+        }
         let reach = descriptor_of(&project.library, p)
             .map(|d| crate::fill::cell_extents(&d, p.yaw, p.tip))
             .map_or(crate::fill::MIN_CELL, |(x, z)| x.max(z));
@@ -16081,8 +16519,22 @@ pub fn ray_box_t(origin: Vec3, dir: Vec3, centre: Vec3, half: Vec3) -> Option<f3
 /// skipped rather than guessed at.
 pub fn ray_pick(project: &Project,
     open: &OpenMap, ys: &[f32], origin: Vec3, dir: Vec3) -> Option<usize> {
+    ray_pick_seen(project, open, ys, origin, dir, &|_| false)
+}
+
+/// **[`ray_pick`], past the pieces `unseen` names** (UI-51, #237): what is not drawn is not what the ray runs into.
+pub fn ray_pick_seen(project: &Project,
+    open: &OpenMap,
+    ys: &[f32],
+    origin: Vec3,
+    dir: Vec3,
+    unseen: &dyn Fn(&bevy_grimoire_core::map::Placed) -> bool,
+) -> Option<usize> {
     let mut best: Option<(usize, f32, &str)> = None;
     for (i, p) in open.map.placements.iter().enumerate() {
+        if unseen(p) {
+            continue;
+        }
         let (Some(d), Some(&y)) = (descriptor_of(&project.library, p), ys.get(i)) else {
             continue;
         };
@@ -16130,8 +16582,23 @@ pub fn pick_subject(project: &Project,
     picture: &StampPicture,
     probe: (f32, f32),
 ) -> Option<Subject> {
+    pick_subject_seen(project, open, picture, probe, &|_| false)
+}
+
+/// **[`pick_subject`], past the pieces `unseen` names** (UI-51, #237): a piece the outliner's eye has taken out of the
+/// viewport cannot be picked there, because a click on what is not drawn is a click on whatever is behind it. The
+/// competition is unchanged; an unseen piece simply does not enter it.
+pub fn pick_subject_seen(project: &Project,
+    open: &OpenMap,
+    picture: &StampPicture,
+    probe: (f32, f32),
+    unseen: &dyn Fn(&bevy_grimoire_core::map::Placed) -> bool,
+) -> Option<Subject> {
     let mut best: Option<(Subject, f32, &str)> = None;
     for (i, p) in open.map.placements.iter().enumerate() {
+        if unseen(p) {
+            continue;
+        }
         let Some(d) = descriptor_of(&project.library, p) else {
             continue;
         };
@@ -16175,12 +16642,14 @@ fn nearest_placement(
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
     project: &Project,
     open: &OpenMap,
+    unseen: &dyn Fn(&bevy_grimoire_core::map::Placed) -> bool,
 ) -> Option<usize> {
     let camera = camera?;
     let (cam, cam_tf) = *camera;
     let hit = cursor_ground(pointer.0, cam, cam_tf)?;
-    // Both sides in map space: `at` is authored there and the cursor answers in world metres.
-    pick_at(project, open, open.map.to_map_space((hit.x, hit.z)))
+    // Both sides in map space: `at` is authored there and the cursor answers in world metres. A piece the eye
+    // has hidden is not under it (UI-51, #237).
+    pick_at_seen(project, open, open.map.to_map_space((hit.x, hit.z)), unseen)
 }
 
 /// **What the piece-verbs would act on right now**, already written as the readout line.
@@ -16348,7 +16817,8 @@ pub(crate) fn under_cursor_target(
     // the honest thing: the verbs above say "nothing here" rather than acting on a guess.
     let ys = crate::ops_terrain::heights_on_ground(project, open).ok()?;
     let (origin, dir) = crate::view::cursor_ray(pointer.0, cam, cam_tf)?;
-    ray_pick(project, open, &ys, origin, dir)
+    // **A piece the eye has hidden is not under the cursor** (UI-51, #237): every piece-verb comes through here.
+    ray_pick_seen(project, open, &ys, origin, dir, &|p| lock.is_unseen(&p.id))
 }
 
 /// **`H`: step the target through the stack under the cursor**, bottom to top, wrapping.

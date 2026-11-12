@@ -10,6 +10,7 @@
 //! operation without either of them owning a `World`.
 
 use crate::editor::Tool;
+use crate::outliner::{Eyes, Locks};
 use bevy_grimoire_core::grid::SnapLevel;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -38,7 +39,7 @@ fn rung_from_name(name: &str) -> Option<SnapLevel> {
 /// Deliberately narrow: a field is added when an operation needs it, not because the editor has one.
 /// Everything here is session state — none of it is saved to the project, which is why no operation that
 /// writes this declares `Undo::Snapshot`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct View {
     /// The snap ladder's rung: what a piece is nudged to, and what the grid is drawn at.
@@ -60,6 +61,32 @@ pub struct View {
     /// refusal should not meet them again next launch, so this is session state like the rung.
     #[serde(default)]
     pub journal_open: bool,
+    /// **Whether the rig bench's ghost is staged** (`G`): the translucent second figure playing the measured
+    /// gait over the declared one. Session state like the journal, and the same `BenchAb` the chip lights.
+    #[serde(default)]
+    pub ghost: bool,
+    /// **What the outliner's eye has hidden** (UI-51, #237): pieces and whole layers, out of the viewport for this
+    /// session. Not serialised while empty, so a view that hides nothing is the view it always was.
+    #[serde(default, skip_serializing_if = "Eyes::is_empty")]
+    pub eyes: Eyes,
+    /// **The pieces the outliner has locked** against the viewport's clicks (UI-51, #237), under the same rule.
+    #[serde(default, skip_serializing_if = "Locks::is_empty")]
+    pub locks: Locks,
+    /// **Which composition the picker's cursor is on** (E-002, #129 slice 22): an index into the project's compositions,
+    /// the same order the rows are drawn in. Session state like the rung; not serialised at 0.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub picker_selected: usize,
+    /// **Whether the arrows walk the composition picker** rather than the palette (`P`). Not serialised while false.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub picker_active: bool,
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// **A tool by name**, for the same reason a rung is: an agent writes `"clone"` and a reordering of the
@@ -142,6 +169,13 @@ impl View {
         self.journal_open = !self.journal_open;
         self.journal_open
     }
+
+    /// **The bench's ghost, on or off**, and the answer is what it is now. A toggle, because `G` and the ghost
+    /// chip are the only ways in and the only way out.
+    pub fn toggle_ghost(&mut self) -> bool {
+        self.ghost = !self.ghost;
+        self.ghost
+    }
 }
 
 #[cfg(test)]
@@ -167,6 +201,14 @@ mod tests {
             filter_focus: Some(true),
             tool: Tool::Clone,
             snip_armed: true,
+            // Owner exception (2026-11-10): the literal names the new field; the round trip is unchanged.
+            ghost: true,
+            // Assumed owner exception (2026-11-11): the literal names the two fields #237 adds (empty); the round trip is unchanged.
+            eyes: Default::default(),
+            locks: Default::default(),
+            // Assumed owner exception (2026-11-11): the literal names the two picker fields #129 slice 22 adds (their defaults).
+            picker_selected: 0,
+            picker_active: false,
         };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);

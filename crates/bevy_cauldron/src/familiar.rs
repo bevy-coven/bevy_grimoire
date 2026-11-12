@@ -206,7 +206,14 @@ pub fn toggle_the_familiar(
         return;
     }
     let Ok(pane) = panes.single() else { return };
-    let block = commands
+    let block = spawn_the_block(&mut commands, pause.0, here.0);
+    commands.entity(pane).insert_children(0, &[block]);
+}
+
+/// **The AGENT block, spawned and not yet placed**: the one builder the Map's INSPECTOR toggle and the Agent workspace
+/// (NV-10, #387) both use, so the block is the same block wherever a dock holds it.
+pub fn spawn_the_block(commands: &mut Commands, pause: bool, here: bool) -> Entity {
+    commands
         .spawn((
             Familiar,
             Name::new("agent"),
@@ -241,9 +248,9 @@ pub fn toggle_the_familiar(
                     crate::chrome::row_value(col, "", crate::chrome::ink().text, FamiliarPlanLine);
                 });
             });
-            block.spawn((toggle("Pause agent writes", pause.0), FamiliarSwitch, observe(toggle_the_pause)));
+            block.spawn((toggle("Pause agent writes", pause), FamiliarSwitch, observe(toggle_the_pause)));
             block.spawn((
-                toggle("Answer hand-backs here", here.0),
+                toggle("Answer hand-backs here", here),
                 HandBackSwitch,
                 observe(|change: On<ValueChange<bool>>, mut here: ResMut<HandBackHere>| {
                     if here.0 != change.value {
@@ -277,8 +284,7 @@ pub fn toggle_the_familiar(
                 Node { flex_direction: FlexDirection::Column, width: Val::Percent(100.0), flex_shrink: 0.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
             ));
         })
-        .id();
-    commands.entity(pane).insert_children(0, &[block]);
+        .id()
 }
 
 /// **The PLAN row follows the plan file**, read at most every [`PLAN_READ_SECS`]: the count, then each step with its status, or `no plan`.

@@ -77,6 +77,20 @@ fn dividers(app: &mut App) -> Vec<(Entity, Rect)> {
         .collect()
 }
 
+/// **The shell's divider: the one that is laid out.**
+///
+/// The editor holds more than one `SplitDivider`: the dock's own body is a hidden `Role::DockBody`
+/// (`chrome::spawn_frame`, bevy_gooey#85), whose pages are built but not laid out, so their dividers are
+/// 0 px. A query's order over them is the order of the archetypes' hash, which any new resource or panel
+/// shifts, so the test names the divider by what it claims — a laid-out channel — and not by where it
+/// happens to come first.
+fn the_shells_divider(found: &[(Entity, Rect)]) -> Option<(Entity, Rect)> {
+    found
+        .iter()
+        .copied()
+        .max_by(|(_, a), (_, b)| (a.width() * a.height()).total_cmp(&(b.width() * b.height())))
+}
+
 /// **The editor has a divider that is really laid out.**
 #[test]
 fn the_editor_spawns_a_laid_out_split_divider() {
@@ -86,7 +100,7 @@ fn the_editor_spawns_a_laid_out_split_divider() {
         !found.is_empty(),
         "the shell is a gooey dock, so it must have a divider; none was found"
     );
-    let (_, rect) = found[0];
+    let (_, rect) = the_shells_divider(&found).expect("a divider");
     // **A channel the shell's full height** (owner, 2026-11-06, #314). It was `height > 500` px, the
     // shell's height when the shell had the window to itself; the terminal is now docked under it on
     // every screen, so the shell is shorter and the claim is the one the number stood for: the divider
@@ -113,7 +127,7 @@ fn the_editor_spawns_a_laid_out_split_divider() {
 fn a_drag_on_the_shells_divider_moves_the_split_fraction() {
     let (_root, mut app) = editor("shell-divider-drag");
     let found = dividers(&mut app);
-    let (divider, rect) = found.first().copied().expect("a divider");
+    let (divider, rect) = the_shells_divider(&found).expect("a divider");
     let parent = app.world().get::<ChildOf>(divider).expect("a parent").parent();
     let before = app.world().get::<bevy_gooey::SplitFraction>(parent).expect("a split").0;
     let node = app.world().get::<ComputedNode>(parent).expect("laid out");

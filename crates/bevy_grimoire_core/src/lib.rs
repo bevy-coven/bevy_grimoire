@@ -54,6 +54,7 @@ pub mod heightfield;
 pub mod image_header;
 pub mod import;
 pub mod kits;
+pub mod lesson;
 pub mod library;
 pub mod live;
 pub mod map;

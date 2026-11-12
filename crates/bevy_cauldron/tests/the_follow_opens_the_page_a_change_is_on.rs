@@ -36,7 +36,8 @@ use bevy::ui::{ComputedNode, UiGlobalTransform};
 use bevy_cauldron::editor::EditorState;
 use bevy_cauldron::harness;
 use bevy_cauldron::project::Project;
-use bevy_cauldron::tiles::{Door, Mode};
+use bevy_cauldron::tiles::Mode;
+use bevy_cauldron::workspace::Workspace;
 
 use crate::fixtures;
 
@@ -137,7 +138,7 @@ fn editor(root: &std::path::Path) -> App {
     for _ in 0..8 {
         app.update();
     }
-    assert_eq!(*app.world().resource::<Door>(), Door::Map, "the test starts on the Map door");
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Map, "the test starts on the Map door");
     app
 }
 
@@ -224,8 +225,8 @@ fn scrollable_ancestor(app: &mut App, row: Entity) -> Entity {
 
 /// **The door and panel the editor ended on**, as words: `Mode` carries no `Debug`, and the words are
 /// what a person reads on the strip anyway.
-fn door_and_tab(app: &App) -> (Door, &'static str) {
-    (*app.world().resource::<Door>(), app.world().resource::<Mode>().label())
+fn door_and_tab(app: &App) -> (Workspace, &'static str) {
+    (*app.world().resource::<Workspace>(), app.world().resource::<Mode>().label())
 }
 
 /// **The row for a library piece**, by the id the Meshes shelf names it.
@@ -256,7 +257,7 @@ fn a_pieces_page_opens_on_the_meshes_shelf_with_the_piece_selected() {
 
     assert_eq!(
         door_and_tab(&app),
-        (Door::Kit, "MESHES"),
+        (Workspace::Kit, "MESHES"),
         "the change is a library piece, whose page is the kit door's Meshes shelf"
     );
     assert_eq!(
@@ -290,7 +291,7 @@ fn a_tiles_lattice_opens_on_the_meshes_panel_with_that_piece_selected() {
 
     assert_eq!(
         door_and_tab(&app),
-        (Door::Kit, "MESHES"),
+        (Workspace::Kit, "MESHES"),
         "a piece's lattice is drawn on the Meshes panel, and the reveal went elsewhere"
     );
     assert_eq!(
@@ -321,7 +322,7 @@ fn a_compositions_page_opens_on_the_compose_panel_with_that_group_selected() {
 
     assert_eq!(
         door_and_tab(&app),
-        (Door::Kit, "COMPOSE"),
+        (Workspace::Kit, "COMPOSE"),
         "a group is defined on the Compose panel, and the reveal went elsewhere"
     );
     let state = app.world().resource::<bevy_cauldron::compose::ComposeState>();
@@ -407,7 +408,7 @@ fn a_rigs_page_opens_on_the_rig_bench_with_that_rig_selected() {
     settle(&mut app);
     assert_eq!(
         door_and_tab(&app),
-        (Door::Rigs, "ANIM"),
+        (Workspace::Animation, "ANIM"),
         "a rig's page is the Rigs door's bench"
     );
     let bench = app.world().resource::<bevy_cauldron::anim_tab::BenchState>();
@@ -434,11 +435,11 @@ fn a_data_files_page_opens_on_the_data_panel_at_that_file() {
 
     assert_eq!(
         door_and_tab(&app),
-        (Door::Map, "MAP"),
+        (Workspace::Map, "MAP"),
         "a data file's page is the Map door's DATA panel"
     );
     let world = app.world_mut();
-    let mut q = world.query::<(&bevy_gooey::Table, &bevy_gooey::TableCursor)>();
+    let mut q = world.query_filtered::<(&bevy_gooey::Table, &bevy_gooey::TableCursor), Without<bevy_cauldron::editor::HistoryTree>>();
     let (_, cursor) = q.single(world).expect("the DATA panel has one table");
     assert!(
         cursor.0.is_some(),
@@ -483,7 +484,7 @@ fn a_notes_page_opens_on_the_notes_panel_with_that_note_selected() {
 
     assert_eq!(
         door_and_tab(&app),
-        (Door::Map, "MAP"),
+        (Workspace::Map, "MAP"),
         "a note is on the open map, so its page is the Map door"
     );
     assert_eq!(

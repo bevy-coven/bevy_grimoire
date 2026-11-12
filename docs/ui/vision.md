@@ -47,10 +47,28 @@ flowchart LR
 
 - **Launcher** (replaces `Screen::Menu` and the kit/map lists of `chooser.rs`): recent projects with name, path, last opened and thumbnail; Open folder…, New project…, Open example, Settings, and what is new since the user last opened Grimoire.
 - **Loader** (a new `Screen::Loading`): the project open as named stages: read project, kits, measure meshes, thumbnails, family crates, maps. Under 1 s nothing shows; from 1 s a spinner; once the stage count is known and 10 s have passed, a percent-done bar with "N of M: stage". Cancel returns to the launcher and writes nothing. When it ends, a report card lists every refused file with its problem.
-- **Workbench** (replaces `Screen::Editor`): where the work happens (section 4).
+- **Workbench** (replaces `Screen::Editor`): where the work happens (section 4). It holds **nine workspaces**, and moving between them is not a screen change: the project, the open map and the selection stay where they are.
 - **Settings** is a workbench tab, opened with Cmd/Ctrl+, and from the launcher.
 
 ## 4. Workbench anatomy
+
+**Two axes.** Since NV-02 (#379) the editor's navigation is two independent axes, and keeping them
+independent is what makes moving around cheap:
+
+- **The workspace** is the *job*: Project, Map, World, Kit, Animation, Sound, Files, Game, Agent. It is
+  a fixed list in a fixed order, so `Cmd`/`Ctrl`+`1` is Project today and Project in five releases.
+- **The layout** is *what is on screen*: a `DockLayout` tree, saved per workspace. A divider moved in
+  Map is where it was left in Map, and has moved nothing in Kit.
+
+They replaced the **doors**, which welded the two together: the Kit door was the meshes, the tiles and
+the compositions, so crossing between jobs meant a full teardown and a project reload. Now a switch
+changes which panels are drawn and nothing else — **one viewport is shared by every workspace that
+shows the world** (Map, World, Kit, Animation), so switching never reloads a map or drops a selection.
+
+**A workspace whose part is not built is not registered.** Project (the page is still its own screen, reached by
+Cmd/Ctrl+O) and Files (until GD-11) have their chord and their command, and the
+command says which issue brings it. There are no placeholder screens: a workspace either does its job or says what
+it is waiting for.
 
 Regions, top to bottom and left to right:
 
@@ -58,7 +76,7 @@ Regions, top to bottom and left to right:
 +--------------------------------------------------------------+
 | menu bar                                                     |
 +--------------------------------------------------------------+
-| toolbar                                                      |
+| workspace strip: the workspace, its panels, and the other one|
 +---------+--------------------------------------+-------------+
 | left    |                                      | right dock  |
 | dock    |            viewport                  | inspector   |
@@ -68,13 +86,58 @@ Regions, top to bottom and left to right:
 | bottom dock: history · problems · notes · log                |
 +--------------------------------------------------------------+
 | status bar                                                   |
-+--------------------------------------------------------------+
 ```
 
-- The **viewport** is the `surface.rs` image and is a *host* focus region: arrow keys and Enter act on the map, as today. F6 and Shift+F6 cycle regions, Esc returns to the viewport.
-- The docks hold **panels**. Each panel has an id, a title and a spawn function in a `PanelRegistry`. The layout of a dock is data (`DockLayout`: a tree of splits and tab groups), saved in settings. There are no floating windows.
-- **Workspaces** replace the doors Kit, Map and Rigs: each is a saved dock layout. Window ▸ Reset layout restores a workspace's default.
-- The **status bar** left side shows the project, map, workspace and selection count. The right side shows the live link, the reload state, background jobs and the problems count.
+The **default layout of each workspace**, and every one is a different arrangement on purpose — a
+person who moves a divider in one workspace and finds it where they left it in the next has proof the
+layouts are per workspace rather than one shared one:
+
+| Workspace | Default | Panels |
+|---|---|---|
+| Project | the page, whole | the project page (NV-08, not yet moved into the workbench) |
+| Map | inspector 22%, viewport, library | viewport, outliner, inspector, place, notes, checks |
+| World | viewport over the inspector | terrain, and the environment, lights and light map in a build that has those crates (NV-08, #385). Water and forest are written through the terrain line and have no panel of their own |
+| Kit | inspector 30%, viewport, library | Meshes, Tiles, Compose |
+| Animation | inspector 28%, viewport, library | the rig bench |
+| Sound | inspector and viewport | the audio panel (`bevy_siren`; a build without it says so, NV-08, #385) |
+| Files | inspector and viewport | the file tree (GD-11) |
+| Game | viewport and inspector | Play, Stop, Build, the build's errors, the game's log, a read-only view of its state over BRP, frame time and memory, Show window; a crash stays on screen and badges the icon (NV-09, #386) |
+| Agent | inspector and viewport | the AGENT block at full size with the waiting wishes and lessons, and the agent's last changes with Look (NV-10, #387); the compact block stays a toggle of Map |
+
+**Document tabs** (NV-04, #381) are the third thing, beside the workspace and the layout: *what you are
+working on*. Inside a workspace the things you open are tabs: maps in Map and World, files in Files,
+meshes, tiles and compositions in Kit, rigs and clips in Animation, cue tables and music scores in Sound.
+A tab shows the thing's name, a dot while it has unsaved edits and a close button, and the strip is drawn
+from two tabs up (one document is the title the chrome already prints). `Cmd/Ctrl+W` closes the active
+tab, `Cmd/Ctrl+Shift+T` reopens the last one closed, and `Ctrl+Tab` (with Shift, backwards) cycles.
+
+- **One map is live at a time.** Choosing another map's tab opens that map, as the project page does; a map
+  with unsaved edits asks first, with the question the workspace switch already asks. The active map tab is
+  always the open map, and nothing else chooses it.
+- **Session state is the person's, not the project's.** The open tabs are saved in
+  `<data_dir>/Grimoire/projects/<hash of root>/session.yaml`, so committing a project never commits
+  somebody's tabs, and they come back when the project is opened again.
+- **A tab whose thing no longer exists** (a file deleted outside the editor) closes, and the status line
+  names it.
+
+- The **viewport** is the `surface.rs` image and is a *host* focus region: arrow keys and Enter act on
+  the map, as today. F6 and Shift+F6 cycle regions, Esc returns to the viewport.
+- The docks hold **panels**. Each panel has an id, a title and a spawn function in a `PanelRegistry`.
+  The layout of a dock is data (`DockLayout`: a tree of splits and tab groups), saved in settings under
+  the workspace's id. There are no floating windows.
+- **A panel lives in one workspace by default**, and Window ▸ Panels can add any panel to any
+  workspace's dock. The default says where it belongs; it is not a cage.
+- **Reset layout** restores the *current* workspace's default and takes that one key out of the file,
+  leaving the others alone.
+- The **status bar** left side shows the project, map, workspace and selection count. The right side
+  shows the live link, the reload state, background jobs and the problems count.
+- The **activity bar** (NV-03, #380) is a vertical bar at the window's far left with one icon per
+  *registered* workspace, in the registry's order. The sliding selection indicator is on the open workspace,
+  its tooltip gives the workspace's name and shortcut, and a badge says what needs a person: the problems
+  count on Map and Files, the waiting wishes and lessons on Agent. A workspace with no source draws no
+  badge. It is a focus region (F6 cycles to it) and its tabs are gooey's vertical `TabList`, so the arrows move down it. **View ▸ Show activity bar**
+  and Zen mode take it away entirely (it is spawned on demand, never hidden) and the choice is saved in the user's
+  settings. Agent's badge replaces the status band's wishes chip once the Agent workspace is registered.
 
 ## 5. Commands
 
@@ -144,7 +207,7 @@ New third-party dependencies, each logged because no family crate does the job: 
 | `keys.rs` `Action` | the command registry (UI-04); the palette (UI-32); the menus (UI-31) |
 | `chooser.rs`, `Screen::Menu` | the launcher (UI-10) |
 | `screen.rs` | launcher, loader, workbench (UI-10, UI-20, UI-30) |
-| `tiles.rs` `Door`, `Mode` | workspaces (UI-33) and the Kit workspace (UI-59) |
+| ~~`tiles.rs` `Door`, `Mode`~~ | **done in NV-02 (#379)**: `Door` is `workspace::Workspace`; `Mode` stays as the panel axis |
 | `oplog_view.rs` | the history panel (UI-53) |
 | `checks_view.rs` | the problems panel (UI-54) |
 | `notes_view.rs` | the notes panel (UI-55) |

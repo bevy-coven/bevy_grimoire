@@ -5,7 +5,8 @@
 //! document tabs — be judged as cheaper or not.
 //!
 //! This file drives the real editor from a cold start on a fixture project, by the keys and pointer
-//! actions a hand would use, and counts them. Its rows *are* `docs/ui/navigation-baseline.md`: the
+//! actions a hand would use, and counts them. Its rows *are* `docs/ui/navigation.md` (the baseline the
+//! series started from, `docs/ui/navigation-baseline.md`, is frozen beside it, #385): the
 //! test renders the document and compares it with the committed file, so a route that gets longer
 //! fails here until the document is regenerated. Nothing is written to the source tree unless
 //! `UPDATE_NAVIGATION_BASELINE=1` is set, which is the pattern `tests/reload_contract.rs` uses for the
@@ -43,6 +44,7 @@ use bevy::ui::{ComputedNode, ScrollPosition, UiGlobalTransform};
 
 use bevy_cauldron::build::Build;
 use bevy_cauldron::compose::ComposeState;
+use bevy_cauldron::workspace::Workspace;
 use bevy_cauldron::project::OpenMap;
 use bevy_cauldron::screen::Screen;
 use bevy_cauldron::selection::Selection;
@@ -74,8 +76,9 @@ const WAIT_POLL: Duration = Duration::from_millis(10);
 /// by a person either.
 const WHEEL_BUDGET: u32 = 60;
 
-/// Where the generated table lives, relative to the workspace root.
-const BASELINE: &str = "docs/ui/navigation-baseline.md";
+/// Where the generated table lives, relative to the workspace root. **The live measurement**, since NV-08 (#385)
+/// moved the panels into their workspaces and the baseline's routes stopped existing; the baseline is kept as it was.
+const BASELINE: &str = "docs/ui/navigation.md";
 
 /// **Set this to rewrite the document** instead of checking it. Run it, read the diff, commit both.
 const REGENERATE: &str = "UPDATE_NAVIGATION_BASELINE";
@@ -394,8 +397,8 @@ fn a_named_piece() -> Destination {
 /// **A piece's library entry**, which is the Meshes panel's shelf.
 fn a_pieces_library_entry() -> Destination {
     let mut d = Driver::cold_start("library_entry");
-    d.chord(&[KeyCode::Equal], "press = (cross to the kit)");
-    assert_eq!(d.panel_name(), Mode::Meshes.label(), "the crossing opens the Kit door on its first panel");
+    d.chord(&[primary(), KeyCode::Digit4], "press Cmd/Ctrl+4 (the Kit workspace)");
+    assert_eq!(d.panel_name(), Mode::Meshes.label(), "the Kit workspace opens on its first panel");
     // The pack starts folded, so the piece is behind the pack's own row.
     let pack = d.word_starting("MESHES (");
     d.click(&pack);
@@ -411,9 +414,9 @@ fn a_pieces_library_entry() -> Destination {
 /// **A tile**, opened on the Tiles panel.
 fn a_tile() -> Destination {
     let mut d = Driver::cold_start("tile");
-    d.chord(&[KeyCode::Equal], "press = (cross to the kit)");
-    d.chord(&[KeyCode::Digit2], "press 2 (the Tiles panel)");
-    assert_eq!(d.panel_name(), Mode::Tiles.label(), "the second slot key opens Tiles");
+    d.chord(&[primary(), KeyCode::Digit4], "press Cmd/Ctrl+4 (the Kit workspace)");
+    d.click("TILES");
+    assert_eq!(d.panel_name(), Mode::Tiles.label(), "the strip's second chip opens Tiles");
     // **The tile's own row**, then `Enter`, which is how a row on this page opens
     // ("1 tile(s) — Enter opens one").
     let row = d.word_starting("TILES (");
@@ -429,9 +432,9 @@ fn a_tile() -> Destination {
 /// **A composition**, chosen on the Compose panel.
 fn a_composition() -> Destination {
     let mut d = Driver::cold_start("composition");
-    d.chord(&[KeyCode::Equal], "press = (cross to the kit)");
-    d.chord(&[KeyCode::Digit3], "press 3 (the Compose panel)");
-    assert_eq!(d.panel_name(), Mode::Compose.label(), "the third slot key opens Compose");
+    d.chord(&[primary(), KeyCode::Digit4], "press Cmd/Ctrl+4 (the Kit workspace)");
+    d.click("COMPOSE");
+    assert_eq!(d.panel_name(), Mode::Compose.label(), "the strip's third chip opens Compose");
     // **The second group's own row**, so the click changes the selection rather than confirming it.
     let row = d.word_starting("barrel ");
     d.click(&row);
@@ -441,73 +444,81 @@ fn a_composition() -> Destination {
     Destination { what: "A composition", steps: d.steps, cost: d.cost, reach: Reach::Arrived }
 }
 
-/// **The rig bench**, which the editor only opens from its command line.
+/// **The rig bench**, one chord away: the Animation workspace (`Cmd`/`Ctrl`+`5`, #379).
+///
+/// It was the one row that was unreachable from inside the editor: the crossing key alternated Map and
+/// Kit and the bench opened only from `--door rigs` on the command line. The workspaces made it a
+/// destination like the others.
 fn a_rig() -> Destination {
-    // Measured: the bench exists when it is opened with `--door rigs`…
-    let mut d = Driver::on("rigs", Mode::Anim);
-    assert!(d.showing("RIGS"), "the bench did not draw when the editor was opened on it: {:#?}", d.words());
-    let mut opened = d.steps;
-    opened.insert(0, "`--door rigs` on the command line".to_owned());
-    // …and no sequence of keys inside the editor reaches it: the crossing key alternates Map and Kit.
-    let mut probe = Driver::cold_start("rigs_probe");
-    let mut seen: Vec<&'static str> = Vec::new();
-    for _ in 0..4 {
-        probe.chord(&[KeyCode::Equal], "press = (cross)");
-        seen.push(probe.panel_name());
-    }
-    assert!(
-        !seen.contains(&Mode::Anim.label()),
-        "a crossing reached the rig bench, which this row says it cannot: {seen:?}"
-    );
-    let mut steps = probe.steps;
-    steps.extend(opened);
-    Destination {
-        what: "A rig (the Rigs bench)",
-        steps,
-        cost: probe.cost,
-        reach: Reach::Unreachable(format!(
-            "no key, menu row or command opens the Rigs door from inside the editor: four presses of `=` walk {:?} and never the bench",
-            seen
-        )),
-    }
+    let mut d = Driver::cold_start("rig");
+    d.chord(&[primary(), KeyCode::Digit5], "press Cmd/Ctrl+5 (the Animation workspace)");
+    assert_eq!(d.panel_name(), Mode::Anim.label(), "the Animation workspace opens the rig bench");
+    assert!(d.showing("RIGS"), "the bench did not draw: {:#?}", d.words());
+    Destination { what: "A rig (the Rigs bench)", steps: d.steps, cost: d.cost, reach: Reach::Arrived }
 }
 
 /// **One of a rig's clips**, which is chosen from a list inside the bench.
 fn a_rigs_clip() -> Destination {
-    let mut d = Driver::on("rigs_clip", Mode::Anim);
+    let mut d = Driver::cold_start("rigs_clip");
+    d.chord(&[primary(), KeyCode::Digit5], "press Cmd/Ctrl+5 (the Animation workspace)");
     assert!(d.showing("RIGS"), "the bench is not even drawn: {:#?}", d.words());
     // The list a clip is chosen from, and whether this project has one to choose.
     let rows = d.words().into_iter().filter(|w| w.starts_with("no rigs") || w.contains("rig(s)")).collect::<Vec<_>>();
+    let mut steps = d.steps;
+    steps.push("click a row in the bench's list".to_owned());
     Destination {
         what: "One of a rig's clips",
-        steps: vec!["`--door rigs` on the command line".to_owned(), "click a row in the bench's list".to_owned()],
+        steps,
         cost: d.cost,
         reach: Reach::Unreachable(format!(
-            "the bench is reachable only from the command line (see the row above), and a clip is chosen from a list inside it; \
-             this fixture has no rig, so its list reads {rows:?}"
+            "a clip is chosen from a list inside the bench, which Cmd/Ctrl+5 opens; this fixture has no rig, so its list reads {rows:?}"
         )),
     }
 }
 
-/// **A sound cue**, in the Map inspector's AUDIO block.
+/// **A sound cue**, in the Sound workspace (`Cmd`/`Ctrl`+`6`, NV-08 #385).
+///
+/// It was the Map inspector's AUDIO block, 60 wheel notches that never reached it. The audio panel is the
+/// Sound workspace's now, one chord away. Its heading is drawn in a build with `bevy_siren`; a build without
+/// the crate says so in a sentence, and that is the row's reason.
 fn a_sound_cue() -> Destination {
     let mut d = Driver::cold_start("sound");
-    let arrived = d.scroll_to("AUDIO");
-    let cost = Cost { presses: d.cost.presses, pointer: d.cost.pointer };
+    d.chord(&[primary(), KeyCode::Digit6], "press Cmd/Ctrl+6 (the Sound workspace)");
+    assert_eq!(d.panel_name(), Mode::Sound.label(), "Cmd/Ctrl+6 opens the Sound workspace");
+    let cost = d.cost;
     let steps = d.steps.clone();
-    if arrived {
+    if d.showing("AUDIO") {
         return Destination { what: "A sound cue", steps, cost, reach: Reach::Arrived };
     }
+    assert!(
+        d.showing(bevy_cauldron::workspace_panels::NO_AUDIO),
+        "the Sound workspace shows neither AUDIO nor the sentence that says the build has none: {:#?}",
+        d.words()
+    );
     Destination {
         what: "A sound cue",
         steps,
         cost,
-        reach: Reach::Unreachable(format!(
-            "the AUDIO block is behind the off-by-default `bevy_siren` feature: {} wheel notches down the inspector \
-             never draw it, and nothing else draws a cue",
-            cost.pointer
-        )),
+        reach: Reach::Unreachable(
+            "the Sound workspace opens by one chord, but the AUDIO panel is behind the off-by-default `bevy_siren` \
+             feature: this build draws a sentence saying so, and no cue"
+                .to_owned(),
+        ),
     }
+}
+
+/// **A part of the world**, in the World workspace (`Cmd`/`Ctrl`+`3`, NV-08 #385): terrain, water, forest and
+/// lights were headings of the one Map inspector scroll.
+///
+/// `absent` is the sentence a row that does not arrive gives, naming what would have to exist.
+fn a_world_section(what: &'static str, label: &'static str, tag: &'static str, absent: &'static str) -> Destination {
+    assert!(!absent.is_empty(), "`{label}` must say why it cannot be reached, since a row renders that reason");
+    let mut d = Driver::cold_start(tag);
+    d.chord(&[primary(), KeyCode::Digit3], "press Cmd/Ctrl+3 (the World workspace)");
+    assert_eq!(d.panel_name(), Mode::World.label(), "Cmd/Ctrl+3 opens the World workspace");
+    let arrived = d.showing(label);
+    let reach = if arrived { Reach::Arrived } else { Reach::Unreachable(absent.to_owned()) };
+    Destination { what, steps: d.steps, cost: d.cost, reach }
 }
 
 /// **A heading of the one inspector scroll** — terrain, water, forest, lights, a data file, the
@@ -529,15 +540,45 @@ fn an_inspector_section(what: &'static str, label: &'static str, tag: &'static s
 fn the_history() -> Destination {
     let mut d = Driver::cold_start("history");
     assert!(d.showing("UNDO") && d.showing("REDO"), "the undo and redo history is not on the Map panel: {:#?}", d.words());
-    // **The rows themselves**, which is what "the history" means: one per step either way.
-    let rows = {
+    // **The rows themselves**, which is what "the history" means. UI-53 made it gooey's virtualized list, so
+    // what is counted is the list's nodes — one per line of the session — and the rows it draws of them.
+    let (lines, drawn) = {
         let world = d.app.world_mut();
-        world.query::<&bevy_cauldron::editor::HistorySlot>().iter(world).count()
+        let tree = world
+            .query_filtered::<Entity, With<bevy_cauldron::editor::HistoryTree>>()
+            .single(world)
+            .ok();
+        let lines = tree
+            .and_then(|tree| world.get::<bevy_gooey::Table>(tree))
+            .and_then(|table| table.source::<bevy_gooey::Tree>())
+            .map_or(0, bevy_gooey::Tree::node_count);
+        let drawn = tree.map_or(0, |tree| {
+            world.query::<&bevy_gooey::TableRow>().iter(world).filter(|row| row.table == tree).count()
+        });
+        (lines, drawn)
     };
-    assert!(rows > 1, "the history list drew {rows} row(s), so the undo list is not there");
+    // **A cold start has no edits, so the list is one line and one row is drawn** (gooey's pool is
+    // `(rows tall).ceil() + 1`, capped at the lines it holds): the list is there, and it draws exactly what it holds.
+    let pool = {
+        let world = d.app.world_mut();
+        world
+            .query_filtered::<&bevy_gooey::TableRows, With<bevy_cauldron::editor::HistoryTree>>()
+            .single(world)
+            .map_or(0, |rows| rows.0.ceil() as usize + 1)
+    };
+    assert!(lines >= 1 && drawn >= 1, "the history list holds {lines} line(s) and drew {drawn} row(s), so the undo list is not there");
+    assert_eq!(
+        drawn,
+        lines.min(pool),
+        "the history list drew {drawn} row(s) of its {lines} line(s); a pool of {pool} draws {} of them",
+        lines.min(pool)
+    );
     Destination {
         what: "The history",
-        steps: vec![format!("it is drawn beside UNDO and REDO, on screen at a cold start ({rows} rows)")],
+        steps: vec![format!(
+            "it is drawn beside UNDO and REDO, on screen at a cold start ({lines} {}, {drawn} drawn)",
+            plural(lines, "line", "lines")
+        )],
         cost: d.cost,
         reach: Reach::Arrived,
     }
@@ -546,9 +587,11 @@ fn the_history() -> Destination {
 /// **The AGENT block.**
 fn the_agent_block() -> Destination {
     let mut d = Driver::cold_start("agent_block");
-    d.click("View");
-    d.click("Show agent");
-    assert!(d.showing("AGENT"), "View ▸ Show agent did not put the AGENT block on screen: {:#?}", d.words());
+    // Owner exception (2026-11-12, NV-10 #387): the AGENT block is the Agent workspace's, one chord away (Cmd/Ctrl+9), where it was
+    // View ▸ Show agent; the compact block is still that toggle, and is not the destination measured here.
+    d.chord(&[primary(), KeyCode::Digit9], "press Cmd/Ctrl+9 (the Agent workspace)");
+    assert_eq!(d.panel_name(), Mode::Agent.label(), "Cmd/Ctrl+9 opens the Agent workspace");
+    assert!(d.showing("AGENT"), "the Agent workspace did not put the AGENT block on screen: {:#?}", d.words());
     // **The block's own three lines**, so this is the block and not a heading that happens to match.
     for line in ["HEARD", "NEWEST", "HAND-BACK"] {
         assert!(d.showing(line), "the AGENT block is on screen without its `{line}` line");
@@ -565,31 +608,19 @@ fn the_settings() -> Destination {
     Destination { what: "The settings", steps: d.steps, cost: d.cost, reach: Reach::Arrived }
 }
 
-/// **The running game's log.**
+/// **The running game's log**, in the Game workspace (`Cmd`/`Ctrl`+`8`, NV-09 #386): its output is written to a file the
+/// workspace tails, under the heading LOG.
 fn the_games_log() -> Destination {
     let mut d = Driver::cold_start("game_log");
-    // Every screen the editor has, in turn: the log is on none of them.
-    let mut seen: Vec<&str> = Vec::new();
-    if d.showing("GAME LOG") || d.showing("Game log") {
-        seen.push("the workbench");
-    }
-    d.chord(&[primary(), KeyCode::KeyO], "Cmd+O (close project)");
-    if d.showing("GAME LOG") || d.showing("Game log") {
-        seen.push("the project page");
-    }
-    let cost = d.cost;
-    let steps = d.steps.clone();
-    assert!(seen.is_empty(), "a game log is drawn after all, on {seen:?}");
-    Destination {
-        what: "The running game's log",
-        steps,
-        cost,
-        reach: Reach::Unreachable(
-            "no panel or screen draws the running game's output: the workbench and the project page both read no \
-             log, and the game's output goes to stdout and cauldron.log"
-                .to_owned(),
-        ),
-    }
+    d.chord(&[primary(), KeyCode::Digit8], "press Cmd/Ctrl+8 (the Game workspace)");
+    assert_eq!(d.panel_name(), Mode::Game.label(), "Cmd/Ctrl+8 opens the Game workspace");
+    let arrived = d.showing("LOG");
+    let reach = if arrived {
+        Reach::Arrived
+    } else {
+        Reach::Unreachable("the Game workspace is open and the LOG heading is not on screen".to_owned())
+    };
+    Destination { what: "The running game's log", steps: d.steps, cost: d.cost, reach }
 }
 
 // ───────────────────────────── the document ─────────────────────────────
@@ -635,29 +666,29 @@ fn table() -> Vec<Destination> {
         a_rig(),
         a_rigs_clip(),
         a_sound_cue(),
-        an_inspector_section(
+        a_world_section(
             "A map's terrain",
             "TERRAIN",
             "terrain",
-            "the TERRAIN line is a text field at the foot of the Map inspector and the wheel never reached it",
+            "the TERRAIN line is in the World workspace and the heading is not on screen there",
         ),
-        an_inspector_section(
+        a_world_section(
             "A map's water",
             "WATER",
             "water",
-            "water is an operation (`water_place`) with no panel: nothing draws a map's water to walk to",
+            "water is an operation (`water_place`) written through the World workspace's terrain line; it has no panel of its own, so nothing draws a map's water to walk to",
         ),
-        an_inspector_section(
+        a_world_section(
             "A map's forest",
             "FOREST",
             "forest",
-            "forest is an operation (`forest_scatter`) with no panel, so there is nothing to walk to",
+            "forest is an operation (`forest_scatter`) written through the World workspace's terrain line; it has no panel of its own, so there is nothing to walk to",
         ),
-        an_inspector_section(
+        a_world_section(
             "A map's lights",
             "LIGHTS",
             "lights",
-            "the LIGHTS block is behind the off-by-default `bevy_lights` feature, and nothing else draws a pool",
+            "the LIGHTS block is in the World workspace but behind the off-by-default `bevy_lights` feature, and nothing else draws a pool",
         ),
         an_inspector_section(
             "A game data file",
@@ -727,10 +758,265 @@ fn plural<'a>(n: usize, one: &'a str, many: &'a str) -> &'a str {
     if n == 1 { one } else { many }
 }
 
-/// **The document, rendered from the rows.** No clock, no paths, so two runs produce one text.
-fn render(rows: &[Destination]) -> String {
+/// **What the frozen baseline (`navigation-baseline.md`, NV-01 #378) said about one destination.**
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Was {
+    keys: u32,
+    pointer: u32,
+    arrives: bool,
+}
+
+/// **The frozen baseline's rows**, by destination, read from the document NV-01 left. A document that does not read is a failure: the
+/// comparison would otherwise be against nothing.
+fn baseline() -> Vec<(String, Was)> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/ui/navigation-baseline.md");
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let mut rows = Vec::new();
+    for line in text.lines().filter(|l| l.starts_with("| ") && !l.starts_with("| Destination")) {
+        let cells: Vec<&str> = line.trim_matches('|').split(" | ").map(str::trim).collect();
+        if cells.len() < 5 {
+            continue;
+        }
+        let (Ok(keys), Ok(pointer)) = (cells[2].parse::<u32>(), cells[3].parse::<u32>()) else { continue };
+        rows.push((cells[0].to_owned(), Was { keys, pointer, arrives: cells[4] == "yes" }));
+    }
+    assert!(rows.len() >= ROWS.len(), "the baseline lists {} destinations and this test measures {}", rows.len(), ROWS.len());
+    rows
+}
+
+/// **What NV-01 held a later change to**, per destination: a workspace in one press, or a named thing in the everything-finder.
+#[derive(Clone, Copy, Debug)]
+enum Target {
+    /// One key press, no pointer.
+    OnePress,
+    /// `Cmd+P`, its name, `Enter`: met when the finder is *driven* with the thing's name and arrives at its page.
+    Finder,
+}
+
+/// Which target a destination is held to.
+fn target_of(what: &str) -> Target {
+    match what {
+        "A named map"
+        | "A named piece on the open map"
+        | "A piece's library entry"
+        | "A tile"
+        | "A composition"
+        | "One of a rig's clips"
+        | "A game data file"
+        | "The notes" => Target::Finder,
+        _ => Target::OnePress,
+    }
+}
+
+/// **The issues filed for a missed target**, by destination (NV-11, #388): a missed target is its own issue, naming the destination and
+/// the route. A miss with no entry here fails the test, so a target cannot be missed quietly.
+const FILED: &[(&str, &str)] = &[
+    ("One of a rig's clips", "#391"),
+    ("A sound cue", "#392"),
+    ("A map's water", "#393"),
+    ("A map's forest", "#394"),
+    ("A map's lights", "#395"),
+    ("The problems list", "#397"),
+];
+
+// ───────────────────────────── driving the finder ─────────────────────────────
+
+/// Where the bed stands in the finder fixture's 64 m map, far from where the camera is put, so a finder that did nothing cannot pass.
+const BED_AT: (f32, f32) = (28.0, -28.0);
+/// How near the camera's focus must come to the bed for the finder to have framed it, in metres.
+const FRAMED_WITHIN_M: f32 = 6.0;
+/// The registered data file the finder fixture holds, and its id.
+const DATA_REGISTRY: &str = "(version: 1, files: [(id: \"tuning\", path: \"mob.ron\", bounds: {\"mob.speed\": (min: 0.0, max: 9.0)})])";
+const DATA_FILE: &str = "// tuning\n(mob: (speed: 1.50, name: \"orc\", hp: 7), fast: false)\n";
+
+/// **What typing into the finder asks for, per destination**: the thing's own name as a person types it.
+const FINDER_ASKS: [(&str, &str); 7] = [
+    ("A named map", "meadow"),
+    ("A named piece on the open map", "bed@3"),
+    ("A piece's library entry", "stool"),
+    ("A tile", "tiling"),
+    ("A composition", "stack"),
+    ("A game data file", "tuning"),
+    ("The notes", "mind"),
+];
+
+/// **The editor for the finder rows**: the same kind of project as the other rows' (pieces, a placed piece, a composition) with what
+/// the finder indexes beyond them — a lattice, a registered data file and a note — added, and a window so keys reach the finder's field.
+fn finder_editor(tag: &str) -> App {
+    let root = fixtures::Fixture::new(&format!("nav_finder_{tag}_{}", std::process::id()))
+        .descriptor("stool", "alpha")
+        .descriptor("bed", "alpha")
+        .place_as("bed@3", "bed", BED_AT)
+        .authored_lattice("tiling", "alpha", "wall", 2)
+        .bounded_composition("stack", (1.0, 1.0, 1.0), &[("body", "stool", (0.0, 0.0))])
+        .side(64.0)
+        .build("meadow");
+    // **Where the project reads its registry from** is its authoring kit's directory, which the project says.
+    let dir = bevy_cauldron::project::Project::open(&root, None).unwrap_or_else(|e| panic!("{e}")).grimoire_dir;
+    std::fs::write(dir.join("mob.ron"), DATA_FILE).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(dir.join("data.ron"), DATA_REGISTRY).unwrap_or_else(|e| panic!("{e}"));
+    let mut app = bevy_cauldron::harness::build_headless(&root, "meadow", None).unwrap_or_else(|e| panic!("{e}"));
+    app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(1.0 / 60.0)));
+    app.world_mut().spawn((Window::default(), bevy::window::PrimaryWindow));
+    for _ in 0..WARM_UP_FRAMES {
+        app.update();
+    }
+    // **A note**, left the way an agent or a person leaves one: through the registry's operation.
+    let mut ctx = bevy_cauldron::ops::Ctx {
+        project: app.world().get_resource::<bevy_cauldron::project::Project>().cloned(),
+        open: app.world().get_resource::<OpenMap>().cloned(),
+        session: "nav".to_owned(),
+        ..bevy_cauldron::ops::Ctx::default()
+    };
+    let note = bevy_cauldron::ops::dispatch(&mut ctx, "note_add", &serde_json::json!({"cells": [0, 0, 0, 0], "text": "mind the gap"}));
+    assert!(matches!(note, Ok(bevy_cauldron::ops::Applied::Done { .. })), "the finder fixture could not leave its note");
+    for _ in 0..40 {
+        app.update();
+    }
+    app
+}
+
+/// One key event to the primary window, as the finder's own tests send it.
+fn finder_key(app: &mut App, code: KeyCode, logical: bevy::input::keyboard::Key, text: Option<&str>, state: ButtonState) {
+    let window = app.world_mut().query_filtered::<Entity, With<bevy::window::PrimaryWindow>>().single(app.world()).expect("one primary window");
+    app.world_mut().write_message(KeyboardInput { key_code: code, logical_key: logical, state, text: text.map(Into::into), repeat: false, window });
+}
+
+/// The key a typed character is made with on a US keyboard, and whether Shift is held for it.
+fn finder_key_for(c: char) -> (KeyCode, bool) {
+    const LETTERS: [KeyCode; 26] = [
+        KeyCode::KeyA, KeyCode::KeyB, KeyCode::KeyC, KeyCode::KeyD, KeyCode::KeyE, KeyCode::KeyF, KeyCode::KeyG, KeyCode::KeyH, KeyCode::KeyI,
+        KeyCode::KeyJ, KeyCode::KeyK, KeyCode::KeyL, KeyCode::KeyM, KeyCode::KeyN, KeyCode::KeyO, KeyCode::KeyP, KeyCode::KeyQ, KeyCode::KeyR,
+        KeyCode::KeyS, KeyCode::KeyT, KeyCode::KeyU, KeyCode::KeyV, KeyCode::KeyW, KeyCode::KeyX, KeyCode::KeyY, KeyCode::KeyZ,
+    ];
+    match c {
+        'a'..='z' => (LETTERS[usize::from(c as u8 - b'a')], false),
+        '@' => (KeyCode::Digit2, true),
+        '3' => (KeyCode::Digit3, false),
+        other => panic!("the finder driver has no key for `{other}`"),
+    }
+}
+
+/// **Drive the finder for one destination**: `Cmd+P`, the name typed, `Enter`. Costs one press for the chord, one per character and one
+/// for `Enter`; arrives when the page the destination is on is the one showing.
+fn drive_the_finder(what: &'static str, query: &'static str) -> Result<Cost, String> {
+    use bevy::input::keyboard::{Key, NativeKey};
+    let mut app = finder_editor(what.split_whitespace().last().unwrap_or("row"));
+    for _ in 0..40 {
+        app.update();
+    }
+    if what == "A named piece on the open map" {
+        let mut rig = app.world_mut().resource_mut::<bevy_cauldron::view::Rig>();
+        rig.focus = Vec3::new(-BED_AT.0, 0.0, -BED_AT.1);
+        rig.height = 8.0;
+        for _ in 0..40 {
+            app.update();
+        }
+    }
+    let settle = |app: &mut App| {
+        for _ in 0..40 {
+            app.update();
+        }
+    };
+    for state in [ButtonState::Pressed, ButtonState::Released] {
+        for key in [primary(), KeyCode::KeyP] {
+            finder_key(&mut app, key, Key::Unidentified(NativeKey::Unidentified), None, state);
+        }
+        app.update();
+    }
+    settle(&mut app);
+    let opened = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<bevy_gooey::CommandPalette>>().iter(world).next().is_some()
+    };
+    if !opened {
+        return Err("Cmd+P did not open the finder".to_owned());
+    }
+    for c in query.chars() {
+        let (code, shift) = finder_key_for(c);
+        let s = c.to_string();
+        for state in [ButtonState::Pressed, ButtonState::Released] {
+            if shift {
+                finder_key(&mut app, KeyCode::ShiftLeft, Key::Unidentified(NativeKey::Unidentified), None, state);
+            }
+            finder_key(&mut app, code, Key::Character(s.as_str().into()), (state == ButtonState::Pressed).then_some(s.as_str()), state);
+            app.update();
+        }
+    }
+    settle(&mut app);
+    for state in [ButtonState::Pressed, ButtonState::Released] {
+        finder_key(&mut app, KeyCode::Enter, Key::Enter, None, state);
+        app.update();
+    }
+    settle(&mut app);
+    let still_open = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<bevy_gooey::CommandPalette>>().iter(world).next().is_some()
+    };
+    if still_open {
+        return Err(format!("Enter did not choose a row for `{query}`: the finder is still open"));
+    }
+    let workspace = *app.world().resource::<Workspace>();
+    let mode = app.world().get_resource::<Mode>().map(|m| m.label());
+    let selected = app.world().resource::<ImportState>().selected_library_id.clone();
+    let arrived = match what {
+        "A named map" => (workspace == Workspace::Map && app.world().resource::<OpenMap>().map.name == "meadow").then_some(()),
+        "A named piece on the open map" => {
+            let focus = app.world().resource::<bevy_cauldron::view::Rig>().focus;
+            (workspace == Workspace::Map && Vec2::new(focus.x - BED_AT.0, focus.z - BED_AT.1).length() < FRAMED_WITHIN_M).then_some(())
+        }
+        "A piece's library entry" => (workspace == Workspace::Kit && selected.as_deref() == Some("stool")).then_some(()),
+        "A tile" => (workspace == Workspace::Kit && selected.as_deref() == Some("tiling")).then_some(()),
+        "A composition" => (workspace == Workspace::Kit && mode == Some(Mode::Compose.label())).then_some(()),
+        "A game data file" | "The notes" => (workspace == Workspace::Map).then_some(()),
+        other => return Err(format!("no arrival is defined for `{other}`")),
+    };
+    match arrived {
+        Some(()) => Ok(Cost { presses: 2 + query.chars().count() as u32, pointer: 0 }),
+        None => Err(format!("`{query}` chosen in the finder landed on the {} workspace, not on {what}'s page", workspace.title())),
+    }
+}
+
+/// **Every named-thing destination, asked of the finder**, and what became of it.
+fn finder_runs() -> Vec<(&'static str, Result<Cost, String>)> {
+    let mut runs: Vec<(&'static str, Result<Cost, String>)> = FINDER_ASKS.iter().map(|(what, query)| (*what, drive_the_finder(what, query))).collect();
+    runs.push((
+        "One of a rig's clips",
+        Err("the finder indexes rigs and not their clips: a clip has no page of its own, so Cmd+P cannot name one".to_owned()),
+    ));
+    runs
+}
+
+/// **Is the target met?** `Ok` with the measured route, or the measured reason it is not.
+fn target_met(row: &Destination, finder: &[(&'static str, Result<Cost, String>)]) -> Result<String, String> {
+    match target_of(row.what) {
+        Target::OnePress => {
+            let arrived = matches!(row.reach, Reach::Arrived);
+            if arrived && row.cost.presses <= 1 && row.cost.pointer == 0 {
+                Ok(format!("{} press(es)", row.cost.presses))
+            } else {
+                Err(format!(
+                    "{} press(es) and {} pointer action(s) against one press{}",
+                    row.cost.presses,
+                    row.cost.pointer,
+                    if arrived { "" } else { ", and it does not arrive" }
+                ))
+            }
+        }
+        Target::Finder => match finder.iter().find(|(what, _)| *what == row.what) {
+            Some((_, Ok(cost))) => Ok(format!("driven: Cmd+P, the name, Enter, {} presses", cost.presses)),
+            Some((_, Err(why))) => Err(format!("driving the finder failed: {why}")),
+            None => Err("the finder was not driven for it".to_owned()),
+        },
+    }
+}
+
+/// **The document, rendered from the rows, the frozen baseline's rows and the targets.** No clock, no paths, so two runs produce one text.
+fn render(rows: &[Destination], was: &[(String, Was)], finder: &[(&'static str, Result<Cost, String>)]) -> String {
     let mut out = String::from(
-        "# Getting around, as it is today\n\
+        "# Getting around, as it is now\n\
+         \n\
+         Measured against `navigation-baseline.md`, which is frozen as NV-01 (#378) left it (`the_navigation_baseline_stays_frozen`).\n\
          \n\
          Generated by `crates/bevy_cauldron/tests/navigation.rs` (`navigation::`), which drives the editor from a\n\
          cold start on a fixture project by the keys and pointer actions a person uses. The test **checks** this\n\
@@ -748,27 +1034,46 @@ fn render(rows: &[Destination]) -> String {
          \n\
          ## What a later change is held to\n\
          \n\
-         - Any workspace in **1 press**.\n\
-         - Any named thing in at most **Cmd+P, its name and Enter** — one press, some typing, one press.\n\
-         - Back to where you were in **1 press**.\n\
+         - Any workspace in **1 press**: a destination of the workspace kind is *met* when it arrives in at most one press and no pointer action.\n\
+         - Any named thing in at most **Cmd+P, its name and Enter** — one press, some typing, one press: *met* when the finder is **driven** with the\n\
+         \x20 thing's name (`Cmd+P`, the characters, `Enter`) on a project that holds one — a piece, a placed piece, a lattice, a composition, a registered\n\
+         \x20 data file and a note — and arrives at its page. The cost shown is that route's presses.\n\
+         - Back to where you were in **1 press**: held by `back_and_forward_across_workspaces`, not a row here.\n\
+         - **Never worse than the baseline**: a destination that arrived then still arrives, and costs no more keys and pointer actions together.\n\
+         \n\
+         A target that is *missed* is filed as its own issue, naming the destination and the route; the issue is cited in the Target column and\n\
+         the test fails for a miss with none.\n\
          \n\
          ## The rows\n\
          \n\
-         | Destination | Route | Keys | Pointer | Arrives |\n\
-         |---|---|---|---|---|\n",
+         | Destination | Route | Keys | Pointer | Arrives | Baseline (keys, pointer, arrives) | Target |\n\
+         |---|---|---|---|---|---|---|\n",
     );
     for row in rows {
         let arrives = match &row.reach {
             Reach::Arrived => "yes".to_owned(),
             Reach::Unreachable(why) => format!("**no** — {why}"),
         };
+        let old = was
+            .iter()
+            .find(|(name, _)| name == row.what)
+            .map_or_else(|| "not in the baseline".to_owned(), |(_, w)| format!("{}, {}, {}", w.keys, w.pointer, if w.arrives { "yes" } else { "no" }));
+        let target = match target_met(row, finder) {
+            Ok(route) => format!("met — {route}"),
+            Err(why) => {
+                let issue = FILED.iter().find(|(what, _)| *what == row.what).map_or("no issue filed", |(_, issue)| *issue);
+                format!("**missed** — {why} ({issue})")
+            }
+        };
         out.push_str(&format!(
-            "| {} | {} | {} | {} | {} |\n",
+            "| {} | {} | {} | {} | {} | {} | {} |\n",
             row.what,
             row.route(),
             row.cost.presses,
             row.cost.pointer,
-            arrives
+            arrives,
+            old,
+            target
         ));
     }
     out.push_str("\n## What the numbers say\n\n");
@@ -802,7 +1107,34 @@ fn every_destination_is_measured_and_the_baseline_says_so() {
         rows.len()
     );
 
-    let rendered = render(&rows);
+    // **Never worse than the baseline** (NV-11, #388): what arrived then arrives now, at no more keys and pointer actions together.
+    let was = baseline();
+    for row in &rows {
+        let (_, old) = was.iter().find(|(name, _)| name == row.what).unwrap_or_else(|| panic!("`{}` is not in the frozen baseline", row.what));
+        let arrives = matches!(row.reach, Reach::Arrived);
+        assert!(!(old.arrives && !arrives), "reachability got worse: `{}` arrived in the baseline and does not now", row.what);
+        if old.arrives && arrives {
+            assert!(
+                row.cost.presses + row.cost.pointer <= old.keys + old.pointer,
+                "reachability got worse: `{}` cost {} key(s) and {} pointer action(s) in the baseline and costs {} and {} now",
+                row.what,
+                old.keys,
+                old.pointer,
+                row.cost.presses,
+                row.cost.pointer
+            );
+        }
+    }
+    // **Every missed target has its issue.**
+    let finder = finder_runs();
+    let unfiled: Vec<String> = rows
+        .iter()
+        .filter(|row| target_met(row, &finder).is_err() && !FILED.iter().any(|(what, _)| *what == row.what))
+        .map(|row| format!("{} ({}; route: {})", row.what, target_met(row, &finder).err().unwrap_or_default(), row.route()))
+        .collect();
+    let regenerating = std::env::var_os(REGENERATE).is_some();
+    assert!(unfiled.is_empty() || regenerating, "these targets are missed and no issue is filed for them (add each to FILED):\n  {}", unfiled.join("\n  "));
+    let rendered = render(&rows, &was, &finder);
     let path = baseline_path();
     let committed = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     if committed == rendered {
@@ -832,6 +1164,26 @@ fn every_destination_is_measured_and_the_baseline_says_so() {
         "{} is out of date with the editor. Regenerate it with {REGENERATE}=1 and commit both.\n{difference}",
         path.display()
     );
+}
+
+/// **The issues filed for missed targets and the committed document agree** (NV-11, #388): every `#N` in [`FILED`] is cited on its own row of
+/// `docs/ui/navigation.md` as a missed target, no row cites an issue that is not in the list, and no missed row is without one. Offline: the
+/// list is a constant, and the document is the one the measurement wrote.
+#[test]
+fn every_filed_issue_is_cited_by_its_row_and_no_miss_is_unfiled() {
+    let path = baseline_path();
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let rows: Vec<&str> = text.lines().filter(|l| l.starts_with("| ") && l.contains("**missed**")).collect();
+    for (what, issue) in FILED {
+        let row = rows.iter().find(|r| r.starts_with(&format!("| {what} |")));
+        let row = row.unwrap_or_else(|| panic!("`{what}` is filed as {issue} but its row in the document is not a missed target"));
+        assert!(row.contains(&format!("({issue})")), "`{what}`'s row does not cite {issue}: {row}");
+    }
+    for row in &rows {
+        assert!(!row.contains("no issue filed"), "a missed target has no issue filed: {row}");
+        let name = row.trim_start_matches("| ").split(" | ").next().unwrap_or_default();
+        assert!(FILED.iter().any(|(what, _)| *what == name), "`{name}` is a missed target and is not in FILED");
+    }
 }
 
 // ───────────────────────────── helpers ─────────────────────────────

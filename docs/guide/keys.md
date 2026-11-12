@@ -45,8 +45,7 @@ These keys work on every tab.
 
 | Key | Works when | Does |
 | --- | --- | --- |
-| `1`, `2`, `3` | Any time | Go to panel 1, 2, or 3 of the door you are in. |
-| `=` | Any time | Switch between the Map and Kit doors. |
+| `Cmd+1` to `Cmd+9` | Any time | Go to a workspace: 1 Project, 2 Map, 3 World, 4 Kit, 5 Animation, 6 Sound, 7 Files, 8 Game, 9 Agent. Only Map, Kit and Animation are built today; the others say which issue brings them. The Kit panels (Meshes, Tiles, Compose) have no key: click their chips on the strip. |
 | `Cmd+Delete` | Any time | Define this piece. On a Mac, the Delete key sends Backspace. |
 | `K` (held) | Any time | Show every key and what it does. Release to hide it. |
 | `Cmd+S` | Any time | Save. |

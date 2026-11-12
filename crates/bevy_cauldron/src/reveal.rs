@@ -31,14 +31,14 @@
 //! **problem naming the operation and its shown**, which is the work item the missing view is built
 //! from.
 //!
-//! # Two frames, because a crossing rebuilds the panels
+//! # Two frames, because a switching rebuilds the panels
 //!
-//! A door crossing is a state transition: the old panels are torn down and the new ones spawned in one
+//! A door switching is a state transition: the old panels are torn down and the new ones spawned in one
 //! frame (`screen::cross`), and the teardown resets every `Door` resource (`screen::OWNERSHIP`). A
-//! selection written on the frame the crossing was *asked for* lands in the state that teardown then
+//! selection written on the frame the switching was *asked for* lands in the state that teardown then
 //! resets, so the reveal asks, waits for the door **and the panel** to be the ones asked for, and
 //! writes the selection on the frame after. Measured on the first version: a piece's row was selected,
-//! the crossing reset `ImportState`, and the shelf arrived with the fixture's first library row armed.
+//! the switching reset `ImportState`, and the shelf arrived with the fixture's first library row armed.
 
 use std::collections::VecDeque;
 
@@ -48,7 +48,8 @@ use bevy::ui::{ComputedNode, ScrollPosition, UiGlobalTransform};
 use crate::editor::{DoorRequest, EditorState};
 use crate::ops::Shown;
 use crate::project::Project;
-use crate::tiles::{Door, Mode};
+use crate::tiles::Mode;
+use crate::workspace::Workspace;
 
 /// **A heading in the Map door's INSPECTOR panel**, named so a reveal can bring it into view.
 ///
@@ -78,8 +79,8 @@ pub struct Section(pub InspectorSection);
 #[derive(Clone, PartialEq, Eq)]
 pub enum Page {
     /// A door and one of its panels, with a selection made there.
-    Door {
-        door: Door,
+    Workspace {
+        workspace: Workspace,
         tab: Mode,
         select: Select,
     },
@@ -137,23 +138,23 @@ pub fn page_of(shown: &Shown, project: Option<&Project>) -> Result<Page, String>
         // `build_detail` for `Mode::Tiles` — the open *composition* — and the `SUBGRID` block,
         // `draw_subgrid`, `pick_lattice` and `click_lattice` all run on the Meshes panel. Going where
         // the change is drawn is the only reading that puts the person in front of it.
-        Shown::Piece { id } | Shown::Tile { id } => Page::Door {
-            door: Door::Kit,
+        Shown::Piece { id } | Shown::Tile { id } => Page::Workspace {
+            workspace: Workspace::Kit,
             tab: Mode::Meshes,
             select: Select::Piece(id.clone()),
         },
-        Shown::Composition { id } => Page::Door {
-            door: Door::Kit,
+        Shown::Composition { id } => Page::Workspace {
+            workspace: Workspace::Kit,
             tab: Mode::Compose,
             select: Select::Group(id.clone()),
         },
-        Shown::Rig { id } => Page::Door {
-            door: Door::Rigs,
+        Shown::Rig { id } => Page::Workspace {
+            workspace: Workspace::Animation,
             tab: Mode::Anim,
             select: Select::Rig(id.clone()),
         },
-        Shown::Note { id } => Page::Door {
-            door: Door::Map,
+        Shown::Note { id } => Page::Workspace {
+            workspace: Workspace::Map,
             tab: Mode::Map,
             select: Select::Note(id.clone()),
         },
@@ -161,8 +162,8 @@ pub fn page_of(shown: &Shown, project: Option<&Project>) -> Result<Page, String>
         // workspace lands (GD-11, #373). `lines` is where that page would scroll to, so it is named in
         // the refusal: the day the page exists, this arm becomes it.
         Shown::File { path, lines } => match project.and_then(|p| registered_data_file(p, path)) {
-            Some(file) => Page::Door {
-                door: Door::Map,
+            Some(file) => Page::Workspace {
+                workspace: Workspace::Map,
                 tab: Mode::Map,
                 select: Select::DataFile(file),
             },
@@ -217,8 +218,8 @@ fn settings_page(section: &str) -> Result<Page, String> {
         _ => None,
     };
     match heading {
-        Some(section) => Ok(Page::Door {
-            door: Door::Map,
+        Some(section) => Ok(Page::Workspace {
+            workspace: Workspace::Map,
             tab: Mode::Map,
             select: Select::Section(section),
         }),
@@ -249,12 +250,19 @@ pub fn registered_data_file(project: &Project, relative: &str) -> Option<String>
 /// **The reveals waiting their frame**, and the one part-way through.
 ///
 /// **A `Session` resource**, like [`crate::follow::Following`] and for the same reason: a reveal raised
-/// on the Kit door asks for the Map, and the crossing it asks for resets every `Door` resource — so a
-/// request kept in one would be erased by the very crossing it asked for.
+/// on the Kit door asks for the Map, and the switching it asks for resets every `Door` resource — so a
+/// request kept in one would be erased by the very switching it asked for.
 #[derive(Resource, Default)]
 pub struct Revealing {
     queue: VecDeque<Request>,
     in_flight: Option<InFlight>,
+    /// **The places a reveal has left and `nav` has not yet pushed** (NV-06, #383).
+    ///
+    /// Recorded here because this is the one system that knows a view is about to move for the person,
+    /// and drained by `nav` because this system is at Bevy's parameter cap. The follow records its own
+    /// place the same way and for the same reason: **the person's place is pushed where their view
+    /// moves, never once per interpolation frame**.
+    leaving: Vec<crate::nav::Place>,
 }
 
 /// One thing to show, with the operation that made it — what the refusal names.
@@ -263,19 +271,29 @@ pub struct Request {
     /// The operation's registered name (`vocab_add_token`, `data_set`), as the log has it.
     pub operation: String,
     pub shown: Shown,
+    /// **Whether the person asked for this page** (NV-05, #382), rather than an agent's change.
+    ///
+    /// Choosing a row in Go to anything is pressing Enter and then reading. The Enter is a key press,
+    /// so the person's own hand has set `Following::busy` and would hold the reveal for
+    /// [`crate::follow::FOLLOW_IDLE_S`] — which reads as the finder being broken — and the same press
+    /// is a gesture that drops what an agent had queued. A request the person made is neither held nor
+    /// dropped by the key that made it. The flag lives on the request, so it is spent with the request
+    /// on every path that ends it (carried out, refused, or cleared by a project change) and cannot
+    /// outlive it.
+    pub by_person: bool,
 }
 
 #[derive(Clone, PartialEq)]
 struct InFlight {
     request: Request,
     page: Page,
-    /// **Whether the door has been asked for already.** A crossing the editor refused — a question on
+    /// **Whether the door has been asked for already.** A switching the editor refused — a question on
     /// screen, a map with unsaved edits — would otherwise be asked for every frame, for ever.
     asked: bool,
     /// **How many frames the selection has been tried**, against [`REVEAL_TRIES`].
     ///
-    /// The row can be missing on the frame the crossing lands: the tab's own loader reads the manifest
-    /// or the notes file *after* the crossing, so `BenchState::names()` is empty on the frame the bench
+    /// The row can be missing on the frame the switching lands: the tab's own loader reads the manifest
+    /// or the notes file *after* the switching, so `BenchState::names()` is empty on the frame the bench
     /// first exists — measured, the bench arrived on rig index 0 (`cipher_field`) while the reveal was
     /// asked for `valkyrie`. The counter is what turns "the row is not there yet" into a wait instead
     /// of a silent miss, and what stops the wait from being for ever.
@@ -293,7 +311,26 @@ impl Revealing {
         self.queue.push_back(Request {
             operation: operation.to_owned(),
             shown: shown.clone(),
+            by_person: false,
         });
+    }
+
+    /// **Show this page because the person asked for it** (Go to anything, NV-05, #382): not held
+    /// back by their idle clock, and not dropped by the key press that asked.
+    pub fn request_by_person(&mut self, operation: &str, shown: &Shown) {
+        self.queue.push_back(Request {
+            operation: operation.to_owned(),
+            shown: shown.clone(),
+            by_person: true,
+        });
+    }
+
+    /// **Whether the reveal that would be carried out next is one the person asked for.**
+    fn person_is_waiting(&self) -> bool {
+        match &self.in_flight {
+            Some(in_flight) => in_flight.request.by_person,
+            None => self.queue.front().is_some_and(|request| request.by_person),
+        }
     }
 
     /// How many reveals are waiting for their frame. The one in flight is not among them.
@@ -306,11 +343,32 @@ impl Revealing {
         self.in_flight.is_some()
     }
 
+    /// Take the places a reveal is leaving, so `nav` can push them. Empties the list.
+    pub fn take_leaving(&mut self) -> Vec<crate::nav::Place> {
+        std::mem::take(&mut self.leaving)
+    }
+
     /// **Forget the queue and the one in flight.** A project change makes them meaningless; a map
     /// change does not, because a page is a door and a row rather than a place in metres.
     pub fn clear(&mut self) {
         self.queue.clear();
         self.in_flight = None;
+        self.leaving.clear();
+    }
+
+    /// **The person reached for the view: forget what an agent's change had queued**, and keep what
+    /// the person themselves asked for.
+    ///
+    /// The Enter that chooses a Go to anything row is a key press, and
+    /// `follow::a_persons_input_takes_the_camera_back` drops the queue on every first key press — measured:
+    /// the finder closed, the index held the row, and nothing moved, because the person's own Enter
+    /// had cleared the reveal it made. The press that *asks* for a move is not the press that cancels
+    /// it (the Look chord's rule, one surface over).
+    pub fn drop_what_the_agent_queued(&mut self) {
+        self.queue.retain(|request| request.by_person);
+        if self.in_flight.as_ref().is_some_and(|in_flight| !in_flight.request.by_person) {
+            self.in_flight = None;
+        }
     }
 }
 
@@ -332,7 +390,7 @@ impl Plugin for RevealPlugin {
             .add_systems(
                 Update,
                 (
-                    // **Before the camera is written** and after the crossing: `apply_pending_door`
+                    // **Before the camera is written** and after the switching: `apply_pending_door`
                     // runs in `PreUpdate` and the transition between the schedules, so by `Update` the
                     // new door's panels exist and the selection lands in state nothing will reset.
                     clear_the_reveal_when_the_project_changes.before(take_the_reveal),
@@ -364,7 +422,7 @@ fn clear_the_reveal_when_the_project_changes(
     revealing.clear();
 }
 
-/// **Carry out one reveal a frame**: ask for the crossing, wait for it, then select.
+/// **Carry out one reveal a frame**: ask for the switching, wait for it, then select.
 ///
 /// **One at a time**, as the follow is: three changes arrive faster than three frames, and each is a
 /// page a person reads.
@@ -399,7 +457,10 @@ fn take_the_reveal(
     // **Nothing moves while the person is working.** The queue is untouched, so the reveal lands
     // once they stop rather than being thrown away: the change it names is still what the editor
     // promised to show.
-    if at.following.as_deref().is_some_and(crate::follow::Following::busy) {
+    // **A reveal the person asked for is not held back by their own key press** (NV-05, #382): the
+    // Enter that chose a Go to anything row is a gesture, and waiting out the idle clock after it
+    // reads as the finder being broken. Spent on the frame it is read.
+    if !revealing.person_is_waiting() && at.following.as_deref().is_some_and(crate::follow::Following::busy) {
         return;
     }
     let Some(in_flight) = revealing.in_flight.take() else {
@@ -432,20 +493,20 @@ fn take_the_reveal(
     };
     let mut in_flight = in_flight;
     let done = match &in_flight.page {
-        Page::Door {
-            door: want_door,
+        Page::Workspace {
+            workspace: want_workspace,
             tab: want_tab,
             select,
         } => {
-            if at.door.as_deref() != Some(want_door) || at.mode.as_deref() != Some(want_tab) {
+            if at.workspace.as_deref() != Some(want_workspace) || at.mode.as_deref() != Some(want_tab) {
                 if let Some(state) = state.as_mut()
                     && state.door_request.is_none()
                     && !state.leaving
                 {
                     if in_flight.asked {
-                        // **Asked once and the editor did not cross**: a refused crossing, or a
+                        // **Asked once and the editor did not cross**: a refused switching, or a
                         // question nobody has answered. The request is dropped rather than asked for
-                        // again every frame — a crossing the camera of a reveal nobody is waiting on
+                        // again every frame — a switching the camera of a reveal nobody is waiting on
                         // more would never end (`follow`'s nit g, the same rule).
                         state.status.problem(format!(
                             "{} changed something on another page, and the editor could not open it. {}",
@@ -455,8 +516,18 @@ fn take_the_reveal(
                         revealing.in_flight = None;
                         return;
                     }
+                    // **The place being left is recorded before the door is asked for** (NV-06,
+                    // #383), so a Back from the new page returns to the one the person was reading —
+                    // with its camera. It is recorded here and pushed by `nav`'s own system, because
+                    // this system is at Bevy's parameter cap and a second `ResMut` would not compile.
+                    revealing.leaving.push(crate::nav::Place::of(
+                        at.workspace.as_deref(),
+                        at.mode.as_deref(),
+                        at.rig.as_deref(),
+                        at.selection.as_deref(),
+                    ));
                     state.door_request = Some(DoorRequest {
-                        door: *want_door,
+                        workspace: *want_workspace,
                         tab: Some(*want_tab),
                     });
                     in_flight.asked = true;
@@ -531,10 +602,15 @@ fn take_the_reveal(
 /// are one question — *can a reveal land right now, and on which page is the editor standing?*
 #[derive(bevy::ecs::system::SystemParam)]
 struct Where<'w, 's> {
-    door: Option<Res<'w, Door>>,
+    workspace: Option<Res<'w, Workspace>>,
     mode: Option<Res<'w, Mode>>,
     /// **The person's own work** — see `take_the_reveal`'s note on one idle clock.
     following: Option<Res<'w, crate::follow::Following>>,
+    /// **The camera and the selection**, read only to record the place a reveal is leaving (NV-06,
+    /// #383). Read-only on purpose: a reveal writes a selection and never the camera, so nothing here
+    /// can move the view.
+    rig: Option<Res<'w, crate::view::Rig>>,
+    selection: Option<Res<'w, crate::selection::Selection>>,
     _marker: std::marker::PhantomData<&'s ()>,
 }
 
@@ -568,7 +644,7 @@ struct Table<'w, 's> {
 /// **Write the page's selection**, and answer whether the row it names was there.
 ///
 /// **`false` is a wait, not a failure**: a tab reads its own manifest, notes file or data registry
-/// after the crossing, so the row a page is asked for may not exist on the frame the page does. The
+/// after the switching, so the row a page is asked for may not exist on the frame the page does. The
 /// caller retries for [`REVEAL_TRIES`] frames, so a loader's first read is a wait rather than a silent
 /// miss, and reports the miss only when the row never arrives.
 ///
@@ -677,7 +753,7 @@ fn reveal_the_data_row(
         return false;
     };
     // **The table may not be built yet.** It is spawned by the panel's own refresh, which runs after
-    // the crossing; a listing with rows and no table is a wait.
+    // the switching; a listing with rows and no table is a wait.
     let mut selected = false;
     for (table_entity, mut cursor, mut sort, table) in tables.iter_mut() {
         // **The DATA table first, and only it.** A sort cleared on every table in the world would

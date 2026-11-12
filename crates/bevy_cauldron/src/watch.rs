@@ -172,6 +172,14 @@ pub struct Due {
     /// **The flag is consumed by the redraw**, which respawns every placement from the map the
     /// watcher just read.
     pub map_replaced: bool,
+    /// **How many files the editor has taken again since it opened**, which survives the frame that
+    /// adopted them.
+    ///
+    /// `changed` is emptied by [`adopt_changes`], so a reader that runs after it — Go to anything's
+    /// index (NV-05, #382) is one — cannot see that an adoption happened at all. Any file the editor
+    /// read again may have added, renamed or removed something a person can name, and this is the one
+    /// number that says so without keeping the paths a second time.
+    pub adopted: u64,
 }
 
 /// **Look at the files, and note what changed.**
@@ -265,6 +273,11 @@ pub fn adopt_changes(
     let changed_paths = std::mem::take(&mut due.changed);
     let mut map_replaced = false;
     for path in &changed_paths {
+        // **A file the editor takes again is an adoption**, whatever came of it: the index rebuilt
+        // from this count (NV-05) is asking whether *anything* may have changed, not whether this
+        // one file's verdict was good — a refused file changes nothing, and a good one may have
+        // added a piece.
+        due.adopted += 1;
         // **The open map's own file, re-read.**
         //
         // **A person editing `town.map.yaml` in a text editor is the case this whole module
@@ -521,7 +534,7 @@ fn adopt(path: &Path, project: &mut Project) -> Result<(), String> {
     // starts with `open_map_name: None`, which is right for a first open and wrong here: this
     // is the same project, re-read, and the name is the author's intent about which map they
     // are working on. Dropping it made a kit edit the same as never having opened a map, so
-    // the next crossing from the Kit door back to the Map door refused with "none has been
+    // the next switching from the Kit door back to the Map door refused with "none has been
     // open".
     let open_map_name = project.open_map_name.clone();
     let mut fresh = fresh;

@@ -41,6 +41,18 @@ const PINNED_NOWHERE: &[&str] = &[
     // A person's own view: a panel, a rung, the next click's tool, the shelf's selection, the door.
     "view_cycle_grid",
     "view_toggle_journal",
+    // Owner exception (2026-11-10): the list grows by the operation #129 slice 21 registers, an overlay on the
+    // rig bench that a person's own view toggles, like the journal above.
+    "view_toggle_ghost",
+    // Assumed owner exception (2026-11-11): the list grows by the three operations #237 registers, what the outliner's
+    // eye and locks hold — a person's own view of the map, which nothing on the map shows, like the rung above.
+    "placement_set_hidden",
+    "layer_set_visible",
+    "placement_set_locked",
+    // Assumed owner exception (2026-11-11): the list grows by the two operations #129 slice 22 registers, the composition
+    // picker's cursor and its hold on the arrows, which a person's own view holds, like the rung above.
+    "composition_picker_walk",
+    "composition_picker_toggle",
     "tool_arm",
     "snip_arm",
     "brush_arm",

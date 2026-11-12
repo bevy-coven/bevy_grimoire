@@ -723,7 +723,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_cauldron"
-version = "0.6.2"
+version = "0.6.5"
 dependencies = [
  "accesskit",
  "alacritty_terminal",
@@ -1227,7 +1227,7 @@ dependencies = [
 [[package]]
 name = "bevy_gooey"
 version = "0.52.1"
-source = "git+https://github.com/bevy-coven/bevy_gooey?rev=d1ec9ee97e40100b1e1690367c1221d5e4d8c014#d1ec9ee97e40100b1e1690367c1221d5e4d8c014"
+source = "git+https://github.com/bevy-coven/bevy_gooey?rev=57d3d49b3e096e7cf4d2c83c4d6b6ee6fad92a73#57d3d49b3e096e7cf4d2c83c4d6b6ee6fad92a73"
 dependencies = [
  "accesskit",
  "bevy",
@@ -1236,7 +1236,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_grimoire"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "bevy",
  "bevy_grimoire_core",
@@ -1255,7 +1255,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_grimoire_core"
-version = "0.10.1"
+version = "0.10.3"
 dependencies = [
  "bevy_grimoire_migrate",
  "bevy_grimoire_rng",
@@ -1315,7 +1315,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_grimoire_solver"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "batsat",
 ]

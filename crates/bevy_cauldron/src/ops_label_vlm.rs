@@ -4,9 +4,9 @@
 //! (`tiles::apply_suggestion`). An agent has no booth, so it brings its own two shots (project-relative
 //! PNGs, e.g. from `bevy_devshot`) and the two halves of that walk become two operations:
 //!
-//! - `label_suggest` asks the configured endpoint (`GRIMOIRE_VLM_*`, as the editor does) about one library
-//!   piece and **returns the validated proposal without writing anything**, so an agent reads it, edits
-//!   it, or throws it away. Undo: none, it only reads.
+//! - `label_suggest` asks the configured decision endpoint (`GRIMOIRE_DECIDE_*`, as the editor does)
+//!   about one library piece and **returns the validated proposal without writing anything**, so an
+//!   agent reads it, edits it, or throws it away. Undo: none, it only reads.
 //! - `label_apply` writes a proposal onto the piece through `labels::apply_fields`, the same field copy
 //!   the editor's apply uses, so the provenance says what the model said (`By::Model`) and the pane draws it
 //!   as unchecked until a person confirms it. Its inverse restores the whole descriptor (`restore`, which
@@ -22,7 +22,8 @@ use serde_json::json;
 
 use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo};
 use crate::project::Project;
-use crate::vlm::{Provenance, Suggestion, VlmConfig};
+use crate::decide_labels::{DEFAULT_THRESHOLD, endpoint_of, label_with_decisions};
+use crate::label_suggestion::{Provenance, Suggestion};
 
 fn piece<'a>(project: &'a Project, id: &str) -> Result<&'a Descriptor, Refusal> {
     project
@@ -121,8 +122,7 @@ impl Operation for LabelSuggest {
         piece(project, &p.id)?;
         shot(project, &p.front)?;
         shot(project, &p.side)?;
-        VlmConfig::load(&project.root).map_err(Refusal::new)?;
-        Ok(json!({"id": p.id, "asks": "the configured VLM endpoint", "writes": false}))
+        Ok(json!({"id": p.id, "asks": "the configured decision endpoint", "writes": false}))
     }
 
     fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
@@ -130,18 +130,23 @@ impl Operation for LabelSuggest {
         let project = open_project(ctx)?;
         let d = piece(project, &p.id)?;
         let pngs = [shot(project, &p.front)?, shot(project, &p.side)?];
-        let cfg = VlmConfig::load(&project.root).map_err(Refusal::new)?;
         let mesh = d.mesh.clone().unwrap_or_default();
         let prompt = crate::labels::prompt_ctx(d, &mesh, project);
         let date: String = crate::ops::now_rfc3339().chars().take(10).collect();
+        let http = bevy_oracle::Http::new(endpoint_of(&project.root));
         let (suggestion, provenance) =
-            crate::vlm::label_with_retry(&cfg, &pngs, &project.vocab, &prompt, date)
+            label_with_decisions(&http, &pngs, &project.vocab, &prompt, DEFAULT_THRESHOLD, date)
                 .map_err(|e| Refusal::new(e.to_string()))?;
+        // **The one-line receipt names what the proposal actually says.** `what` is the labeller's
+        // own sentence and the decision path has none, so the kinds carry the line instead — the
+        // same tokens a reader looks for on the piece, rather than an empty colon.
+        let says = if suggestion.what.trim().is_empty() {
+            suggestion.kind.join(", ")
+        } else {
+            suggestion.what.clone()
+        };
         Ok(Outcome {
-            summary: format!(
-                "`{}` proposed by {}: {}",
-                p.id, provenance.model, suggestion.what
-            ),
+            summary: format!("`{}` proposed by {}: {says}", p.id, provenance.model),
             affected: 0,
             saved: false,
             inverse: None,

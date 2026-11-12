@@ -8,7 +8,7 @@ You need a Rust toolchain and a clone of this repo. Run every command from the r
 
 ## Start the editor
 
-With no argument, `cargo run -p bevy_cauldron` opens the **launcher** before any project: your recent projects (a missing folder is listed as missing, not dropped), a field to type a project's folder, **Open example**, **New project…** (a name, a place and a template; a name that is already a folder is refused beside the field and Create stays off until it is free) and, when the changelog has grown since you last opened a project, what it added. Choosing a project starts the editor on it, at its kit and map menu, as step 1 below does by hand. **Copy command line** on a recent project puts that line on your clipboard. The list follows the desktop's conventions: one press chooses a card and a double press (or Enter) opens it, typing a project's first letters moves to it, a card shrinks a little under the press, a list longer than its box fades at the edge that hides rows, and in the **New project…** form Return presses **Create** from the Name field. A button that is a screen's main action is gooey's `Submit` (the accent), a toolbar button is a `Ghost`, and the agreeing answer of a question that cannot be undone is `Danger`.
+With no argument, `cargo run -p bevy_cauldron` opens the **launcher** before any project: your recent projects (a missing folder is listed as missing, not dropped), a field to type a project's folder, **Open example**, **New project…** (a name, a place and a template; a name that is already a folder is refused beside the field and Create stays off until it is free) and, when the changelog has grown since you last opened a project, what it added. Choosing a project starts the editor on it, at its kit and map menu, as step 1 below does by hand. **Copy command line** on a recent project puts that line on your clipboard. The list follows the desktop's conventions: one press (or Enter), on a card, opens it, typing a project's first letters moves to it, a card shrinks a little under the press, a list longer than its box fades at the edge that hides rows, and in the **New project…** form Return presses **Create** from the Name field. A button that is a screen's main action is gooey's `Submit` (the accent), a toolbar button is a `Ghost`, and the agreeing answer of a question that cannot be undone is `Danger`.
 
 A project named on the command line with a door or a map (`cargo run -p bevy_cauldron -- . bedroom`) opens on a **loading screen**: nothing for the first second, then the stage it is in with a spinner, and from ten seconds a bar that says `N of M` and the stage. **Cancel** goes back to the launcher and writes nothing. When it has loaded, any file of the project that does not read is listed on a card, one row each with the file, the field and why; **Open anyway** goes on into the editor and **Back** returns to the launcher. `GRIMOIRE_LOAD_STAGE_DELAY_MS=3000` pauses after each stage if you want to see the screen on a project that opens too fast to.
 
@@ -36,19 +36,19 @@ A **map** is a file that holds your placements. It is saved as `<name>.map.yaml`
 3. Type `first_map`. Use lowercase letters, digits and underscores. Start with a letter.
 4. Press Enter. The map `first_map` is made **and opens in the editor**, in that one press.
 
-**What you see:** the editor opens on the MAP door. A door is one of the editor's three workspaces. The MAP door shows your map. A new map's bounds start at `10 x 4 x 10`.
+**What you see:** the editor opens on the MAP workspace, which shows your map. A workspace is one of the editor's jobs: Map, Kit, Animation and more. A new map's bounds start at `10 x 4 x 10`.
 
 **If the map is made but does not open:** the door refused it, and the reason is on the status line (`\`first_map\` will not open: …`). The map is still in the MAPS column, so pressing Enter on it tries again.
 
 **If it goes wrong:** if Enter on `+ new map` does nothing, check that the form is open under MAPS. If you press Enter with the name blank, the message reads `a map needs a name — snake_case, starting with a letter`. Type a name first.
 
-## Look at the kit door
+## Look at the Kit workspace
 
-1. Press `=`. The editor switches to the other door, KIT.
+1. Press `Cmd+4` (`Ctrl+4` on Windows and Linux). The editor switches to the KIT workspace.
 
-**What you see:** the KIT door opens on the MESHES tab.
+**What you see:** the KIT workspace opens on the MESHES tab.
 
-2. Press `=` again. You are back on the MAP door.
+2. Press `Cmd+2` (`Ctrl+2`). You are back on the MAP workspace.
 
 ## Arm a piece and place it
 

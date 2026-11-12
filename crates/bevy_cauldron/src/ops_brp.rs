@@ -82,7 +82,7 @@ pub struct UndoParams {
     /// change.
     ///
     /// **A flag rather than making the id-less form follow the stack.** An undo on the *log* is well
-    /// defined with no presentation, survives a door crossing, and is what `grimoire_read_oplog`
+    /// defined with no presentation, survives a door switching, and is what `grimoire_read_oplog`
     /// lists; making it silently depend on a UI resource would make one call mean two things on two
     /// screens. The person's Cmd+Z has always meant "the turn", so this gives the agent's door the
     /// same verb rather than changing what its existing one says.
@@ -188,6 +188,21 @@ impl AfterRef {
             AfterRef::Presentation(id) | AfterRef::Note(id) => id.clone(),
         }
     }
+}
+
+/// **The parameters of `grimoire/lesson`** (AG-06, #351).
+///
+/// A lesson is one line for the project's guide, learned from the task just handed back. **The call
+/// queues it and writes nothing**: only a person's Keep appends the line.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LessonParams {
+    /// **The hand-back the lesson follows**: a presentation's id, or a resolved note's.
+    pub after: AfterRef,
+    /// The one line the guide gains.
+    pub lesson: String,
+    /// Why it is worth the line.
+    pub why: String,
 }
 
 /// **The parameters of `grimoire/operation_preview`.**
@@ -489,7 +504,7 @@ fn project_root(
         return Err("no project is open.".to_owned());
     };
     // **The open map's name, while a map is open.** A rename changes the open map and not the
-    // project's name; the project's is only brought up to date on a crossing. Without this an agent
+    // project's name; the project's is only brought up to date on a switching. Without this an agent
     // asking which map is open is told the name the author has already replaced.
     let map = open
         .map(|o| o.map.name.clone())
@@ -616,7 +631,7 @@ fn frame_json(
 /// follow lives here rather than in the signature because `operation_apply` is at the limit; the
 /// alternative was a second bundle and two ways to name the same call's side effects.
 #[derive(bevy::ecs::system::SystemParam)]
-struct Gates<'w> {
+struct Gates<'w, 's> {
     confirm: Option<Res<'w, crate::confirm::Confirm>>,
     pause: Option<Res<'w, crate::familiar::AgentPause>>,
     activity: Option<ResMut<'w, crate::familiar::AgentActivity>>,
@@ -628,9 +643,91 @@ struct Gates<'w> {
     /// **The page a change off the map is on** (AF-03, #359), asked for here for `following`'s
     /// reason: the request is raised where the agent comes in, never inside `dispatch`.
     revealing: Option<ResMut<'w, crate::reveal::Revealing>>,
+    /// **The editor's own view, for an operation that changes one** (E-002, #129): the grid's rung, the snip,
+    /// the bench's ghost and the journal panel. A view verb with no view in hand is refused, and this door
+    /// used to hand it none, so `tool_arm`, `view_cycle_grid`, `snip_arm` and `view_toggle_journal` were
+    /// registered, listed for an agent, and refused every time it called them. Held here for `following`'s
+    /// reason: `operation_apply` is at the limit of sixteen parameters.
+    rung: Option<ResMut<'w, crate::editor::Rung>>,
+    snip: Option<ResMut<'w, crate::snip::SnipEdit>>,
+    ghost: Option<ResMut<'w, crate::anim_stage::BenchAb>>,
+    journal: Query<'w, 's, &'static mut Node, With<crate::chrome::JournalPanel>>,
+    /// **The outliner's eye and locks** (UI-51, #237): what `placement_set_hidden`, `layer_set_visible` and
+    /// `placement_set_locked` change, carried by the same view as the rest.
+    eyes: Option<ResMut<'w, crate::outliner::Eyes>>,
+    locks: Option<ResMut<'w, crate::outliner::Locks>>,
+    /// **The composition picker's cursor** (E-002, #129 slice 22): what `composition_picker_walk` and
+    /// `composition_picker_toggle` change, carried by the same view.
+    picker: Option<ResMut<'w, crate::compose::picker::Picker>>,
 }
 
-impl Gates<'_> {
+impl Gates<'_, '_> {
+    /// **The view an agent's call to a view operation changes**, as the editor holds it now: the tool from
+    /// the editor's state, the rest from the resources a person's key reads.
+    fn view_in(&self, state: Option<&crate::editor::EditorState>) -> crate::ops_view::View {
+        crate::ops_view::View {
+            tool: state.map(|s| s.tool).unwrap_or_default(),
+            rung: self.rung.as_deref().map(|r| r.0).unwrap_or_default(),
+            snip_armed: self.snip.as_deref().is_some_and(|s| s.armed),
+            ghost: self.ghost.as_deref().is_some_and(|a| a.0),
+            journal_open: self.journal.iter().any(|n| n.display != Display::None),
+            eyes: self.eyes.as_deref().cloned().unwrap_or_default(),
+            locks: self.locks.as_deref().cloned().unwrap_or_default(),
+            picker_selected: self.picker.as_deref().map(|p| p.selected).unwrap_or_default(),
+            picker_active: self.picker.as_deref().is_some_and(|p| p.active),
+            ..Default::default()
+        }
+    }
+
+    /// **Apply the view the operation answered with**, the way each key applies its own answer. Each is
+    /// compared first and written only when it moved: writing through a `ResMut` marks it changed, and
+    /// every system gated on a change would rebuild for a call that changed nothing.
+    fn apply_view(&mut self, view: crate::ops_view::View, state: Option<&mut crate::editor::EditorState>) {
+        if let Some(state) = state
+            && state.tool != view.tool
+        {
+            state.tool = view.tool;
+        }
+        if self.rung.as_deref().is_some_and(|r| r.0 != view.rung)
+            && let Some(rung) = self.rung.as_deref_mut()
+        {
+            rung.0 = view.rung;
+        }
+        if self.snip.as_deref().is_some_and(|s| s.armed != view.snip_armed)
+            && let Some(snip) = self.snip.as_deref_mut()
+        {
+            snip.armed = view.snip_armed;
+        }
+        if self.ghost.as_deref().is_some_and(|a| a.0 != view.ghost)
+            && let Some(ghost) = self.ghost.as_deref_mut()
+        {
+            ghost.0 = view.ghost;
+        }
+        if self.journal.iter().any(|n| n.display != Display::None) != view.journal_open {
+            for mut node in &mut self.journal {
+                node.display = if view.journal_open { Display::Flex } else { Display::None };
+            }
+        }
+        // **What the outliner's eye and locks hold** (UI-51, #237), written only when it moved.
+        if self.eyes.as_deref().is_some_and(|e| *e != view.eyes)
+            && let Some(eyes) = self.eyes.as_deref_mut()
+        {
+            *eyes = view.eyes;
+        }
+        if self.locks.as_deref().is_some_and(|l| *l != view.locks)
+            && let Some(locks) = self.locks.as_deref_mut()
+        {
+            *locks = view.locks;
+        }
+        // **The composition picker's cursor and its hold on the arrows** (E-002, #129 slice 22), written only when it moved.
+        if let Some(picker) = self.picker.as_deref_mut()
+            && (picker.selected != view.picker_selected || picker.active != view.picker_active)
+        {
+            picker.selected = view.picker_selected;
+            picker.active = view.picker_active;
+        }
+    }
+
     /// An agent called `method`: the AGENT block says when it was last heard.
     fn hear(&mut self, method: &'static str) {
         if let (Some(activity), Some(time)) = (self.activity.as_mut(), self.time.as_deref()) {
@@ -644,7 +741,27 @@ impl Gates<'_> {
     /// map and the camera takes it; [`crate::reveal::page_of`] answers for everything else and the
     /// reveal opens its door, panel and row (AF-03, #359). A `Shown` neither takes — `Nowhere` — is
     /// nothing anybody can look at, and is left alone rather than being refused as a page.
+    ///
+    /// **A proposal is followed as one** (AF-05, #361): `layout_propose` is the third way an agent
+    /// proposes a change, and it is drawn in the preview colour rather than the applied one.
     fn follow(&mut self, operation: &str, shown: &crate::ops::Shown, summary: &str) {
+        // **A standing proposal is a preview, not a change** (AF-05, #361): `layout_propose` writes
+        // nothing — its own `writes()` is empty and its `undo()` is `Undo::None` — and the layout
+        // stands on screen as a *proposal* until `layout_accept` keeps it. Followed as a change it wore
+        // the applied colour and was ringed as a fact, which is the one difference AF-05 exists to
+        // make visible. Same queue, same idle wait, same dwell: a preview is not a second mechanism.
+        //
+        // **The words are the operation's own** — its `Outcome::summary` is `proposed: 12 piece(s)
+        // … — Enter keeps it, Esc throws it away` — so the chip and the receipt cannot describe one
+        // proposal two ways, and no second sentence is written for the follow to overwrite them.
+        if operation == "layout_propose" {
+            if let Some(request) = crate::follow::request_of(shown)
+                && let Some(following) = self.following.as_mut()
+            {
+                following.request_a_preview(request, crate::follow::as_the_familiar(summary));
+            }
+            return;
+        }
         if let Some(request) = crate::follow::request_of(shown) {
             if let Some(following) = self.following.as_mut() {
                 following.request_named(request, crate::follow::as_the_familiar(summary));
@@ -743,11 +860,13 @@ fn editor_state(
     state: Option<Res<crate::editor::EditorState>>,
     tiles: Option<Res<crate::tiles::ImportState>>,
     armed: Option<Res<crate::compose::Armed>>,
-    door: Option<Res<crate::tiles::Door>>,
+    door: Option<Res<crate::workspace::Workspace>>,
     mode: Option<Res<crate::tiles::Mode>>,
     presenting: Option<Res<crate::present::Presenting>>,
     // **The agent's wishes this session** (#353): what it found hard, waiting to be read.
     wishes: Option<Res<crate::present::Wishes>>,
+    // **The lessons it proposed this session** (AG-06, #351), waiting to be kept or discarded.
+    lessons: Option<Res<crate::present::Lessons>>,
     // **Which screen the editor is on, which nothing else here says (E-078).** The map, the door and
     // the mode all read the same on the menu as in the editor — `Door` and `Mode` are `init_resource`d
     // at build and a loaded `OpenMap` is a resource either way — so before this, an agent could not
@@ -897,7 +1016,7 @@ fn editor_state(
             // the door it would cross to, so a waiting door is not invisible to the agent that asked.
             "leaving": s.leaving,
             "door_waiting": s.door_request.map(|r| json!({
-                "door": r.door.label(),
+                "door": r.workspace.label(),
                 "tab": r.tab.map(|m| m.label()),
             })),
         })
@@ -985,6 +1104,11 @@ fn editor_state(
         // here. The MCP server holds no wish state: this is the record, and the editor is where a
         // hand-back and its wish are both known.
         "wishes": wishes.as_deref().map(|w| w.state_json()).unwrap_or(Value::Null),
+        // **The lessons the agent proposed this session** (AG-06, #351): `[{id, after, state}]`,
+        // oldest first. `kept` means the line is in the guide — the editor wrote it — and
+        // `discarded` that the person dropped it. Like a wish, a lesson is held here and not by the
+        // MCP server, because it cites a hand-back and hand-backs live in the editor.
+        "lessons": lessons.as_deref().map(|l| l.state_json()).unwrap_or(Value::Null),
         "frame": frame_json(diagnostics.as_deref(), busy.as_deref()),
         // **The game's verdict on the last reload** (S3.5): null, "pending", or {ok, message, at_unix_ms}.
         "game": game.as_deref().map_or(Value::Null, |g| g.state_json(open.as_ref().map(|o| o.map_path.as_path()))),
@@ -1026,7 +1150,7 @@ fn editor_state(
 /// `grimoire/run_command`: a command is refused when the region that holds the keys is not its own.
 fn ui_json(
     screen: Option<&State<crate::screen::Screen>>,
-    door: Option<&crate::tiles::Door>,
+    door: Option<&crate::workspace::Workspace>,
     live: Option<&crate::keys::Live>,
 ) -> Value {
     use crate::keys::{Context, Holder};
@@ -1043,7 +1167,7 @@ fn ui_json(
     json!({
         "screen": "workbench",
         "workspace": door.map(|d| d.label()),
-        "panels": door.map_or_else(Vec::new, |d| d.tabs().iter().map(|m| m.label()).collect()),
+        "panels": door.map_or_else(Vec::new, |d| d.panels().iter().map(|m| m.label()).collect()),
         "focus": focus,
     })
 }
@@ -1645,14 +1769,15 @@ fn operation_preview(
 /// The plan reads the library and nothing else. The door, the job and the shelf filter are editor
 /// state, so they are read here, where the editor's resources are in hand.
 pub(crate) fn piece_select_refusal(
-    door: Option<crate::tiles::Door>,
+    door: Option<crate::workspace::Workspace>,
     mode: Option<crate::tiles::Mode>,
     project: Option<&crate::project::Project>,
     filters: Option<&crate::filter::Filters>,
     id: &str,
 ) -> Option<String> {
-    use crate::tiles::{Door, Mode};
-    if door != Some(Door::Kit) || mode != Some(Mode::Meshes) {
+    use crate::tiles::Mode;
+use crate::workspace::Workspace;
+    if door != Some(Workspace::Kit) || mode != Some(Mode::Meshes) {
         return Some(
             "the Meshes shelf is not on screen. Open the kit door on its meshes panel first (door_open with door kit and tab meshes), then select the piece."
                 .to_string(),
@@ -1701,7 +1826,7 @@ fn operation_apply(
     mut due: Option<ResMut<crate::watch::Due>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
     mut gates: Gates,
-    door: Option<Res<crate::tiles::Door>>,
+    door: Option<Res<crate::workspace::Workspace>>,
     mode: Option<Res<crate::tiles::Mode>>,
     filters: Option<Res<crate::filter::Filters>>,
     mut import: Option<ResMut<crate::tiles::ImportState>>,
@@ -1710,7 +1835,7 @@ fn operation_apply(
     mut clock: Option<ResMut<crate::editor::ProposalClock>>,
     // **Which screen the operation is being applied on (E-078).** `map_open` means two different
     // things and only the screen tells them apart: from a door it asks for the Map door, and from the
-    // menu it is an *entry* — the same crossing the MAPS column's Enter makes. **Read the state, not
+    // menu it is an *entry* — the same switching the MAPS column's Enter makes. **Read the state, not
     // the presence of a resource**: `PointedAt` is inserted when a project is opened and stays on every screen,
     // and `EditorState`'s absence is a fact about the editor, not a name for the menu.
     screen: Option<Res<State<crate::screen::Screen>>>,
@@ -1813,7 +1938,7 @@ fn operation_apply(
         let read_project = project.as_deref();
         let read_open = open.as_deref();
         let ctx = Ctx {
-        view: None, trust_file: None,
+        view: op.changes_view().then(|| gates.view_in(state.as_deref())), trust_file: None,
             root: menu.as_ref().map(|m| m.root.clone()),
             project: read_project.cloned(),
             open: read_open.cloned(),
@@ -1843,6 +1968,7 @@ fn operation_apply(
     let mut ctx = take(&project, &open);
     // **The menu's root, when the menu is up**, so `map_create` has a directory before any door.
     ctx.root = menu.as_ref().map(|m| m.root.clone());
+    ctx.view = op.changes_view().then(|| gates.view_in(state.as_deref()));
     // **The proposal travels by value**, in and out, because it is not map data.
     ctx.proposal = proposal.as_deref_mut().and_then(|r| r.0.take());
     // **A proposal with no seed named gets the editor's own next one.** This is what makes two
@@ -1867,6 +1993,10 @@ fn operation_apply(
         .then(|| crate::checks::find(&ctx).map(|after| crate::checks::report(before.as_ref(), &after)))
         .flatten();
     let carried = ctx.proposal.take();
+    // **The view the operation answered with goes back to the editor's own** (E-002, #129), as a key's does.
+    if let Some(view) = ctx.view.take() {
+        gates.apply_view(view, state.as_deref_mut());
+    }
     // **A project the operation LOADED is installed here, before the map goes back.** `map_open` can
     // load the project from the menu's root — that is what lets an agent make a map and then work in
     // it — and a write-back that skipped it left the editor holding a map and no project, which no
@@ -1894,7 +2024,7 @@ fn operation_apply(
     // **On the menu, `map_open` enters the editor (E-078)** — and it does it the way the MAPS
     // column's Enter does, not by installing resources and hoping the screen follows.
     //
-    // `Chosen` is what a crossing carries: `screen::open_the_door` consumes it on the project page's transition into the editor and
+    // `Chosen` is what a switching carries: `screen::open_the_door` consumes it on the project page's transition into the editor and
     // installs the project and the map through `Opened::insert_into`, an exclusive system, so
     // `OnEnter(Editor)` — the very next schedule — finds them. Inserting `Project` here instead would
     // put a loaded project on a screen that has no door, and a `NextState` read one pass late would
@@ -1909,14 +2039,14 @@ fn operation_apply(
     if entering {
         match (loaded, opened) {
             (Some(mut fresh), Some(map)) => {
-                // **The project remembers the map's name**, mirroring `args::open`: a crossing from
+                // **The project remembers the map's name**, mirroring `args::open`: a switching from
                 // the Kit door back to Maps reads it to know which map to reopen.
                 fresh.open_map_name = Some(map.map.name.clone());
                 commands.insert_resource(crate::screen::Chosen(crate::args::Opened {
                     project: fresh,
                     open_map: Some(map),
-                    door: crate::tiles::Door::Map,
-                    mode: crate::tiles::Door::Map.opens_on(),
+                    workspace: crate::workspace::Workspace::Map,
+                    mode: crate::workspace::Workspace::Map.opens_on(),
                 }));
                 if let Some(next) = screen_next.as_deref_mut() {
                     next.set(crate::screen::Screen::Editor);
@@ -1968,7 +2098,7 @@ fn operation_apply(
     {
         crate::editor::apply_composition_armed(armed, outcome.after.as_ref());
     }
-    // **An agent's door is crossed by the editor in the next frame (`door_open`)**, the same crossing
+    // **An agent's door is crossed by the editor in the next frame (`door_open`)**, the same switching
     // the keys make. It is stored here and carried out by `editor::apply_pending_door`, because the
     // leaving question may need the author's answer first.
     if let (Ok(ops::Applied::Done { outcome, .. }), Some(state)) = (&applied, state.as_deref_mut())
@@ -1983,7 +2113,7 @@ fn operation_apply(
         && !on_menu
     {
         state.door_request = Some(crate::editor::DoorRequest {
-            door: crate::tiles::Door::Map,
+            workspace: crate::workspace::Workspace::Map,
             tab: None,
         });
     }
@@ -2971,6 +3101,26 @@ impl Plugin for OpsBridgePlugin {
             })),
             editor_wish,
         );
+        app.add_debug_command(
+            DebugCommandInfo::new(
+                "grimoire/lesson",
+                "One line for the project's guide, learned from the task just handed back: the \
+                 hand-back it follows, the lesson and why. Queued in the editor and read from \
+                 grimoire/state's lessons; a person keeps or discards it in the AGENT block, and \
+                 only Keep writes the line. One lesson per hand-back, refused at the door and \
+                 never trimmed; a project with no guide is refused with the reason.",
+            )
+            .params(
+                "after: {\"presentation\": \"present-1\"} or {\"note\": \"n3\"}; lesson, one line \
+                     under the limit its schema states; why, also one line, under its own.",
+            )
+            .example(json!({
+                "after": {"presentation": "present-1"},
+                "lesson": "Measure the walls before placing a door: a door placed blind overlapped one.",
+                "why": "the overlap was found by rendering, three calls after the placement",
+            })),
+            editor_lesson,
+        );
     }
 }
 
@@ -2994,7 +3144,7 @@ fn editor_present(
     block: Query<(), With<crate::familiar::Familiar>>,
     here: Option<Res<crate::familiar::HandBackHere>>,
     // **The hand-back's first place to check is a follow** (AF-02, #358): one camera, one ease, one
-    // crossing. A presentation that framed through a mechanism of its own would fight the follow for
+    // switching. A presentation that framed through a mechanism of its own would fight the follow for
     // the camera the moment an agent placed something and then handed back.
     mut following: Option<ResMut<crate::follow::Following>>,
 ) -> Result<Value, String> {
@@ -3061,7 +3211,7 @@ fn editor_present(
         );
     }
     // **The first place to check is framed before the question goes up**, as a follow (AF-02, #358):
-    // one camera, one ease, one crossing, so a hand-back and a follow cannot fight over it. The ids
+    // one camera, one ease, one switching, so a hand-back and a follow cannot fight over it. The ids
     // are the ones the person will read under the camera, so the ring lasts as it does for a change.
     if let (Some(first), Some(following)) = (p.check.first(), following.as_mut())
         && !first.placements.is_empty()
@@ -3250,6 +3400,112 @@ fn editor_wish(
         "after": p.after.recorded_id(),
         "state": "waiting",
         "queued": wishes.queued.len(),
+    }))
+}
+
+/// **`grimoire/lesson` — one line for the project's guide, learned from the task** (AG-06, #351).
+///
+/// **Refused at the door, never trimmed**: an empty field, one past its limit, or a newline is a
+/// refusal naming the field and the limit. **The call writes nothing.** It queues the proposal where a
+/// person reads it and answers Keep or Discard; only Keep appends the line to the guide, which is why
+/// an agent cannot instruct itself.
+///
+/// **One lesson per hand-back**, asked with the record's own key — the same rule the wishes keep, and
+/// for the same reason: a hand-back carries one reflection.
+#[allow(clippy::too_many_arguments)]
+fn editor_lesson(
+    In(p): In<LessonParams>,
+    project: Option<Res<crate::project::Project>>,
+    open: Option<Res<crate::project::OpenMap>>,
+    handbacks: Option<Res<crate::present::HandBacks>>,
+    mut lessons: Option<ResMut<crate::present::Lessons>>,
+    client: Option<Res<crate::present::AgentClient>>,
+    mut activity: Option<ResMut<crate::familiar::AgentActivity>>,
+    time: Option<Res<Time<Real>>>,
+) -> Result<Value, String> {
+    if let (Some(activity), Some(time)) = (activity.as_mut(), time) {
+        activity.hear("lesson", time.elapsed_secs_f64());
+    }
+    let Some(lessons) = lessons.as_mut() else {
+        return Err("this editor keeps no lesson queue, so a lesson would be lost".to_owned());
+    };
+    // **The fields first**, so an agent that sent a paragraph is told that rather than that its
+    // hand-back is unknown.
+    let mut lesson = bevy_grimoire_core::lesson::Lesson {
+        after: p.after.recorded_id(),
+        lesson: p.lesson,
+        why: p.why,
+        ..bevy_grimoire_core::lesson::Lesson::default()
+    };
+    lesson.validate()?;
+    let Some(project) = project.as_deref() else {
+        return Err("no project is open, so there is no hand-back record to cite and no guide to keep a lesson in".to_owned());
+    };
+    let root = project.root.as_path();
+    let (kind, cited) = match &p.after {
+        AfterRef::Presentation(id) => (
+            crate::present::HandBackKind::Presentation,
+            handbacks.as_ref().and_then(|h| h.cited(crate::present::HandBackKind::Presentation, id, root, None).cloned()),
+        ),
+        AfterRef::Note(id) => {
+            let map = open.as_deref().map(|open| open.map_path.as_path());
+            (
+                crate::present::HandBackKind::Note,
+                handbacks
+                    .as_ref()
+                    .and_then(|h| h.cited(crate::present::HandBackKind::Note, id, root, map).cloned()),
+            )
+        }
+    };
+    let Some(cited) = cited else {
+        if let AfterRef::Presentation(id) | AfterRef::Note(id) = &p.after
+            && handbacks.as_ref().is_some_and(|h| h.elsewhere(kind, id, root).is_some())
+        {
+            return Err(format!(
+                "`{id}` was handed back in another project. A lesson follows a hand-back of the \
+                 project it is about, and the line lands in that project's guide."
+            ));
+        }
+        return Err(match &p.after {
+            AfterRef::Presentation(id) => format!(
+                "`{id}` was never handed back in this editor session. A presentation hands \
+                 back, and a lesson cites the one it follows."
+            ),
+            AfterRef::Note(id) => format!(
+                "`{id}` is not a note this editor session handed back. A note resolved in an \
+                 earlier session, or on another map, is not a hand-back anyone watched here, and \
+                 a lesson cites the hand-back it follows."
+            ),
+        });
+    };
+    if lessons.has_lesson_for(&cited.key) {
+        return Err(format!(
+            "`{}` already has a lesson, and a hand-back carries one. Read the queued ones in \
+             grimoire_state.lessons.",
+            lesson.after
+        ));
+    }
+    // **Who is talking**, so the line carries a name the agent did not type.
+    lesson.client = client
+        .as_deref()
+        .and_then(|c| c.0.as_ref())
+        .map(|c| format!("{} {}", c.name, c.version))
+        .unwrap_or_default();
+    // **A project with no guide has nowhere to keep one**, and the person is the only one who can
+    // make the file: saying so is what tells the agent to ask them rather than to retry.
+    let guide = crate::agent_guide::project_file(root);
+    if !guide.exists() {
+        return Err(
+            "this project has no agent guide; ask the person to create one on the project page".to_owned(),
+        );
+    }
+    let id = lessons.take(lesson.clone(), cited.key.clone(), root.to_path_buf());
+    Ok(json!({
+        "id": id,
+        "after": lesson.after,
+        "state": "waiting",
+        "line": lesson.line(&crate::labels::date_today()),
+        "queued": lessons.queued.len(),
     }))
 }
 

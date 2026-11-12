@@ -293,6 +293,10 @@ pub struct EditorSettings {
     /// The triangle count is shown at the top right (#302). Off until asked for: it is a number for
     /// someone tuning a scene, and the first thing a newcomer reads at the top of the window.
     pub show_statistics: bool,
+    /// **View ▸ Show activity bar** (NV-03, #380): the vertical strip of workspace icons at the
+    /// window's far left. On by default, because it is the one place the workspaces are all in view;
+    /// off takes it away entirely and the choice is saved.
+    pub show_activity_bar: bool,
     /// The rebound commands of every layer, by command id: what the keymap screen shows against each
     /// command's default chord.
     pub keymap: BTreeMap<String, Shortcut>,
@@ -326,11 +330,16 @@ pub struct EditorSettings {
     pub terminal_shell: Option<String>,
     /// The arguments `terminal_shell` is started with (VS Code's profile `args`); empty when none.
     pub terminal_shell_args: Vec<String>,
-    /// **The shell's arrangement, as a person left it** (UI-33, #227): a `bevy_gooey` `DockLayout` of
-    /// this door's panels, written by the editor when a divider or a tab is moved and read back on
-    /// the next start. `None` is `ui::shell_layout` — the default, so a person who has never moved
-    /// anything has no key in their file.
-    pub shell_layout: Option<bevy_gooey::DockLayout>,
+    /// **Each workspace's arrangement, as a person left it** (UI-33, #227; per workspace since
+    /// NV-02, #379): the workspace's id and the `bevy_gooey` `DockLayout` it shows, written by the
+    /// editor when a divider or a tab is moved and read back on the next start.
+    ///
+    /// **A map, not one layout.** A door was one arrangement because a door was one place; with nine
+    /// workspaces a single layout would move Map's inspector when somebody dragged Kit's, which is
+    /// the thing per-workspace layouts exist to stop. A workspace with no entry is
+    /// [`Workspace::default_layout`](crate::workspace::Workspace::default_layout) — its own default,
+    /// so a person who has never moved anything has no key in their file.
+    pub workspace_layout: BTreeMap<String, bevy_gooey::DockLayout>,
 }
 
 impl Default for EditorSettings {
@@ -344,6 +353,7 @@ impl Default for EditorSettings {
             show_grid: true,
             grid_strength: 1.0,
             show_statistics: false,
+            show_activity_bar: true,
             keymap: BTreeMap::new(),
             terminal_text_scale: 1.0,
             terminal_cursor: TerminalCursor::default(),
@@ -353,7 +363,7 @@ impl Default for EditorSettings {
             terminal_agent_command: None,
             terminal_shell: None,
             terminal_shell_args: Vec::new(),
-            shell_layout: None,
+            workspace_layout: BTreeMap::new(),
         }
     }
 }
@@ -389,6 +399,10 @@ pub struct SettingsLayer {
     pub grid_strength: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub show_statistics: Option<bool>,
+    /// **View ▸ Show activity bar** (NV-03, #380). `None` leaves the layer below to decide, so a file
+    /// written before this key existed reads as on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_activity_bar: Option<bool>,
     /// **Rebound commands**: a command's id (`file.save`, `commands::Command::id`) and the chord that
     /// now runs it. A command the file leaves out keeps its default chord (UI-72, #250).
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
@@ -409,9 +423,16 @@ pub struct SettingsLayer {
     pub terminal_shell: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_shell_args: Option<Vec<String>>,
-    /// The shell's arrangement (UI-33, #227). Not in the settings catalogue: it is a thing a person
-    /// drags, not one they type, and Window ▸ Reset layout is the way back to the default.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Each workspace's arrangement (UI-33, #227; per workspace since NV-02, #379). Not in the
+    /// settings catalogue: it is a thing a person drags, not one they type, and Window ▸ Reset
+    /// layout is the way back to the current workspace's default.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub workspace_layout: BTreeMap<String, bevy_gooey::DockLayout>,
+    /// **The one arrangement files had before the workspaces** (UI-33, #227), read so no existing
+    /// settings file is refused for it: [`SettingsLayer::read`] moves it into
+    /// `workspace_layout["map"]` (the arrangement was the Map's) unless that entry exists. Never
+    /// written back.
+    #[serde(default, skip_serializing)]
     pub shell_layout: Option<bevy_gooey::DockLayout>,
 }
 
@@ -427,6 +448,7 @@ impl Default for SettingsLayer {
             show_grid: None,
             grid_strength: None,
             show_statistics: None,
+            show_activity_bar: None,
             keymap: BTreeMap::new(),
             terminal_text_scale: None,
             terminal_cursor: None,
@@ -436,6 +458,7 @@ impl Default for SettingsLayer {
             terminal_agent_command: None,
             terminal_shell: None,
             terminal_shell_args: None,
+            workspace_layout: BTreeMap::new(),
             shell_layout: None,
         }
     }
@@ -445,7 +468,13 @@ impl SettingsLayer {
     /// **Reads a file's text as a layer**, refusing with the file and the field when it does not read,
     /// is another version, or holds a value no editor can use.
     pub fn read(file: &str, text: &str) -> Result<SettingsLayer, Refusal> {
-        let layer: SettingsLayer = reload_check::read(KIND, file, text, |t| bevy_grimoire_core::yaml::from_str(t, "settings").map_err(|p| p.line()))?;
+        let mut layer: SettingsLayer = reload_check::read(KIND, file, text, |t| bevy_grimoire_core::yaml::from_str(t, "settings").map_err(|p| p.line()))?;
+        if let Some(old) = layer.shell_layout.take() {
+            layer.workspace_layout.entry(crate::workspace::Workspace::Map.id().to_owned()).or_insert(old);
+        }
+        // **A keymap that rebound a command the workspaces replaced still reads** (#379): the entry
+        // binds nothing now, so it is dropped here and the next save writes the file without it.
+        layer.keymap.retain(|id, _| !crate::commands::is_retired(id));
         let refuse = |field: &str, reason: String| Refusal { kind: KIND, file: file.to_owned(), field: Some(field.to_owned()), reason };
         if layer.version != SETTINGS_VERSION {
             return Err(refuse(
@@ -534,6 +563,7 @@ impl EditorSettings {
             out.show_grid = layer.show_grid.unwrap_or(out.show_grid);
             out.grid_strength = layer.grid_strength.unwrap_or(out.grid_strength);
             out.show_statistics = layer.show_statistics.unwrap_or(out.show_statistics);
+            out.show_activity_bar = layer.show_activity_bar.unwrap_or(out.show_activity_bar);
             // Per command: a later layer's binding replaces the earlier one's for that command alone.
             out.keymap.extend(layer.keymap.iter().map(|(id, chord)| (id.clone(), *chord)));
             out.terminal_text_scale = layer.terminal_text_scale.unwrap_or(out.terminal_text_scale);
@@ -552,8 +582,8 @@ impl EditorSettings {
             }
             // **The whole arrangement, not a key of it**: a layout is one value, and a later layer
             // that states one replaces the earlier's (the same rule as `theme`).
-            if let Some(layout) = &layer.shell_layout {
-                out.shell_layout = Some(layout.clone());
+            for (workspace, layout) in &layer.workspace_layout {
+                out.workspace_layout.insert(workspace.clone(), layout.clone());
             }
         }
         out

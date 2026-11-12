@@ -1,22 +1,22 @@
 # Kits and labels
 
-A kit is the set of meshes a map draws from. You bring meshes into a kit, label each one, and the labels tell the editor what each piece is for. This page covers the kit door from start to finish, and ends with an agent labelling a piece for you.
+A kit is the set of meshes a map draws from. You bring meshes into a kit, label each one, and the labels tell the editor what each piece is for. This page covers the Kit workspace from start to finish, and ends with an agent labelling a piece for you.
 
 ## What a kit is
 
 A **kit** is a folder of meshes and the `library.yaml` file that lists them. Each entry in that file is a **piece**: one mesh, its size, and its labels. The file lives beside the meshes, for example at `assets/grimoire/kit/library.yaml`.
 
-A **door** is one of the editor's three screens: Map, Kit and Rigs. Press `=` to switch to the other door. The kit door has three panels, and you switch between them with `1`, `2` and `3`:
+A **workspace** is one of the editor's jobs: Map, Kit, Animation and more. Press `Cmd+4` (`Ctrl+4` on Windows and Linux) to go to the Kit workspace. It has three panels, and you switch between them by clicking their chips on the strip:
 
-- `1` **Meshes**: bring meshes in, and label the pieces you have.
-- `2` **Tiles**: the kit's tiles, and placing pieces on them.
-- `3` **Compose**: saved groups of pieces, called **compositions**.
+- **Meshes**: bring meshes in, and label the pieces you have.
+- **Tiles**: the kit's tiles, and placing pieces on them.
+- **Compose**: saved groups of pieces, called **compositions**.
 
 ## Bring a mesh into a kit
 
 Goal: add a mesh from the kit's folder to the library as a piece.
 
-1. Press `1` to open the Meshes panel.
+1. Click MESHES on the strip to open the Meshes panel.
 2. Read the two shelves. `NOT IMPORTED (n)` lists meshes on disk that are not pieces yet. `MESHES (n)` lists the pieces.
 3. Press `Left` to walk the NOT IMPORTED list, or `Right` to walk MESHES. Up and Down move one row; Shift with an arrow moves five.
 4. On a mesh in NOT IMPORTED, press `Enter`. The mesh becomes a piece and moves to MESHES.
@@ -90,24 +90,24 @@ Goal: set a piece's labels yourself.
 
 What you see: the labels row reads `by hand · <date>` once every axis is set and no model was used.
 
-## Label with the VLM labeller
+## Label with the decision labeller
 
-Goal: have a vision model propose labels for a piece, and check them.
+Goal: have a decision model propose labels for a piece, and check them.
 
-The labeller sends a photograph of a piece to a vision model. The model replies with tokens for each axis. The editor applies them as they arrive.
+The labeller sends two photographs of a piece to a decision model and asks one yes/no question per token in the project's vocabulary. The model answers with a probability for each, and the editor suggests every token at or above the threshold. Nothing is generated and nothing is parsed, so a word the project does not have can never come back.
 
-Set this up once. The labeller needs `GRIMOIRE_VLM_KEY`. Put it in the project root's `.env` file, which is gitignored, or set it in the environment. A value in the environment wins over the one in `.env`.
+Set this up once. Put the endpoint in the project root's `.env` file, which is gitignored, or set it in the environment. A value in the environment wins over the one in `.env`.
 
-- `GRIMOIRE_VLM_KEY`: required. An empty value is an error.
-- `GRIMOIRE_VLM_URL`: the chat-completions endpoint. The default is `http://127.0.0.1:9292/v1/chat/completions`.
-- `GRIMOIRE_VLM_MODEL`: the model to ask. The default is `qwen3.8-27b`.
-- `GRIMOIRE_VLM_TIMEOUT_SECS`: how long to wait for a reply. The default is 600.
-- `GRIMOIRE_VLM_THINK`: set to `1` or `true` to let the model reason before it answers. It is off by default.
-- `GRIMOIRE_VLM_MAX_TOKENS`: the reply's length limit. The default is 2000.
+- `GRIMOIRE_DECIDE_ENDPOINT`: the decision endpoint. The default is `http://127.0.0.1:8093/v1/systemone`; serve it with `tools/decide/serve-clef-flash.sh`.
+- `GRIMOIRE_DECIDE_MODEL`: the model to ask, when the endpoint serves more than one. A `llama.cpp` server names none and needs none.
+- `GRIMOIRE_DECIDE_KEY`: sent as a bearer token when the endpoint wants one. Cloudflare Workers AI needs it; a local server does not.
+- `GRIMOIRE_DECIDE_TIMEOUT_SECS`: how long to wait for an answer. The default is 60.
+
+There is one labelling path. There is no setting that chooses a second one and no fallback endpoint.
 
 Steps:
 
-1. Press `1`, then `Right`, and highlight a piece on MESHES.
+1. Click MESHES on the strip, press `Right`, and highlight a piece on MESHES.
 2. Press `L`. The editor photographs the piece and asks the model.
 3. Watch the description. It shows `PROPOSED` while the suggestion is pending.
 4. Read the chips. The model's tokens appear as they arrive. There is no review step: the labels stay marked as the model's until you change them.
@@ -118,10 +118,9 @@ What you see: the labels row reads `confidence <level> · <model> · <date>` in 
 
 If it goes wrong:
 
-- If `GRIMOIRE_VLM_KEY` is not set, the labeller stops before it asks, and the message names the missing setting.
-- The editor checks a local or LAN endpoint before it asks. A remote endpoint is not checked in advance, so a failure shows only when the request runs.
-- The reply must use only tokens in the vocabulary. The editor refuses the whole suggestion if any token is outside it, and asks the model once more. If the second reply is still wrong, nothing is applied. To allow a word the vocabulary lacks, add it to `assets/grimoire/vocab.yaml` by hand.
-- A reply that names no model is refused.
+- The editor dials a local or LAN endpoint before it starts a walk. A remote endpoint is not dialled in advance, so a failure shows only when the request runs.
+- Every token suggested is one the project's vocabulary has, because the questions are built from it. To allow a word the vocabulary lacks, add it to `assets/grimoire/vocab.yaml` by hand, and it becomes a question.
+- An answer that names no model is refused.
 - A mesh that lies on its side is not turned for you. Turn it with `N` (X), `O` (Y) or `P` (Z) on the Meshes panel, then press `L` again.
 
 ## Confirm or correct a label

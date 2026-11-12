@@ -207,6 +207,56 @@ fn token_of(text: &str, node: &Node, leaf: &Leaf) -> String {
     }
 }
 
+/// **What a span of a YAML file is**, for an editor that colours it (GD-11, #373).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SpanKind {
+    /// A mapping's key (its bytes, quotes included).
+    Key,
+    /// The `-` of a block sequence's item.
+    Dash,
+    /// A plain scalar, with its text: the reader decides whether it is a number, a bool, a null or a word.
+    Plain(String),
+    /// A quoted scalar: always a string.
+    Quoted,
+    /// A `|` or `>` block scalar: always a string.
+    Block,
+}
+
+/// **One span of a file**: the path it stands at (`placements[3].turn_deg`), its bytes and what it is.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct YamlSpan {
+    pub path: String,
+    pub range: std::ops::Range<usize>,
+    pub kind: SpanKind,
+}
+
+/// **Every key, dash and scalar of `text`, from the same walk the reader refuses a file by**, so what an editor
+/// colours is what the loader reads and the two cannot disagree. `fault_line` is the first line (1-based) of the
+/// construct the file may not say: the walk's spans stop being a reading of the file there, and an editor is left to
+/// colour the rest as best it can.
+pub fn spans(text: &str) -> (Vec<YamlSpan>, Option<usize>) {
+    let walk = walk(text);
+    let fault = first_fault(text, &walk).map(|site| site.line);
+    let mut out = Vec::new();
+    for node in &walk.nodes {
+        if let Some(key) = &node.key {
+            out.push(YamlSpan { path: node.path.clone(), range: key.span.0..key.span.1, kind: SpanKind::Key });
+        }
+        if let Some(dash) = node.dash {
+            out.push(YamlSpan { path: node.path.clone(), range: dash..dash + 1, kind: SpanKind::Dash });
+        }
+        if let Some(leaf) = &node.scalar {
+            let kind = match leaf.style {
+                Style::Plain => SpanKind::Plain(leaf.text.clone()),
+                Style::Quoted => SpanKind::Quoted,
+                Style::Block => SpanKind::Block,
+            };
+            out.push(YamlSpan { path: node.path.clone(), range: node.span.0..node.span.1, kind });
+        }
+    }
+    (out, fault)
+}
+
 /// **Read `text` as the plain JSON a value holds**, keeping nothing but names, numbers and strings: a YAML tag
 /// names an enum variant, and a JSON Schema and a reflected type both spell a named variant as the key of a
 /// one-key object, so `!Near {to: …}` becomes `{"Near": {"to": …}}`.

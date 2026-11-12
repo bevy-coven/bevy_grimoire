@@ -261,7 +261,7 @@ fn a_persons_key_press_drops_the_queued_follow_and_keeps_the_camera() {
 /// requests are still what the person asked to see, and each is resolved against the map open when its
 /// turn comes.
 ///
-/// **The other door is what makes the queue observable**: on `Door::Kit` a follow asks for the Map and
+/// **The other door is what makes the queue observable**: on `Workspace::Kit` a follow asks for the Map and
 /// waits, so a queued request is still queued when the map changes. On the Map door the very same
 /// frame would take it, and an empty queue would prove nothing either way.
 #[test]
@@ -294,7 +294,7 @@ fn a_new_map_clears_the_ease_and_the_ring_and_keeps_the_queue() {
     );
 
     // **Now on another door**, where a follow cannot be carried out and so stays queued.
-    app.insert_resource(bevy_cauldron::tiles::Door::Kit);
+    app.insert_resource(bevy_cauldron::workspace::Workspace::Kit);
     app.world_mut().resource_mut::<Following>().request(FollowRequest {
         target: bevy_cauldron::editor::FrameTarget::Map,
         ids: Vec::new(),
@@ -350,7 +350,7 @@ fn a_follow_asks_for_the_map_once_and_is_dropped_if_it_does_not_cross() {
     let root = room("follow_once");
     let mut app = editor(&root);
     // **On another door**, which is where a follow has to ask for the Map.
-    app.insert_resource(bevy_cauldron::tiles::Door::Kit);
+    app.insert_resource(bevy_cauldron::workspace::Workspace::Kit);
     app.world_mut().resource_mut::<Following>().request(FollowRequest {
         target: bevy_cauldron::editor::FrameTarget::Map,
         ids: Vec::new(),
@@ -364,8 +364,8 @@ fn a_follow_asks_for_the_map_once_and_is_dropped_if_it_does_not_cross() {
         .get_resource::<bevy_cauldron::editor::EditorState>()
         .and_then(|state| state.door_request);
     assert_eq!(
-        asked.map(|r| r.door),
-        Some(bevy_cauldron::tiles::Door::Map),
+        asked.map(|r| r.workspace),
+        Some(bevy_cauldron::workspace::Workspace::Map),
         "the follow did not ask the editor to open the Map"
     );
     assert_eq!(

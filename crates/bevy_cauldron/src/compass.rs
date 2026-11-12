@@ -163,7 +163,7 @@ fn spawn(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                         // `PANEL_BG` would be the wrong contrast here.
                         // CHROME-OK: read against the axis dot, not against a panel.
                         TextColor(Color::srgb(0.10, 0.10, 0.10)),
-                        crate::chrome::font(crate::chrome::text::HINT),
+                        crate::chrome::typed(crate::chrome::text::HINT),
                         Pickable::IGNORE,
                     ));
                 });
@@ -297,8 +297,8 @@ fn show_by_tab(
     use crate::tiles::Mode;
     let show = !asking
         && match *mode {
-            Mode::Map | Mode::Tiles | Mode::Meshes => true,
-            Mode::Compose | Mode::Anim => false,
+            Mode::Map | Mode::World | Mode::Tiles | Mode::Meshes => true,
+            Mode::Compose | Mode::Anim | Mode::Files | Mode::Sound | Mode::Game | Mode::Agent => false,
         };
     let display = if show { Display::Flex } else { Display::None };
     for mut node in &mut compass {

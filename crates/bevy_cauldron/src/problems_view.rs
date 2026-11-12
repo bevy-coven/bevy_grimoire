@@ -179,7 +179,7 @@ fn refresh_problems_list(
         commands.entity(list).with_children(|p| match &now {
             Said::Line { words, unreadable } => {
                 let colour = if *unreadable { ink.danger } else { ink.quiet };
-                p.spawn((Text::new(words.clone()), TextColor(colour), crate::chrome::font(crate::chrome::text::LABEL)));
+                p.spawn((Text::new(words.clone()), TextColor(colour), crate::chrome::typed(crate::chrome::text::LABEL)));
             }
             Said::Rows(rows) => {
                 for row in rows {
@@ -187,7 +187,7 @@ fn refresh_problems_list(
                         .with_children(|line| {
                             line.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() }).with_children(|words| {
                                 let colour = if row.hard { ink.danger } else { ink.read };
-                                words.spawn((Text::new(row.words.clone()), TextColor(colour), crate::chrome::font(crate::chrome::text::BODY)));
+                                words.spawn((Text::new(row.words.clone()), TextColor(colour), crate::chrome::typed(crate::chrome::text::BODY)));
                             });
                             if !row.pieces.is_empty() {
                                 crate::chrome::button(line, ProblemGoTo { pieces: row.pieces.clone() }, "Go to", crate::chrome::Severity::Plain);

@@ -6,7 +6,7 @@
 
 use bevy::prelude::*;
 use bevy_cauldron::harness;
-use bevy_cauldron::tiles::Door;
+use bevy_cauldron::workspace::Workspace;
 use bevy_gooey::testing::{click, find_by_label};
 
 use crate::fixtures;
@@ -27,24 +27,24 @@ fn editor(tag: &str) -> App {
 #[test]
 fn a_click_on_the_other_doors_name_crosses_to_it() {
     let mut app = editor("other_door_click");
-    assert_eq!(*app.world().resource::<Door>(), Door::Map, "the editor opens on the Map door");
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Map, "the editor opens on the Map door");
 
     let kit = find_by_label(&mut app, "Kit").expect("the Map door's strip names the Kit door");
     click(&mut app, kit);
     for _ in 0..4 {
         app.update();
     }
-    assert_eq!(*app.world().resource::<Door>(), Door::Kit, "a click on \"the kit door\" opens the Kit door");
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Kit, "a click on \"the kit door\" opens the Kit door");
 
     // "Map" is also a menu's title, so the strip's own name is found by what it is.
     let map = app
         .world_mut()
-        .query_filtered::<Entity, With<bevy_cauldron::tiles::OtherDoorLabel>>()
+        .query_filtered::<Entity, With<bevy_cauldron::tiles::OtherWorkspaceLabel>>()
         .single(app.world())
         .expect("the Kit door's strip names the Map door");
     click(&mut app, map);
     for _ in 0..4 {
         app.update();
     }
-    assert_eq!(*app.world().resource::<Door>(), Door::Map, "and the other way");
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Map, "and the other way");
 }

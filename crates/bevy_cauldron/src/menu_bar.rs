@@ -40,10 +40,11 @@ use crate::screen::Screen;
 ///
 /// It is a list rather than a sort so the bar does not move when a category is added: a new one is
 /// appended.
-pub const MENUS: [(&str, &str); 10] = [
+pub const MENUS: [(&str, &str); 11] = [
     ("file", "File"),
     ("edit", "Edit"),
     ("view", "View"),
+    ("workspace", "Workspace"),
     ("map", "Map"),
     ("meshes", "Meshes"),
     ("tiles", "Tiles"),
@@ -64,6 +65,12 @@ pub struct MenuCommand(pub crate::keys::Action);
 #[derive(Component)]
 pub struct StatisticsItem;
 
+/// **View → Show activity bar** (NV-03, #380): a tick on the `show_activity_bar` setting, written to the user's settings file
+/// like Show statistics, so the bar can be collapsed away and the choice is kept. [`follow_the_activity_bar_setting`] keeps the
+/// tick on what the settings say.
+#[derive(Component)]
+pub struct ActivityBarItem;
+
 /// The bar itself, so a test can find it and nothing else claims to be one.
 #[derive(Component)]
 pub struct EditorMenuBar;
@@ -77,7 +84,7 @@ impl Plugin for MenuBarPlugin {
         }
         app.add_systems(
             Update,
-            (keep_the_menu_bar, read_the_titles_as_controls, refresh_the_rows, follow_the_statistics_setting)
+            (keep_the_menu_bar, read_the_titles_as_controls, refresh_the_rows, follow_the_statistics_setting, follow_the_activity_bar_setting)
                 .chain()
                 .after(FrameSystems)
                 .run_if(in_state(Screen::Editor)),
@@ -140,7 +147,8 @@ fn keep_the_menu_bar(
         &mut commands,
         &frame,
         live.as_deref().copied(),
-        settings.is_some_and(|s| s.show_statistics),
+        settings.as_deref().is_some_and(|s| s.show_statistics),
+        settings.as_deref().is_none_or(|s| s.show_activity_bar),
         recent_projects(recents.as_deref()),
     );
 }
@@ -190,6 +198,8 @@ enum Slot {
     Recent(Vec<PathBuf>),
     Separator,
     Statistics,
+    /// View ▸ Show activity bar (NV-03, #380).
+    ActivityBar,
     /// View ▸ Show outliner (UI-51, #237).
     Outliner,
     /// View ▸ Show library (UI-52, #238): the same library as a grid of portraits.
@@ -206,6 +216,8 @@ enum Slot {
     LeftPanel,
     /// View ▸ Zen mode (feedback-1794146831022).
     Zen,
+    /// View ▸ Show reload panel (UI-61, #247): the bottom dock, shown whatever the window's room.
+    ReloadPanel,
     /// Window ▸ Reset layout (UI-33, #227).
     ResetLayout,
     /// View ▸ Light map (UI-80, #254): a tick that shows or hides the viewport overlay. Only built in a
@@ -294,8 +306,10 @@ fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slo
     if category == "view" {
         slots.push(Slot::Separator);
         slots.push(Slot::Statistics);
+        slots.push(Slot::ActivityBar);
         slots.push(Slot::LeftPanel);
         slots.push(Slot::Zen);
+        slots.push(Slot::ReloadPanel);
         slots.push(Slot::Outliner);
         slots.push(Slot::Library);
         slots.push(Slot::GameUi);
@@ -312,7 +326,7 @@ fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slo
 
 /// **The bar itself, at the top of the window.** The chrome bar was index 0 of the frame's root, so the
 /// menu bar goes above it: index 0, and the chrome bar moves to 1.
-fn spawn_menu_bar(commands: &mut Commands, frame: &Frame, live: Option<Live>, show_statistics: bool, recent: Vec<PathBuf>) {
+fn spawn_menu_bar(commands: &mut Commands, frame: &Frame, live: Option<Live>, show_statistics: bool, show_activity_bar: bool, recent: Vec<PathBuf>) {
     let live = live.unwrap_or_default();
     // One `Vec` per menu, built here rather than inside the spawner: the spawners are closures the
     // relationship machinery calls later, and a registry read inside one would be the second place
@@ -329,7 +343,7 @@ fn spawn_menu_bar(commands: &mut Commands, frame: &Frame, live: Option<Live>, sh
                         title,
                         Children::spawn(SpawnWith(move |menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>| {
                             for slot in slots {
-                                spawn_slot(menu, slot, live, show_statistics);
+                                spawn_slot(menu, slot, live, show_statistics, show_activity_bar);
                             }
                         })),
                     ));
@@ -341,7 +355,13 @@ fn spawn_menu_bar(commands: &mut Commands, frame: &Frame, live: Option<Live>, sh
 }
 
 /// One row of a menu.
-fn spawn_slot(menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>, slot: Slot, live: Live, show_statistics: bool) {
+fn spawn_slot(
+    menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>,
+    slot: Slot,
+    live: Live,
+    show_statistics: bool,
+    show_activity_bar: bool,
+) {
     match slot {
         Slot::Command(action) => {
             let command = commands::command(action);
@@ -411,6 +431,13 @@ fn spawn_slot(menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>, slot:
                 bevy_gooey::observe(crate::shell_view::toggle_zen),
             ));
         }
+        Slot::ReloadPanel => {
+            menu.spawn((
+                crate::shell_view::ReloadPanelItem,
+                bevy_gooey::check_item("Show reload panel", false),
+                bevy_gooey::observe(crate::shell_view::toggle_the_reload_panel),
+            ));
+        }
         Slot::Outliner => {
             menu.spawn((
                 crate::outliner::OutlinerItem,
@@ -446,6 +473,19 @@ fn spawn_slot(menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>, slot:
                 crate::light_overlay::LightMapItem,
                 bevy_gooey::check_item("Light map", false),
                 bevy_gooey::observe(crate::light_overlay::on_light_map_item),
+            ));
+        }
+        Slot::ActivityBar => {
+            menu.spawn((
+                ActivityBarItem,
+                bevy_gooey::check_item("Show activity bar", show_activity_bar),
+                bevy_gooey::observe(|change: On<bevy_gooey::ValueChange<bool>>, file: Option<Res<crate::settings::UserSettingsFile>>| {
+                    if let Some(file) = file
+                        && let Err(why) = crate::setting_catalogue::write_key(&file.0, "show_activity_bar", Some(crate::setting_catalogue::Value::On(change.value)))
+                    {
+                        bevy::log::warn!("could not save Show activity bar: {why}");
+                    }
+                }),
             ));
         }
         Slot::Statistics => {
@@ -498,6 +538,26 @@ fn refresh_the_rows(
             None => {
                 commands.entity(entity).remove::<bevy_gooey::Disabled>();
             }
+        }
+    }
+}
+
+/// The tick on View → Show activity bar says what the settings say, whichever way they were changed.
+fn follow_the_activity_bar_setting(
+    settings: Option<Res<crate::settings::EditorSettings>>,
+    items: Query<(Entity, Has<bevy_gooey::Checked>), With<ActivityBarItem>>,
+    mut commands: Commands,
+) {
+    let Some(settings) = settings else { return };
+    for (item, ticked) in &items {
+        match (settings.show_activity_bar, ticked) {
+            (true, false) => {
+                commands.entity(item).insert(bevy_gooey::Checked);
+            }
+            (false, true) => {
+                commands.entity(item).remove::<bevy_gooey::Checked>();
+            }
+            _ => {}
         }
     }
 }

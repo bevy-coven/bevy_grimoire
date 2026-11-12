@@ -30,7 +30,6 @@ use std::path::{Path, PathBuf};
 
 use bevy::asset::RenderAssetUsages;
 use bevy::image::{CompressedImageFormats, ImageSampler, ImageType};
-use bevy::input_focus::InputFocusVisible;
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::ui::Selected;
@@ -168,8 +167,6 @@ impl HomeTab {
 pub struct Launcher {
     /// The recent projects as [`recent::Recent::listing`] orders them.
     pub rows: Vec<Listed>,
-    /// The card a click chose; a second activation of it, or one from the keyboard, opens it.
-    pub selected: Option<PathBuf>,
     /// What the filter box holds.
     pub filter: String,
     /// The page the sidebar chose.
@@ -360,7 +357,7 @@ pub(crate) struct SplashArt(pub(crate) Option<(Handle<Image>, Vec2)>);
 /// `PostUpdate` (`bevy_app-0.20.0/src/main_schedule.rs`). Captured on big under Xvfb at 15 fps
 /// against a 1 MiB portrait, the first frame of the page draws the picture correctly with no band —
 /// both with and without this cache. The frames that settle that are on big at
-/// `/tmp/pp-frames/big/`. What pins the crossing is
+/// `/tmp/pp-frames/big/`. What pins the switching is
 /// `tests/the_project_page.rs::the_first_frame_of_the_page_is_whole`.
 ///
 /// Keys on the file's modified time, so a freshly baked portrait is decoded again and the newest one
@@ -448,7 +445,7 @@ impl Plugin for LauncherPlugin {
             .add_systems(OnEnter(Screen::Launcher), (build_launcher, fill_the_home).chain())
             .add_systems(
                 Update,
-                (hide_the_divider, open_requested, on_picked, say_the_problem, redraw_the_cards, apply_filter, show_the_tab, mark_the_selection)
+                (hide_the_divider, open_requested, on_picked, say_the_problem, redraw_the_cards, apply_filter, show_the_tab, mark_the_focus)
                     .chain()
                     .run_if(in_state(Screen::Launcher)),
             );
@@ -495,7 +492,7 @@ pub(crate) fn shown_folder(path: &Path) -> String {
 
 /// A quiet line under a name: the skin's muted ink ([`quiet_ink`], painted by [`paint_the_quiet_lines`]).
 pub(crate) fn quiet(text: impl Into<String>) -> impl Bundle {
-    (Text::new(text), crate::chrome::font(crate::chrome::text::LABEL), TextColor(crate::chrome::ink().label), Quiet)
+    (Text::new(text), crate::chrome::typed(crate::chrome::text::LABEL), TextColor(crate::chrome::ink().label), Quiet)
 }
 
 /// A line of muted words (a card's folder, a count).
@@ -873,7 +870,7 @@ fn welcome(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &Art) {
             for (number, step) in WELCOME_STEPS.iter().enumerate() {
                 steps.spawn((
                     Text::new(format!("{}. {step}", number + 1)),
-                    crate::chrome::font(crate::chrome::text::LABEL),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
                     TextColor(quiet_ink(None)),
                     TextLayout::new(Justify::Left, LineBreak::WordBoundary),
                 ));
@@ -1039,14 +1036,20 @@ fn missing_card(grid: &mut ChildSpawnerCommands, row: &Listed) {
     });
 }
 
-/// A card was activated: the first press chooses it, a second (or any press from the keyboard) opens it.
-fn on_card(activate: On<Activate>, cards: Query<&ProjectCard>, keyboard: Option<Res<InputFocusVisible>>, mut launcher: ResMut<Launcher>, mut out: MessageWriter<OpenRequest>) {
+/// A card was activated: **it opens that folder** (feedback-1794103491165, #344).
+///
+/// It used to take two presses — the first choosing the card and only the rail saying so, the second
+/// opening it — and a person read the second press as the app having ignored the first. Every other
+/// control on the home (`New project`, `Open folder…`, `Open the example`, `Take the tour`) acts on one
+/// press, and so did a card pressed from the keyboard, which is what says the two-press step was never
+/// a design: it was an invisible mode. Opening is not destructive and the card already shrinks under
+/// the press, so one press is enough.
+///
+/// **The rail is the keyboard's** ([`mark_the_focus`]): it marks the card with input focus or the
+/// pointer, which is a fact about the screen rather than a place a click is remembered.
+fn on_card(activate: On<Activate>, cards: Query<&ProjectCard>, mut out: MessageWriter<OpenRequest>) {
     let Ok(card) = cards.get(activate.entity) else { return };
-    if keyboard.is_some_and(|k| k.0) || launcher.selected.as_ref() == Some(&card.path) {
-        out.write(OpenRequest(card.path.clone()));
-    } else {
-        launcher.selected = Some(card.path.clone());
-    }
+    out.write(OpenRequest(card.path.clone()));
 }
 
 /// Takes `path` out of the recent list (the folder is untouched) and draws the cards again.
@@ -1390,10 +1393,23 @@ fn show_the_tab(launcher: Res<Launcher>, mut pages: Query<(&HomePage, &mut Node)
     }
 }
 
-/// Marks the chosen card.
-fn mark_the_selection(launcher: Res<Launcher>, cards: Query<(Entity, &ProjectCard, Has<Selected>)>, mut commands: Commands) {
-    for (entity, card, selected) in &cards {
-        match (launcher.selected.as_ref() == Some(&card.path), selected) {
+/// **Marks the card the keyboard or the pointer is on**, so `Selected`'s rail keeps saying *this one*
+/// without a press having to be remembered (feedback-1794103491165, #344).
+///
+/// It replaces `mark_the_selection`, which compared each card against `Launcher::selected` — a field
+/// that existed for no other reason than the choose-then-open step, and that went with it. The two
+/// facts a card can honestly be marked for are the ones the screen already holds: `InputFocus` (Tab or
+/// an arrow put it there) and `Hovered` (the pointer is on it). A card that has lost both loses the
+/// rail, so nothing is left behind to make the next press look like a second one.
+fn mark_the_focus(
+    focus: Option<Res<bevy::input_focus::InputFocus>>,
+    cards: Query<(Entity, &Hovered, Has<Selected>), With<ProjectCard>>,
+    mut commands: Commands,
+) {
+    let focused = focus.as_deref().and_then(|focus| focus.get());
+    for (entity, hovered, selected) in &cards {
+        let want = hovered.get() || focused == Some(entity);
+        match (want, selected) {
             (true, false) => {
                 commands.entity(entity).insert(Selected);
             }
