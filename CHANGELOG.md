@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-12
+
+- **ui-93-patched-rows** `4920d7d25` The outliner and the history take the one row a change names instead of rebuilding 10,000 and 5,000: the UI costs under 2 ms on every frame of a placement, an undo and a redo (#259) *No clip: performance of existing lists, no new picture; proved by a_change_to_the_map_reaches_the_lists_row_by_row and the_frame_a_change_lands_on_stays_inside_two_milliseconds*
+
 ## 2026-11-11
 
 - **picker-operations** `e03ea6120` The composition picker's P and Shift+up/down keys are operations an agent calls too (composition_picker_toggle, composition_picker_walk) *No clip: an operation behind existing keys, no new picture; proved by composition_picker_is_an_operation*
