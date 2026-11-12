@@ -375,6 +375,12 @@ impl Lessons {
         self.queued.iter().filter(|q| q.state == LessonState::Waiting).count()
     }
 
+    /// **The first lesson still waiting**, which is the row the chip opens the block on when no wish
+    /// is waiting.
+    pub fn first_waiting(&self) -> Option<&str> {
+        self.queued.iter().find(|q| q.state == LessonState::Waiting).map(|q| q.lesson.id.as_str())
+    }
+
     /// **Whether this hand-back has a lesson already.** An answered lesson still counts, as an
     /// answered wish does: the person has read that hand-back's lesson, and a second one is the same
     /// lesson twice.

@@ -23,9 +23,9 @@ use bevy_cauldron::agent_guide::UserGuideFile;
 use bevy_cauldron::familiar::FamiliarItem;
 use bevy_cauldron::harness;
 use bevy_cauldron::present::Lessons;
-use bevy_cauldron::wish_view::{LessonDiscard, LessonKeep};
+use bevy_cauldron::wish_view::{LessonDiscard, LessonKeep, WishChip, WishChipText};
 use bevy_grimoire_core::agent_guide::PROJECT_PATH;
-use bevy_grimoire_core::lesson::{LESSON_MAX_CHARS, LESSONS_HEADING};
+use bevy_grimoire_core::lesson::{LESSON_MAX_CHARS, LESSONS_HEADING, WHY_MAX_CHARS};
 use bevy_grimoire_core::trust::{self, TrustStore};
 use bevy_gooey::{Activate, ValueChange};
 use std::path::{Path, PathBuf};
@@ -294,6 +294,13 @@ fn a_lesson_that_does_not_fit_is_refused_at_the_door_and_never_trimmed() {
     let refused = propose(&mut app, &presentation, "one line\ntwo lines", "why").expect_err("a newline is refused");
     assert!(refused.contains("`lesson`") && refused.contains("newline"), "{refused}");
 
+    let refused = propose(&mut app, &presentation, "a lesson", "one\ntwo").expect_err("a newline in `why` is refused");
+    assert!(refused.contains("`why`") && refused.contains("newline"), "{refused}");
+
+    let long_why = "y".repeat(WHY_MAX_CHARS + 1);
+    let refused = propose(&mut app, &presentation, "a lesson", &long_why).expect_err("281 characters of `why` is refused");
+    assert!(refused.contains("`why`") && refused.contains("281") && refused.contains("280"), "{refused}");
+
     let refused = propose(&mut app, "present-99", "a lesson", "why").expect_err("no such hand-back");
     assert!(refused.contains("present-99") && refused.contains("never handed back"), "{refused}");
 
@@ -319,4 +326,59 @@ fn a_project_with_no_guide_refuses_a_lesson_and_says_what_the_person_must_do() {
     let refused = propose(&mut app, &presentation, "A lesson.", "why").expect_err("there is nowhere to keep it");
     assert!(refused.contains("no agent guide"), "{refused}");
     assert!(refused.contains("project page"), "and it says where the person makes one: {refused}");
+}
+
+/// **A waiting lesson is counted by the status band while the block is hidden, and the chip opens the
+/// block on its row** — the same chip a waiting wish uses, so a lesson nobody sees is still a thing
+/// that waits for the person.
+#[test]
+fn a_hidden_block_counts_a_waiting_lesson_and_the_chip_opens_its_row() {
+    let guide = format!("# Guide\n\n{LESSONS_HEADING}\n");
+    let (mut app, _store) = ready("chip", Some(&guide), true);
+    show_the_block(&mut app, false);
+    let presentation = present(&mut app);
+    let made = propose(&mut app, &presentation, "Measure first.", "it cost a wall").unwrap_or_else(|e| panic!("{e}"));
+    let id = made["id"].as_str().expect("an id").to_owned();
+    updates(&mut app, 4);
+
+    let said = app
+        .world_mut()
+        .query_filtered::<&Text, With<WishChipText>>()
+        .iter(app.world())
+        .next()
+        .map(|text| text.0.clone())
+        .unwrap_or_else(|| panic!("the chip carries the count"));
+    assert_eq!(said, "1 waiting for you", "the chip does not count the waiting lesson: {said:?}");
+
+    let chip = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<WishChip>>().single(world).expect("one chip")
+    };
+    // **The `PointerClick` a person's press produces**: the page has a window, and with one present
+    // gooey's pointer resolves widgets against a surface nothing is drawn into, so the pointer names
+    // the image surface, as `a_wish_is_opened_or_discarded_in_the_agent_block` does.
+    app.world_mut().commands().trigger(bevy::picking::events::PointerClick {
+        entity: chip,
+        pointer: bevy::picking::events::Pointer::new(
+            bevy::picking::pointer::PointerId::Mouse,
+            bevy::picking::pointer::Location {
+                target: bevy::camera::NormalizedRenderTarget::Image(bevy::camera::ImageRenderTarget {
+                    handle: bevy::asset::Handle::default(),
+                    scale_factor: 1.0,
+                }),
+                position: bevy::math::Vec2::new(100.0, 700.0),
+            },
+        ),
+        button: bevy::picking::pointer::PointerButton::Primary,
+        hit: bevy::picking::backend::HitData::new(chip, 0.0, None, None),
+        duration: std::time::Duration::ZERO,
+        count: 1,
+    });
+    updates(&mut app, 6);
+    let keep_is_drawn = {
+        let world = app.world_mut();
+        let mut query = world.query::<(&LessonKeep, &bevy_cauldron::wish_view::WishOf)>();
+        query.iter(world).any(|(_, of)| of.0 == id)
+    };
+    assert!(keep_is_drawn, "the chip opened the block but not the lesson row it was counting");
 }

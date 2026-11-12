@@ -565,15 +565,18 @@ fn draw_agent_guide(parent: &mut bevy::ecs::relationship::RelatedSpawnerCommands
 /// **This row alone is rebuilt when the state moves** — not the page body. The first key typed flips
 /// whether there is an edit, and a rebuild of the body at that moment replaced the area under the typist,
 /// so the field lost the keyboard after one character.
-fn fill_the_guide_buttons(mut commands: Commands, page: Option<Res<ProjectPage>>, rows: Query<(Entity, Option<&ButtonsFor>), With<AgentGuideButtons>>) {
+fn fill_the_guide_buttons(mut commands: Commands, page: Option<Res<ProjectPage>>, rows: Query<(Entity, Option<&ButtonsFor>, Option<&Children>), With<AgentGuideButtons>>) {
     let Some(page) = page else { return };
     let now = ButtonsFor { state: page.guide.view.state, conflict: page.guide.conflict, editing: page.guide.editing.is_some() };
     let ButtonsFor { state, conflict, editing } = now;
-    for (row, built) in &rows {
+    for (row, built, children) in &rows {
         if built == Some(&now) {
             continue;
         }
-        commands.entity(row).despawn_children().insert(now).with_children(|row| {
+        for child in children.into_iter().flatten() {
+            commands.entity(*child).try_despawn();
+        }
+        commands.entity(row).try_insert(now).with_children(|row| {
             if conflict {
                 // **The person says which text wins.** Neither is thrown away until they do.
                 row.spawn((submit_button("Reload"), AgentGuideReload, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::ReloadGuide); })));

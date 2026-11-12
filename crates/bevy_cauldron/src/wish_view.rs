@@ -1033,13 +1033,16 @@ pub fn chip_says(waiting: usize) -> String {
 /// on screen), and the count otherwise.
 fn follow_the_chip(
     wishes: Option<Res<Wishes>>,
+    lessons: Option<Res<crate::present::Lessons>>,
     blocks: Query<(), With<crate::familiar::Familiar>>,
     mut chips: Query<(&mut Node, &mut ChipShown), With<WishChip>>,
     mut texts: Query<&mut Text, With<WishChipText>>,
 ) {
     let Some(wishes) = wishes else { return };
     let hiding = blocks.is_empty();
-    let said = if hiding { chip_says(wishes.waiting()) } else { String::new() };
+    // **Wishes and lessons are one count**: both are rows in the block, and both wait for the person.
+    let waiting = wishes.waiting() + lessons.as_deref().map_or(0, crate::present::Lessons::waiting);
+    let said = if hiding { chip_says(waiting) } else { String::new() };
     for (mut node, mut shown) in &mut chips {
         let display = if said.is_empty() { Display::None } else { Display::Flex };
         if node.display != display {
@@ -1063,13 +1066,18 @@ fn open_the_block_on_click(
     chips: Query<(), With<WishChip>>,
     rows: Query<Entity, With<crate::familiar::FamiliarItem>>,
     wishes: Option<Res<Wishes>>,
+    lessons: Option<Res<crate::present::Lessons>>,
     mut open: Option<ResMut<WishOpenRows>>,
     mut commands: Commands,
 ) {
     if !chips.contains(click.entity) {
         return;
     }
-    let Some(first) = wishes.as_deref().and_then(Wishes::first_waiting) else { return };
+    let first = wishes
+        .as_deref()
+        .and_then(Wishes::first_waiting)
+        .or_else(|| lessons.as_deref().and_then(crate::present::Lessons::first_waiting));
+    let Some(first) = first else { return };
     let first = first.to_owned();
     if let Some(open) = open.as_mut() {
         open.open(&first);
