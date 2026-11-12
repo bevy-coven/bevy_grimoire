@@ -105,7 +105,11 @@ fn the_field_under(app: &mut App, label: &str) -> Entity {
         .unwrap_or_else(|| panic!("no row on screen reads `{label}`"));
     let world = app.world_mut();
     world
-        .query::<(Entity, &TextInputOf)>()
+        // Owner exception (2026-11-11): the helper asks for the entity that IS a text input. The row's display `Text`
+        // also carries `TextInputOf`, so the bare query returned whichever of the two the archetype order put first; that
+        // order moved when #237 added systems, and the test then clicked the editable field and compared focus with
+        // the display text. Selecting by the `TextInput` component is the property the test means.
+        .query_filtered::<(Entity, &TextInputOf), With<bevy::ui_widgets::TextInput>>()
         .iter(world)
         .find(|(_, of)| of.0 == row)
         .map(|(entity, _)| entity)

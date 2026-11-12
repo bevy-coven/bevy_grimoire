@@ -45,6 +45,8 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use serde::{Deserialize, Serialize};
+
 use bevy::prelude::*;
 use bevy_grimoire_core::map::Map;
 use bevy_grimoire_core::stack::descriptor_of;
@@ -163,6 +165,16 @@ impl Outliner {
         pub fn piece_of(&self, key: u64) -> Option<&str> {
             self.rows.get(&key).map(String::as_str)
         }
+
+        /// **The layer the row `key` is the row of**, or `None` for every other row.
+        ///
+        /// A layer's row is the one whose children are groups, and a kind's are pieces; the tree grows a layer level
+        /// only when the map has more than one layer, so a map with one has no row to name and this answers `None`.
+        pub fn layer_of_row(&self, key: u64) -> Option<&'static str> {
+            let layer = LAYERS.iter().copied().find(|layer| group_key(layer) == key)?;
+            let under = self.children.get(&key)?;
+            under.first().is_some_and(|child| child & GROUP_BIT != 0).then_some(layer)
+        }
 }
 
 /// The tree widget.
@@ -216,9 +228,16 @@ impl Plugin for OutlinerPlugin {
         // **The eye is registered here and reset by the door** (`screen::door_state!`): it holds ids of the
         // open map's rows, so it cannot outlive the map.
         app.init_resource::<Eyes>();
+        app.init_resource::<Locks>();
         app.add_systems(
             Update,
             (rebuild_the_tree, follow_the_viewport, tick_the_menu_row).chain().run_if(in_state(Screen::Editor)),
+        );
+        // **The marks follow the map** (UI-51, #237): pruned of pieces that are gone, and the unseen mirrored into the
+        // target lock the piece-verbs carry. Before the tree is rebuilt, so the rows are drawn from the pruned sets.
+        app.add_systems(
+            Update,
+            (prune_the_marks, mirror_the_unseen).chain().before(rebuild_the_tree).run_if(in_state(Screen::Editor)),
         );
         // **A row's menu** (UI-51, #237): gooey's own `context_menu`, named on the piece rows and taken off the
         // others — never a control built here.
@@ -349,6 +368,19 @@ pub const NOTES: &str = "notes";
 /// How much of a note's text a row shows. One line, so the row stays one line tall however long the note is.
 const NOTE_PREVIEW_CHARS: usize = 48;
 
+/// What a row says after its name when its piece is out of the viewport (UI-51, #237).
+pub const HIDDEN_MARK: &str = " (hidden)";
+/// What a row says after its name when its piece is locked against the viewport's clicks.
+pub const LOCKED_MARK: &str = " (locked)";
+
+/// The byte before a hidden piece's id in [`fingerprint`]; none of these three, nor `\x1f`/`\x1e`/`\x1c`/`\x1b`, is a
+/// byte an id or a name carries, so the fields cannot be read into one another.
+const SEP_HIDDEN_PIECE: &[u8] = b"\x18";
+/// The byte before a hidden layer's name in [`fingerprint`].
+const SEP_HIDDEN_LAYER: &[u8] = b"\x17";
+/// The byte before a locked piece's id in [`fingerprint`].
+const SEP_LOCKED_PIECE: &[u8] = b"\x16";
+
 /// **The tree, built from the map, the map's other contents and the search.** Returns the nodes, the piece
 /// behind each key, and the rows drawn under each group.
 ///
@@ -364,6 +396,7 @@ pub fn nodes_for(
     library: &bevy_grimoire_core::library::Library,
     contents: &Contents,
     query: &str,
+    marks: (&Eyes, &Locks),
     group_open: impl Fn(u64) -> Option<bool>,
 ) -> (Vec<TreeNode>, HashMap<u64, String>, HashMap<u64, Vec<u64>>) {
     let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
@@ -405,7 +438,14 @@ pub fn nodes_for(
             Some(group) => group,
             None => kinds.entry(kind.to_owned()).or_default(),
         };
-        group.push((key, format!("{} \u{b7} {}", placed.id, placed.descriptor)));
+        let mut label = format!("{} \u{b7} {}", placed.id, placed.descriptor);
+        if marks.0.is_hidden(&placed.id) || marks.0.layer_hidden(layer) {
+            label.push_str(HIDDEN_MARK);
+        }
+        if marks.1.is_locked(&placed.id) {
+            label.push_str(LOCKED_MARK);
+        }
+        group.push((key, label));
     }
     // **The map's other contents, four groups of their own** (UI-51, #237), after the pieces' groups.
     let notes: Vec<(u64, String)> = contents
@@ -473,7 +513,8 @@ pub fn nodes_for(
         }
         let layer_key = group_key(layer);
         children.insert(layer_key, kind_keys);
-        let node = TreeNode::new(layer_key, layer.to_owned()).children(kind_nodes);
+        let layer_label = if marks.0.layer_hidden(layer) { format!("{layer}{HIDDEN_MARK}") } else { layer.to_owned() };
+        let node = TreeNode::new(layer_key, layer_label).children(kind_nodes);
         nodes.push(if searching || group_open(layer_key).unwrap_or(true) { node.expanded() } else { node });
     }
     for (kind, rows_here) in others {
@@ -503,6 +544,7 @@ fn fingerprint(
     notes: u64,
     files: &[FileStat],
     query: &str,
+    marks: (&Eyes, &Locks),
 ) -> u64 {
     const BASIS: u64 = 0xcbf2_9ce4_8422_2325;
     const PRIME: u64 = 0x0100_0000_01b3;
@@ -513,6 +555,17 @@ fn fingerprint(
         hash
     }
     let mut hash = fold(BASIS, query.as_bytes());
+    // **What the eye and the locks hold**, because the rows say so (` (hidden)`, ` (locked)`): the sets are folded in
+    // name order with bytes no id carries between them, so a hide is a different fingerprint.
+    for id in marks.0.hidden.iter() {
+        hash = fold(fold(hash, SEP_HIDDEN_PIECE), id.as_bytes());
+    }
+    for layer in marks.0.layers.iter() {
+        hash = fold(fold(hash, SEP_HIDDEN_LAYER), layer.as_bytes());
+    }
+    for id in marks.1.locked.iter() {
+        hash = fold(fold(hash, SEP_LOCKED_PIECE), id.as_bytes());
+    }
     for placed in &map.placements {
         hash = fold(hash, b"\x1f");
         hash = fold(hash, placed.id.as_bytes());
@@ -625,6 +678,7 @@ fn first_words(text: &str, chars: usize) -> String {
 }
 
 /// **The tree is rebuilt when the map or the search moved**, and the groups a person closed stay closed.
+#[allow(clippy::too_many_arguments)]
 fn rebuild_the_tree(
     open: Option<Res<OpenMap>>,
     project: Option<Res<Project>>,
@@ -632,12 +686,17 @@ fn rebuild_the_tree(
     mut outliners: Query<&mut Outliner>,
     mut tables: Query<&mut Table, With<OutlinerTree>>,
     mut budget: ResMut<crate::ui_budget::UiFrame>,
+    eyes: Res<Eyes>,
+    locks: Res<Locks>,
 ) {
     // **This system's cost, into the frame's total** (UI-93, #259): the tree is the list that grows with the map, and the
     // budget's whole point is that a settled frame pays nothing for its depth. The guard writes on drop, so every `return`
     // below is measured without a call of its own.
     let spent = crate::ui_budget::measure(&mut budget);
     let (Some(open), Some(project)) = (open, project) else { return };
+    // **The marks on the rows are part of what the tree is built from** (UI-51, #237): a hide or a lock is a rebuild.
+    let (eyes_changed, locks_changed) = (eyes.is_changed(), locks.is_changed());
+    let (eyes, locks) = (&*eyes, &*locks);
     let (Ok(mut outliner), Ok(mut table)) = (outliners.single_mut(), tables.single_mut()) else { return };
     // **Two stats, not two parses.** `people/<map>.ron` and `scripts/<map>.ron` are the two facts no resource in the
     // editor can show: `person_set` writes one and a hand edit the other, and the map does not change at all. A
@@ -654,12 +713,14 @@ fn rebuild_the_tree(
         || project.is_changed()
         || outliner.built_for != outliner.query
         || outliner.built_notes != notes_now
-        || outliner.built_files != files;
+        || outliner.built_files != files
+        || eyes_changed
+        || locks_changed;
     if !moved {
         return;
     }
     outliner.looks += 1;
-    let now = fingerprint(&open.map, &project.library, notes_now, &files, &outliner.query);
+    let now = fingerprint(&open.map, &project.library, notes_now, &files, &outliner.query, (eyes, locks));
     if outliner.built_from == now && outliner.built_notes == notes_now {
         let query = outliner.query.clone();
         outliner.built_for = query;
@@ -671,7 +732,8 @@ fn rebuild_the_tree(
     // so opening `people/` and `scripts/` is work that reaches the screen in this frame.
     let contents = contents_of(&open, &project, notes.as_deref());
     let Some(tree) = table.source_mut::<Tree>() else { return };
-    let (nodes, rows, children) = nodes_for(&open.map, &project.library, &contents, &outliner.query, |key| tree.is_open(key));
+    let (nodes, rows, children) =
+        nodes_for(&open.map, &project.library, &contents, &outliner.query, (eyes, locks), |key| tree.is_open(key));
     tree.set_nodes(nodes);
     outliner.rows = rows;
     outliner.children = children;
@@ -703,7 +765,8 @@ fn follow_the_viewport(
     }
 }
 
-/// **The pieces a person's eye has taken out of the viewport, for this session** (UI-51, #237).
+/// **What a person's eye has taken out of the viewport, for this session** (UI-51, #237): pieces one at a time and
+/// whole layers.
 ///
 /// A resource and not a field of the section, because the eye outlives the section: closing the outliner is not
 /// showing everything again, and the map's own drawing system ([`crate::editor::hide_carried`]) is the one place
@@ -713,13 +776,23 @@ fn follow_the_viewport(
 /// a map every consumer (a game, a generator, this editor) has to agree with. The eye is therefore this session's
 /// and is **reset at every door** (`screen::door_state!`): opening another map shows everything, because the ids
 /// it holds name rows of the map that was open.
-#[derive(Resource, Default)]
+///
+/// **Changed through operations** (`placement_set_hidden`, `layer_set_visible`), which carry it in
+/// [`crate::ops_view::View`] as a value, so the outliner's menu and an agent's call are one write (E-002, #129).
+/// A hidden piece stays on the map: nothing here touches the file, the log's undo or the solver.
+#[derive(Resource, Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Eyes {
+    /// The ids of the pieces hidden one by one.
+    #[serde(default)]
     hidden: BTreeSet<String>,
+    /// The layers hidden whole, by the names [`LAYERS`] gives.
+    #[serde(default)]
+    layers: BTreeSet<String>,
 }
 
 impl Eyes {
-    /// Whether the piece `id` is behind the eye.
+    /// Whether the piece `id` is behind the eye on its own account (a hidden layer is [`Eyes::hides`]'s).
     pub fn is_hidden(&self, id: &str) -> bool {
         self.hidden.contains(id)
     }
@@ -738,32 +811,238 @@ impl Eyes {
         self.hidden.iter().cloned().collect()
     }
 
-    /// Whether nothing is hidden.
+    /// Whether any layer is hidden whole, so a caller that only needs the per-layer lookup can skip it.
+    pub fn has_hidden_layers(&self) -> bool {
+        !self.layers.is_empty()
+    }
+
+    /// Whether the layer `layer` is hidden whole.
+    pub fn layer_hidden(&self, layer: &str) -> bool {
+        self.layers.contains(layer)
+    }
+
+    /// **Hide the layer `layer` whole (`hidden` true) or show it.** Returns whether it moved.
+    pub fn set_layer(&mut self, layer: &str, hidden: bool) -> bool {
+        if hidden {
+            self.layers.insert(layer.to_owned())
+        } else {
+            self.layers.remove(layer)
+        }
+    }
+
+    /// Every layer hidden whole, in name order.
+    pub fn hidden_layers(&self) -> Vec<String> {
+        self.layers.iter().cloned().collect()
+    }
+
+    /// Whether nothing is hidden, a piece or a layer.
     pub fn is_empty(&self) -> bool {
-        self.hidden.is_empty()
+        self.hidden.is_empty() && self.layers.is_empty()
+    }
+
+    /// **Whether this piece is out of the viewport**, for either reason: hidden itself, or standing in a hidden layer
+    /// ([`layer_of`], the one rule that says which layer a piece is in).
+    pub fn hides(&self, library: &bevy_grimoire_core::library::Library, placed: &bevy_grimoire_core::map::Placed) -> bool {
+        self.hidden.contains(&placed.id) || (!self.layers.is_empty() && self.layers.contains(layer_of(library, placed)))
     }
 }
 
-/// **The one context menu an outliner row names.** A component on the entity, not a resource, for the reason
+/// **The pieces a person has locked against the viewport's clicks, for this session** (UI-51, #237).
+///
+/// A locked piece cannot be picked up to move or taken out by the removal tool's click or box: the tools say so and
+/// leave it. **An operation still can** — `placement_remove`, `placement_set_pose` and the rest are the editor's
+/// verbs and a lock is a guard on the pointer, not a seal on the map — and selecting it is still allowed.
+///
+/// Not a map field, for the reason [`Eyes`] gives, and reset at every door with it. Changed through
+/// `placement_set_locked`, which carries it in [`crate::ops_view::View`].
+///
+/// This is not `placement_set_pin`: a pin is the author's claim on a piece *for the generator* (it keeps what the
+/// solver may not replace, and it asks for a reason); a lock is only about what a click may do.
+#[derive(Resource, Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Locks {
+    #[serde(default)]
+    locked: BTreeSet<String>,
+}
+
+impl Locks {
+    /// Whether the piece `id` is locked.
+    pub fn is_locked(&self, id: &str) -> bool {
+        self.locked.contains(id)
+    }
+
+    /// **Lock the piece `id` (`locked` true) or unlock it.** Returns whether it moved.
+    pub fn set(&mut self, id: &str, locked: bool) -> bool {
+        if locked {
+            self.locked.insert(id.to_owned())
+        } else {
+            self.locked.remove(id)
+        }
+    }
+
+    /// Every locked piece, in name order.
+    pub fn locked(&self) -> Vec<String> {
+        self.locked.iter().cloned().collect()
+    }
+
+    /// Whether nothing is locked.
+    pub fn is_empty(&self) -> bool {
+        self.locked.is_empty()
+    }
+}
+
+/// **What the viewport's pointer tools ask before they act** (UI-51, #237): is this piece out of sight, is it locked.
+///
+/// One bundle for the tools that are at Bevy's parameter limit, over [`Eyes`] and [`Locks`], both optional so an
+/// app that does not carry the outliner still runs its tools. A click never writes either; the operations do.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct Sight<'w> {
+    eyes: Option<Res<'w, Eyes>>,
+    locks: Option<Res<'w, Locks>>,
+}
+
+impl Sight<'_> {
+    /// **Whether a click cannot see this piece**: hidden itself, or standing in a hidden layer.
+    pub fn unseen(&self, library: &bevy_grimoire_core::library::Library, placed: &bevy_grimoire_core::map::Placed) -> bool {
+        self.eyes.as_deref().is_some_and(|eyes| eyes.hides(library, placed))
+    }
+
+    /// **Whether a click may not move or remove this piece.**
+    pub fn locked(&self, id: &str) -> bool {
+        self.locks.as_deref().is_some_and(|locks| locks.is_locked(id))
+    }
+}
+
+impl Sight<'_> {
+    /// **Refuse a click that would replace a piece the person has locked or cannot see** (UI-51, #237). `blockers` are
+    /// indices into `map.placements`, what a placement or a box fill would take out of the way. A locked piece is named
+    /// and left; a hidden one is named and left too (taking it would delete what is not drawn, with nothing on screen to
+    /// say so), and the sentence says how to proceed. An operation (`placement_add`) is not asked.
+    pub fn refuse_replacing(
+        &self,
+        library: &bevy_grimoire_core::library::Library,
+        map: &Map,
+        blockers: &[usize],
+    ) -> Result<(), String> {
+        for placed in blockers.iter().filter_map(|i| map.placements.get(*i)) {
+            if self.locked(&placed.id) {
+                return Err(format!("blocked: `{}` is locked — unlock it in the outliner first", placed.id));
+            }
+            if self.unseen(library, placed) {
+                return Err(format!("blocked: `{}` is hidden and in the way — show it in the outliner first", placed.id));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// **The pieces out of the viewport are mirrored into the target lock**, which every piece-verb already carries, so a
+/// key aimed at the cursor (turn, tip, lift, pin, cycle, Edit Tile) does not act on what is not drawn (UI-51, #237).
+/// Written only when the eye, the map or the library moved, and without marking the lock changed.
+fn mirror_the_unseen(
+    eyes: Res<Eyes>,
+    open: Option<Res<OpenMap>>,
+    project: Option<Res<Project>>,
+    lock: Option<ResMut<TargetLock>>,
+) {
+    let (Some(open), Some(project), Some(mut lock)) = (open, project, lock) else { return };
+    if !(eyes.is_changed() || open.is_changed() || project.is_changed()) {
+        return;
+    }
+    let unseen: BTreeSet<String> =
+        open.map.placements.iter().filter(|p| eyes.hides(&project.library, p)).map(|p| p.id.clone()).collect();
+    TargetLock::set_unseen(&mut lock, unseen);
+}
+
+/// **A mark does not outlive its piece** (UI-51, #237): when the map changes, the ids of pieces that are no longer on it
+/// leave the eye and the locks, so an id from a removed piece (or an old map) never marks a different piece that is
+/// later given the same id. Nothing is written when nothing is stale. Taking a removal back does not bring the mark
+/// back: a mark is session view state, not an undo step.
+fn prune_the_marks(open: Option<Res<OpenMap>>, mut eyes: ResMut<Eyes>, mut locks: ResMut<Locks>) {
+    let Some(open) = open else { return };
+    if !open.is_changed() {
+        return;
+    }
+    let on_the_map = |id: &String| open.map.placements.iter().any(|p| &p.id == id);
+    if eyes.hidden.iter().any(|id| !on_the_map(id)) {
+        eyes.hidden.retain(|id| on_the_map(id));
+    }
+    if locks.locked.iter().any(|id| !on_the_map(id)) {
+        locks.locked.retain(|id| on_the_map(id));
+    }
+}
+
+/// **The six layers**, by the names [`layer_of`] gives: what `layer_set_visible` accepts.
+pub const LAYERS: [&str; 6] = [LAYER_FLOOR, LAYER_WALL, LAYER_CEILING, LAYER_SURFACE, LAYER_OPENING, LAYER_DECAL];
+
+/// **The one context menu an outliner piece row names.** A component on the entity, not a resource, for the reason
 /// [`crate::piece_menu::PieceMenu`] gives: it is one entity's identity, not editor state.
 #[derive(Component)]
 pub struct OutlinerRowMenu;
+
+/// **The context menu a layer row names** (UI-51, #237): one item, which hides the layer whole or shows it again.
+#[derive(Component)]
+pub struct OutlinerLayerMenu;
 
 /// **What one item of a row's menu does.** Public because [`ROW_ITEMS`] is: a table of labels decoded by an index
 /// would be two lists that can drift, and the menu and a test both read this one.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum RowVerb {
-    /// The piece's lock: `placement_set_pin`, through the `O` key's own [`crate::editor::pin_or_unpin`].
+    /// The piece's pin: `placement_set_pin`, through the `O` key's own [`crate::editor::pin_or_unpin`].
     Pin,
-    /// The piece out of the viewport for this session.
+    /// The piece out of the viewport for this session: `placement_set_hidden`.
     Hide,
+    /// The piece locked against the viewport's clicks for this session: `placement_set_locked`.
+    Lock,
 }
 
 /// What the menu holds, top to bottom: the words and what each one does. One table, so the menu and its test read
 /// the same list, and there is no index to decode.
-pub const ROW_ITEMS: [(&str, RowVerb); 2] = [("Pin", RowVerb::Pin), ("Hide", RowVerb::Hide)];
+pub const ROW_ITEMS: [(&str, RowVerb); 3] = [("Pin", RowVerb::Pin), ("Hide", RowVerb::Hide), ("Lock", RowVerb::Lock)];
 
-/// **The row's menu, spawned once with the screen.** gooey's `context_menu`; the items are gooey's
+/// What a layer row's menu says: it hides the layer, or shows it again, through `layer_set_visible`.
+pub const LAYER_ITEM: &str = "Hide layer";
+
+/// **Dispatch one of the three sight operations the way the editor's own front ends do**: the sight travels in
+/// `Ctx::view` and the operation's answer is written back, a resource only when it moved (writing through a `ResMut`
+/// marks it changed, and the tree rebuilds on a change).
+///
+/// **The map goes in as a copy**, so a refusal for an id that is not on the map is the operation's, the same one an
+/// agent gets; the copy is dropped and the map resource is never touched, so a hide marks nothing dirty.
+fn dispatch_sight(
+    operation: &str,
+    params: &serde_json::Value,
+    project: Option<&Project>,
+    open: Option<&OpenMap>,
+    eyes: &mut ResMut<Eyes>,
+    locks: &mut ResMut<Locks>,
+    state: Option<&mut crate::editor::EditorState>,
+) {
+    let mut ctx = crate::ops::Ctx {
+        root: project.map(|p| p.root.clone()),
+        open: open.cloned(),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View { eyes: (**eyes).clone(), locks: (**locks).clone(), ..Default::default() }),
+        ..crate::ops::Ctx::default()
+    };
+    let outcome = crate::ops::dispatch(&mut ctx, operation, params);
+    if let Some(view) = ctx.view.take() {
+        if **eyes != view.eyes {
+            **eyes = view.eyes;
+        }
+        if **locks != view.locks {
+            **locks = view.locks;
+        }
+    }
+    let Some(state) = state else { return };
+    match outcome {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => state.status.note(outcome.summary),
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => state.status.problem(e.0),
+    }
+}
+
+/// **The row's menus, spawned once with the screen.** gooey's `context_menu`; the items are gooey's
 /// `menu_item`s, and the row they were opened for is gooey's `ContextTarget`.
 fn spawn_row_menu(mut commands: Commands) {
     let menu = commands.spawn((bevy_gooey::context_menu(()), OutlinerRowMenu)).id();
@@ -778,7 +1057,8 @@ fn spawn_row_menu(mut commands: Commands) {
                            mut project: Option<ResMut<Project>>,
                            mut open: Option<ResMut<OpenMap>>,
                            mut state: Option<ResMut<crate::editor::EditorState>>,
-                           mut eyes: ResMut<Eyes>| {
+                           mut eyes: ResMut<Eyes>,
+                           mut locks: ResMut<Locks>| {
                 let Some(row) = bevy_gooey::ContextTarget::of(activate.entity, &parents, &targets) else { return };
                 let Ok(table_row) = rows.get(row) else { return };
                 let Ok(outliner) = outliners.single() else { return };
@@ -791,40 +1071,75 @@ fn spawn_row_menu(mut commands: Commands) {
                         crate::editor::pin_or_unpin(project, open, state, &id);
                     }
                     RowVerb::Hide => {
-                        let hidden = !eyes.is_hidden(&id);
-                        eyes.set(&id, hidden);
+                        let params = serde_json::json!({ "id": id, "hidden": !eyes.is_hidden(&id) });
+                        dispatch_sight("placement_set_hidden", &params, project.as_deref(), open.as_deref(), &mut eyes, &mut locks, state.as_deref_mut());
+                    }
+                    RowVerb::Lock => {
+                        let params = serde_json::json!({ "id": id, "locked": !locks.is_locked(&id) });
+                        dispatch_sight("placement_set_locked", &params, project.as_deref(), open.as_deref(), &mut eyes, &mut locks, state.as_deref_mut());
                     }
                 }
             });
     }
+    // **A layer row's menu** (UI-51, #237): the layer hidden whole, or shown again.
+    let layer_menu = commands.spawn((bevy_gooey::context_menu(()), OutlinerLayerMenu)).id();
+    commands
+        .spawn((bevy_gooey::menu_item(LAYER_ITEM), ChildOf(layer_menu)))
+        .observe(|activate: On<bevy::ui_widgets::Activate>,
+                  parents: Query<&ChildOf>,
+                  targets: Query<&bevy_gooey::ContextTarget>,
+                  rows: Query<&bevy_gooey::TableRow>,
+                  outliners: Query<&Outliner>,
+                  project: Option<Res<Project>>,
+                  open: Option<Res<OpenMap>>,
+                  mut state: Option<ResMut<crate::editor::EditorState>>,
+                  mut eyes: ResMut<Eyes>,
+                  mut locks: ResMut<Locks>| {
+            let Some(row) = bevy_gooey::ContextTarget::of(activate.entity, &parents, &targets) else { return };
+            let Ok(table_row) = rows.get(row) else { return };
+            let Ok(outliner) = outliners.single() else { return };
+            let Some(layer) = outliner.layer_of_row(table_row.key) else { return };
+            // `visible` is what the layer becomes: hidden now means shown next.
+            let params = serde_json::json!({ "layer": layer, "visible": eyes.layer_hidden(layer) });
+            dispatch_sight("layer_set_visible", &params, project.as_deref(), open.as_deref(), &mut eyes, &mut locks, state.as_deref_mut());
+        });
 }
 
-/// **The menu sits on the piece rows and on nothing else**, and a row that is rebound to something else loses it.
+/// **The menus sit on the rows they are for and on nothing else**, and a row that is rebound to something else loses
+/// them: the piece menu on a piece's row, the layer menu on a layer's, none on a group, a person, a trigger or a note.
 ///
 /// The tree's rows are a **pool**: the same entity shows row 3 now and row 40 after a scroll, and a group, a
 /// person, a trigger and a note are rows too. So this both puts the menu on a row whose key names a piece and
 /// **takes it off** a row whose key does not — otherwise a group row would offer Pin and Hide, and choosing one
 /// would do nothing and say nothing.
 fn name_the_menu_on_rows(
-    menu: Query<Entity, With<OutlinerRowMenu>>,
+    piece_menu: Query<Entity, With<OutlinerRowMenu>>,
+    layer_menu: Query<Entity, With<OutlinerLayerMenu>>,
     trees: Query<Entity, With<OutlinerTree>>,
     outliners: Query<&Outliner>,
-    rows: Query<(Entity, &bevy_gooey::TableRow, Has<bevy_gooey::ContextMenu>)>,
+    rows: Query<(Entity, &bevy_gooey::TableRow, Option<&bevy_gooey::ContextMenu>)>,
     mut commands: Commands,
 ) {
-    let Ok(menu) = menu.single() else { return };
+    let (Ok(piece_menu), Ok(layer_menu)) = (piece_menu.single(), layer_menu.single()) else { return };
     let Ok(tree) = trees.single() else { return };
     let Ok(outliner) = outliners.single() else { return };
     for (row, table_row, named) in &rows {
         if table_row.table != tree {
             continue;
         }
-        match (outliner.piece_of(table_row.key).is_some(), named) {
-            (true, false) => {
+        let wanted = if outliner.piece_of(table_row.key).is_some() {
+            Some(piece_menu)
+        } else if outliner.layer_of_row(table_row.key).is_some() {
+            Some(layer_menu)
+        } else {
+            None
+        };
+        match (wanted, named.map(|n| n.0)) {
+            (Some(want), have) if have != Some(want) => {
                 // `try_`: the tree rebinds its pool in the same frame and may despawn a row this has just seen.
-                commands.entity(row).try_insert(bevy_gooey::ContextMenu(menu));
+                commands.entity(row).try_insert(bevy_gooey::ContextMenu(want));
             }
-            (false, true) => {
+            (None, Some(_)) => {
                 commands.entity(row).try_remove::<bevy_gooey::ContextMenu>();
             }
             _ => {}

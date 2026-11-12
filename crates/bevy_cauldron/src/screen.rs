@@ -364,6 +364,7 @@ door_state![
     // **The outliner's eye** (UI-51, #237): it holds ids of *this map's* placements, so another map's rows
     // must not inherit them.
     crate::outliner::Eyes,
+    crate::outliner::Locks,
     crate::editor::RunDrag,
     crate::editor::RunGhostDrag,
     crate::editor::FineAnchor,
@@ -649,6 +650,8 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::editor::NotesFilter", Ownership::Workspace),
     // **The eye of the outliner** (UI-51, #237): the pieces a person hid are rows of the map that was open.
     ("bevy_cauldron::outliner::Eyes", Ownership::Workspace),
+    // **The outliner's locks** (UI-51, #237): ids of this map's placements, like the eye.
+    ("bevy_cauldron::outliner::Locks", Ownership::Workspace),
     ("bevy_cauldron::editor::RunDrag", Ownership::Workspace),
     ("bevy_cauldron::editor::RunGhostDrag", Ownership::Workspace),
     ("bevy_cauldron::editor::FineAnchor", Ownership::Workspace),

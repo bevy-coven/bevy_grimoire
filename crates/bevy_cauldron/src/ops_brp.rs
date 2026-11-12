@@ -652,6 +652,13 @@ struct Gates<'w, 's> {
     snip: Option<ResMut<'w, crate::snip::SnipEdit>>,
     ghost: Option<ResMut<'w, crate::anim_stage::BenchAb>>,
     journal: Query<'w, 's, &'static mut Node, With<crate::chrome::JournalPanel>>,
+    /// **The outliner's eye and locks** (UI-51, #237): what `placement_set_hidden`, `layer_set_visible` and
+    /// `placement_set_locked` change, carried by the same view as the rest.
+    eyes: Option<ResMut<'w, crate::outliner::Eyes>>,
+    locks: Option<ResMut<'w, crate::outliner::Locks>>,
+    /// **The composition picker's cursor** (E-002, #129 slice 22): what `composition_picker_walk` and
+    /// `composition_picker_toggle` change, carried by the same view.
+    picker: Option<ResMut<'w, crate::compose::picker::Picker>>,
 }
 
 impl Gates<'_, '_> {
@@ -664,6 +671,10 @@ impl Gates<'_, '_> {
             snip_armed: self.snip.as_deref().is_some_and(|s| s.armed),
             ghost: self.ghost.as_deref().is_some_and(|a| a.0),
             journal_open: self.journal.iter().any(|n| n.display != Display::None),
+            eyes: self.eyes.as_deref().cloned().unwrap_or_default(),
+            locks: self.locks.as_deref().cloned().unwrap_or_default(),
+            picker_selected: self.picker.as_deref().map(|p| p.selected).unwrap_or_default(),
+            picker_active: self.picker.as_deref().is_some_and(|p| p.active),
             ..Default::default()
         }
     }
@@ -696,6 +707,24 @@ impl Gates<'_, '_> {
             for mut node in &mut self.journal {
                 node.display = if view.journal_open { Display::Flex } else { Display::None };
             }
+        }
+        // **What the outliner's eye and locks hold** (UI-51, #237), written only when it moved.
+        if self.eyes.as_deref().is_some_and(|e| *e != view.eyes)
+            && let Some(eyes) = self.eyes.as_deref_mut()
+        {
+            *eyes = view.eyes;
+        }
+        if self.locks.as_deref().is_some_and(|l| *l != view.locks)
+            && let Some(locks) = self.locks.as_deref_mut()
+        {
+            *locks = view.locks;
+        }
+        // **The composition picker's cursor and its hold on the arrows** (E-002, #129 slice 22), written only when it moved.
+        if let Some(picker) = self.picker.as_deref_mut()
+            && (picker.selected != view.picker_selected || picker.active != view.picker_active)
+        {
+            picker.selected = view.picker_selected;
+            picker.active = view.picker_active;
         }
     }
 

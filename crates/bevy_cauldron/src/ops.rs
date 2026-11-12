@@ -2504,6 +2504,433 @@ pub mod view_toggle_ghost {
     }
 }
 
+/// **What the outliner's eye and locks do, as operations** (UI-51, #237; E-002, #129): `placement_set_hidden`,
+/// `layer_set_visible` and `placement_set_locked`.
+///
+/// **View state, like the rung and the journal**: they change what a person looks through and what a click may do,
+/// not what the map holds. A hidden piece stays on the map, in the file, in the solver's view and in every other
+/// operation's reach; a lock is a guard on the viewport's pointer tools, so an operation still moves and removes a
+/// locked piece. They write nothing the project keeps and have no undo step, for the journal's reason: `Cmd+Z` takes
+/// back the last change to the grimoire, not a piece's eye. The outliner's row menu and an agent's call
+/// (`grimoire/operation_apply`) are the two front ends, and both carry the sight in `Ctx::view`.
+pub mod sight {
+    use super::*;
+    use crate::outliner::{LAYERS, layer_of};
+    use serde_json::json;
+
+    /// **A piece the eye or the lock is asked about must be on the map**, when a map is in hand: an id a typo made is
+    /// a refusal, not a mark on a piece that does not exist. A call with no map in hand (a front end that carries
+    /// only the view) is not refused for it.
+    fn on_the_map(ctx: &Ctx, id: &str) -> Result<(), Refusal> {
+        match ctx.open.as_ref() {
+            Some(open) if !open.map.placements.iter().any(|p| p.id == id) => Err(Refusal::new(format!(
+                "there is no placement `{id}` on this map. `grimoire/state` lists the ids."
+            ))),
+            _ => Ok(()),
+        }
+    }
+
+    fn need_view<'a>(ctx: &'a Ctx, what: &str) -> Result<&'a crate::ops_view::View, Refusal> {
+        ctx.view.as_ref().ok_or_else(|| {
+            Refusal::new(format!(
+                "no view is in hand, so there is nothing to {what}. An editor front end carries one in `Ctx::view`."
+            ))
+        })
+    }
+
+    fn need_view_mut<'a>(ctx: &'a mut Ctx, what: &str) -> Result<&'a mut crate::ops_view::View, Refusal> {
+        ctx.view.as_mut().ok_or_else(|| {
+            Refusal::new(format!(
+                "no view is in hand, so there is nothing to {what}. An editor front end carries one in `Ctx::view`."
+            ))
+        })
+    }
+
+    fn parse<T: serde::de::DeserializeOwned>(params: &serde_json::Value, fields: &str) -> Result<T, Refusal> {
+        serde_json::from_value(params.clone())
+            .map_err(|e| Refusal::new(format!("these are not the parameters: {e}. The fields are {fields}, and nothing else.")))
+    }
+
+    /// **Take one piece out of the viewport, or put it back.**
+    pub mod placement_set_hidden {
+        use super::*;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// The placement's id, as the map file and `grimoire/state` name it.
+            pub id: String,
+            /// `true` takes the piece out of the viewport for this session; `false` puts it back.
+            pub hidden: bool,
+        }
+
+        pub struct PlacementSetHidden;
+
+        impl Operation for PlacementSetHidden {
+            fn name(&self) -> &'static str {
+                "placement_set_hidden"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                // **Nothing the project keeps**: the map has no "hidden" field and this does not add one.
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["id", "hidden"],
+                    "properties": {
+                        "id": {"type": "string", "description": "The placement's id, as the map file names it."},
+                        "hidden": {"type": "boolean", "description": "true takes the piece out of the viewport for this session; false puts it back. The piece stays on the map and in the file either way."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let p: Params = parse(params, "`id` and `hidden`")?;
+                let view = need_view(ctx, "hide")?;
+                on_the_map(ctx, &p.id)?;
+                Ok(json!({ "id": p.id, "from": view.eyes.is_hidden(&p.id), "to": p.hidden }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                self.plan(ctx, params)?;
+                let p: Params = parse(params, "`id` and `hidden`")?;
+                need_view_mut(ctx, "hide")?.eyes.set(&p.id, p.hidden);
+                Ok(Outcome {
+                    summary: if p.hidden {
+                        format!("{} is out of the viewport for this session; it is still on the map", p.id)
+                    } else {
+                        format!("{} is back in the viewport", p.id)
+                    },
+                    affected: 0,
+                    saved: false,
+                    inverse: None,
+                    after: Some(json!({ "id": p.id, "hidden": p.hidden })),
+                })
+            }
+        }
+    }
+
+    /// **Hide a whole layer of the map, or show it again.**
+    pub mod layer_set_visible {
+        use super::*;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// One of [`LAYERS`].
+            pub layer: String,
+            /// `true` shows the layer's pieces; `false` takes them out of the viewport.
+            pub visible: bool,
+        }
+
+        pub struct LayerSetVisible;
+
+        impl LayerSetVisible {
+            /// The pieces standing in `layer`, as the outliner groups them ([`layer_of`]), when a map and a project
+            /// are in hand; `None` otherwise, which is only a count the receipt cannot give.
+            fn pieces_in(ctx: &Ctx, layer: &str) -> Option<usize> {
+                let (open, project) = (ctx.open.as_ref()?, ctx.project.as_ref()?);
+                Some(open.map.placements.iter().filter(|p| layer_of(&project.library, p) == layer).count())
+            }
+        }
+
+        impl Operation for LayerSetVisible {
+            fn name(&self) -> &'static str {
+                "layer_set_visible"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["layer", "visible"],
+                    "properties": {
+                        "layer": {"type": "string", "enum": LAYERS, "description": "The layer a piece stands in, from its descriptor's mount: floor, wall, ceiling, surface, opening or decal."},
+                        "visible": {"type": "boolean", "description": "false takes every piece of the layer out of the viewport for this session; true shows them again. They stay on the map."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let p: Params = parse(params, "`layer` and `visible`")?;
+                let view = need_view(ctx, "hide")?;
+                if !LAYERS.contains(&p.layer.as_str()) {
+                    return Err(Refusal::new(format!("`{}` is not a layer; say one of {}", p.layer, LAYERS.join(", "))));
+                }
+                Ok(json!({ "layer": p.layer, "from": !view.eyes.layer_hidden(&p.layer), "to": p.visible, "pieces": Self::pieces_in(ctx, &p.layer) }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                self.plan(ctx, params)?;
+                let p: Params = parse(params, "`layer` and `visible`")?;
+                let pieces = Self::pieces_in(ctx, &p.layer);
+                need_view_mut(ctx, "hide")?.eyes.set_layer(&p.layer, !p.visible);
+                let held = pieces.map_or_else(String::new, |n| format!(" ({n} piece(s))"));
+                Ok(Outcome {
+                    summary: if p.visible {
+                        format!("the {} layer is back in the viewport{held}", p.layer)
+                    } else {
+                        format!("the {} layer is out of the viewport for this session{held}; it is still on the map", p.layer)
+                    },
+                    affected: 0,
+                    saved: false,
+                    inverse: None,
+                    after: Some(json!({ "layer": p.layer, "visible": p.visible })),
+                })
+            }
+        }
+    }
+
+    /// **Lock one piece against the viewport's clicks, or unlock it.**
+    pub mod placement_set_locked {
+        use super::*;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// The placement's id, as the map file and `grimoire/state` name it.
+            pub id: String,
+            /// `true` locks the piece against the viewport's move and removal clicks; `false` unlocks it.
+            pub locked: bool,
+        }
+
+        pub struct PlacementSetLocked;
+
+        impl Operation for PlacementSetLocked {
+            fn name(&self) -> &'static str {
+                "placement_set_locked"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["id", "locked"],
+                    "properties": {
+                        "id": {"type": "string", "description": "The placement's id, as the map file names it."},
+                        "locked": {"type": "boolean", "description": "true locks the piece against the viewport's move and removal clicks for this session; false unlocks it. Operations (placement_remove, placement_set_pose and the rest) still act on a locked piece, and it is not placement_set_pin, which keeps the piece from the generator."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let p: Params = parse(params, "`id` and `locked`")?;
+                let view = need_view(ctx, "lock")?;
+                on_the_map(ctx, &p.id)?;
+                Ok(json!({ "id": p.id, "from": view.locks.is_locked(&p.id), "to": p.locked }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                self.plan(ctx, params)?;
+                let p: Params = parse(params, "`id` and `locked`")?;
+                need_view_mut(ctx, "lock")?.locks.set(&p.id, p.locked);
+                Ok(Outcome {
+                    summary: if p.locked {
+                        format!("{} is locked: a click will not move or remove it", p.id)
+                    } else {
+                        format!("{} is unlocked", p.id)
+                    },
+                    affected: 0,
+                    saved: false,
+                    inverse: None,
+                    after: Some(json!({ "id": p.id, "locked": p.locked })),
+                })
+            }
+        }
+    }
+}
+
+/// **The composition picker's cursor and its hold on the arrows, as operations** (E-002, #129 slice 22):
+/// `composition_picker_walk` (the picker's Shift+up and Shift+down) and `composition_picker_toggle` (`P`).
+///
+/// **View state**, like the grid rung: which row the cursor is on and whether the arrows walk the picker rather than
+/// the palette are what a person is looking through, not what the project keeps. They travel in `Ctx::view`
+/// (`picker_selected`, `picker_active`), so the keys and an agent's call decide what "walk" means in one place: it
+/// **clamps at the ends**, where the key used to carry that rule alone. Arming what the cursor is on is already
+/// `composition_arm`.
+pub mod composition_picker {
+    use super::*;
+    use serde_json::json;
+
+    fn need_view<'a>(ctx: &'a Ctx, what: &str) -> Result<&'a crate::ops_view::View, Refusal> {
+        ctx.view.as_ref().ok_or_else(|| {
+            Refusal::new(format!(
+                "no view is in hand, so there is no picker to {what}. An editor front end carries one in `Ctx::view`."
+            ))
+        })
+    }
+
+    /// **Move the picker's cursor one row**, clamped to the project's compositions.
+    pub mod composition_picker_walk {
+        use super::*;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `"prev"` or `"next"`.
+            pub by: String,
+        }
+
+        /// The two directions an agent names, beside the schema so the parse and the schema cannot disagree.
+        pub const DIRECTIONS: &[&str] = &["prev", "next"];
+
+        pub struct CompositionPickerWalk;
+
+        impl CompositionPickerWalk {
+            /// Where the cursor lands, and what is there: the walk's own rule, one copy for plan and commit.
+            fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(usize, String), Refusal> {
+                let p: Params = serde_json::from_value(params.clone())
+                    .map_err(|e| Refusal::new(format!("these are not a walk: {e}. The only field is `by`, `prev` or `next`.")))?;
+                let by: i64 = match p.by.as_str() {
+                    "prev" => -1,
+                    "next" => 1,
+                    other => return Err(Refusal::new(format!("`{other}` is not a direction; say one of {}", DIRECTIONS.join(", ")))),
+                };
+                let view = need_view(ctx, "walk")?;
+                let compositions = &ctx
+                    .project
+                    .as_ref()
+                    .ok_or_else(|| Refusal::new("no project is open, so there are no compositions to walk."))?
+                    .compositions
+                    .compositions;
+                let Some(last) = compositions.len().checked_sub(1) else {
+                    return Err(Refusal::new("the project has no compositions, so there is nothing to walk."));
+                };
+                // **Clamped, where it once wrapped**: an author holding an arrow at the end of a list stops there.
+                let to = (view.picker_selected as i64 + by).clamp(0, last as i64) as usize;
+                Ok((to, compositions[to].id.clone()))
+            }
+        }
+
+        impl Operation for CompositionPickerWalk {
+            fn name(&self) -> &'static str {
+                "composition_picker_walk"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["by"],
+                    "properties": {
+                        "by": {"type": "string", "enum": DIRECTIONS, "description": "Which way to move the composition picker's cursor one row. It stops at the ends of the list. `composition_arm` arms what it is on."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let (to, id) = Self::landing(ctx, params)?;
+                Ok(json!({ "to": to, "composition": id }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let (to, id) = Self::landing(ctx, params)?;
+                let Some(view) = ctx.view.as_mut() else {
+                    return Err(Refusal::new("no view is in hand, so there is no picker to walk."));
+                };
+                view.picker_selected = to;
+                Ok(Outcome {
+                    summary: format!("the picker's cursor is on `{id}`"),
+                    affected: 0,
+                    saved: false,
+                    inverse: None,
+                    after: Some(json!({ "selected": to, "composition": id })),
+                })
+            }
+        }
+    }
+
+    /// **Give the arrows to the picker, or give them back to the palette.**
+    pub mod composition_picker_toggle {
+        use super::*;
+
+        #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {}
+
+        pub struct CompositionPickerToggle;
+
+        impl Operation for CompositionPickerToggle {
+            fn name(&self) -> &'static str {
+                "composition_picker_toggle"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({"type": "object", "additionalProperties": false, "properties": {}})
+            }
+            fn plan(&self, ctx: &Ctx, _params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let view = need_view(ctx, "toggle")?;
+                Ok(json!({ "now": if view.picker_active { "palette" } else { "picker" } }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                self.plan(ctx, params)?;
+                let Some(view) = ctx.view.as_mut() else {
+                    return Err(Refusal::new("no view is in hand, so there is no picker to toggle."));
+                };
+                view.picker_active = !view.picker_active;
+                Ok(Outcome {
+                    summary: if view.picker_active {
+                        "Shift+up and Shift+down walk the compositions — Enter arms one".to_owned()
+                    } else {
+                        "the arrows walk the palette".to_owned()
+                    },
+                    affected: 0,
+                    saved: false,
+                    inverse: None,
+                    after: Some(json!({ "arrows": if view.picker_active { "picker" } else { "palette" } })),
+                })
+            }
+        }
+    }
+}
+
 pub mod view_cycle_grid {
     use super::*;
     use serde_json::json;
@@ -4807,6 +5234,11 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(view_cycle_grid::ViewCycleGrid),
         Box::new(view_toggle_journal::ViewToggleJournal),
         Box::new(view_toggle_ghost::ViewToggleGhost),
+        Box::new(sight::placement_set_hidden::PlacementSetHidden),
+        Box::new(sight::layer_set_visible::LayerSetVisible),
+        Box::new(sight::placement_set_locked::PlacementSetLocked),
+        Box::new(composition_picker::composition_picker_walk::CompositionPickerWalk),
+        Box::new(composition_picker::composition_picker_toggle::CompositionPickerToggle),
         Box::new(tool_arm::ToolArm),
         Box::new(snip_arm::SnipArm),
         Box::new(map_create::MapCreate),
@@ -5061,6 +5493,15 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // **The ghost key and chip**, `G`, which dispatch `view_toggle_ghost` (E-002, #129). The bench's overlay is what
     // changes; the operation decides on or off and the front end applies it.
     ("view_toggle_ghost", "\"view_toggle_ghost\""),
+    // **The outliner's row menus** (UI-51, #237): Hide and Lock on a piece's row, and Hide layer on a layer's row,
+    // dispatch these through `outliner::dispatch_sight`, the same operations an agent calls.
+    ("placement_set_hidden", "\"placement_set_hidden\""),
+    ("layer_set_visible", "\"layer_set_visible\""),
+    ("placement_set_locked", "\"placement_set_locked\""),
+    // **The composition picker's keys** (E-002, #129 slice 22): `P` dispatches `composition_picker_toggle` and Shift+up
+    // and Shift+down dispatch `composition_picker_walk`, through `compose::picker`'s `act` and `walk`.
+    ("composition_picker_toggle", "\"composition_picker_toggle\""),
+    ("composition_picker_walk", "\"composition_picker_walk\""),
     // **The clone and run keys**, which dispatch `tool_arm` through `arm_tool` (E-002, #129). Two keys,
     // one rule: press to arm, press again to return to `Tool::Place`.
     ("tool_arm", "\"tool_arm\""),
