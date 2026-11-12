@@ -438,8 +438,14 @@ pub fn start(root: &Path, config: &PlayConfig, map: &str, camera: Option<[f32; 3
     Ok(argv)
 }
 
-/// **A door change stops this project's build**, and drops the record with the rest of the door's state.
-fn stop_the_build(project: Option<Res<Project>>) {
+/// **Leaving the project stops its build**, and drops the record with the rest of the door's state. **A switch of
+/// workspace does not** (NV-09, #386): the build is watched in the Game workspace, and a person who goes to the Map
+/// while it compiles has not asked for it to stop. A switch marks itself with [`crate::screen::Crossing`], which this
+/// reads before `close_the_door` takes it away.
+fn stop_the_build(project: Option<Res<Project>>, crossing: Option<Res<crate::screen::Crossing>>) {
+    if crossing.is_some() {
+        return;
+    }
     if let Some(root) = project.as_ref().map(|p| p.root.clone()) {
         stop(&root);
     }
@@ -470,7 +476,7 @@ impl Plugin for BuildPlugin {
             // **A door change takes the build with it**: the job names this project's map and camera, and
             // a compiler for a project nobody is looking at is not this editor's work. Stopped by its
             // group, so rustc goes with cargo.
-            .add_systems(OnExit(Screen::Editor), stop_the_build);
+            .add_systems(OnExit(Screen::Editor), stop_the_build.before(crate::screen::close_the_door));
     }
 }
 

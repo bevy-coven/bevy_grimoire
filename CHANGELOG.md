@@ -2,10 +2,6 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
-## 2026-11-12
-
-- **nv-08-workspace-panels** `fdaad278d` NV-08: the World and Sound workspaces hold their own panels; terrain, environment, lights and audio left the Map inspector *For you: The terrain, environment, light and audio panels now live in their own World and Sound workspaces, one key away, instead of far down the Map's side panel.* *No clip: visible, not yet recorded: fleet worker*
-
 ## 2026-11-11
 
 - **picker-operations** `e03ea6120` The composition picker's P and Shift+up/down keys are operations an agent calls too (composition_picker_toggle, composition_picker_walk) *No clip: an operation behind existing keys, no new picture; proved by composition_picker_is_an_operation*

@@ -2636,6 +2636,8 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::activity_bar::ActivityBarPlugin);
         // **The World and Sound workspaces' panels** (NV-08, #385): spawned when their workspace is entered.
         app.add_plugins(crate::workspace_panels::WorkspacePanelsPlugin);
+        // **The Game workspace** (NV-09, #386): the running game's panel, its log and its state, and the watching of it.
+        app.add_plugins(crate::game_view::GameViewPlugin);
         app.add_plugins(crate::app_verbs::AppVerbsPlugin);
         // **Each panel header's "?"** (UI-91, #257): the guide page that covers what the panel holds.
         app.add_plugins(crate::help::HelpPlugin);
@@ -3896,22 +3898,8 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 );
             });
 
-            // **Play (#97):** start the project's game on the open map at the camera, and stop it.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(crate::ops_play::spawn_section);
-
-            // **Build (#371, GD-09):** rebuild the project's game when a change needs Rust, watching
-            // it as a background job, and relaunch on the same map when it works.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(crate::build_view::spawn_section);
+            // **Play and Build have moved to the Game workspace** (NV-09, #386): the same two sections, the same
+            // buttons and observers, spawned in `game_view::spawn_game_panel` — there is no second launcher.
 
             // **Crowd (#107).** One line: `<from_x> <from_z> <to_x> <to_z> <walkers>`, e.g. `-8 -8 8 8 40`.
             // Enter walks that many people between two 2 m squares round the open map's solid pieces.

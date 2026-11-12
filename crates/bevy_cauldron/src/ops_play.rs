@@ -29,12 +29,56 @@ fn with_table<T>(f: impl FnOnce(&mut HashMap<PathBuf, Child>) -> T) -> T {
     f(guard.get_or_insert_with(HashMap::new))
 }
 
-/// The pid of the game this editor started for `root`, if it is still running.
+/// **How the game this editor last ran ended** (NV-09, #386): what the Game workspace says after the process is gone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Exit {
+    /// The process's exit code, or `None` when it was ended by a signal (a crash that never got to say a code).
+    pub code: Option<i32>,
+    /// The editor's own `play_stop` ended it, so this is not a crash whatever the code was.
+    pub stopped: bool,
+}
+
+impl Exit {
+    /// **A crash is the game ending without being asked to and without success.** Exit `0` on its own is the game
+    /// closing its window, which needs nothing from a person; a signal or any other code does.
+    pub fn crashed(&self) -> bool {
+        !self.stopped && self.code != Some(0)
+    }
+}
+
+/// How each project's game last ended, by project root. Cleared when `play` starts another.
+static EXITS: Mutex<Option<HashMap<PathBuf, Exit>>> = Mutex::new(None);
+
+fn with_exits<T>(f: impl FnOnce(&mut HashMap<PathBuf, Exit>) -> T) -> T {
+    let mut guard = EXITS.lock().unwrap_or_else(|e| e.into_inner());
+    f(guard.get_or_insert_with(HashMap::new))
+}
+
+/// **How the game this editor started for `root` last ended**, or `None` while it runs or before any run.
+pub fn last_exit(root: &std::path::Path) -> Option<Exit> {
+    with_exits(|t| t.get(root).copied())
+}
+
+/// **Where the game's output goes**: one file per project in the temporary directory, named by a hash of the root,
+/// so the log of a project is never inside it (a project is a folder a person shares) and two projects never share one.
+/// `play` truncates it, so it holds the last run only.
+pub fn log_path(root: &std::path::Path) -> PathBuf {
+    const BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0100_0000_01b3;
+    let hash = root.to_string_lossy().bytes().fold(BASIS, |h, b| (h ^ u64::from(b)).wrapping_mul(PRIME));
+    std::env::temp_dir().join(format!("grimoire-game-{hash:016x}.log"))
+}
+
+/// The pid of the game this editor started for `root`, if it is still running. A game that has ended has its
+/// [`Exit`] recorded here, the one place the child is reaped.
 pub fn running_pid(root: &std::path::Path) -> Option<u32> {
     with_table(|t| match t.get_mut(root) {
         Some(child) => match child.try_wait() {
             Ok(None) => Some(child.id()),
-            _ => {
+            ended => {
+                if let Ok(Some(status)) = ended {
+                    with_exits(|e| e.insert(root.to_path_buf(), Exit { code: status.code(), stopped: false }));
+                }
                 t.remove(root);
                 None
             }
@@ -157,9 +201,18 @@ impl Operation for Play {
         // **Its own process group**, so `play_stop` can end what the launcher started as well as the launcher.
         #[cfg(unix)]
         std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
+        // **Its output goes to the project's game log** ([`log_path`]), which the Game workspace reads: a game
+        // started from a window has no terminal, and what it printed before it died is what says why. A file
+        // that cannot be made leaves the output where it was, rather than refusing to play.
+        if let Ok(file) = std::fs::File::create(log_path(&root))
+            && let Ok(again) = file.try_clone()
+        {
+            cmd.stdout(std::process::Stdio::from(file)).stderr(std::process::Stdio::from(again));
+        }
         #[allow(clippy::zombie_processes)]
         let child = cmd.spawn().map_err(|e| Refusal::new(format!("could not start `{}`: {e}. Nothing is running.", argv[0])))?;
         let pid = child.id();
+        with_exits(|e| e.remove(&root));
         with_table(|t| t.insert(root.clone(), child));
         let deadline = Instant::now() + Duration::from_secs_f64(p.wait_s.max(0.0));
         let mut ready = fairy_ready(config.port);
@@ -220,6 +273,7 @@ impl Operation for PlayStop {
             .status();
         let killed = child.kill();
         let _ = child.wait();
+        with_exits(|e| e.insert(root.clone(), Exit { code: None, stopped: true }));
         killed
             .or_else(|e| if e.kind() == std::io::ErrorKind::InvalidInput { Ok(()) } else { Err(e) })
             .map_err(|e| Refusal::new(format!("could not stop pid {pid}: {e}")))?;

@@ -605,31 +605,19 @@ fn the_settings() -> Destination {
     Destination { what: "The settings", steps: d.steps, cost: d.cost, reach: Reach::Arrived }
 }
 
-/// **The running game's log.**
+/// **The running game's log**, in the Game workspace (`Cmd`/`Ctrl`+`8`, NV-09 #386): its output is written to a file the
+/// workspace tails, under the heading LOG.
 fn the_games_log() -> Destination {
     let mut d = Driver::cold_start("game_log");
-    // Every screen the editor has, in turn: the log is on none of them.
-    let mut seen: Vec<&str> = Vec::new();
-    if d.showing("GAME LOG") || d.showing("Game log") {
-        seen.push("the workbench");
-    }
-    d.chord(&[primary(), KeyCode::KeyO], "Cmd+O (close project)");
-    if d.showing("GAME LOG") || d.showing("Game log") {
-        seen.push("the project page");
-    }
-    let cost = d.cost;
-    let steps = d.steps.clone();
-    assert!(seen.is_empty(), "a game log is drawn after all, on {seen:?}");
-    Destination {
-        what: "The running game's log",
-        steps,
-        cost,
-        reach: Reach::Unreachable(
-            "no panel or screen draws the running game's output: the workbench and the project page both read no \
-             log, and the game's output goes to stdout and cauldron.log"
-                .to_owned(),
-        ),
-    }
+    d.chord(&[primary(), KeyCode::Digit8], "press Cmd/Ctrl+8 (the Game workspace)");
+    assert_eq!(d.panel_name(), Mode::Game.label(), "Cmd/Ctrl+8 opens the Game workspace");
+    let arrived = d.showing("LOG");
+    let reach = if arrived {
+        Reach::Arrived
+    } else {
+        Reach::Unreachable("the Game workspace is open and the LOG heading is not on screen".to_owned())
+    };
+    Destination { what: "The running game's log", steps: d.steps, cost: d.cost, reach }
 }
 
 // ───────────────────────────── the document ─────────────────────────────

@@ -379,6 +379,7 @@ mod the_follow_waits_for_a_person_using_the_view;
 mod the_four_view_keys_are_retired;
 mod the_person_is_never_yanked_review_two;
 mod the_enclosure_wish_is_the_maps_to_set;
+mod the_game_workspace_runs_the_game;
 mod the_games_per_file_verdicts_reach_grimoire_state;
 mod the_games_verdict_reaches_grimoire_state;
 mod the_ghost_is_the_contract;

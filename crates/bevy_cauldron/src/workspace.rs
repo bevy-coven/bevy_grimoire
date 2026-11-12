@@ -162,7 +162,8 @@ impl Workspace {
             // **Nothing yet.** These workspaces hold documents rather than panels (NV-04, NV-07) or
             // a page of their own (NV-08, NV-09, NV-10), and until they are built they show no
             // panel and are not registered.
-            Workspace::Project | Workspace::Files | Workspace::Game | Workspace::Agent => &[],
+            Workspace::Game => &[Mode::Game],
+            Workspace::Project | Workspace::Files | Workspace::Agent => &[],
         }
     }
 
@@ -192,7 +193,7 @@ impl Workspace {
     /// A workspace that is not built is refused rather than shown empty: the vision's *"no
     /// placeholder screens"*.
     pub const fn is_built(self) -> bool {
-        matches!(self, Workspace::Map | Workspace::Kit | Workspace::Animation | Workspace::World | Workspace::Sound)
+        matches!(self, Workspace::Map | Workspace::Kit | Workspace::Animation | Workspace::World | Workspace::Sound | Workspace::Game)
     }
 
     /// **What this workspace is waiting for**, in the issue series' own words, or `None` when it is
@@ -202,9 +203,8 @@ impl Workspace {
         match self {
             Workspace::Project => Some("the Project workspace arrives with NV-08 (#385)"),
             Workspace::Files => Some("the Files workspace arrives with GD-11"),
-            Workspace::Game => Some("the Game workspace arrives with NV-09 (#386)"),
             Workspace::Agent => Some("the Agent workspace arrives with NV-10 (#387)"),
-            Workspace::Map | Workspace::Kit | Workspace::Animation | Workspace::World | Workspace::Sound => None,
+            Workspace::Map | Workspace::Kit | Workspace::Animation | Workspace::World | Workspace::Sound | Workspace::Game => None,
         }
     }
 
@@ -255,6 +255,11 @@ impl Workspace {
     /// **Run condition: is the Sound workspace open?** (NV-08, #385.)
     pub fn sound_is_open(workspace: Option<Res<Workspace>>) -> bool {
         workspace.is_some_and(|w| *w == Workspace::Sound)
+    }
+
+    /// **Run condition: is the Game workspace open?** (NV-09, #386.)
+    pub fn game_is_open(workspace: Option<Res<Workspace>>) -> bool {
+        workspace.is_some_and(|w| *w == Workspace::Game)
     }
 
     /// Whether this workspace's middle is the world — the workspaces that share one viewport
