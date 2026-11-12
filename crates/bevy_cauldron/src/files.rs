@@ -1039,7 +1039,11 @@ fn follow_on_primary_click(
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     mut files: ResMut<Files>,
-    editors: Query<(&Hovered, &FileEditor, &CodeEditor, &CodeEditorValue)>,
+    // **The pointer's place is the column's**, not the editor's: `Hovered` is the host's (it is the node the picking backend finds under
+    // the pointer), while `FileEditor` and the widget's own components sit on the editor inside it. Asking for all of them on one entity
+    // matched nothing, which is why the click did nothing while F12 on the same value followed it.
+    hosts: Query<&Hovered, With<FilesHost>>,
+    editors: Query<(&FileEditor, &CodeEditor, &CodeEditorValue)>,
     mut commands: Commands,
 ) {
     // **On the release**, a frame after the press: the editor puts the caret where the pointer went down in its own system, and a read on the
@@ -1051,10 +1055,13 @@ fn follow_on_primary_click(
     if !primary {
         return;
     }
+    if !hosts.iter().any(Hovered::get) {
+        return;
+    }
     let found = editors
         .iter()
-        .find(|(hovered, ..)| hovered.get())
-        .and_then(|(_, editor, widget, value)| reference_under_caret(&mut files, editor, widget, value));
+        .next()
+        .and_then(|(editor, widget, value)| reference_under_caret(&mut files, editor, widget, value));
     if let Some(found) = found {
         follow_reference_later(&mut commands, found);
     }

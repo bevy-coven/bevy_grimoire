@@ -184,10 +184,14 @@ pub fn component_line(root: &Path, entity: &str, component: &str) -> Option<(Str
     let child = format!(".{}.{entity}.{component}", bevy_grimoire::entities::CHILDREN_KEY);
     for name in names {
         let Ok(text) = std::fs::read_to_string(dir.join(&name)) else { continue };
-        let found = bevy_grimoire_core::yaml::lines(&text)
+        // **The component's own key**, from the same walk the loader reads the file with: a mapping node's span starts at its
+        // first child, so the node's line is the first line of what the component holds rather than the line it is written on.
+        // The key span is that line.
+        let found = bevy_grimoire_core::yaml::spans(&text)
+            .0
             .into_iter()
-            .filter(|(path, _)| *path == own || path.ends_with(&child))
-            .map(|(_, line)| line)
+            .filter(|span| span.kind == bevy_grimoire_core::yaml::SpanKind::Key && (span.path == own || span.path.ends_with(&child)))
+            .map(|span| text[..span.range.start.min(text.len())].bytes().filter(|b| *b == b'\n').count() + 1)
             .min();
         if let Some(line) = found {
             return Some((format!("{}/{name}", bevy_grimoire::entities::ENTITIES_DIR), line.saturating_sub(1)));
