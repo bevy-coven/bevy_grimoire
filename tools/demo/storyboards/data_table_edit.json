@@ -47,7 +47,7 @@
   {
    "write": {
     "path": "assets/grimoire/furniture/data.yaml",
-    "text": "(version: 1, files: [(id: \"tuning/mob\", path: \"mob.yaml\", bounds: {\"mob.speed\": (min: 0.0, max: 9.0)})])"
+    "text": "version: 1\nfiles:\n- id: tuning/mob\n  path: mob.yaml\n  bounds:\n    mob.speed:\n      min: 0.0\n      max: 9.0\n"
    },
    "at": 0.15000000000000002
   },

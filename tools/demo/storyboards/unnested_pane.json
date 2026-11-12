@@ -62,7 +62,7 @@
    "at": 4.0,
    "write": {
     "path": "assets/grimoire/standards.yaml",
-    "text": "(version: 1, rules: [\n    (name: \"bed module\", kind: Some(\"bed\"), dim: Width, multiple_of: Some(0.52)),\n    (name: \"fence module\", kind: Some(\"fence\"), dim: Depth, multiple_of: Some(0.4)),\n])\n"
+    "text": "version: 1\nrules:\n- name: bed module\n  kind: bed\n  dim: Width\n  multiple_of: 0.52\n- name: fence module\n  kind: fence\n  dim: Depth\n  multiple_of: 0.4\n"
    },
    "caption": "saved: beds on a 0.52 m module, fences on 0.4 m; the pane names the pair that does not nest"
   },
@@ -70,7 +70,7 @@
    "at": 9.0,
    "write": {
     "path": "assets/grimoire/standards.yaml",
-    "text": "(version: 1, rules: [\n    (name: \"bed module\", kind: Some(\"bed\"), dim: Width, multiple_of: Some(0.52)),\n    (name: \"fence module\", kind: Some(\"fence\"), dim: Depth, multiple_of: Some(0.26)),\n])\n"
+    "text": "version: 1\nrules:\n- name: bed module\n  kind: bed\n  dim: Width\n  multiple_of: 0.52\n- name: fence module\n  kind: fence\n  dim: Depth\n  multiple_of: 0.26\n"
    },
    "caption": "fence module set to 0.26 m, which divides 0.52 m: the modules nest and the line goes"
   }

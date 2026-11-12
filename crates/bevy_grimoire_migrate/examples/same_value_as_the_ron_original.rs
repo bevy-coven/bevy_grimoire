@@ -5,7 +5,7 @@
 //!
 //! Each line on stdin is the path of a RON file at the base commit. The RON is read from `git show <base>:<path>` into a value
 //! tree (`ron_tree`, no type), the YAML is the file beside it with `.yaml` and read by the project's one YAML reader, and the two
-//! are compared as values: an absent key and a null are the same (a typed write leaves an empty `Option` out), and `1` is `1.0`.
+//! are compared as values: a null equals an absent key, a key only the YAML has is a field the type defaults (a typed write prints it), and `1` is `1.0`; a key only the RON has, or a different value, is a difference.
 //! Prints `same` or the first path where they differ, and exits 1 when any differ. A report, not a test: a file whose RON this
 //! does not read is named and counted.
 
@@ -35,7 +35,10 @@ fn first_difference(path: &str, a: &Value, b: &Value) -> Option<String> {
                             return Some(d);
                         }
                     }
-                    _ => return Some(format!("{path}.{k} is only in one of them")),
+                    // A key only the YAML has is a field the type fills with its default (a typed write prints it): the same value.
+                    (None, Some(_)) => {}
+                    (Some(_), None) => return Some(format!("{path}.{k} is in the RON and missing from the YAML")),
+                    (None, None) => {}
                 }
             }
             None

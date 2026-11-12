@@ -52,7 +52,7 @@ default = ["debugger"]
 debugger = ["bevy/bevy_remote", "dep:bevy_debugger_bevy"]
 # **Family crates (#96).** One optional feature per crate, named after it, off by default: a game
 # that lists none pays nothing. Pinned by git revision on the crate's `main`, never a path. A project's
-# `family.ron` lists the crates it uses (`bevy_gooey` is not one of these features: the editor's UI is
+# `family.yaml` lists the crates it uses (`bevy_gooey` is not one of these features: the editor's UI is
 # gooey, always built); listing one this build lacks is a problem message
 # (`family_host::problems`). The engine-free core crates never depend on these.
 bevy_carnage = ["dep:bevy_carnage"]
@@ -72,7 +72,7 @@ bevy_stigmergy = ["dep:bevy_stigmergy"]
 # **The audio mix table and cue audition (S-01).** `bevy_siren`'s own types, written by the audio panel:
 # the editor never keeps a second schema of a project's sound. Pinned by git rev like every family crate.
 bevy_siren = ["dep:bevy_siren"]
-# **A spike, not a migration (#204, hot-reload H7)**: `standards.ron` through Bevy's `AssetLoader` and its
+# **A spike, not a migration (#204, hot-reload H7)**: `standards.yaml` through Bevy's `AssetLoader` and its
 # file watcher, beside the editor's own `FileWatch`. Off by default and in no build the gate makes; it turns
 # on Bevy's `file_watcher` (the `notify` crates) and nothing else. `src/asset_spike.rs` says what it is for.
 asset_spike = ["bevy/file_watcher"]
@@ -90,7 +90,7 @@ bevy_society = { git = "https://github.com/bevy-coven/bevy_society", rev = "d2e3
 bevy_speech_bubbles = { git = "https://github.com/bevy-coven/bevy_speech_bubbles", rev = "b2d67f0d8a8a984a78f9bc9291cc63be867c6822", optional = true }
 bevy_stigmergy = { git = "https://github.com/bevy-coven/bevy_stigmergy", rev = "6ecee6a3c2ff0bf7f18dab10f376c49b49914c44", optional = true }
 # The audio crate (S-01): the editor writes the crate's own `SirenSettings` and `CueTable`, never a schema of its
-# own. `serde` on, because the panel reads and writes `family/bevy_siren.ron`.
+# own. `serde` on, because the panel reads and writes `family/bevy_siren.yaml`.
 bevy_siren = { git = "https://github.com/bevy-coven/bevy_siren", rev = "7029b20", features = ["serde"], optional = true }
 bevy_grimoire_core = { path = "../bevy_grimoire_core" }
 bevy_flora = { git = "https://github.com/bevy-coven/bevy_flora", rev = "25e956b3f88ba32a1b6d75957360c6840da6afd9", features = ["serde"], optional = true }
@@ -132,7 +132,7 @@ bevy_devshot = { path = "../bevy_devshot" }
 # RON, and `bevy_grimoire_core` must not.
 bevy_grimoire_migrate = { path = "../bevy_grimoire_migrate", version = "0.1.0" }
 serde.workspace = true
-# The platform's own data directory, where `recent.ron` lives (`recent.rs`, UI-11): no family crate finds
+# The platform's own data directory, where `recent.yaml` lives (`recent.rs`, UI-11): no family crate finds
 # platform directories, so this is the one small crate that does.
 dirs = "6"
 # The OS's own folder and file chooser (`picker.rs`, #298). `xdg-portal` is the Linux backend: D-Bus to the desktop's

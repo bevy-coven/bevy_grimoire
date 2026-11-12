@@ -65,7 +65,7 @@
    "at": 4.0,
    "write": {
     "path": "assets/grimoire/standards.yaml",
-    "text": "(version: 1, rules: [\n    (name: \"ceiling\", dim: Height, max: Some(2.5)),\n    (name: \"wall module\", dim: Width, multiple_of: Some(0.5)),\n])\n"
+    "text": "version: 1\nrules:\n- name: ceiling\n  dim: Height\n  max: 2.5\n- name: wall module\n  dim: Width\n  multiple_of: 0.5\n"
    },
    "caption": "standards.yaml saved: ceiling max 2.5 m, width a multiple of 0.5 m; the pane names both breaches"
   },
@@ -73,7 +73,7 @@
    "at": 8.0,
    "write": {
     "path": "assets/grimoire/standards.yaml",
-    "text": "(version: 1, rules: [\n    (name: \"ceiling\", dim: Height),\n])\n"
+    "text": "version: 1\nrules:\n- name: ceiling\n  dim: Height\n"
    },
    "caption": "a rule with no bound: the file's problem is named, the editor keeps what it had"
   },
@@ -81,7 +81,7 @@
    "at": 12.0,
    "write": {
     "path": "assets/grimoire/standards.yaml",
-    "text": "(version: 1, rules: [\n    (name: \"ceiling\", dim: Height, max: Some(3.0)),\n    (name: \"wall module\", dim: Width, multiple_of: Some(0.5)),\n])\n"
+    "text": "version: 1\nrules:\n- name: ceiling\n  dim: Height\n  max: 3.0\n- name: wall module\n  dim: Width\n  multiple_of: 0.5\n"
    },
    "caption": "fixed, ceiling raised to 3.0 m: one breach left, without reselecting the piece"
   }

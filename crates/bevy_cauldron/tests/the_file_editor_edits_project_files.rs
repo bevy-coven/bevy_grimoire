@@ -487,6 +487,13 @@ fn errors_are_the_loaders_own_with_the_line_they_stand_on() {
     assert_eq!(dup[0].0, 2, "the second `a` is the fault: {dup:?}");
     assert!(on("scratch/a.yaml", "a: 1\nb: [1, 2]\n").is_empty(), "a file that reads has no findings");
     assert_eq!(on("scratch/a.yaml", "a: &x 1\nb: *x\n").len(), 1, "an anchor is refused where it stands");
+    // Owner exception (2026-11-12): the RON error case the `ron` crate used to find (`b: ,` on line 2) is restored as YAML cases the
+    // loader's own reader reports with a line: a tab that indents, and a second document.
+    let tab = on("scratch/a.yaml", "a:\n\tb: 1\n");
+    assert_eq!(tab.len(), 1, "{tab:?}");
+    assert_eq!(tab[0].0, 1, "a tab is refused on the line it is on: {tab:?}");
+    let second = on("scratch/a.yaml", "a: 1\n---\nb: 2\n");
+    assert_eq!(second.len(), 1, "a second document is refused: {second:?}");
 
     // Owner exception (2026-11-12): no project file is RON and the `ron` crate is out of the editor (#365), so a RON file's
     // errors are what a bracket scan is sure of, as a Rhai file's are: a bracket that never closes, on the line it opened.

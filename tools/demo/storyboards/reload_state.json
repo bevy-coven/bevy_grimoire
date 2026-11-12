@@ -43,7 +43,7 @@
    "at": 6.0,
    "write": {
     "path": "assets/grimoire/.live/game.yaml",
-    "text": "(version: 2, at_unix_ms: $now_ms, ok: false, message: \"furniture/library.yaml: refused\", seq: 4, kinds: [(kind: \"kits\", file: \"kits.yaml\", outcome: Applied, field: None, reason: \"\"), (kind: \"vocab\", file: \"vocab.yaml\", outcome: Applied, field: None, reason: \"\"), (kind: \"library\", file: \"furniture/library.yaml\", outcome: Refused, field: Some(\"descriptors[2].size[1]\"), reason: \"1:47: Expected float\")])"
+    "text": "version: 2\nat_unix_ms: $now_ms\nok: false\nmessage: 'furniture/library.yaml: refused'\nseq: 4\nkinds:\n- kind: kits\n  file: kits.yaml\n  outcome: Applied\n  field: null\n  reason: ''\n- kind: vocab\n  file: vocab.yaml\n  outcome: Applied\n  field: null\n  reason: ''\n- kind: library\n  file: furniture/library.yaml\n  outcome: Refused\n  field: descriptors[2].size[1]\n  reason: '1:47: Expected float'\n"
    },
    "caption": "the game decides: one file refused with its field, the rest applied"
   }
