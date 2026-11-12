@@ -148,6 +148,12 @@ pub fn read_document(file: &str, text: &str) -> Result<Document, Fault> {
         // `line 0` would be a path with no place to go.
         Fault { file: file.to_owned(), line: problem_line(&p), at, why: p.line() }
     })?;
+    document_of(file, &json, lines)
+}
+
+/// **A document from the value its file holds**, which is all a release has (a bake keeps no text, so no lines).
+#[allow(clippy::result_large_err)]
+pub fn document_of(file: &str, json: &Value, lines: BTreeMap<String, usize>) -> Result<Document, Fault> {
     let root = json.as_object().ok_or_else(|| Fault {
         file: file.to_owned(),
         // **The line the document itself starts on**, which its first node knows.
@@ -588,6 +594,12 @@ fn fault(file: &str, line: usize, at: String, why: String) -> Fault {
 
 /// **The path of every entity file under `root`**, sorted, so a game and a test read the same set.
 pub fn files(root: &Path) -> Vec<PathBuf> {
+    // **A release lists its files from the bake's manifest**, not from a folder it may not ship.
+    if bevy_grimoire_core::load::is_baked() {
+        let mut out = bevy_grimoire_core::load::files_of_kind(root, bevy_grimoire_core::bake::ENTITIES_KIND).unwrap_or_default();
+        out.sort();
+        return out;
+    }
     let dir = root.join(ENTITIES_DIR);
     let Ok(entries) = std::fs::read_dir(&dir) else { return Vec::new() };
     let mut out: Vec<PathBuf> = entries
@@ -603,6 +615,11 @@ pub fn files(root: &Path) -> Vec<PathBuf> {
 #[allow(clippy::result_large_err)]
 pub fn load(path: &Path) -> Result<Document, Fault> {
     let file = path.display().to_string();
+    // **One load function** (`bevy_grimoire_core::load`): a release reads the baked value, a development build the YAML.
+    if bevy_grimoire_core::load::is_baked() {
+        let json = bevy_grimoire_core::load::load_value(path).map_err(|p| Fault { file: file.clone(), line: 0, at: String::new(), why: p.line() })?;
+        return document_of(&file, &json, BTreeMap::new());
+    }
     let text = std::fs::read_to_string(path).map_err(|e| Fault {
         file: file.clone(),
         line: 0,

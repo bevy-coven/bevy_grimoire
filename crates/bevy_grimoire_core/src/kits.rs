@@ -523,10 +523,8 @@ pub fn bound_library(project: &Path, kits: &Kits) -> Result<Bound, String> {
     // degraded mode — a project that stamps nothing has no file, and that is the same state as a
     // file holding no compositions.
     let comp_path = project.join(Compositions::FILE);
-    let compositions = if comp_path.exists() {
-        let text = std::fs::read_to_string(&comp_path)
-            .map_err(|e| format!("{}: {e}", comp_path.display()))?;
-        Compositions::parse(&text).map_err(|e| format!("{}: {e}", comp_path.display()))?
+    let compositions = if crate::load::exists(&comp_path) {
+        crate::load::parsed::<Compositions>(&comp_path)?
     } else {
         Compositions {
             version: crate::composition::COMPOSITIONS_VERSION,

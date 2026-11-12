@@ -1,0 +1,30 @@
+version: 1
+kind:
+  tokens:
+  - name: prop
+    note: a thing
+    implies: []
+effects:
+  tokens:
+  - name: inert
+    note: does nothing
+    implies: []
+look:
+  tokens:
+  - name: plain
+    note: unremarkable
+    implies: []
+surfaces:
+  tokens:
+  - name: worktop
+    note: a top
+    implies: []
+capabilities:
+  tokens: []
+edge:
+  tokens:
+  - name: wall
+    note: a solid run-face
+    implies: []
+slot:
+  tokens: []

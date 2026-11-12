@@ -1,0 +1,24 @@
+[package]
+name = "grimoire_sample_game"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+description = "A small playable game made of YAML and Rhai: its Rust is one line (GD-10)."
+publish = false
+
+[[bin]]
+name = "sample"
+path = "src/main.rs"
+
+[dependencies]
+bevy.workspace = true
+bevy_grimoire = { path = "../../crates/bevy_grimoire" }
+
+[features]
+# The release build: reads only `baked/` (`cauldron bake games/sample --out games/sample/baked`).
+baked = ["bevy_grimoire/baked"]
+
+[dev-dependencies]
+bevy_grimoire_core = { path = "../../crates/bevy_grimoire_core" }
+bevy_grimoire_rhai = { path = "../../crates/bevy_grimoire_rhai" }
+serde_json.workspace = true

@@ -185,6 +185,7 @@ Cauldron: the editor that writes a grimoire, the book your game loads.
 
 usage: bevy_cauldron [ROOT] [MAP] [--workspace <id>] [--kit NAME] [--live]
        bevy_cauldron migrate <project folder>
+       bevy_cauldron bake <project folder> --out <folder>
 
   ROOT          the project's root, the folder holding assets/grimoire (default: the current folder)
   MAP           the map to open on the Map workspace; naming one, or a --workspace, skips the launcher
@@ -194,7 +195,8 @@ usage: bevy_cauldron [ROOT] [MAP] [--workspace <id>] [--kit NAME] [--live]
   --live        write every committed change to disk at once, for a game that watches the project
   -h, --help    print this and exit
 
-  migrate       move a project's files from RON to YAML and exit (does not open the editor)";
+  migrate       move a project's files from RON to YAML and exit (does not open the editor)
+  bake          turn every YAML file a game loads into binaries for a release, proved against the YAML, and exit";
 
 /// Whether the arguments ask for [`USAGE`] rather than a window.
 pub fn asks_for_help(args: &[String]) -> bool {
@@ -215,7 +217,7 @@ pub fn subcommand(args: &[String]) -> Option<&str> {
 }
 
 /// **Every subcommand this binary takes**, so [`subcommand`] and [`USAGE`] state one list.
-pub const SUBCOMMANDS: [&str; 1] = ["migrate"];
+pub const SUBCOMMANDS: [&str; 2] = ["migrate", "bake"];
 
 /// **The name a person types to run this binary**, and the name every refusal that names a command spells.
 ///

@@ -32,6 +32,7 @@
 pub mod adjacency;
 pub mod agent_guide;
 pub mod atomic_file;
+pub mod bake;
 pub mod census;
 pub mod clips;
 pub mod composition;
@@ -57,6 +58,7 @@ pub mod kits;
 pub mod lesson;
 pub mod library;
 pub mod live;
+pub mod load;
 pub mod map;
 pub mod naming;
 pub mod note_agent;

@@ -94,10 +94,6 @@ impl ProjectData {
     }
 }
 
-fn read(path: &Path) -> Result<String, String> {
-    std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))
-}
-
 /// Load the project in `grimoire_dir` (`assets/grimoire`) and the named `maps`.
 ///
 /// Order: `kits.yaml`, the bound kits, `vocab.yaml` (resolved against the merged library so an unknown
@@ -105,13 +101,12 @@ fn read(path: &Path) -> Result<String, String> {
 /// `town` and gets nothing has a bug to hear about, not a default to continue with.
 pub fn load(grimoire_dir: &Path, maps: &[&str]) -> Result<ProjectData, String> {
     let kits_path = grimoire_dir.join(kits::KITS_FILE);
-    let kits = Kits::parse(&read(&kits_path)?).map_err(|e| format!("{}: {e}", kits_path.display()))?;
+    let kits: Kits = crate::load::parsed(&kits_path)?;
 
     let bound = kits::bound_library(grimoire_dir, &kits)?;
 
     let vocab_path = grimoire_dir.join(VOCAB_FILE);
-    let vocab =
-        Vocabularies::parse(&read(&vocab_path)?).map_err(|e| format!("{}: {e}", vocab_path.display()))?;
+    let vocab: Vocabularies = crate::load::parsed(&vocab_path)?;
 
     // The lattice check the game's own map loader applies, on the layered merge — what is placed.
     bound
@@ -131,9 +126,8 @@ pub fn load(grimoire_dir: &Path, maps: &[&str]) -> Result<ProjectData, String> {
         .map_err(|e| format!("{}: {e}", compositions_path.display()))?;
 
     let rules_path = grimoire_dir.join(rules::FILE);
-    let rules = if rules_path.is_file() {
-        let parsed =
-            Rules::parse(&read(&rules_path)?).map_err(|e| format!("{}: {e}", rules_path.display()))?;
+    let rules = if crate::load::exists(&rules_path) {
+        let parsed: Rules = crate::load::parsed(&rules_path)?;
         parsed
             .validate_against(&bound.library)
             .map_err(|e| format!("{}: {e}", rules_path.display()))?;
@@ -151,7 +145,7 @@ pub fn load(grimoire_dir: &Path, maps: &[&str]) -> Result<ProjectData, String> {
         let path = grimoire_dir
             .join(MAPS_DIR)
             .join(crate::naming::map_file_name(name));
-        let map = Map::parse(&read(&path)?).map_err(|e| format!("{}: {e}", path.display()))?;
+        let map: Map = crate::load::parsed(&path)?;
         if map.name != *name {
             return Err(format!(
                 "{}: calls itself `{}`. A map's name IS its file.",

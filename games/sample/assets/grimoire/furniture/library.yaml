@@ -1,0 +1,65 @@
+version: 1
+note: null
+descriptors:
+- id: floor
+  mesh: alpha/floor.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 0.5
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - prop
+  effects:
+  - inert
+  look:
+  - plain
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: a fixture piece
+- id: wall
+  mesh: alpha/wall.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 0.5
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - prop
+  effects:
+  - inert
+  look:
+  - plain
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: a fixture piece

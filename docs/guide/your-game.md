@@ -253,3 +253,11 @@ After you allow one, press Play or Send again; nothing starts on its own. What y
 ## Conversations over the speaker
 
 With the editor built with `--features bevy_speech_bubbles` and `bevy_speech_bubbles` listed in `family.yaml`, a project's conversations are `bevy_speech_bubbles`' own `DialogueScript`, saved as `family/bevy_speech_bubbles.yaml`; a graph `validate_script` refuses is not written. A placed piece carries one by name (`placement_set_family` with `"crate": "bevy_speech_bubbles"` and `"value": "\"market\""`, or `@<id> bevy_speech_bubbles "market"` in FAMILY SETTINGS). Typing `dialogue market 0` in FAMILY SETTINGS walks that conversation (`dialogue_preview`), each number picking an option at the next choice (0 is the first), and draws the lines it says as one balloon over the piece carrying it; a choice with no number left stops the walk there.
+
+## Release: bake your data
+
+`bevy_cauldron bake <project folder> --out <folder>` turns every YAML file the game loads (the project's files, `game/*.entities.yaml`, the files `data.yaml` registers) into one binary each, and writes `manifest.json` with each file's kind, its format version and the SHA-256 of its YAML. **Every file is decoded again and compared with the value its YAML reads to; a file that differs fails the bake, naming it, and nothing is written.**
+
+A game built with the `baked` feature of `bevy_grimoire` reads `<root>/baked` and nothing else (`bevy_grimoire_core::load`). It refuses to start, naming the file, when the YAML it was baked from has changed since or a file was added. It never falls back to the YAML. A development build reads the YAML.
+
+`games/sample/` is a small game made of YAML and Rhai whose Rust is one line; its tests play it from the YAML and from the bake.

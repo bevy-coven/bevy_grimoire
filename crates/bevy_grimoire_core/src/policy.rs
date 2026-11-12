@@ -97,14 +97,9 @@ pub fn layered_library(dir: &Path) -> Result<Layered, String> {
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .push(dir.to_path_buf());
-    let read = |name: &str| -> Result<String, String> {
-        let path = dir.join(name);
-        std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))
-    };
-    let measured = Library::parse(&read(LIBRARY_FILE)?)
-        .map_err(|e| format!("{}: {e}", dir.join(LIBRARY_FILE).display()))?;
-    let policy = Policy::parse(&read(POLICY_FILE)?)
-        .map_err(|e| format!("{}: {e}", dir.join(POLICY_FILE).display()))?;
+    // **Through `load`**, the one function a development build reads YAML by and a release reads its bake by (#370).
+    let measured: Library = crate::load::parsed(&dir.join(LIBRARY_FILE))?;
+    let policy: Policy = crate::load::parsed(&dir.join(POLICY_FILE))?;
     let library = policy
         .apply(&measured)
         .map_err(|e| format!("{}: {e}", dir.join(POLICY_FILE).display()))?;

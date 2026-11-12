@@ -36,6 +36,10 @@ fn main() -> AppExit {
     if args::subcommand(&argv) == Some("migrate") {
         return migrate_and_exit(&argv, args::PROGRAM);
     }
+    // **`bake` runs and exits** (GD-08, #370), for the same reason `migrate` does: it reads a project and writes a folder.
+    if args::subcommand(&argv) == Some("bake") {
+        return bake_and_exit(&argv, args::PROGRAM);
+    }
 
     // **`bevy_audio` is opened only when something plays a sound.** The editor links
     // `bevy_audio` through `DefaultPlugins`, and an audio device that fails is what loops
@@ -259,6 +263,31 @@ fn name_the_window(
     }
 }
 
+
+/// **`bevy_cauldron bake <project folder> --out <folder>`**: turn every YAML file the game loads into postcard, prove each
+/// against its YAML, and say what was written (GD-08, #370). A file that does not read, or does not survive the bake, fails
+/// the command naming it and writes nothing.
+fn bake_and_exit(argv: &[String], program: &str) -> AppExit {
+    let command = format!("{program} bake <project folder> --out <folder>");
+    let rest = &argv[1..];
+    let out_at = rest.iter().position(|a| a == "--out");
+    let out = out_at.and_then(|at| rest.get(at + 1));
+    let root = rest.iter().enumerate().find(|(at, a)| !a.starts_with('-') && out_at.is_none_or(|o| *at != o + 1)).map(|(_, a)| a);
+    let (Some(root), Some(out)) = (root, out) else {
+        eprintln!("usage: {command}");
+        return AppExit::error();
+    };
+    match bevy_grimoire_core::bake::bake(std::path::Path::new(root), std::path::Path::new(out)) {
+        Ok(report) => {
+            println!("baked {} file(s), {} bytes, into {} (manifest: {})", report.files, report.bytes, out, report.manifest.display());
+            AppExit::Success
+        }
+        Err(problem) => {
+            eprintln!("{}", problem.line());
+            AppExit::error()
+        }
+    }
+}
 
 /// **`bevy_cauldron migrate <project folder>`**: move a project's files from RON to YAML, and say what
 /// happened (GD-03, #365).

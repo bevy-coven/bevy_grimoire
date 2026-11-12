@@ -34,8 +34,11 @@
 
 pub mod behaviours;
 pub mod entities;
+pub mod game;
 pub mod game_schema;
 pub mod live;
+
+pub use game::{GameDataPlugin, GamePlugin};
 
 use std::collections::HashMap;
 
