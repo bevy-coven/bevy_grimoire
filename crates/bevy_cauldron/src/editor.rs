@@ -2629,6 +2629,8 @@ impl Plugin for EditorPlugin {
         // is about to move for the person. Registered after `RevealPlugin` and `FollowPlugin`, whose
         // systems are its writers.
         app.add_plugins(crate::nav::NavPlugin);
+        // **Cross-links** (NV-07, #384): the inspector's `Used by` and Open file.
+        app.add_plugins(crate::crosslinks::CrossLinksPlugin);
         app.add_plugins(crate::toolbar::ToolbarPlugin);
         app.add_plugins(crate::empty_state::EmptyStatePlugin);
         app.add_plugins(crate::add_meshes::AddMeshesPlugin);

@@ -571,6 +571,9 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // **`Session`: a Look is carried out on the Map after the switch it asked for**, and a switch resets every workspace's own state
     // (NV-10, #387, `agent_view::PendingLook`).
     ("bevy_cauldron::agent_view::PendingLook", Ownership::Session),
+    // **`Session`: the cue the Sound list marks** (NV-07, #384) is where the person is looking, kept across a switch so a Back to Sound finds it
+    // (`nav` restores it), and a cue the next project does not hold is simply not marked.
+    ("bevy_cauldron::world_lists::SelectedCue", Ownership::Session),
     ("bevy_cauldron::project_assets::ProjectRoot", Ownership::Session),
     // The editor's face is installed over the default font id once and lives as long as the app does (`harness::install_font_in`).
     ("bevy_cauldron::harness::EditorFont", Ownership::Session),

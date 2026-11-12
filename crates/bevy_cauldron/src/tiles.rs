@@ -9747,6 +9747,14 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 // The line `I` types into, so that is where its badge goes.
                 crate::chrome::Control(crate::keys::ControlId::IdField),
             ));
+            // **Used by** (NV-07, #384): the maps that place this piece, from the project's one reader of `maps/`
+            // (`Project::maps_that_place`), so the sentence and the check that refuses a removal cannot disagree.
+            crate::chrome::section(p, "USED BY");
+            p.spawn((
+                Text::new(crate::crosslinks::used_by_line(&project, &d.id).unwrap_or_else(|why| why)),
+                TextColor(quiet_ink),
+                crate::chrome::typed(crate::chrome::text::BODY),
+            ));
 
             // **The description.** `Descriptor::note` is free text and nothing could write it before,
             // so every description in the shipped libraries is whatever a generator left there. The id

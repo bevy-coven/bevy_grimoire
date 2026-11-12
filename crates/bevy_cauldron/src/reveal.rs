@@ -107,6 +107,8 @@ pub enum Select {
     DataFile(String),
     /// A note on the Notes list.
     Note(String),
+    /// **A sound cue** on the Sound workspace's list (NV-07, #384): the cue the list marks as selected.
+    Cue(String),
     /// An inspector section alone.
     Section(InspectorSection),
     /// Nothing to select: the page is enough.
@@ -166,6 +168,11 @@ pub fn page_of(shown: &Shown, project: Option<&Project>) -> Result<Page, String>
             workspace: Workspace::Map,
             tab: Mode::Map,
             select: Select::Note(id.clone()),
+        },
+        Shown::Cue { name } => Page::Workspace {
+            workspace: Workspace::Sound,
+            tab: Mode::Sound,
+            select: Select::Cue(name.clone()),
         },
         // **A registered data file's page is the DATA table**; anything else has none until the Files
         // workspace lands (GD-11, #373). `lines` is where that page would scroll to, so it is named in
@@ -652,6 +659,8 @@ struct Table<'w, 's> {
     /// **The bench's stage and what it plays**, which a clip reveal waits on and writes (NV-11, #391).
     staged: Query<'w, 's, &'static crate::anim_stage::BenchStageOf, With<crate::anim_stage::BenchStage>>,
     scrub: Option<ResMut<'w, crate::anim_stage::BenchScrub>>,
+    /// **The cue the Sound workspace's list marks as selected**, which a cue reveal writes (NV-07, #384).
+    cue: Option<ResMut<'w, crate::world_lists::SelectedCue>>,
 }
 
 /// **Write the page's selection**, and answer whether the row it names was there.
@@ -756,6 +765,13 @@ fn apply_selection(
             want = Some(InspectorSection::Notes);
             if let Some(selected_note) = selected_note {
                 selected_note.0 = Some(id.clone());
+            }
+        }
+        Select::Cue(name) => {
+            // **A cue the project does not hold is a row that never appears**, so the reveal says so rather than marking nothing.
+            found = project.is_some_and(|p| crate::world_lists::cue_names_of(p).is_ok_and(|names| names.contains(name)));
+            if found && let Some(cue) = tables.cue.as_mut() {
+                cue.0 = Some(name.clone());
             }
         }
         Select::Section(section) => want = Some(*section),

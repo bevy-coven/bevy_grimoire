@@ -495,6 +495,12 @@ fn walk_project(root: &Path) -> Walked {
     walk_with(root, false)
 }
 
+/// **The files the tree lists**, with the tree's own caps: the finder's index reads this (NV-05, #382) on a timer, so it is bounded the way the
+/// tree is. A search and a replace use [`listed_files`], which has no limit.
+pub fn tree_files(root: &Path) -> Vec<String> {
+    walk_project(root).names.into_values().filter(|(_, dir)| !dir).map(|(rel, _)| rel).collect()
+}
+
 fn walk_with(root: &Path, uncapped: bool) -> Walked {
     let ignore = std::fs::read_to_string(root.join(".gitignore")).map(|t| Ignore::parse(&t)).unwrap_or_default();
     let mut walked = Walked { uncapped, ..Walked::default() };
@@ -594,6 +600,8 @@ impl Plugin for FilesPlugin {
                     poll_the_disk,
                     keep_the_editor,
                     decorate_the_editor,
+                    follow_on_f12,
+                    follow_on_primary_click,
                     keep_the_header,
                     keep_the_conflict_bar,
                     keep_the_tree,
@@ -938,7 +946,13 @@ fn on_edit(
 }
 
 /// **Colours and folds as the text changes; errors once the person has stopped** ([`DIAGNOSE_IDLE_S`]).
-fn decorate_the_editor(mut commands: Commands, mut files: ResMut<Files>, time: Res<Time<Real>>, mut editors: Query<(Entity, &mut FileEditor, &CodeEditorValue)>) {
+fn decorate_the_editor(
+    mut commands: Commands,
+    mut files: ResMut<Files>,
+    time: Res<Time<Real>>,
+    index: Option<Res<crate::goto::GotoIndex>>,
+    mut editors: Query<(Entity, &mut FileEditor, &CodeEditorValue)>,
+) {
     let now = time.elapsed_secs_f64();
     for (entity, mut editor, value) in &mut editors {
         let Some(rel) = editor.shown.clone() else { continue };
@@ -958,12 +972,89 @@ fn decorate_the_editor(mut commands: Commands, mut files: ResMut<Files>, time: R
             if let Some(file) = files.open.get(&rel) {
                 items.extend(agent_marks(value.text(), &file.agent_lines));
             }
+            // **A cue the project does not hold is marked where it is written** (NV-07, #384): a reference to nothing is a diagnostic, never a link
+            // that does nothing. Judged against the finder's index, once the index has been built.
+            if let Some(index) = index.as_deref().filter(|i| i.is_built()) {
+                let schema = files.schema_for(&rel);
+                for found in files_lang::references(lang, value.text(), schema.as_deref()) {
+                    if index.holds(&found.kind, &found.name) == Some(false) && found.kind == files_lang::CUE_KIND {
+                        let message = format!("`{}` is not a cue of this project (the cues are in family/bevy_siren.ron)", found.name);
+                        items.push(Diagnostic::new(found.range, CodeSeverity::Warning, message));
+                    }
+                }
+            }
             commands.entity(entity).insert(Diagnostics::new(revision, items));
             editor.analysed = revision;
             if let Some(file) = files.open.get_mut(&rel) {
                 file.edited_at = None;
             }
         }
+    }
+}
+
+/// **The reference under the caret of one editor**, when the caret is on a value that names another thing.
+fn reference_under_caret(files: &mut Files, editor: &FileEditor, widget: &CodeEditor, value: &CodeEditorValue) -> Option<files_lang::Reference> {
+    let rel = editor.shown.clone()?;
+    let schema = files.schema_for(&rel);
+    let offset = widget.buffer().offset_of(widget.buffer().caret());
+    files_lang::reference_at(Lang::of(&rel), value.text(), offset, schema.as_deref())
+}
+
+/// **Open what a reference names**, or say on the status line what it names that the project does not hold.
+fn follow_reference_later(commands: &mut Commands, found: files_lang::Reference) {
+    commands.queue(move |world: &mut World| {
+        if let Err(why) = crate::crosslinks::follow_reference(world, &found.kind, &found.name)
+            && let Some(mut state) = world.get_resource_mut::<EditorState>()
+        {
+            state.status.problem(format!("NOT OPENED: {why}"));
+        }
+    });
+}
+
+/// **F12 follows the reference under the caret** (NV-07, #384), the editor's own key as the editor's other keys are: not an action of the keymap.
+fn follow_on_f12(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut files: ResMut<Files>,
+    editors: Query<(&FileEditor, &CodeEditor, &CodeEditorValue)>,
+    mut state: Option<ResMut<EditorState>>,
+    mut commands: Commands,
+) {
+    if !keys.just_pressed(KeyCode::F12) {
+        return;
+    }
+    let found = editors.iter().next().and_then(|(editor, widget, value)| reference_under_caret(&mut files, editor, widget, value));
+    match found {
+        Some(found) => follow_reference_later(&mut commands, found),
+        None => {
+            if let Some(state) = state.as_mut() {
+                state.status.note("there is no reference under the caret to follow");
+            }
+        }
+    }
+}
+
+/// **Cmd/Ctrl+click follows the reference under the click** (NV-07, #384): the press has already put the caret where the pointer is, so the
+/// reference under the caret is the one under the click. Only while the pointer is over the editor; a plain click only edits.
+fn follow_on_primary_click(
+    mouse: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut files: ResMut<Files>,
+    editors: Query<(&Hovered, &FileEditor, &CodeEditor, &CodeEditorValue)>,
+    mut commands: Commands,
+) {
+    if !mouse.just_pressed(MouseButton::Left) {
+        return;
+    }
+    let primary = [KeyCode::SuperLeft, KeyCode::SuperRight, KeyCode::ControlLeft, KeyCode::ControlRight].into_iter().any(|k| keys.pressed(k));
+    if !primary {
+        return;
+    }
+    let found = editors
+        .iter()
+        .find(|(hovered, ..)| hovered.get())
+        .and_then(|(_, editor, widget, value)| reference_under_caret(&mut files, editor, widget, value));
+    if let Some(found) = found {
+        follow_reference_later(&mut commands, found);
     }
 }
 

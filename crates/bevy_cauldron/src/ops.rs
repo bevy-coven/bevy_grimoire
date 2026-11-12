@@ -284,6 +284,9 @@ pub enum Shown {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         lines: Option<[u32; 2]>,
     },
+    /// **One sound cue** (NV-07, #384), by the name `family/bevy_siren.ron` gives it: on the Sound workspace's cue list, selected. No
+    /// operation answers it: a reference that names a cue and the Go to anything finder do.
+    Cue { name: String },
     /// **One note**, in the Notes panel and on the map where it was drawn.
     Note { id: String },
     /// **One section of the settings**, by the name the screen lists it under: a family crate's id, or
@@ -320,6 +323,7 @@ impl Shown {
                 Some([first, last]) => format!("the file `{path}` at lines {first}..{last}"),
                 _ => format!("the file `{path}`"),
             },
+            Shown::Cue { name } => format!("the sound cue `{name}`"),
             Shown::Note { id } => format!("the note `{id}`"),
             Shown::Settings { section } => format!("the `{section}` settings"),
             Shown::Job { key } => format!("the `{key}` job in the status band"),
