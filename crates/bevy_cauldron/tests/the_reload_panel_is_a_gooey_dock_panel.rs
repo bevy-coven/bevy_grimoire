@@ -210,3 +210,81 @@ fn resetting_the_layout_leaves_the_bottom_dock_holding_the_reload_panel() {
 fn run_the_verb(In(verb): In<bevy_cauldron::app_verbs::AppVerb>, mut commands: Commands) {
     commands.queue(move |world: &mut World| bevy_cauldron::app_verbs::run(world, verb));
 }
+
+/// The bottom dock's own `display`, which is what the room rule and the View row write.
+fn dock_display(app: &mut App) -> Display {
+    let world = app.world_mut();
+    let bottom = world.query_filtered::<Entity, With<BottomDock>>().single(world).expect("the frame has a bottom dock");
+    world.get::<Node>(bottom).expect("a node").display
+}
+
+/// **A person can ask for the reload panel** (review of #247, MUST-FIX).
+///
+/// The dock is shown on its own only where the workbench can spare the room, and with the terminal open
+/// (the default) a real window never can, so View ▸ Show reload panel is the way a person reads the
+/// reload state there. Ticked, the dock is a row whatever the window and the reload lines are drawn in
+/// it; unticked, the room rule is what it was (hidden at the reference window).
+#[test]
+fn view_show_reload_panel_shows_the_dock_in_the_reference_window_and_unticking_hides_it() {
+    use bevy::ui_widgets::ValueChange;
+    use bevy_gooey::Checked;
+    use bevy_cauldron::shell_view::ReloadPanelItem;
+
+    let mut app = editor("view_row");
+    assert_eq!(dock_display(&mut app), Display::None, "no room at the reference window, and nobody asked for it");
+    let row = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<ReloadPanelItem>>().single(world).expect("the View menu carries a Show reload panel row")
+    };
+    assert!(!app.world().entity(row).contains::<Checked>(), "the row starts unticked");
+
+    app.world_mut().commands().trigger(ValueChange { source: row, value: true, is_final: true });
+    settle(&mut app);
+    assert_eq!(dock_display(&mut app), Display::Flex, "ticking the row shows the dock whatever the window");
+    assert!(app.world().entity(row).contains::<Checked>(), "and the row says so");
+    let drawn = {
+        let world = app.world_mut();
+        let list = world.query_filtered::<Entity, With<ReloadList>>().single(world).expect("the panel's list").to_owned();
+        let mut texts = world.query::<(&Text, &ComputedNode, &ChildOf)>();
+        texts
+            .iter(world)
+            .filter(|(_, node, parent)| parent.parent() == list && node.size().x > 0.0 && node.size().y > 0.0)
+            .count()
+    };
+    assert!(drawn > 0, "the reload lines are laid out, with a size, in the dock the person asked for");
+
+    app.world_mut().commands().trigger(ValueChange { source: row, value: false, is_final: true });
+    settle(&mut app);
+    assert_eq!(dock_display(&mut app), Display::None, "unticked, the room rule alone decides, and there is no room");
+    assert!(!app.world().entity(row).contains::<Checked>(), "and the row is unticked");
+}
+
+/// **Ending Zen mode in a window that shrank while it lasted shows no dock, not even for a frame**
+/// (review of #247, NIT): the dock is not left to the fold's stored display.
+#[test]
+fn ending_zen_in_a_window_that_shrank_leaves_the_dock_hidden_at_once() {
+    let mut app = editor("zen_flash");
+    harness::resize_surface(&mut app, 1536, 1500).unwrap_or_else(|e| panic!("{e}"));
+    for _ in 0..8 {
+        app.update();
+    }
+    assert_eq!(dock_display(&mut app), Display::Flex, "a tall window has room for the dock");
+
+    app.world_mut().resource_mut::<bevy_cauldron::shell_view::ShellView>().zen = true;
+    for _ in 0..4 {
+        app.update();
+    }
+    assert_eq!(dock_display(&mut app), Display::None, "Zen folds the dock");
+
+    harness::resize_surface(&mut app, 1536, 864).unwrap_or_else(|e| panic!("{e}"));
+    for _ in 0..4 {
+        app.update();
+    }
+    app.world_mut().resource_mut::<bevy_cauldron::shell_view::ShellView>().zen = false;
+    app.update();
+    assert_eq!(
+        dock_display(&mut app),
+        Display::None,
+        "the window is the reference one again, so the frame Zen ends on must not draw the dock"
+    );
+}
