@@ -283,7 +283,14 @@ fn the_bar_takes_its_width_from_the_docks_and_the_viewport_keeps_its_own() {
             Window { resolution: bevy::window::WindowResolution::new(1280, 720), ..default() },
             bevy::window::PrimaryWindow,
         ));
-        app.world_mut().resource_mut::<bevy_cauldron::settings::EditorSettings>().show_activity_bar = bar;
+        if !bar {
+            // The way a person turns it off: the user's settings file says so, and the editor reads it.
+            let file = std::env::temp_dir().join(format!("activity_width_{}/settings.ron", std::process::id()));
+            std::fs::create_dir_all(file.parent().unwrap_or_else(|| panic!("a folder"))).unwrap_or_else(|e| panic!("{e}"));
+            std::fs::write(&file, "(version: 1, show_activity_bar: Some(false))").unwrap_or_else(|e| panic!("{e}"));
+            app.insert_resource(UserSettingsFile(file));
+            until(&mut app, "the setting read", |app| !app.world().resource::<bevy_cauldron::settings::EditorSettings>().show_activity_bar);
+        }
         for _ in 0..16 {
             app.update();
         }
