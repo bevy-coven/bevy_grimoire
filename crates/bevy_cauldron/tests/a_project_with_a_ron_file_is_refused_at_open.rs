@@ -55,5 +55,5 @@ fn migrating_a_project_holding_a_ron_editor_file_lets_it_open() {
     let text = std::fs::read_to_string(&yaml).unwrap_or_else(|e| panic!("{}: {e}", yaml.display()));
     assert!(text.contains("!Pine"), "the converted forest keeps its variant: {text}");
     Project::open(&root, None).unwrap_or_else(|e| panic!("the migrated project opens: {e}"));
-    bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("and the editor opens it: {e}"));
+    let _editor = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("and the editor opens it: {e}"));
 }
