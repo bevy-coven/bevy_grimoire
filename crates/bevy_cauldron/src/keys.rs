@@ -1016,7 +1016,20 @@ impl Action {
             // migrated to `composition_picker_toggle` and `composition_picker_walk`.
             | Action::PickComposition
             | Action::CompositionPrev
-            | Action::CompositionNext => Change::View,
+            | Action::CompositionNext
+            // **The COMPOSE tab's cursors** (E-002, #129 slice 23): view state, migrated to `compose_walk`, `compose_focus`
+            // and `compose_carousel_step`.
+            | Action::ComposePrev
+            | Action::ComposeNext
+            | Action::ComposeMemberPrev
+            | Action::ComposeMemberNext
+            | Action::CarouselPrev
+            | Action::CarouselNext
+            // **The rig bench's list** (E-002, #129 slice 24): view state, migrated to `rig_walk`.
+            | Action::PrevRig
+            | Action::NextRig
+            // **The candidate list's fold** (E-002, #129 slice 25): view state, migrated to `pack_fold`.
+            | Action::FoldPack => Change::View,
 
             // **Held, not pressed.** The effect is the hold: things fade, a pick is live, the overlay is
             // up. An operation whose effect reverses when a key is released is not a value an agent can
@@ -1117,6 +1130,19 @@ impl Action {
             // and Shift+up and Shift+down walk it, through the operations an agent calls.
             Action::PickComposition => Some("composition_picker_toggle"),
             Action::CompositionPrev | Action::CompositionNext => Some("composition_picker_walk"),
+            // **The COMPOSE tab's cursors are view state** (E-002, #129 slice 23): up and down walk the focused list, left and
+            // right choose it, and `O` and `P` step the carousel, through the operations an agent calls.
+            Action::ComposePrev | Action::ComposeNext => Some("compose_walk"),
+            Action::ComposeMemberPrev | Action::ComposeMemberNext => Some("compose_focus"),
+            Action::CarouselPrev | Action::CarouselNext => Some("compose_carousel_step"),
+            // **The rig list and the Tiles page's rows are cursors, so view state** (E-002, #129 slice 24): up and down walk
+            // them through the operations an agent calls.
+            Action::PrevRig | Action::NextRig => Some("rig_walk"),
+            Action::TilePrev | Action::TileNext => Some("tile_page_walk"),
+            // **A fold and the filter boxes' keyboard are view state** (E-002, #129 slice 25): `Space` folds, `F` and `/`
+            // take a box, through the operations an agent calls.
+            Action::FoldPack => Some("pack_fold"),
+            Action::FocusFilter | Action::FocusTagFilter => Some("filter_focus"),
             // **The tool keys** (E-002, #129): `B`, `Shift+B` and the run chord arm a tool through `tool_arm`.
             // **`Remove` and `NoteTool` arm a tool, so they name the arming operation** (E-002,
             // #129). They named `placement_remove` and `note_add`: a write neither key makes — its
@@ -3920,13 +3946,41 @@ pub fn repeating(
     repeat: &mut Repeat,
     dt: f32,
 ) -> bool {
-    countdown(
+    repeating_fire(keys, live, action, repeat, dt).is_some()
+}
+
+/// **Whether a held key fired, and whether this was the press or one of its repeats.**
+///
+/// [`repeating`] answers "did it fire" for every list walk. The three list walks that go through an operation need the
+/// second half as well, and for a reason the log cares about: a press is one change a person made, and the twenty steps
+/// before they let go are the same change continuing. `ops::dispatch_repeat` writes no log line, so which of the two this
+/// frame is decides whether the project's log grows — see [`crate::ops::dispatch_repeat`].
+pub fn repeating_fire(
+    keys: &ButtonInput<KeyCode>,
+    live: Live,
+    action: Action,
+    repeat: &mut Repeat,
+    dt: f32,
+) -> Option<Fire> {
+    let fired = countdown(
         repeat,
         RepeatId::Action(action),
         pressed(keys, live, action),
         just_pressed(keys, live, action),
         dt,
-    )
+    );
+    // **`countdown` is the only thing that knows**, and it already distinguishes the two: a fresh press is the branch
+    // that starts the countdown, every other `true` is a repeat off it.
+    fired.then(|| if just_pressed(keys, live, action) { Fire::Press } else { Fire::Repeat })
+}
+
+/// **One fire of a held key**: the press, or a repeat off it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fire {
+    /// The key went down this frame: one change, logged as one.
+    Press,
+    /// The key is still down and its countdown came round: the same change again, not a second line in the log.
+    Repeat,
 }
 
 /// **The same cadence, for a screen with no key census.**

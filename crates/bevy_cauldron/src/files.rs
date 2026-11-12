@@ -495,6 +495,12 @@ fn walk_project(root: &Path) -> Walked {
     walk_with(root, false)
 }
 
+/// **The files the tree lists**, with the tree's own caps: the finder's index reads this (NV-05, #382) on a timer, so it is bounded the way the
+/// tree is. A search and a replace use [`listed_files`], which has no limit.
+pub fn tree_files(root: &Path) -> Vec<String> {
+    walk_project(root).names.into_values().filter(|(_, dir)| !dir).map(|(rel, _)| rel).collect()
+}
+
 fn walk_with(root: &Path, uncapped: bool) -> Walked {
     let ignore = std::fs::read_to_string(root.join(".gitignore")).map(|t| Ignore::parse(&t)).unwrap_or_default();
     let mut walked = Walked { uncapped, ..Walked::default() };
@@ -585,6 +591,7 @@ pub struct FilesPlugin;
 
 impl Plugin for FilesPlugin {
     fn build(&self, app: &mut App) {
+        app.init_resource::<PointerAt>();
         app.init_resource::<Files>()
             .add_systems(OnEnter(Screen::Editor), spawn_the_files_workspace.after(FrameSystems).run_if(in_files))
             .add_systems(
@@ -594,6 +601,9 @@ impl Plugin for FilesPlugin {
                     poll_the_disk,
                     keep_the_editor,
                     decorate_the_editor,
+                    track_the_pointer,
+                    follow_on_f12,
+                    follow_on_primary_click,
                     keep_the_header,
                     keep_the_conflict_bar,
                     keep_the_tree,
@@ -938,7 +948,13 @@ fn on_edit(
 }
 
 /// **Colours and folds as the text changes; errors once the person has stopped** ([`DIAGNOSE_IDLE_S`]).
-fn decorate_the_editor(mut commands: Commands, mut files: ResMut<Files>, time: Res<Time<Real>>, mut editors: Query<(Entity, &mut FileEditor, &CodeEditorValue)>) {
+fn decorate_the_editor(
+    mut commands: Commands,
+    mut files: ResMut<Files>,
+    time: Res<Time<Real>>,
+    index: Option<Res<crate::goto::GotoIndex>>,
+    mut editors: Query<(Entity, &mut FileEditor, &CodeEditorValue)>,
+) {
     let now = time.elapsed_secs_f64();
     for (entity, mut editor, value) in &mut editors {
         let Some(rel) = editor.shown.clone() else { continue };
@@ -958,12 +974,164 @@ fn decorate_the_editor(mut commands: Commands, mut files: ResMut<Files>, time: R
             if let Some(file) = files.open.get(&rel) {
                 items.extend(agent_marks(value.text(), &file.agent_lines));
             }
+            // **A cue the project does not hold is marked where it is written** (NV-07, #384): a reference to nothing is a diagnostic, never a link
+            // that does nothing. Judged against the finder's index, once the index has been built.
+            if let Some(index) = index.as_deref().filter(|i| i.is_built()) {
+                let schema = files.schema_for(&rel);
+                for found in files_lang::references(lang, value.text(), schema.as_deref()) {
+                    if index.holds(&found.kind, &found.name) == Some(false) && found.kind == files_lang::CUE_KIND {
+                        let message = format!("`{}` is not a cue of this project (the cues are in family/bevy_siren.ron)", found.name);
+                        items.push(Diagnostic::new(found.range, CodeSeverity::Warning, message));
+                    }
+                }
+            }
             commands.entity(entity).insert(Diagnostics::new(revision, items));
             editor.analysed = revision;
             if let Some(file) = files.open.get_mut(&rel) {
                 file.edited_at = None;
             }
         }
+    }
+}
+
+/// **Where the pointer last was, in the window's logical pixels** (NV-07, #384): the file editor's click needs the place a
+/// click landed to tell a click in the editor from one on the tree. Bevy's own `Window::cursor_position` is one source; a
+/// `PointerInput` message is the other, and it is the one a test's synthetic click and a touch both speak. A resource rather
+/// than a read at the click, because a message lasts two frames and the release is a frame after the press.
+#[derive(Resource, Default, Debug, Clone, Copy)]
+pub struct PointerAt(pub Option<Vec2>);
+
+/// **Keep [`PointerAt`] true** from either channel: the pointer's own moves, and a pointer input's place.
+fn track_the_pointer(mut at: ResMut<PointerAt>, mut inputs: MessageReader<bevy::picking::pointer::PointerInput>, windows: Query<&Window, With<bevy::window::PrimaryWindow>>) {
+    // **The last pointer input of the frame wins**, so a synthetic click over an editor is read at its own place rather than at
+    // wherever a `CursorMoved` left the pointer.
+    for input in inputs.read() {
+        at.0 = Some(input.location.position);
+    }
+    if at.0.is_none()
+        && let Some(window) = windows.iter().next()
+        && let Some(cursor) = window.cursor_position()
+    {
+        at.0 = Some(cursor);
+    }
+}
+
+/// **The open code editors**, as one fact: the file's own state, the widget, its text and where it is drawn. Bundled because
+/// three systems read the same four components and the one that also reads the pointer was over Bevy's parameter cap.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct OpenEditor<'w, 's> {
+    editors: Query<'w, 's, (&'static FileEditor, &'static CodeEditor, &'static CodeEditorValue, &'static ComputedNode, &'static UiGlobalTransform)>,
+}
+
+/// **What a Cmd/Ctrl+click reads**: the open editors, the window the pointer is measured in, the pointer's last place, and the two
+/// gates. Bundled because they answer one question — *is this click on a reference in the editor?* — and the system was over Bevy's
+/// parameter cap.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct ClickFacts<'w, 's> {
+    open: OpenEditor<'w, 's>,
+    windows: Query<'w, 's, &'static Window, With<bevy::window::PrimaryWindow>>,
+    at: Res<'w, PointerAt>,
+    live: Option<Res<'w, crate::keys::Live>>,
+    confirm: Option<Res<'w, crate::confirm::Confirm>>,
+}
+
+/// **Whether a reference may be followed right now**: the gates `nav`'s walk and the other chords take — no text field holding the
+/// keyboard, the tab holding it, and no question on screen. One function, so F12 and the click cannot disagree about when they are
+/// allowed, and neither can drift from `nav`.
+fn may_follow(live: Option<&crate::keys::Live>, confirm: Option<&crate::confirm::Confirm>) -> bool {
+    let some_other_holder = live.is_some_and(|l| l.0 == crate::keys::Context::Typing || l.2 != crate::keys::Holder::Tab);
+    !some_other_holder && !confirm.is_some_and(crate::confirm::Confirm::is_open)
+}
+
+/// **The reference under the caret of one editor**, when the caret is on a value that names another thing.
+fn reference_under_caret(files: &mut Files, editor: &FileEditor, widget: &CodeEditor, value: &CodeEditorValue) -> Option<files_lang::Reference> {
+    let rel = editor.shown.clone()?;
+    let schema = files.schema_for(&rel);
+    let offset = widget.buffer().offset_of(widget.buffer().caret());
+    files_lang::reference_at(Lang::of(&rel), value.text(), offset, schema.as_deref())
+}
+
+/// **Open what a reference names**, or say on the status line what it names that the project does not hold.
+fn follow_reference_later(commands: &mut Commands, found: files_lang::Reference) {
+    commands.queue(move |world: &mut World| {
+        if let Err(why) = crate::crosslinks::follow_reference(world, &found.kind, &found.name)
+            && let Some(mut state) = world.get_resource_mut::<EditorState>()
+        {
+            state.status.problem(format!("NOT OPENED: {why}"));
+        }
+    });
+}
+
+/// **F12 follows the reference under the caret** (NV-07, #384), the editor's own key as the editor's other keys are: not an action of the keymap.
+fn follow_on_f12(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut files: ResMut<Files>,
+    open: OpenEditor,
+    mut state: Option<ResMut<EditorState>>,
+    live: Option<Res<crate::keys::Live>>,
+    confirm: Option<Res<crate::confirm::Confirm>>,
+    mut commands: Commands,
+) {
+    if !keys.just_pressed(KeyCode::F12) {
+        return;
+    }
+    // **The gates every other chord respects** (`nav::walk_on_the_chords`): not while a text field has the keyboard, not while
+    // another pane holds it, and not over a question — the finder's own box is a text field, so Cmd+P then F12 would otherwise
+    // follow the reference behind the overlay.
+    if !may_follow(live.as_deref(), confirm.as_deref()) {
+        return;
+    }
+    let found = open.editors.iter().next().and_then(|(editor, widget, value, _, _)| reference_under_caret(&mut files, editor, widget, value));
+    match found {
+        Some(found) => follow_reference_later(&mut commands, found),
+        None => {
+            if let Some(state) = state.as_mut() {
+                state.status.note("there is no reference under the caret to follow");
+            }
+        }
+    }
+}
+
+/// **Cmd/Ctrl+click follows the reference under the click** (NV-07, #384): the press has already put the caret where the pointer is, so the
+/// reference under the caret is the one under the click. Only while the pointer is over the editor; a plain click only edits.
+fn follow_on_primary_click(
+    mouse: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut files: ResMut<Files>,
+    // **The editor's own place on screen**, so a click is a click *in the editor*: the tree, the header and the notice are in the same
+    // workspace, and a Cmd+click on one of them must not follow whatever reference the caret was left on. `Hovered` is no use for this
+    // (bevy sets it on the deepest node under the pointer, which inside the editor is the editor's own node but says nothing about where
+    // in it the pointer is), so the node's bounds are measured against the pointer.
+    facts: ClickFacts,
+    mut commands: Commands,
+) {
+    // **On the release**, a frame after the press: the editor puts the caret where the pointer went down in its own system, and a read on the
+    // press frame could be of the caret's old place.
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let primary = [KeyCode::SuperLeft, KeyCode::SuperRight, KeyCode::ControlLeft, KeyCode::ControlRight].into_iter().any(|k| keys.pressed(k));
+    if !primary || !may_follow(facts.live.as_deref(), facts.confirm.as_deref()) {
+        return;
+    }
+    // **Inside the editor, by the node's own bounds.** `ComputedNode` and `UiGlobalTransform` are in physical pixels and the pointer is
+    // in the window's logical ones, so the pointer is scaled by the window's factor before the test. A click with no pointer place at
+    // all follows nothing: there is no way to tell it from one on the tree.
+    let (Some(pointer), scale) = (facts.at.0, facts.windows.iter().next().map_or(1.0, Window::scale_factor)) else {
+        return;
+    };
+    let found = facts
+        .open
+        .editors
+        .iter()
+        .find(|(_, _, _, node, place)| {
+            let offset = pointer * scale - place.translation;
+            let half = node.size() * 0.5;
+            offset.x.abs() <= half.x && offset.y.abs() <= half.y
+        })
+        .and_then(|(editor, widget, value, _, _)| reference_under_caret(&mut files, editor, widget, value));
+    if let Some(found) = found {
+        follow_reference_later(&mut commands, found);
     }
 }
 

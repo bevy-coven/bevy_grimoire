@@ -3737,9 +3737,20 @@ impl Axis {
 #[derive(Component, Clone, Copy)]
 pub struct CandidateRow(pub usize);
 
-/// A pack heading in the candidate list. Clicking it folds the pack away.
+/// **The pack a heading band in the candidate list stands for**, by its folder. Clicking it folds the pack away.
+///
+/// Public so a test can trigger the heading's own `Activate`: the click is a front end of `pack_fold` and has to be
+/// exercised as one (E-002, #129 review). The field stays closed, so nothing outside can rename a heading.
 #[derive(Component, Clone)]
-struct PackHeader(String);
+pub struct PackHeader(String);
+
+impl PackHeader {
+    /// **The pack this heading stands for.** A reader, for the test that triggers a heading's own `Activate`: the
+    /// field stays closed, so nothing outside can rename a heading.
+    pub fn pack(&self) -> &str {
+        &self.0
+    }
+}
 
 /// One row for a tile already in the library, carrying its id.
 #[derive(Component, Clone)]
@@ -4335,6 +4346,8 @@ fn focus_filter(
     live: Res<crate::keys::Live>,
     mode: Res<Mode>,
     mut filters: ResMut<crate::filter::Filters>,
+    // `Option`, because a door with no project has no filter box to take and a missing `Res` panics.
+    project: Option<Res<Project>>,
 ) {
     if crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::FocusFilter) {
         // **The pane this tab's list is filtered by.** It was always `Candidates` — the Tiles tab's
@@ -4360,11 +4373,87 @@ fn focus_filter(
         // **The Files workspace has no filter box at all** (GD-11, #373): the key takes nothing there, rather than focusing a
         // box of the Map's that is not on screen.
         if *mode != Mode::Files {
-            filters.take_focus(pane);
+            focus_through_operation(project.as_deref(), &mut filters, pane);
         }
     }
     if crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::FocusTagFilter) {
-        filters.take_focus(crate::filter::Pane::Tags);
+        focus_through_operation(project.as_deref(), &mut filters, crate::filter::Pane::Tags);
+    }
+}
+
+/// **Put the keyboard in a filter box through the operation an agent calls** (E-002, #129 slice 25), and take focus only
+/// when the answer names a box other than the one that has it: a write through a `ResMut` marks the filters changed.
+/// `take_focus` itself starts the search fresh, as a click on the box does.
+fn focus_through_operation(
+    project: Option<&Project>,
+    filters: &mut ResMut<crate::filter::Filters>,
+    pane: crate::filter::Pane,
+) {
+    // **A door with no project still takes the box.** `filter_focus` reads the view and writes the view; the project is
+    // travel, not a requirement (E-002, #129 review), and this took a `&Project` before only because its callers had one.
+    let mut ctx = crate::ops::Ctx {
+        project: project.cloned(),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View { filter_pane: filters.focus_name(), ..Default::default() }),
+        ..crate::ops::Ctx::default()
+    };
+    let _ = crate::ops::dispatch(
+        &mut ctx,
+        "filter_focus",
+        &serde_json::json!({ "pane": crate::ops_view::pane_name(pane) }),
+    );
+    if let Some(view) = ctx.view.take()
+        && let Some(landed) = filters.box_to_clear(view.filter_pane.as_deref(), view.filter_fresh)
+    {
+        filters.take_focus(landed);
+    }
+}
+
+/// **Fold or open a group on the candidate list through the operation an agent calls** (E-002, #129 slice 25): `params`
+/// names a `pack` or the `excluded` band. The folds travel in `Ctx::view` and are written back only when they moved. The
+/// operation's sentence is returned for a key to note; a click ignores it.
+fn fold_through_operation(project: &Project, state: &mut ResMut<ImportState>, params: &serde_json::Value) -> Result<String, String> {
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View { packs: state.folds(), ..Default::default() }),
+        ..crate::ops::Ctx::default()
+    };
+    let outcome = crate::ops::dispatch(&mut ctx, "pack_fold", params);
+    if let Some(view) = ctx.view.take()
+        && !state.folds_are(&view.packs)
+    {
+        state.set_folds(&view.packs);
+    }
+    match outcome {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => Ok(outcome.summary),
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => Err(e.0),
+    }
+}
+
+impl ImportState {
+    /// **The candidate list's folds as a value**, which is what `pack_fold` moves.
+    pub(crate) fn folds(&self) -> crate::ops_view::PackFold {
+        crate::ops_view::PackFold {
+            folded: self.folded_packs.iter().cloned().collect(),
+            excluded_open: self.excluded_open,
+        }
+    }
+
+    /// **Whether the list is already folded as an operation answered.** Compared first by the caller, because a write
+    /// through a `ResMut` marks the state changed and every system gated on a change redraws for a call that moved nothing.
+    pub(crate) fn folds_are(&self, folds: &crate::ops_view::PackFold) -> bool {
+        self.excluded_open == folds.excluded_open
+            && self.folded_packs.len() == folds.folded.len()
+            && folds.folded.iter().all(|pack| self.folded_packs.iter().any(|p| p == pack))
+    }
+
+    /// **Fold the list as an operation answered.**
+    pub(crate) fn set_folds(&mut self, folds: &crate::ops_view::PackFold) {
+        self.folded_packs = folds.folded.iter().cloned().collect();
+        self.excluded_open = folds.excluded_open;
     }
 }
 
@@ -5978,24 +6067,21 @@ fn commit_candidate(
     // **The band takes the same two keys a heading does.** It was the pointer's alone — the one
     // path back from an accidental `Shift+R` — and `on_excluded_click` is the toggle this mirrors.
     if state.excluded_focused {
-        state.excluded_open = !state.excluded_open;
-        let said = if state.excluded_open { "opened" } else { "closed" };
-        state.status.note(format!("`EXCLUDED` {said}"));
+        // **The key dispatches the operation an agent calls** (E-002, #129 slice 25), as the click does.
+        match fold_through_operation(&project, &mut state, &serde_json::json!({ "excluded": true })) {
+            Ok(said) => state.status.note(said),
+            Err(why) => state.status.problem(why),
+        }
         return;
     }
     if let Some(pack) = state.focused_pack.clone() {
-        // **The toggle already knows the answer**, so it is not asked again: `remove` reports
-        // whether it was folded, which is exactly whether this press opened it. Re-reading
-        // `folded_packs` here would be a second reader of the visibility rule, which is the thing
-        // `every_list_follows_its_selection.rs` exists to stop — and it caught this.
-        let opened = state.folded_packs.remove(&pack);
-        if !opened {
-            state.folded_packs.insert(pack.clone());
+        // **The operation toggles, so it is the one that answers** whether this press opened the pack; the sentence
+        // it returns is the note. Re-reading `folded_packs` here would be a second reader of the visibility rule, which is
+        // the thing `every_list_follows_its_selection.rs` exists to stop.
+        match fold_through_operation(&project, &mut state, &serde_json::json!({ "pack": pack })) {
+            Ok(said) => state.status.note(said),
+            Err(why) => state.status.problem(why),
         }
-        state.status.note(format!(
-            "`{pack}` {}",
-            if opened { "opened" } else { "closed" }
-        ));
         return;
     }
     // **Off a heading, Space has nothing to say.** Everything below commits a tile, and that is
@@ -7607,20 +7693,20 @@ fn on_pack_click(
     activate: On<Activate>,
     headers: Query<&PackHeader>,
     state: Option<ResMut<ImportState>>,
+    project: Option<Res<Project>>,
 ) {
     // **`Option`, because this is a GLOBAL observer** — it fires for any `Activate` anywhere in
     // the application, and in Bevy 0.19 a missing resource panics at param validation rather
     // than skipping. See [`on_cell_verb`] for the whole argument; the ratchet is
     // `every_resource_says_what_a_door_does_to_it.rs`.
-    let Some(mut state) = state else {
+    let (Some(mut state), Some(project)) = (state, project) else {
         return;
     };
     let Ok(header) = headers.get(activate.entity) else {
         return;
     };
-    if !state.folded_packs.remove(&header.0) {
-        state.folded_packs.insert(header.0.clone());
-    }
+    // **A click dispatches the operation the `Space` key does** (E-002, #129 slice 25); the heading's own look says what happened.
+    let _ = fold_through_operation(&project, &mut state, &serde_json::json!({ "pack": header.0 }));
 }
 
 /// Clicking the `EXCLUDED` heading opens or closes the group — the same one-key-both-directions
@@ -7629,18 +7715,19 @@ fn on_excluded_click(
     activate: On<Activate>,
     headers: Query<&ExcludedHeader>,
     state: Option<ResMut<ImportState>>,
+    project: Option<Res<Project>>,
 ) {
     // **`Option`, because this is a GLOBAL observer** — it fires for any `Activate` anywhere in
     // the application, and in Bevy 0.19 a missing resource panics at param validation rather
     // than skipping. See [`on_cell_verb`] for the whole argument; the ratchet is
     // `every_resource_says_what_a_door_does_to_it.rs`.
-    let Some(mut state) = state else {
+    let (Some(mut state), Some(project)) = (state, project) else {
         return;
     };
     if headers.get(activate.entity).is_err() {
         return;
     }
-    state.excluded_open = !state.excluded_open;
+    let _ = fold_through_operation(&project, &mut state, &serde_json::json!({ "excluded": true }));
 }
 
 /// **The pointer moves the cursor the same way the arrows do**, which it did not until 2026-09-03.
@@ -9735,7 +9822,16 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     format!("id  {}_", bevy_grimoire_core::naming::to_snake_case(&raw.raw)),
                     crate::chrome::ink().accent,
                 ),
-                None => (format!("id  {}", d.id), crate::chrome::ink().text),
+                // **What places it, on the id's own line** (NV-07, #384): the maps that hold this piece, from the project's
+                // one reader of `maps/` (`Project::maps_that_place`), so this sentence and the check that refuses a removal
+                // cannot disagree. It is a suffix rather than a section of its own because the detail's controls are placed
+                // by a packer with no give-up arm: a row added here is a row the badges can be packed through
+                // (`headless::no_badge_cluster_draws_through_another`), and `used_by_line` is built to be read in the middle
+                // of a sentence's line rather than as a heading's text.
+                None => (
+                    format!("id  {}   ·   {}", d.id, crate::crosslinks::used_by_line(&project, &d.id).unwrap_or_else(|why| why)),
+                    crate::chrome::ink().text,
+                ),
             };
             // **The headline.** It is the thing being named, so it is the only 13 px line in the
             // block — hierarchy by size, so the eye lands here first without reading anything.
@@ -9747,7 +9843,8 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 // The line `I` types into, so that is where its badge goes.
                 crate::chrome::Control(crate::keys::ControlId::IdField),
             ));
-
+            // **Used by** (NV-07, #384): the maps that place this piece, from the project's one reader of `maps/`
+            // (`Project::maps_that_place`), so the sentence and the check that refuses a removal cannot disagree.
             // **The description.** `Descriptor::note` is free text and nothing could write it before,
             // so every description in the shipped libraries is whatever a generator left there. The id
             // says what a piece *is* and the tags say what it *offers*; neither can carry "the one

@@ -60,7 +60,7 @@ fn a_piece_no_map_places_says_so() {
 /// **A reference to a map's file is refused with the page that is missing** — GD-11 (#373) — rather than
 /// doing nothing.
 #[test]
-fn a_file_reference_is_refused_with_the_page_that_is_missing() {
+fn a_file_references_page_is_the_files_workspace_at_that_file() {
     let app = editor("open_file");
     let project = app.world().resource::<bevy_cauldron::project::Project>().clone();
     let open = app.world().resource::<OpenMap>().clone();
@@ -72,13 +72,23 @@ fn a_file_reference_is_refused_with_the_page_that_is_missing() {
         .replace('\\', "/");
     assert_eq!(path, "assets/grimoire/maps/m.map.yaml", "the file a person edits for `bed@0`");
 
+    // **Owner exception (2026-11-12): tests/reading_a_reference_opens_what_it_names.rs::a_file_reference_is_refused_with_the_page_that_is_missing:
+    // the refusal this asserted was a stand-in for the Files workspace (GD-11, #373), which now exists** (review M1). The pin
+    // moves to the page it stands in for — same intent, a reference opens what it names — so a file has a page now.
     let shown = bevy_cauldron::ops::Shown::File { path, lines: None };
-    let why = match bevy_cauldron::reveal::page_of(&shown, Some(&project)) {
-        Ok(_) => panic!("the Files workspace does not exist yet, so this must have no page"),
-        Err(why) => why,
-    };
-    assert!(
-        why.contains("no page that shows one yet") && why.contains("#373"),
-        "the refusal must name the missing page and its issue, and said: {why}"
-    );
+    let page = bevy_cauldron::reveal::page_of(&shown, Some(&project)).expect("a project file's page is the Files workspace");
+    match page {
+        bevy_cauldron::reveal::Page::Workspace { workspace, select, .. } => {
+            assert_eq!(workspace, bevy_cauldron::workspace::Workspace::Files, "a project file is shown in the Files workspace");
+            // **The selection opens the file itself**, by the path the change named, and at its first line when one was given.
+            match select {
+                bevy_cauldron::reveal::Select::File { path: opened, line } => {
+                    assert_eq!(opened, "assets/grimoire/maps/m.map.ron", "the file the change is in");
+                    assert_eq!(line, None, "no line was named, so the file opens at its top");
+                }
+                _ => panic!("a project file's selection is the file itself"),
+            }
+        }
+        _ => panic!("a project file's page is the Files workspace"),
+    }
 }

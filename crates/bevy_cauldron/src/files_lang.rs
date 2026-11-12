@@ -547,9 +547,8 @@ fn yaml_highlights(text: &str, schema: Option<Schema<'_>>) -> Vec<(Range<usize>,
     let cutoff = fault.map_or(text.len(), |line| lines.range(line.saturating_sub(1).min(lines.count().saturating_sub(1))).start);
     let mut links: HashMap<Vec<Seg>, bool> = HashMap::new();
     let mut is_link = |path: &[Seg]| -> bool {
-        let Some(schema) = schema.as_ref() else { return false };
         let shape: Vec<Seg> = path.iter().map(|s| if let Seg::Index(_) = s { Seg::Index(0) } else { s.clone() }).collect();
-        *links.entry(shape.clone()).or_insert_with(|| schema.reference_of(&shape).is_some())
+        *links.entry(shape.clone()).or_insert_with(|| reference_kind(schema.as_ref(), &shape).is_some())
     };
     let mut spans = Vec::new();
     for span in parsed.iter().filter(|s| s.range.end <= cutoff) {
@@ -1268,5 +1267,71 @@ pub fn hover(lang: Lang, text: &str, offset: usize, schema: Option<&Value>) -> O
         tracker.feed(&line);
     }
     None
+}
+
+/// **The key whose value names a sound cue** (NV-07, #384). No file kind of this repository has a field that names a cue
+/// yet, so a cue reference is read by the field's name as well as by a schema's `x-dark-factory-ref: cue`: a game's own data
+/// files say `cue: door.creak` and the editor follows it to the cue.
+pub const CUE_FIELD: &str = "cue";
+
+/// **The kind a cue reference has**, the word a schema's `x-dark-factory-ref` would carry.
+pub const CUE_KIND: &str = "cue";
+
+/// **The kind a field names, when it names another thing**: the schema's `x-dark-factory-ref`, else [`CUE_KIND`] for a field
+/// called [`CUE_FIELD`]. One function, read by the colouring, by the scan, and by the click, so they cannot disagree about
+/// which values are links.
+fn reference_kind<'a>(schema: Option<&Schema<'a>>, path: &[Seg]) -> Option<&'a str> {
+    let shape: Vec<Seg> = path.iter().map(|s| if let Seg::Index(_) = s { Seg::Index(0) } else { s.clone() }).collect();
+    schema
+        .and_then(|s| s.reference_of(&shape))
+        .or_else(|| matches!(path.last(), Some(Seg::Key(key)) if key == CUE_FIELD).then_some(CUE_KIND))
+}
+
+/// **One value of a YAML file that names another thing**: its kind (`library`, `cue`), the name it holds, the bytes of the
+/// value, and the line (0-based) it is on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Reference {
+    pub kind: String,
+    pub name: String,
+    pub range: Range<usize>,
+    pub line: usize,
+}
+
+/// **Every reference in a YAML text**, in file order, by the schema's marks and by [`CUE_FIELD`]. Nothing for any other
+/// language. A value that is a tag, an anchor, a flow collection or a block scalar names nothing here.
+pub fn references(lang: Lang, text: &str, schema: Option<&Value>) -> Vec<Reference> {
+    if lang != Lang::Yaml {
+        return Vec::new();
+    }
+    let schema = schema.map(Schema::new);
+    let lines = Lines::new(text);
+    let mut tracker = PathTracker::default();
+    let mut block = None;
+    let mut out = Vec::new();
+    for n in 0..lines.count() {
+        let line = parse_line(lines.text(n), lines.range(n).start, &mut block);
+        if line.blank || line.comment_only || line.block_body {
+            continue;
+        }
+        tracker.feed(&line);
+        let (Some(_), Some(value)) = (&line.key, &line.value) else { continue };
+        let raw = &text[value.clone()];
+        if raw.starts_with(['!', '&', '*', '|', '>', '[', '{']) {
+            continue;
+        }
+        let Some(kind) = reference_kind(schema.as_ref(), &tracker.path()) else { continue };
+        let name = raw.trim_matches(['"', '\'']);
+        if name.is_empty() {
+            continue;
+        }
+        out.push(Reference { kind: kind.to_owned(), name: name.to_owned(), range: value.clone(), line: n });
+    }
+    out
+}
+
+/// **The reference under a caret** (a byte offset), when the caret is on a value that names another thing: what Cmd/Ctrl+click
+/// and F12 follow (NV-07, #384).
+pub fn reference_at(lang: Lang, text: &str, offset: usize, schema: Option<&Value>) -> Option<Reference> {
+    references(lang, text, schema).into_iter().find(|r| r.range.start <= offset && offset <= r.range.end)
 }
 

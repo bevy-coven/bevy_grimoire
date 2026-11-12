@@ -571,6 +571,9 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // **`Session`: a Look is carried out on the Map after the switch it asked for**, and a switch resets every workspace's own state
     // (NV-10, #387, `agent_view::PendingLook`).
     ("bevy_cauldron::agent_view::PendingLook", Ownership::Session),
+    // **`Session`: the cue the Sound list marks** (NV-07, #384) is where the person is looking, kept across a switch so a Back to Sound finds it
+    // (`nav` restores it), and a cue the next project does not hold is simply not marked.
+    ("bevy_cauldron::world_lists::SelectedCue", Ownership::Session),
     ("bevy_cauldron::project_assets::ProjectRoot", Ownership::Session),
     // The editor's face is installed over the default font id once and lives as long as the app does (`harness::install_font_in`).
     ("bevy_cauldron::harness::EditorFont", Ownership::Session),
@@ -589,6 +592,9 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::session::Session", Ownership::Project),
     // **The files open in the Files workspace** (GD-11, #373): a project's own text, with what a person typed and has not
     // saved yet, so a switch to the Map and back keeps it. Dropped with the project (`files::keep_the_open_files`).
+    // **`Session`: where the pointer last was** (NV-07, #384) is a fact about the window, not about this door — a door change does
+    // not move the mouse, and the first pointer event after one sets it again.
+    ("bevy_cauldron::files::PointerAt", Ownership::Session),
     ("bevy_cauldron::files::Files", Ownership::Project),
     // Derived from the kit's meshes: a different kit means different thumbnails.
     ("bevy_cauldron::thumbs::Thumbnails", Ownership::Project),

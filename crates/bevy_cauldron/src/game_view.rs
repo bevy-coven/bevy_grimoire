@@ -345,7 +345,7 @@ impl Plugin for GameViewPlugin {
             .add_systems(Last, remove_the_log_on_quit.run_if(on_message::<AppExit>))
             .add_systems(
                 Update,
-                (read_the_log, poll_the_game, draw_the_game)
+                (read_the_log, poll_the_game, draw_the_game, draw_the_field_files)
                     .chain()
                     .after(watch_the_game)
                     .run_if(in_state(Screen::Editor))
@@ -545,6 +545,16 @@ pub struct ShowWindowButton;
 /// One row of the state view: choosing it shows the entity's components.
 #[derive(Component, Clone, Copy)]
 pub struct EntityButton(pub u64);
+/// **The column of Open file rows under the state view's components** (NV-09, #386; NV-07, #384): one for each component of the chosen entity that
+/// an entity file of the project sets.
+#[derive(Component)]
+pub struct GameFieldFiles;
+/// **An Open file button of that column**: the entity file and the line that sets the component (0-based).
+#[derive(Component, Clone, Debug, PartialEq, Eq)]
+pub struct FieldFileButton {
+    pub rel: String,
+    pub line: usize,
+}
 
 /// **The Game workspace's panel**: Play, Stop, Build, the status, the log, the state and the frame line.
 fn spawn_game_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
@@ -576,6 +586,7 @@ fn spawn_game_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 section(s, "STATE");
                 s.spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(GAP_TIGHT), ..default() }, GameEntities));
                 chrome::row_value(s, "", body, GameFields);
+                s.spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(GAP_TIGHT), ..default() }, GameFieldFiles));
                 chrome::row_value(s, "", dim, GameResources);
                 chrome::row_value(s, "", dim, GameFrame);
             });
@@ -694,14 +705,87 @@ fn draw_the_game(
     });
 }
 
+/// **How the state view separates a component's name from its value**: `module::Type: value`, the engine's own wording.
+pub const STATE_VIEW_VALUE_SEP: &str = ": ";
+
+/// **How the engine separates a type's module from its own name.**
+pub const MODULE_SEP: &str = "::";
+
+/// **How often the entity files are read again for the chosen entity**, in seconds: they are read for the line each component stands on, and a file
+/// edited under the panel moves a line.
+pub const FIELD_FILES_POLL_S: f32 = 1.5;
+
+/// **Draw an Open file row for each component the project's entity files set**, for the chosen entity. The state view stays read-only (the file is
+/// the truth, P3): a row does not change the game, it opens the YAML that does, at the line.
+/// **What the Open file column last drew**: the entity and its fields it was drawn for, the rows it drew (component, file, line), and the
+/// seconds since it last looked. A named type, so the column's own memory reads as one thing.
+type Drawn = (Option<(u64, Vec<String>)>, Vec<(String, String, usize)>, f32);
+
+fn draw_the_field_files(
+    view: Res<GameView>,
+    project: Option<Res<Project>>,
+    time: Res<Time>,
+    list: Query<(Entity, Option<&Children>), With<GameFieldFiles>>,
+    mut commands: Commands,
+    mut shown: Local<Drawn>,
+) {
+    let Ok((container, children)) = list.single() else { return };
+    let key = view.snapshot.fields.clone().filter(|(id, _)| view.selected == Some(*id));
+    shown.2 += time.delta_secs();
+    let unfilled = !shown.1.is_empty() && children.is_none_or(|c| c.is_empty());
+    if shown.0 == key && shown.2 < FIELD_FILES_POLL_S && !unfilled {
+        return;
+    }
+    shown.2 = 0.0;
+    let want: Vec<(String, String, usize)> = match (&key, project.as_deref()) {
+        (Some((id, lines)), Some(project)) => view.snapshot.entities.iter().find(|e| e.id == *id).map_or_else(Vec::new, |entity| {
+            lines
+                .iter()
+                .filter_map(|line| {
+                    // The state view writes a component's name as the engine words it; the entity file's key is the type's own
+                    // name, so both of the view's own separators are named here rather than spelled out.
+                    let component = line.split(STATE_VIEW_VALUE_SEP).next()?.rsplit(MODULE_SEP).next()?;
+                    crate::crosslinks::component_line(&project.root, &entity.name, component).map(|(rel, at)| (component.to_owned(), rel, at))
+                })
+                .collect()
+        }),
+        _ => Vec::new(),
+    };
+    shown.0 = key;
+    if shown.1 == want && !unfilled {
+        return;
+    }
+    for child in children.into_iter().flatten() {
+        commands.entity(*child).despawn();
+    }
+    commands.entity(container).with_children(|c| {
+        for (component, rel, line) in &want {
+            c.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() })
+                .with_children(|r| {
+                    r.spawn((Text::new(component.clone()), TextColor(crate::chrome::ink().dim), crate::chrome::typed(crate::chrome::text::BODY)));
+                    crate::chrome::button(r, FieldFileButton { rel: rel.clone(), line: *line }, "Open file", crate::chrome::Severity::Plain);
+                });
+        }
+    });
+    shown.1 = want;
+}
+
 /// **A click in the Game panel**: choose an entity to read, or bring the game's window to the front.
 fn on_game_click(
     activate: On<Activate>,
+    fields: Query<&FieldFileButton>,
     entities: Query<&EntityButton>,
     windows: Query<(), With<ShowWindowButton>>,
     view: Option<ResMut<GameView>>,
     state: Option<ResMut<crate::editor::EditorState>>,
+    mut commands: Commands,
 ) {
+    // **Open file on a component** goes to the entity file at the line that sets it.
+    if let Ok(button) = fields.get(activate.entity) {
+        let (rel, line) = (button.rel.clone(), button.line);
+        commands.queue(move |world: &mut World| crate::crosslinks::open_in_files(world, &rel, Some(line)));
+        return;
+    }
     let Some(mut view) = view else { return };
     if let Ok(button) = entities.get(activate.entity) {
         if view.selected != Some(button.0) {

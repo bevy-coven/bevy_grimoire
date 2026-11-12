@@ -122,6 +122,26 @@ impl Filters {
         self.focus
     }
 
+    /// **The box that owns the keyboard, by the name an operation's view gives it** (E-002, #129 slice 25), or `None`.
+    pub(crate) fn focus_name(&self) -> Option<String> {
+        self.focus.map(|pane| crate::ops_view::pane_name(pane).to_owned())
+    }
+
+    /// **The box an operation's answer asks to start fresh**, or `None` when the answer asks for nothing.
+    ///
+    /// **`fresh` is the operation's own flag, not a comparison** (E-002, #129 review M1). It used to be "the box the
+    /// view names, when it is not the one that has the keyboard", which made `filter_focus` unable to reach the box
+    /// already focused: the answer said `applied`, the clear never ran, and a person who pressed `F` twice on a
+    /// half-typed search kept the text. `take_focus` is what clears the search, so the flag is what says to call it.
+    /// `None` when the answer names no box or does not ask for a fresh one: a write through a `ResMut` marks the
+    /// filters changed, and every system gated on that redraws.
+    pub(crate) fn box_to_clear(&self, named: Option<&str>, fresh: bool) -> Option<Pane> {
+        if !fresh {
+            return None;
+        }
+        crate::ops_view::pane_from_name(named?)
+    }
+
     /// **Put the keyboard in this box**, and start the search fresh — the same two writes
     /// `on_click` makes, so the `F` key and the mouse leave the filter in one state rather than two.
     ///
@@ -286,7 +306,12 @@ fn placeholder(pane: Pane) -> &'static str {
 
 /// Click to focus. Clicking the box that is already focused clears it, which is the fastest way back
 /// to the whole list and needs no second control.
-pub fn on_click(activate: On<Activate>, boxes: Query<&FilterBox>, mut filters: ResMut<Filters>) {
+pub fn on_click(
+    activate: On<Activate>,
+    boxes: Query<&FilterBox>,
+    project: Option<Res<crate::project::Project>>,
+    mut filters: ResMut<Filters>,
+) {
     let Ok(b) = boxes.get(activate.entity) else {
         return;
     };
@@ -294,8 +319,27 @@ pub fn on_click(activate: On<Activate>, boxes: Query<&FilterBox>, mut filters: R
     // used to clear it *and* blur it, so narrowing a list twice meant click, type, click, click, type
     // — the second click looked like it had done nothing. Enter and Escape still both leave, so there
     // is no way to get stuck in a box you did not mean to open.
-    filters.text_mut(b.0).clear();
-    filters.focus = Some(b.0);
+    //
+    // **Through the operation the keys and an agent use** (E-002, #129 review): the click wrote the two fields itself,
+    // a second path to the state `filter_focus` decides. A door with no project keeps the direct write, because there is
+    // no operation to carry — the filters are the editor's own and the box is still the one clicked.
+    let Some(project) = project else {
+        filters.take_focus(b.0);
+        return;
+    };
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View { filter_pane: filters.focus_name(), ..Default::default() }),
+        ..crate::ops::Ctx::default()
+    };
+    let _ = crate::ops::dispatch(&mut ctx, "filter_focus", &serde_json::json!({ "pane": crate::ops_view::pane_name(b.0) }));
+    if let Some(view) = ctx.view.take()
+        && let Some(pane) = filters.box_to_clear(view.filter_pane.as_deref(), view.filter_fresh)
+    {
+        filters.take_focus(pane);
+    }
 }
 
 /// Keystrokes into the focused box.

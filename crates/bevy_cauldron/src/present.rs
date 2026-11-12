@@ -777,31 +777,10 @@ fn answer_presentation(
     let mut undone = 0usize;
     let mut stopped: Option<String> = None;
     for id in presented.operation_ids.iter().rev() {
-        let mut ctx = crate::ops::Ctx {
-            project: Some(project.clone()),
-            open: Some(std::mem::replace(
-                &mut **open,
-                crate::project::OpenMap::new(
-                    bevy_grimoire_core::map::Map::default(),
-                    std::path::PathBuf::new(),
-                ),
-            )),
-            source: crate::ops::Source::Human,
-            session: crate::ops::session_id(),
-            ..crate::ops::Ctx::default()
-        };
-        let result = crate::ops::undo(&mut ctx, Some(id));
-        if let Some(fresh) = ctx.open.take() {
-            **open = fresh;
-        }
-        crate::editor::carry_changes(project, &mut ctx);
-        match result {
-            Ok((_, crate::ops::Applied::Done { outcome, operation_id, .. })) => {
-                undone += 1;
-                state.record_logged(operation_id, outcome.summary, false);
-            }
-            Ok((_, crate::ops::Applied::Refused(e))) | Err(e) => {
-                stopped = Some(format!("undo stopped at `{id}`: {}", e.0));
+        match undo_logged(project, open, state, id) {
+            Ok(()) => undone += 1,
+            Err(why) => {
+                stopped = Some(why);
                 break;
             }
         }
@@ -818,6 +797,38 @@ fn answer_presentation(
     }
     presented.answer = Some("undone".to_owned());
     state.status.note(format!("undid the agent's {undone} change(s)"));
+}
+
+/// **Take one logged change back as the person**, by its operation id, and record the undo in the editor's own history.
+///
+/// The one body the hand-back's "undo all" walk and the Agent workspace's per-row Undo (NV-10, #387) share: the inverse the log recorded goes
+/// through the operation layer, the map is replaced with what it answered, and the project carries the files it wrote. `Err` is the
+/// sentence a person reads, naming the change it stopped at.
+pub(crate) fn undo_logged(
+    project: &mut crate::project::Project,
+    open: &mut crate::project::OpenMap,
+    state: &mut crate::editor::EditorState,
+    id: &str,
+) -> Result<(), String> {
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: Some(std::mem::replace(open, crate::project::OpenMap::new(bevy_grimoire_core::map::Map::default(), std::path::PathBuf::new()))),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        ..crate::ops::Ctx::default()
+    };
+    let result = crate::ops::undo(&mut ctx, Some(id));
+    if let Some(fresh) = ctx.open.take() {
+        *open = fresh;
+    }
+    crate::editor::carry_changes(project, &mut ctx);
+    match result {
+        Ok((_, crate::ops::Applied::Done { outcome, operation_id, .. })) => {
+            state.record_logged(operation_id, outcome.summary, false);
+            Ok(())
+        }
+        Ok((_, crate::ops::Applied::Refused(e))) | Err(e) => Err(format!("undo stopped at `{id}`: {}", e.0)),
+    }
 }
 
 /// **A hand-back asked in the AGENT block whose block was closed is asked in the modal instead**, so a question never

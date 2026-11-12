@@ -15,16 +15,21 @@
 //! must be unique to its test (its name and `std::process::id()`), never a fixed name.
 
 mod a_chord_shows_the_problems_list;
+mod a_game_field_opens_the_file_that_sets_it;
 mod a_maps_forest_is_listed_in_the_world_workspace;
 mod a_maps_lights_are_listed_without_bevy_lights;
 mod a_maps_water_is_listed_in_the_world_workspace;
 mod a_project_skin_previews_only_in_the_panel;
+mod a_reference_is_followed_from_where_it_is_written;
 mod a_rigs_clip_is_found_by_the_finder;
 mod a_saved_arrangement_is_the_one_the_editor_shows;
 mod a_sound_cue_is_listed_without_bevy_siren;
 mod a_workspace_switch_keeps_the_map;
 mod back_and_forward_across_workspaces;
+mod back_and_forward_returns_to_a_cue_and_a_file;
 mod fixtures;
+mod the_agent_workspace_takes_a_change_back_from_its_row;
+mod the_finder_goes_to_cues_scripts_and_files;
 
 mod a_badge_draws_in_the_skins_ink;
 mod capture_feedback_1793927698061;
@@ -249,6 +254,7 @@ mod census_is_the_one_counter;
 mod check_view_asks_the_checks_on_demand;
 mod chrome_census;
 mod closeup_frames_the_edit;
+mod compose_cursor_is_an_operation;
 mod compose_is_read_only;
 mod composition_arm_is_an_operation;
 mod composition_picker_is_an_operation;
@@ -334,6 +340,7 @@ mod one_undo_takes_back_the_newest_change;
 mod operations_have_two_front_ends;
 mod out_of_area_compares_before_and_after;
 mod outliner_toggles_are_operations;
+mod pack_fold_and_filter_focus_are_operations;
 mod pack_set_excluded_is_an_operation;
 mod palette_rows_never_overlap;
 mod pieces_stand_on_sculpted_ground;
@@ -366,6 +373,7 @@ mod relations_solve_mends_the_open_map;
 mod reload_contract;
 mod repetition_vary_turns_the_open_maps_repeats;
 mod rig_adopt_measured_is_an_operation;
+mod rig_and_tile_walks_are_operations;
 mod roads_and_fields_do_not_z_fight;
 mod rows_become_a_run_through_an_operation;
 mod runs_are_edited_through_operations;

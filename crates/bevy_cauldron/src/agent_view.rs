@@ -74,6 +74,11 @@ pub struct AgentChangeLook {
     pub text: String,
 }
 
+/// **The Undo button of a history row**, carrying the id of the change it takes back (NV-10, #387). The inverse is the one the log recorded, run
+/// through the operation layer as the person's own undo, so it lands in the log and on the editor's history like any undo.
+#[derive(Component, Clone, Debug, PartialEq, Eq)]
+pub struct AgentChangeUndo(pub String);
+
 /// **One of the agent's changes**, as the history lists it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Change {
@@ -81,6 +86,8 @@ pub struct Change {
     pub params: Value,
     /// `op: what it did`.
     pub text: String,
+    /// **The operation's id in the log**, which is what an undo names (`operation_undo`'s own key).
+    pub operation_id: String,
 }
 
 /// What the history last looked at, so the log is read when it moved and the column is rebuilt when its rows did.
@@ -102,7 +109,8 @@ impl Plugin for AgentViewPlugin {
             .add_systems(Update, draw_the_history.run_if(in_state(Screen::Editor)).run_if(Workspace::agent_is_open))
             // Runs in every workspace: the Look is carried out on the Map, after it has been left for.
             .add_systems(Update, finish_the_look.run_if(in_state(Screen::Editor)))
-            .add_observer(on_look);
+            .add_observer(on_look)
+            .add_observer(on_undo);
     }
 }
 
@@ -118,6 +126,7 @@ fn agent_changes_of(entries: &[crate::ops::Entry], count: usize) -> Vec<Change> 
         .take(count)
         .map(|e| Change {
             operation: e.op.clone(),
+            operation_id: e.operation_id.clone(),
             params: e.params.clone(),
             text: match e.result.as_deref().filter(|r| !r.is_empty()) {
                 Some(result) => format!("{}: {result}", e.op),
@@ -227,6 +236,7 @@ fn draw_the_history(
                         "Look",
                         Severity::Plain,
                     );
+                    chrome::button(r, AgentChangeUndo(row.operation_id.clone()), "Undo this", Severity::Plain);
                 });
         }
     });
@@ -247,6 +257,28 @@ fn on_look(activate: On<Activate>, looks: Query<&AgentChangeLook>, mut pending: 
             crate::editor::open_door(world, Workspace::Map, None);
         }
     });
+}
+
+/// **Undo on a history row takes that change back**, or says on the status line why the log refuses (a newer change in the same scope still
+/// stands, the map changed by hand since): the refusal is the operation layer's own sentence, never a silent no-op.
+fn on_undo(
+    activate: On<Activate>,
+    undos: Query<&AgentChangeUndo>,
+    mut project: Option<ResMut<Project>>,
+    mut open: Option<ResMut<OpenMap>>,
+    mut state: Option<ResMut<crate::editor::EditorState>>,
+    mut due: Option<ResMut<crate::watch::Due>>,
+) {
+    let Ok(AgentChangeUndo(id)) = undos.get(activate.entity) else { return };
+    let (Some(project), Some(open), Some(state)) = (project.as_mut(), open.as_mut(), state.as_mut()) else { return };
+    match crate::present::undo_logged(project, open, state, id) {
+        Ok(()) => state.status.note(format!("took back the agent's change `{id}`")),
+        Err(why) => state.status.problem(why),
+    }
+    // The screen is drawn again through the one flag that means "the map was replaced", as every other undo does.
+    if let Some(due) = due.as_mut() {
+        due.map_replaced = true;
+    }
 }
 
 /// **Carry out a Look**: asked of the operation itself for its parameters — a place on the map (its pieces, framed) goes to the follow, once the

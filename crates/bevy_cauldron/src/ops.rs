@@ -284,6 +284,9 @@ pub enum Shown {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         lines: Option<[u32; 2]>,
     },
+    /// **One sound cue** (NV-07, #384), by the name `family/bevy_siren.ron` gives it: on the Sound workspace's cue list, selected. No
+    /// operation answers it: a reference that names a cue and the Go to anything finder do.
+    Cue { name: String },
     /// **One note**, in the Notes panel and on the map where it was drawn.
     Note { id: String },
     /// **One section of the settings**, by the name the screen lists it under: a family crate's id, or
@@ -320,6 +323,7 @@ impl Shown {
                 Some([first, last]) => format!("the file `{path}` at lines {first}..{last}"),
                 _ => format!("the file `{path}`"),
             },
+            Shown::Cue { name } => format!("the sound cue `{name}`"),
             Shown::Note { id } => format!("the note `{id}`"),
             Shown::Settings { section } => format!("the `{section}` settings"),
             Shown::Job { key } => format!("the `{key}` job in the status band"),
@@ -2520,6 +2524,7 @@ pub mod view_toggle_ghost {
 /// (`grimoire/operation_apply`) are the two front ends, and both carry the sight in `Ctx::view`.
 pub mod sight {
     use super::*;
+    use super::list_walk::need_view;
     use crate::outliner::{LAYERS, layer_of};
     use serde_json::json;
 
@@ -2533,14 +2538,6 @@ pub mod sight {
             ))),
             _ => Ok(()),
         }
-    }
-
-    fn need_view<'a>(ctx: &'a Ctx, what: &str) -> Result<&'a crate::ops_view::View, Refusal> {
-        ctx.view.as_ref().ok_or_else(|| {
-            Refusal::new(format!(
-                "no view is in hand, so there is nothing to {what}. An editor front end carries one in `Ctx::view`."
-            ))
-        })
     }
 
     fn need_view_mut<'a>(ctx: &'a mut Ctx, what: &str) -> Result<&'a mut crate::ops_view::View, Refusal> {
@@ -2782,15 +2779,8 @@ pub mod sight {
 /// `composition_arm`.
 pub mod composition_picker {
     use super::*;
+    use super::list_walk::need_view;
     use serde_json::json;
-
-    fn need_view<'a>(ctx: &'a Ctx, what: &str) -> Result<&'a crate::ops_view::View, Refusal> {
-        ctx.view.as_ref().ok_or_else(|| {
-            Refusal::new(format!(
-                "no view is in hand, so there is no picker to {what}. An editor front end carries one in `Ctx::view`."
-            ))
-        })
-    }
 
     /// **Move the picker's cursor one row**, clamped to the project's compositions.
     pub mod composition_picker_walk {
@@ -2930,6 +2920,795 @@ pub mod composition_picker {
                     saved: false,
                     inverse: None,
                     after: Some(json!({ "arrows": if view.picker_active { "picker" } else { "palette" } })),
+                })
+            }
+        }
+    }
+}
+
+/// **What every cursor-walking operation shares** (E-002, #129): the two directions an agent names, the stride a held
+/// Shift walks, and the one reading of a direction, so the COMPOSE tab's lists, the rig bench's and the Tiles page's
+/// walks cannot come to disagree about what `prev`, `next` or a stride mean.
+pub mod list_walk {
+    use super::{Ctx, Refusal};
+
+    /// The two directions an agent names, beside the schemas so the parse and the schemas cannot disagree.
+    pub const DIRECTIONS: &[&str] = &["prev", "next"];
+
+    /// **The band at the bottom of the candidate list**, as its heading spells it and as `pack_fold` answers it.
+    /// Named because the operation writes it twice — in its `plan` and in its `commit` — and a reader of the answer
+    /// should not have to believe two literals agree.
+    pub const EXCLUDED_BAND: &str = "EXCLUDED";
+
+    /// **The Tiles page's row zero, as the page draws it** — what `tile_page_walk` names in its answer. The index of
+    /// that row is `build::NEW_TILE_ROW` (`0`); this is the label, and the two are different kinds of thing.
+    pub const NEW_TILE_LABEL: &str = "+ New Tile";
+
+    /// **Rows a Shift-held walk strides**, the key's own accelerator, in list rows.
+    pub const STRIDE_ROWS: usize = 5;
+
+    /// **The most rows one call may walk**, in list rows: far past any list, so a request is a stride and not an overflow.
+    pub const MAX_ROWS: usize = 1000;
+
+    /// **A walk's default stride**, one row: what an arrow key walks without Shift.
+    pub fn one_row() -> usize {
+        1
+    }
+
+    /// **A direction as a step**: `prev` is `-1` and `next` is `1`.
+    pub fn direction(by: &str) -> Result<i64, Refusal> {
+        match by {
+            "prev" => Ok(-1),
+            "next" => Ok(1),
+            other => Err(Refusal::new(format!("`{other}` is not a direction; say one of {}", DIRECTIONS.join(", ")))),
+        }
+    }
+
+    /// **The view the caller carries in, or the refusal that says what a call without one cannot do.**
+    ///
+    /// Four view modules wrote this function word for word (E-002, #129 review): a fifth copy is how the sentence a refused
+    /// agent reads drifts into five sentences. `what` completes it — "so there is nothing to **walk**".
+    pub fn need_view<'a>(ctx: &'a Ctx, what: &str) -> Result<&'a crate::ops_view::View, Refusal> {
+        ctx.view.as_ref().ok_or_else(|| {
+            Refusal::new(format!(
+                "no view is in hand, so there is nothing to {what}. An editor front end carries one in `Ctx::view`."
+            ))
+        })
+    }
+
+    /// **`rows` is a stride this walk accepts**, or the refusal that says the range.
+    pub fn check_rows(rows: usize) -> Result<usize, Refusal> {
+        if (1..=MAX_ROWS).contains(&rows) {
+            Ok(rows)
+        } else {
+            Err(Refusal::new(format!("`rows` is {rows}, and a walk is 1 to {MAX_ROWS} rows")))
+        }
+    }
+}
+
+/// **The COMPOSE tab's cursors** (E-002, #129 slice 23): the two lists' walk, which list the arrows walk, and the
+/// carousel's step. Three view operations, one body of rules: the key and an agent's call cannot disagree about
+/// them. A cursor is what a person is looking at, so none of these writes a file or takes an undo step.
+pub mod compose_cursor {
+    use super::*;
+    use crate::compose::Pane;
+    use crate::ops_view::{ComposeCursor, select_group};
+    use serde_json::json;
+
+    use super::list_walk::{DIRECTIONS, MAX_ROWS, check_rows, direction};
+
+    fn cursor_in<'a>(ctx: &'a Ctx, what: &str) -> Result<(&'a ComposeCursor, &'a [bevy_grimoire_core::composition::Composition]), Refusal> {
+        let view = ctx.view.as_ref().ok_or_else(|| {
+            Refusal::new(format!(
+                "no view is in hand, so there is no COMPOSE cursor to {what}. An editor front end carries one in `Ctx::view`."
+            ))
+        })?;
+        let project = ctx
+            .project
+            .as_ref()
+            .ok_or_else(|| Refusal::new("no project is open, so there are no compositions to walk."))?;
+        Ok((&view.compose, &project.compositions.compositions))
+    }
+
+    /// The one body of the three operations' `plan` and `commit`: where the cursors land and the sentence for it.
+    struct Landing {
+        cursor: ComposeCursor,
+        said: String,
+    }
+
+    impl Landing {
+        fn json(&self, compositions: &[bevy_grimoire_core::composition::Composition]) -> serde_json::Value {
+            json!({
+                "selected": self.cursor.selected,
+                "member": self.cursor.member,
+                "list": if self.cursor.members_focused { "members" } else { "compositions" },
+                "composition": compositions.get(self.cursor.selected).map(|c| c.id.clone()),
+            })
+        }
+    }
+
+    /// **Commit a landing into the view**, and answer as an `Outcome`.
+    fn settle(ctx: &mut Ctx, landing: Landing) -> Result<Outcome, Refusal> {
+        let after = {
+            let compositions = ctx.project.as_ref().map(|p| p.compositions.compositions.as_slice()).unwrap_or_default();
+            landing.json(compositions)
+        };
+        let Some(view) = ctx.view.as_mut() else {
+            return Err(Refusal::new("no view is in hand, so there is no COMPOSE cursor to move."));
+        };
+        view.compose = landing.cursor;
+        Ok(Outcome { summary: landing.said, affected: 0, saved: false, inverse: None, after: Some(after) })
+    }
+
+    /// **Walk whichever list has the arrows**, clamped at its ends — the walk `Shift` strides five rows of.
+    pub mod compose_walk {
+        use super::*;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `"prev"` or `"next"`. Exactly one of `by` and `to` is named.
+            #[serde(default)]
+            pub by: Option<String>,
+            /// **The row to land on**, for a click on a row and for an agent that knows which one it wants. Clamped, like
+            /// a walk, because the list it names may have shrunk since the caller read it.
+            #[serde(default)]
+            pub to: Option<usize>,
+            /// How many rows, `1` unless given. Shift is `5`.
+            #[serde(default = "crate::ops::list_walk::one_row")]
+            pub rows: usize,
+        }
+
+        pub struct ComposeWalk;
+
+        impl ComposeWalk {
+            pub(super) fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<Landing, Refusal> {
+                let p: Params = serde_json::from_value(params.clone()).map_err(|e| {
+                    Refusal::new(format!("these are not a walk: {e}. The fields are `by` (`prev` or `next`) or `to` (a row), and `rows`."))
+                })?;
+                check_rows(p.rows)?;
+                let (cursor, compositions) = cursor_in(ctx, "walk")?;
+                let here = compositions.get(cursor.selected);
+                let n = if cursor.members_focused { here.map_or(0, |c| c.members.len()) } else { compositions.len() };
+                let Some(last) = n.checked_sub(1) else {
+                    return Err(Refusal::new(match (cursor.members_focused, here) {
+                        // **Guidance for an empty MEMBERS list**, the sentence the key has always said.
+                        (true, Some(c)) => crate::compose::nothing_to_walk(c),
+                        _ => "the project has no compositions, so there is nothing to walk.".to_owned(),
+                    }));
+                };
+                // **Clamped, where it once wrapped**: an author holding an arrow at the end of a list stops there. A `to`
+                // is clamped by the same rule and for the same reason — the list may have shrunk since the caller read it.
+                let at = if cursor.members_focused { cursor.member } else { cursor.selected };
+                let to = match (p.by.as_deref(), p.to) {
+                    (Some(by), None) => (at as i64 + direction(by)? * p.rows as i64).clamp(0, last as i64) as usize,
+                    (None, Some(to)) => to.min(last),
+                    _ => {
+                        return Err(Refusal::new(
+                            "name exactly one of `by` (walk `prev` or `next`) and `to` (land on a row), not both and not neither.",
+                        ));
+                    }
+                };
+                let mut landed = *cursor;
+                let said = if cursor.members_focused {
+                    landed.member = to;
+                    here.and_then(|c| c.members.get(to)).map_or_else(|| format!("member {to}"), |m| format!("member `{}`", m.id))
+                } else {
+                    select_group(&mut landed.selected, &mut landed.member, to);
+                    format!("`{}`", compositions[to].id)
+                };
+                Ok(Landing { cursor: landed, said: format!("the cursor is on {said}") })
+            }
+        }
+
+        impl Operation for ComposeWalk {
+            fn name(&self) -> &'static str {
+                "compose_walk"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["by"],
+                    "properties": {
+                        "by": {"type": "string", "enum": DIRECTIONS, "description": "Which way to move the cursor of whichever COMPOSE list has the arrows (`compose_focus` chooses it). It stops at the ends of the list."},
+                        "rows": {"type": "integer", "minimum": 1, "maximum": MAX_ROWS, "description": "How many rows to move: 1 unless given. Shift+arrow moves 5."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let landing = Self::landing(ctx, params)?;
+                let (_, compositions) = cursor_in(ctx, "walk")?;
+                Ok(landing.json(compositions))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let landing = Self::landing(ctx, params)?;
+                settle(ctx, landing)
+            }
+        }
+    }
+
+    /// **Choose which list the arrows walk**: the COMPOSITIONS list or the MEMBERS of the one selected.
+    pub mod compose_focus {
+        use super::*;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `"prev"` or `"next"`: the other list, because there are two. Exactly one of `by` and `list` is named.
+            #[serde(default)]
+            pub by: Option<String>,
+            /// **The list to hand the arrows to**, `compositions` or `members`, for a click that lands in one.
+            #[serde(default)]
+            pub list: Option<String>,
+        }
+
+        pub struct ComposeFocus;
+
+        impl ComposeFocus {
+            pub(super) fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<Landing, Refusal> {
+                let p: Params = serde_json::from_value(params.clone()).map_err(|e| {
+                    Refusal::new(format!("these are not a focus: {e}. Name `by` (`prev` or `next`) or `list` (`compositions` or `members`)."))
+                })?;
+                let (cursor, compositions) = cursor_in(ctx, "move")?;
+                let pane = if cursor.members_focused { Pane::Members } else { Pane::Groups };
+                let to = match (p.by.as_deref(), p.list.as_deref()) {
+                    (Some(by), None) => pane.step(direction(by)? as i32),
+                    (None, Some("compositions")) => Pane::Groups,
+                    (None, Some("members")) => Pane::Members,
+                    (None, Some(other)) => {
+                        return Err(Refusal::new(format!("`{other}` is not a COMPOSE list; say `compositions` or `members`.")));
+                    }
+                    _ => {
+                        return Err(Refusal::new(
+                            "name exactly one of `by` (step to the other list) and `list` (the list to take), not both and not neither.",
+                        ));
+                    }
+                };
+                let mut landed = *cursor;
+                landed.members_focused = to == Pane::Members;
+                // **Handing the arrows to an empty MEMBERS list says so.** The focus still moves — a mode you can see is what
+                // this pane was rebuilt for — and the sentence names the state instead of announcing a list that answers nothing.
+                let said = match compositions.get(cursor.selected) {
+                    Some(c) if to == Pane::Members && c.members.is_empty() => crate::compose::nothing_to_walk(c),
+                    _ => to.label().to_owned(),
+                };
+                Ok(Landing { cursor: landed, said })
+            }
+        }
+
+        impl Operation for ComposeFocus {
+            fn name(&self) -> &'static str {
+                "compose_focus"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "by": {"type": "string", "enum": DIRECTIONS, "description": "Which way to move the COMPOSE tab's focus between its two lists, COMPOSITIONS and MEMBERS. There are two, so either direction chooses the other. Name this or `list`, not both."},
+                        "list": {"type": "string", "enum": ["compositions", "members"], "description": "The list to hand the arrows to, for a click that lands in one. Name this or `by`, not both."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let landing = Self::landing(ctx, params)?;
+                let (_, compositions) = cursor_in(ctx, "move")?;
+                Ok(landing.json(compositions))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let landing = Self::landing(ctx, params)?;
+                settle(ctx, landing)
+            }
+        }
+    }
+
+    /// **Step the carousel round its ring**: the previous or next composition becomes the focal one.
+    pub mod compose_carousel_step {
+        use super::*;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `"prev"` or `"next"`. Exactly one of `by` and `to` is named.
+            #[serde(default)]
+            pub by: Option<String>,
+            /// **The composition to make focal**, as an index into the project's compositions, for a click on its row.
+            #[serde(default)]
+            pub to: Option<usize>,
+        }
+
+        pub struct ComposeCarouselStep;
+
+        impl ComposeCarouselStep {
+            pub(super) fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<Landing, Refusal> {
+                let p: Params = serde_json::from_value(params.clone()).map_err(|e| {
+                    Refusal::new(format!("these are not a step: {e}. Name `by` (`prev` or `next`) or `to` (a row)."))
+                })?;
+                let (cursor, compositions) = cursor_in(ctx, "step")?;
+                if compositions.is_empty() {
+                    return Err(Refusal::new("the project has no compositions, so there is no carousel to step."));
+                }
+                // **It wraps, where the lists clamp**: `O` and `P` are the one way to move between groups from anywhere on the
+                // tab, so a ring means the key always answers. The focus is left alone. A `to` is clamped instead: a click
+                // names a row that exists on screen, and a ring would turn a stale index into a different group.
+                let to = match (p.by.as_deref(), p.to) {
+                    (Some(by), None) => (cursor.selected as i64 + direction(by)?).rem_euclid(compositions.len() as i64) as usize,
+                    (None, Some(to)) => to.min(compositions.len() - 1),
+                    _ => {
+                        return Err(Refusal::new(
+                            "name exactly one of `by` (step `prev` or `next`) and `to` (make a row focal), not both and not neither.",
+                        ));
+                    }
+                };
+                let mut landed = *cursor;
+                select_group(&mut landed.selected, &mut landed.member, to);
+                Ok(Landing { cursor: landed, said: format!("the carousel is on `{}`", compositions[to].id) })
+            }
+        }
+
+        impl Operation for ComposeCarouselStep {
+            fn name(&self) -> &'static str {
+                "compose_carousel_step"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "by": {"type": "string", "enum": DIRECTIONS, "description": "Which way to step the COMPOSE carousel: the previous or next composition becomes the focal one. It wraps round the ring and leaves the focused list alone. Name this or `to`, not both."},
+                        "to": {"type": "integer", "minimum": 0, "description": "The composition to make focal, as its row in the project's compositions, for a click on its row. Clamped to the list. Name this or `by`, not both."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let landing = Self::landing(ctx, params)?;
+                let (_, compositions) = cursor_in(ctx, "step")?;
+                Ok(landing.json(compositions))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let landing = Self::landing(ctx, params)?;
+                settle(ctx, landing)
+            }
+        }
+    }
+}
+
+/// **The rig bench's list and the Tiles page's list, walked** (E-002, #129 slice 24): up and down on the Anim tab and on
+/// the Tiles page. Two view operations on the rules `list_walk` shares; a cursor is what a person is looking at, so
+/// neither writes a file or takes an undo step.
+pub mod list_cursors {
+    use super::list_walk::{DIRECTIONS, MAX_ROWS, NEW_TILE_LABEL, check_rows, direction, need_view, one_row};
+    use super::*;
+    use serde_json::json;
+
+    /// **Walk the rig bench's list**, round its ring — the walk `Shift` strides five rows of.
+    pub mod rig_walk {
+        use super::*;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `"prev"` or `"next"`. Exactly one of `by` and `to` is named.
+            #[serde(default)]
+            pub by: Option<String>,
+            /// **The rig to land on**, as its row in the manifest, for a click on its row or its summary row.
+            #[serde(default)]
+            pub to: Option<usize>,
+            /// How many rows, `1` unless given. Shift is `5`.
+            #[serde(default = "one_row")]
+            pub rows: usize,
+        }
+
+        pub struct RigWalk;
+
+        impl RigWalk {
+            /// Where the cursor lands and the rig there: the walk's own rule, one copy for plan and commit.
+            fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(usize, String), Refusal> {
+                let p: Params = serde_json::from_value(params.clone()).map_err(|e| {
+                    Refusal::new(format!("these are not a walk: {e}. The fields are `by` (`prev` or `next`) or `to` (a row), and `rows`."))
+                })?;
+                check_rows(p.rows)?;
+                let rigs = &need_view(ctx, "walk")?.rig;
+                let n = rigs.names.len();
+                if n == 0 {
+                    return Err(Refusal::new("the rig bench lists no rigs, so there is nothing to walk. Open the Anim tab on a project with a rigs.ron."));
+                }
+                // **Clamped below the list's length**: this list wraps, and on a short list a stride of exactly `n` is the
+                // identity wearing a jump's clothes. **A stride longer than that is refused rather than silently cut**
+                // (E-002, #129 review): `rows` is advertised as 1 to 1000, and an answer that quietly walked 1 of the
+                // 900 an agent asked for would be a lie about what happened. A list of one rig has no stride at all.
+                let cap = n.saturating_sub(1);
+                let rows = p.rows.min(cap).max(1);
+                if p.by.is_some() && p.rows > cap {
+                    return Err(Refusal::new(format!(
+                        "`rows` is {}, and this list is {n} rigs: a stride longer than {} would land where the walk started. \
+                         Say {cap} or fewer, or use `to` to name the rig.",
+                        p.rows,
+                        cap.saturating_sub(1).max(1)
+                    )));
+                }
+                let to = match (p.by.as_deref(), p.to) {
+                    (Some(by), None) => (rigs.selected as i64 + direction(by)? * rows as i64).rem_euclid(n as i64) as usize,
+                    // **A click clamps**: it names a row that exists on screen, and a ring would turn a stale index into a
+                    // different rig.
+                    (None, Some(to)) => to.min(n - 1),
+                    _ => {
+                        return Err(Refusal::new(
+                            "name exactly one of `by` (walk `prev` or `next`) and `to` (land on a row), not both and not neither.",
+                        ));
+                    }
+                };
+                Ok((to, rigs.names[to].clone()))
+            }
+        }
+
+        impl Operation for RigWalk {
+            fn name(&self) -> &'static str {
+                "rig_walk"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "by": {"type": "string", "enum": DIRECTIONS, "description": "Which way to move the rig bench's cursor along the rig list. The list is a ring: it wraps from the last rig to the first. Name this or `to`, not both."},
+                        "to": {"type": "integer", "minimum": 0, "description": "The rig to land on, as its row in the manifest, for a click on its row or the summary's. Clamped to the list. Name this or `by`, not both."},
+                        "rows": {"type": "integer", "minimum": 1, "maximum": MAX_ROWS, "description": "How many rows to move: 1 unless given. Shift+arrow moves 5. Ignored with `to`."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let (to, rig) = Self::landing(ctx, params)?;
+                Ok(json!({ "selected": to, "rig": rig }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let (to, rig) = Self::landing(ctx, params)?;
+                let Some(view) = ctx.view.as_mut() else {
+                    return Err(Refusal::new("no view is in hand, so there is no rig bench to walk."));
+                };
+                view.rig.selected = to;
+                // **Walking to a rig is looking at one**, as the key always did: the summary face gives way.
+                view.rig.all = false;
+                Ok(Outcome {
+                    summary: format!("the rig bench is on `{rig}`"),
+                    affected: 0,
+                    saved: false,
+                    inverse: None,
+                    after: Some(json!({ "selected": to, "rig": rig })),
+                })
+            }
+        }
+    }
+
+    /// **Walk the Tiles page's rows**, clamped at its ends: `+ New Tile`, then the kit's tiles, then the draft.
+    pub mod tile_page_walk {
+        use super::*;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `"prev"` or `"next"`.
+            pub by: String,
+            /// How many rows, `1` unless given. Shift is `5`.
+            #[serde(default = "one_row")]
+            pub rows: usize,
+        }
+
+        pub struct TilePageWalk;
+
+        impl TilePageWalk {
+            /// Where the cursor lands and what is there: the walk's own rule, one copy for plan and commit.
+            fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(usize, String), Refusal> {
+                let p: Params = serde_json::from_value(params.clone())
+                    .map_err(|e| Refusal::new(format!("these are not a walk: {e}. The fields are `by`, `prev` or `next`, and `rows`.")))?;
+                let by = direction(&p.by)?;
+                check_rows(p.rows)?;
+                let page = need_view(ctx, "walk")?.tile_page.ok_or_else(|| {
+                    Refusal::new("the Tiles page is not up, so there is no tile cursor to move. Open the Tiles tab first (`door_open`).")
+                })?;
+                let Some(last) = page.rows.checked_sub(1) else {
+                    return Err(Refusal::new("the Tiles page has no rows, so there is nothing to walk."));
+                };
+                // **Clamped, where an arrow at the end of a list stops**, rather than wrapping to the other end of it.
+                let to = (page.row as i64 + by * p.rows as i64).clamp(0, last as i64) as usize;
+                let said = match crate::build::row_composition(to) {
+                    None => NEW_TILE_LABEL.to_owned(),
+                    Some(ix) => ctx
+                        .project
+                        .as_ref()
+                        .and_then(|project| project.compositions.compositions.get(ix))
+                        .map_or_else(|| "the draft".to_owned(), |c| format!("`{}`", c.id)),
+                };
+                Ok((to, said))
+            }
+        }
+
+        impl Operation for TilePageWalk {
+            fn name(&self) -> &'static str {
+                "tile_page_walk"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["by"],
+                    "properties": {
+                        "by": {"type": "string", "enum": DIRECTIONS, "description": "Which way to move the Tiles page's cursor along its rows (`+ New Tile`, then the kit's tiles). It stops at the ends of the page. Refused unless the Tiles page is up."},
+                        "rows": {"type": "integer", "minimum": 1, "maximum": MAX_ROWS, "description": "How many rows to move: 1 unless given. Shift+arrow moves 5."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let (to, said) = Self::landing(ctx, params)?;
+                Ok(json!({ "row": to, "on": said }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let (to, said) = Self::landing(ctx, params)?;
+                let Some(page) = ctx.view.as_mut().and_then(|v| v.tile_page.as_mut()) else {
+                    return Err(Refusal::new("the Tiles page is not up, so there is no tile cursor to move."));
+                };
+                page.row = to;
+                Ok(Outcome {
+                    summary: format!("the Tiles page's cursor is on {said}"),
+                    affected: 0,
+                    saved: false,
+                    inverse: None,
+                    after: Some(json!({ "row": to, "on": said })),
+                })
+            }
+        }
+    }
+}
+
+/// **The candidate list's folds and the filter boxes' keyboard** (E-002, #129 slice 25): `Space` on a heading, and `F` and
+/// `/`. Two view operations: which group is folded and which box has the keyboard are what a person is looking through,
+/// so neither writes a file or takes an undo step.
+pub mod shelf_cursors {
+    use super::*;
+    use super::list_walk::{EXCLUDED_BAND, need_view};
+    use crate::ops_view::{pane_from_name, pane_name, pane_names};
+    use serde_json::json;
+
+    /// **Open or close a group on the candidate list**: a pack, or the `EXCLUDED` band at the bottom.
+    pub mod pack_fold {
+        use super::*;
+
+        #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// The pack's folder, as its heading spells it. Exactly one of `pack` and `excluded` is named.
+            #[serde(default)]
+            pub pack: Option<String>,
+            /// `true` for the `EXCLUDED` band instead of a pack.
+            #[serde(default)]
+            pub excluded: bool,
+            /// `true` folds the group away (closes it), `false` opens it; absent toggles, as `Space` does.
+            #[serde(default)]
+            pub folded: Option<bool>,
+        }
+
+        /// What the call names, and whether that group ends up folded.
+        struct Landing {
+            /// The pack's folder, or `None` for the `EXCLUDED` band.
+            pack: Option<String>,
+            folded: bool,
+        }
+
+        pub struct PackFold;
+
+        impl PackFold {
+            fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<Landing, Refusal> {
+                let p: Params = serde_json::from_value(params.clone()).map_err(|e| {
+                    Refusal::new(format!("these are not a fold: {e}. The fields are `pack` or `excluded`, and `folded`."))
+                })?;
+                let view = need_view(ctx, "fold")?;
+                let pack = match (p.pack, p.excluded) {
+                    (Some(pack), false) if !pack.is_empty() => Some(pack),
+                    (None, true) => None,
+                    _ => {
+                        return Err(Refusal::new(
+                            "name exactly one group: `pack` (the pack's folder, as its heading spells it) or `excluded: true` (the EXCLUDED band).",
+                        ));
+                    }
+                };
+                let now_folded = match &pack {
+                    Some(pack) => view.packs.folded.contains(pack),
+                    None => !view.packs.excluded_open,
+                };
+                Ok(Landing { folded: p.folded.unwrap_or(!now_folded), pack })
+            }
+        }
+
+        impl Operation for PackFold {
+            fn name(&self) -> &'static str {
+                "pack_fold"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "pack": {"type": "string", "description": "The pack's folder, as its heading on the Meshes tab's candidate list spells it: a folder name under assets/, not a mesh path. A name no heading draws folds nothing and says so; it is not refused, because a pack can be added between a caller reading the list and calling. Name this or `excluded`, not both."},
+                        "excluded": {"type": "boolean", "description": "`true` for the EXCLUDED band at the bottom of the list instead of a pack."},
+                        "folded": {"type": "boolean", "description": "`true` folds the group away (the EXCLUDED band: closes it); `false` opens it. Absent toggles, as Space does."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let l = Self::landing(ctx, params)?;
+                Ok(json!({ "group": l.pack.clone().unwrap_or_else(|| EXCLUDED_BAND.to_owned()), "folded": l.folded }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let l = Self::landing(ctx, params)?;
+                let Some(view) = ctx.view.as_mut() else {
+                    return Err(Refusal::new("no view is in hand, so there is nothing to fold."));
+                };
+                let group = match &l.pack {
+                    Some(pack) => {
+                        if l.folded {
+                            view.packs.folded.insert(pack.clone());
+                        } else {
+                            view.packs.folded.remove(pack);
+                        }
+                        pack.clone()
+                    }
+                    None => {
+                        view.packs.excluded_open = !l.folded;
+                        EXCLUDED_BAND.to_owned()
+                    }
+                };
+                Ok(Outcome {
+                    summary: format!("`{group}` {}", if l.folded { "closed" } else { "opened" }),
+                    affected: 0,
+                    saved: false,
+                    inverse: None,
+                    after: Some(json!({ "group": group, "folded": l.folded })),
+                })
+            }
+        }
+    }
+
+    /// **Put the keyboard in a filter box**, and start its search fresh.
+    pub mod filter_focus {
+        use super::*;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// The box: `palette`, `candidates`, `rigs` or `tags`.
+            pub pane: String,
+        }
+
+        pub struct FilterFocus;
+
+        impl FilterFocus {
+            fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<crate::filter::Pane, Refusal> {
+                let p: Params = serde_json::from_value(params.clone())
+                    .map_err(|e| Refusal::new(format!("these are not a focus: {e}. The only field is `pane`.")))?;
+                need_view(ctx, "focus")?;
+                pane_from_name(&p.pane).ok_or_else(|| {
+                    Refusal::new(format!("`{}` is not a filter box; say one of {}", p.pane, pane_names().join(", ")))
+                })
+            }
+        }
+
+        impl Operation for FilterFocus {
+            fn name(&self) -> &'static str {
+                "filter_focus"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["pane"],
+                    "properties": {
+                        "pane": {"type": "string", "enum": pane_names(), "description": "Which filter box takes the keyboard: the Map tab's PLACE palette, the Meshes and Tiles tabs' candidate list, the Anim tab's rig list, or the tag block. Its search starts fresh."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                Ok(json!({ "pane": pane_name(Self::landing(ctx, params)?) }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let pane = pane_name(Self::landing(ctx, params)?);
+                let Some(view) = ctx.view.as_mut() else {
+                    return Err(Refusal::new("no view is in hand, so there is no filter box to focus."));
+                };
+                view.filter_pane = Some(pane.to_owned());
+                // **The clear is the operation's** (E-002, #129 review M1): a front end writes it from the answer, so an
+                // agent naming the box that already has the keyboard starts its search fresh exactly as `F` does.
+                view.filter_fresh = true;
+                Ok(Outcome {
+                    summary: format!("the `{pane}` filter box has the keyboard"),
+                    affected: 0,
+                    saved: false,
+                    inverse: None,
+                    after: Some(json!({ "pane": pane })),
                 })
             }
         }
@@ -5244,6 +6023,13 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(sight::placement_set_locked::PlacementSetLocked),
         Box::new(composition_picker::composition_picker_walk::CompositionPickerWalk),
         Box::new(composition_picker::composition_picker_toggle::CompositionPickerToggle),
+        Box::new(compose_cursor::compose_walk::ComposeWalk),
+        Box::new(compose_cursor::compose_focus::ComposeFocus),
+        Box::new(compose_cursor::compose_carousel_step::ComposeCarouselStep),
+        Box::new(list_cursors::rig_walk::RigWalk),
+        Box::new(list_cursors::tile_page_walk::TilePageWalk),
+        Box::new(shelf_cursors::pack_fold::PackFold),
+        Box::new(shelf_cursors::filter_focus::FilterFocus),
         Box::new(tool_arm::ToolArm),
         Box::new(snip_arm::SnipArm),
         Box::new(map_create::MapCreate),
@@ -5509,6 +6295,19 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // and Shift+down dispatch `composition_picker_walk`, through `compose::picker`'s `act` and `walk`.
     ("composition_picker_toggle", "\"composition_picker_toggle\""),
     ("composition_picker_walk", "\"composition_picker_walk\""),
+    // **The COMPOSE tab's cursor keys** (E-002, #129 slice 23): up and down dispatch `compose_walk`, left and right
+    // `compose_focus`, and `O` and `P` `compose_carousel_step`, through `compose.rs`'s `walk`, `cycle_focus` and `step_carousel`.
+    ("compose_walk", "\"compose_walk\""),
+    ("compose_focus", "\"compose_focus\""),
+    ("compose_carousel_step", "\"compose_carousel_step\""),
+    // **The rig bench's and the Tiles page's list keys** (E-002, #129 slice 24): up and down dispatch `rig_walk` on the Anim tab
+    // (`anim_tab::move_selection`) and `tile_page_walk` on the Tiles page (`build::build_keys`).
+    ("rig_walk", "\"rig_walk\""),
+    ("tile_page_walk", "\"tile_page_walk\""),
+    // **The candidate list's fold key and the filter keys** (E-002, #129 slice 25): `Space` dispatches `pack_fold` (`tiles::commit_candidate`
+    // and the heading clicks), and `F` and `/` dispatch `filter_focus` (`tiles::focus_filter`).
+    ("pack_fold", "\"pack_fold\""),
+    ("filter_focus", "\"filter_focus\""),
     // **The clone and run keys**, which dispatch `tool_arm` through `arm_tool` (E-002, #129). Two keys,
     // one rule: press to arm, press again to return to `Tool::Place`.
     ("tool_arm", "\"tool_arm\""),
@@ -5735,7 +6534,22 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
 /// **And the log is written here, once**, so an operation cannot be applied without being
 /// recorded — which is what makes the log a source of truth rather than a report.
 pub fn dispatch(ctx: &mut Ctx, name: &str, params: &serde_json::Value) -> Result<Applied, Refusal> {
-    dispatch_as(ctx, name, params, None)
+    dispatch_as(ctx, name, params, None, When::Once)
+}
+
+/// **Apply an operation a held key is repeating, and change the same state without a second log line.**
+///
+/// **The first press is an ordinary [`dispatch`]**; only the repeats come through here. A held arrow fires at
+/// [`crate::keys::REPEAT_SECS`], so ten seconds on `↓` was ten seconds of `compose_walk` lines in the project's own
+/// log — a hundred of them — and `oplog_target` re-parses every line of that file for each Cmd+Z (`ops.rs`, the undo
+/// resolver). The log is a record of the changes a person and an agent made, and "I held the key down" is one act.
+///
+/// **Nothing else is skipped.** The parameters are validated by the operation's own `plan`, the state change is the
+/// operation's own `commit`, and a refusal is the same refusal — so a repeat cannot apply what a press would not, and
+/// the rules still live in one body. What is absent is the append, and with it the operation id: `Applied::Done`
+/// answers with an empty one, which is the honest answer for a change that has no line to cite.
+pub fn dispatch_repeat(ctx: &mut Ctx, name: &str, params: &serde_json::Value) -> Result<Applied, Refusal> {
+    dispatch_as(ctx, name, params, None, When::Repeating)
 }
 
 /// **The refusal for a change only an undo may make**, the same wherever it is found: [`dispatch`]
@@ -5792,11 +6606,21 @@ pub fn preview_summary(op: &dyn Operation, plan: &serde_json::Value) -> String {
 
 /// **[`dispatch`], with the line it undoes named** — the one path for a change and for its undo,
 /// so an undo is validated, written and logged exactly as the change was.
+/// **Whether this call writes a log line**: a press is one change, a held key's repeat is the same change again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum When {
+    /// A press, a click or an agent's call: validated, committed and logged, as the log's own record.
+    Once,
+    /// A held key's repeat: validated and committed, not logged — see [`dispatch_repeat`].
+    Repeating,
+}
+
 fn dispatch_as(
     ctx: &mut Ctx,
     name: &str,
     params: &serde_json::Value,
     undoes: Option<&str>,
+    when: When,
 ) -> Result<Applied, Refusal> {
     let Some(op) = find(name) else {
         return Err(Refusal::new(format!(
@@ -5848,7 +6672,11 @@ fn dispatch_as(
     // through its recorded inverse and says so. The take-back itself is not logged: nothing the
     // log should describe happened. See [`take_back`].
     //
-    append(ctx, &mut entry).map_err(|e| take_back(ctx, &*op, &outcome, e))?;
+    // **A repeat changes the state and writes nothing**: the press that started the hold is the log's record of it, so
+    // there is no line to append and no id to cite. The entry still describes the change; it just never reaches a file.
+    if when == When::Once {
+        append(ctx, &mut entry).map_err(|e| take_back(ctx, &*op, &outcome, e))?;
+    }
     Ok(Applied::Done {
         outcome,
         operation_id: entry.operation_id.clone(),
@@ -6198,6 +7026,7 @@ pub fn undo(ctx: &mut Ctx, target: Option<&str>) -> Result<(UndoPlan, Applied), 
         &plan.line.op,
         &plan.inverse,
         Some(&plan.line.operation_id),
+        When::Once,
     )?;
     Ok((plan, applied))
 }
