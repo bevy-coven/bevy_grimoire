@@ -48,6 +48,8 @@ flowchart TD
 3. The gate has its own target dir (`~/.cargo-target-gate`) and no `touch`; each fleet cluster builds in `~/.cargo-target-fleet/<cluster>`, which `predone.sh` uses too.
 5. A worker runs the whole suite once per round, after the review (`brief.md` rule 6).
 
+Disk: `/home` on big is 97% full (121 GB free; the shared `~/.cargo-target-shared/global` alone is 1.1 TB), and a target dir is 15-20 GB, so `predone.sh` refuses to start with under 30 GB free and a cluster's target dir is deleted with its worktree. Reclaiming the shared target is the owner's call.
+
 Left to the owner: 4 (record predone as a gated sha so a merge takes the clean-merge fast path; it trades one round of merge-interaction detection for ~10-15 min per landing; three such failures were caught this week) and 6 (split the editor's single test binary).
 
 ## Guidance
