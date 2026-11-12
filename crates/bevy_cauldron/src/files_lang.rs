@@ -809,8 +809,8 @@ fn markdown_highlights(text: &str) -> Vec<(Range<usize>, SyntaxRole)> {
         let mut at = 0;
         while at < line.len() {
             let rest = &line[at..];
-            if rest.starts_with('`') {
-                match rest[1..].find('`') {
+            if let Some(inner) = rest.strip_prefix('`') {
+                match inner.find('`') {
                     Some(end) => {
                         spans.push((range.start + at..range.start + at + end + 2, SyntaxRole::String));
                         at += end + 2;
@@ -1102,8 +1102,7 @@ pub struct Completion {
 
 fn word_before(text: &str, offset: usize) -> usize {
     let head = &text[..offset];
-    let start = head.rfind(|c: char| !(c.is_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | '@'))).map_or(0, |at| at + head[at..].chars().next().map_or(1, char::len_utf8));
-    start
+    head.rfind(|c: char| !(c.is_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | '@'))).map_or(0, |at| at + head[at..].chars().next().map_or(1, char::len_utf8))
 }
 
 /// **Complete a YAML file at `offset`**, from the kind's schema: at a key, the fields the mapping may hold;
