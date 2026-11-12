@@ -66,7 +66,7 @@ changes which panels are drawn and nothing else — **one viewport is shared by 
 shows the world** (Map, World, Kit, Animation), so switching never reloads a map or drops a selection.
 
 **A workspace whose part is not built is not registered.** Project (the page is still its own screen, reached by
-Cmd/Ctrl+O), Files (until GD-11) and Agent (NV-10) have their chord and their command, and the
+Cmd/Ctrl+O) and Files (until GD-11) have their chord and their command, and the
 command says which issue brings it. There are no placeholder screens: a workspace either does its job or says what
 it is waiting for.
 
@@ -102,7 +102,7 @@ layouts are per workspace rather than one shared one:
 | Sound | inspector and viewport | the audio panel (`bevy_siren`; a build without it says so, NV-08, #385) |
 | Files | inspector and viewport | the file tree (GD-11) |
 | Game | viewport and inspector | Play, Stop, Build, the build's errors, the game's log, a read-only view of its state over BRP, frame time and memory, Show window; a crash stays on screen and badges the icon (NV-09, #386) |
-| Agent | inspector and viewport | the Familiar (NV-10) |
+| Agent | inspector and viewport | the AGENT block at full size with the waiting wishes and lessons, and the agent's last changes with Look (NV-10, #387); the compact block stays a toggle of Map |
 
 **Document tabs** (NV-04, #381) are the third thing, beside the workspace and the layout: *what you are
 working on*. Inside a workspace the things you open are tabs: maps in Map and World, files in Files,
