@@ -227,12 +227,13 @@ fn every_mcp_tool_is_prefixed_and_unique() {
 /// list, and it is explicit: a verb is on the list or it goes through an operation, and there is
 /// no third thing.
 const UNMIGRATED: &[Action] = &[
-    Action::ComposePrev,
-    Action::ComposeNext,
-    Action::ComposeMemberPrev,
-    Action::ComposeMemberNext,
-    Action::CarouselPrev,
-    Action::CarouselNext,
+    // **Why the verbs that are left stay here (E-002, #129 slices 23 to 25).** `EditTile` and `CycleTarget` read the pointer's
+    // position (the piece under the cursor), so an agent has no equivalent of the verb. `MainMenu` raises the unsaved-work
+    // question and leaves for the menu screen: a modal conversation with a person. `CopyInfo` reads the drawn screen into the
+    // system clipboard. `PrevCandidate`, `NextCandidate`, `TileListPrev`, `TileListNext`, `FocusLibrary` and `FocusCandidates`
+    // walk the shelf's drawn rows, which depend on the filter, the folds, the excluded policy and the cursor's own heading
+    // state, and the Meshes shelf's selection already goes through `piece_select`; a walk operation needs the drawn row list
+    // in the view, which is its own slice.
     Action::MainMenu,
     Action::Undo,
     Action::Redo,
@@ -249,11 +250,7 @@ const UNMIGRATED: &[Action] = &[
     Action::PageEnter,
     Action::PageLeave,
     Action::TileOpen,
-    Action::TilePrev,
-    Action::TileNext,
     Action::CloseTile,
-    Action::FocusFilter,
-    Action::FocusTagFilter,
     Action::PanForward,
     Action::PanBack,
     Action::PanLeft,
@@ -264,7 +261,6 @@ const UNMIGRATED: &[Action] = &[
     Action::NextCandidate,
     Action::TypeId,
     Action::Accept,
-    Action::FoldPack,
     Action::Rescan,
     Action::UndoTile,
     Action::RedoTile,
@@ -304,8 +300,6 @@ const UNMIGRATED: &[Action] = &[
     Action::SuggestLabels,
     Action::SuggestAll,
     Action::DiscardAllSuggestions,
-    Action::PrevRig,
-    Action::NextRig,
     Action::UndoBench,
     Action::RedoBench,
     Action::ScrubBack,
@@ -348,7 +342,10 @@ const UNMIGRATED: &[Action] = &[
 // 87 -> 85 with #129 slice 21 (below): two actions leave the list.
 // 86 -> 84: `MoveMode` -> `tool_arm` and `ToggleGhost` -> `view_toggle_ghost` (E-002, #129 slice 21): `B` arms the move tool and `G` toggles the rig bench's ghost through the operations an agent calls, and an agent's call to any view operation now reaches the editor's own view. Owner exception (2026-11-10): the ratchet number the issue's own work lowers; `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `MoveMode` from the `View` set and `ToggleGhost` from the `Camera` set for the same reason.
 // 85 -> 82: `PickComposition`, `CompositionPrev` and `CompositionNext` -> `composition_picker_toggle` and `composition_picker_walk` (E-002, #129 slice 22): `P` gives the arrows to the composition picker and Shift+up and Shift+down walk it, through the operations an agent calls. Assumed owner exception (2026-11-11): the ratchet number the slice's own work lowers; nothing is skipped.
-const UNMIGRATED_MAX: usize = 82;
+// 82 -> 76: `ComposePrev`, `ComposeNext`, `ComposeMemberPrev`, `ComposeMemberNext`, `CarouselPrev` and `CarouselNext` -> `compose_walk`, `compose_focus` and `compose_carousel_step` (E-002, #129 slice 23): up and down walk the COMPOSE tab's focused list, left and right choose it, and `O` and `P` step the carousel, through the operations an agent calls. Assumed owner exception (2026-11-12): the ratchet number the slice's own work lowers; nothing is skipped.
+// 76 -> 72: `PrevRig`, `NextRig`, `TilePrev` and `TileNext` -> `rig_walk` and `tile_page_walk` (E-002, #129 slice 24): up and down walk the rig bench's list and the Tiles page's rows through the operations an agent calls. Assumed owner exception (2026-11-12): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `TilePrev` and `TileNext` from the `View` set for the same reason; nothing is skipped.
+// 72 -> 69: `FoldPack`, `FocusFilter` and `FocusTagFilter` -> `pack_fold` and `filter_focus` (E-002, #129 slice 25): `Space` opens or closes a pack heading or the EXCLUDED band, and `F` and `/` take a filter box, through the operations an agent calls. Assumed owner exception (2026-11-12): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `FocusFilter` and `FocusTagFilter` from the `View` set for the same reason; nothing is skipped.
+const UNMIGRATED_MAX: usize = 69;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///
@@ -718,8 +715,7 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     assert_eq!(
         view,
         [
-            "MainMenu", "CycleTarget", "TilePrev", "TileNext", "FocusFilter",
-            "FocusTagFilter", "PrevCandidate", "NextCandidate", "FocusCandidates", "CopyInfo",
+            "MainMenu", "CycleTarget", "PrevCandidate", "NextCandidate", "FocusCandidates", "CopyInfo",
             "FocusLibrary",
         ],
         "the `View` set changed. That is allowed — but it is a deliberate act: a verb moves here only \
