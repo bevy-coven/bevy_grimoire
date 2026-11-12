@@ -521,7 +521,7 @@ fn a_project_files_change_opens_the_files_workspace_on_that_file() {
     assert_eq!(*app.world().resource::<Workspace>(), Workspace::Files, "a rules change is shown in the Files workspace");
     assert_eq!(
         bevy_cauldron::files::active_file(app.world().resource::<bevy_cauldron::session::Session>()).as_deref(),
-        Some("assets/grimoire/rules.ron"),
+        Some("assets/grimoire/rules.yaml"),
         "on the file the operation wrote"
     );
     let status = &app.world().resource::<EditorState>().status;

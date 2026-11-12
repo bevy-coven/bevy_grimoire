@@ -31,7 +31,12 @@ use crate::fixtures;
 const SETTLE: usize = 40;
 
 /// The project's sound file.
-const CUES: &str = "(cues: (cues: [(name: \"door.creak\"), (name: \"wind.loop\")]))";
+const CUES: &str = "\
+cues:
+  cues:
+  - name: door.creak
+  - name: wind.loop
+";
 
 /// A data file three lines long: the person leaves it on its third.
 const DOOR: &str = "name: door\nopen: true\ncue: door.creak\n";
@@ -48,7 +53,7 @@ fn editor(tag: &str) -> (App, std::path::PathBuf) {
         .place_as("bed@0", "bed", (2.0, 2.0))
         .side(64.0)
         .build("m");
-    for (rel, text) in [("family/bevy_siren.ron", CUES), (DOOR_FILE, DOOR)] {
+    for (rel, text) in [("family/bevy_siren.yaml", CUES), (DOOR_FILE, DOOR)] {
         let path = root.join(rel);
         std::fs::create_dir_all(path.parent().unwrap_or_else(|| panic!("{path:?}"))).unwrap_or_else(|e| panic!("{e}"));
         std::fs::write(&path, text).unwrap_or_else(|e| panic!("{path:?}: {e}"));

@@ -247,15 +247,20 @@ fn siren_shown() -> String {
     format!("family/{SIREN_FILE}")
 }
 
-/// **The sound cues of a project in words**: a row per cue, or the line that says there are none. A file that does not read is its own row.
-pub fn cue_rows(project: &Project) -> Vec<String> {
+/// **The cue names of a project's sound file**: none when the project has no file, and why when the file does not read.
+pub fn cue_names_of(project: &Project) -> Result<Vec<String>, String> {
     let file = bevy_grimoire_core::family::settings_dir(&project.root).join(SIREN_FILE);
-    let text = match std::fs::read_to_string(&file) {
-        Ok(text) => text,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return vec![NO_CUES.to_owned()],
-        Err(e) => return vec![format!("{} cannot be read: {e}", siren_shown())],
-    };
-    match cue_names(&text) {
+    match std::fs::read_to_string(&file) {
+        Ok(text) => cue_names(&text),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(e) => Err(format!("{} cannot be read: {e}", siren_shown())),
+    }
+}
+
+/// **The sound cues of a project in words**: a row per cue (the selected one marked with [`CUE_MARK`]), or the line that says there
+/// are none. A file that does not read is its own row.
+pub fn cue_rows(project: &Project, selected: Option<&str>) -> Vec<String> {
+    match cue_names_of(project) {
         Ok(names) if names.is_empty() => vec![NO_CUES.to_owned()],
         Ok(names) => names
             .into_iter()

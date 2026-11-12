@@ -83,7 +83,7 @@ fn a_file_references_page_is_the_files_workspace_at_that_file() {
             // **The selection opens the file itself**, by the path the change named, and at its first line when one was given.
             match select {
                 bevy_cauldron::reveal::Select::File { path: opened, line } => {
-                    assert_eq!(opened, "assets/grimoire/maps/m.map.ron", "the file the change is in");
+                    assert_eq!(opened, "assets/grimoire/maps/m.map.yaml", "the file the change is in");
                     assert_eq!(line, None, "no line was named, so the file opens at its top");
                 }
                 _ => panic!("a project file's selection is the file itself"),

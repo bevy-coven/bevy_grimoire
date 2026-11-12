@@ -54,7 +54,7 @@ fn editor(name: &str) -> (App, SettingsFile) {
     updates(&mut app, 8);
     // The editor does not follow the agent here (the `follow_agent` setting off): a followed change would carry the person to the Map under
     // the history being measured.
-    let file = std::env::temp_dir().join(format!("agent_undo_settings_{name}_{}.ron", std::process::id()));
+    let file = std::env::temp_dir().join(format!("agent_undo_settings_{name}_{}.yaml", std::process::id()));
     app.insert_resource(bevy_cauldron::settings::UserSettingsFile(file.clone()));
     bevy_cauldron::setting_catalogue::write_key(&file, "follow_agent", Some(bevy_cauldron::setting_catalogue::Value::On(false))).unwrap_or_else(|e| panic!("{e}"));
     updates(&mut app, 8);

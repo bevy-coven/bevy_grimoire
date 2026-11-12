@@ -94,7 +94,7 @@ fn project(tag: &str, port: u16) -> PathBuf {
         .place("site/wall", (0.0, 0.0))
         .build("m");
     std::fs::write(root.join("game.py"), GAME).unwrap_or_else(|e| panic!("{e}"));
-    std::fs::write(root.join("play.ron"), format!(r#"(version: 1, command: ["{py}", "game.py", "{port}"], port: {port})"#, py = python()))
+    std::fs::write(root.join("play.yaml"), format!("version: 1\ncommand: [\"{}\", game.py, {}]\nport: {}\n", python(), port, port))
         .unwrap_or_else(|e| panic!("{e}"));
     let path = root.join(ENTITY_FILE);
     std::fs::create_dir_all(path.parent().unwrap_or_else(|| panic!("{path:?}"))).unwrap_or_else(|e| panic!("{e}"));

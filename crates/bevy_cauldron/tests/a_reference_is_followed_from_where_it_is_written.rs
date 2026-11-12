@@ -38,7 +38,12 @@ use crate::fixtures;
 const SETTLE: usize = 40;
 
 /// The project's sound file, in the crate's own shape, with the two cues the Sound list shows.
-const CUES: &str = "(cues: (cues: [(name: \"door.creak\"), (name: \"wind.loop\")]))";
+const CUES: &str = "\
+cues:
+  cues:
+  - name: door.creak
+  - name: wind.loop
+";
 
 /// A game data file that names a cue, on one line with no line break at the end: a click in the empty part of the editor puts the caret
 /// at the end of that line, which is the end of the value.
@@ -156,7 +161,7 @@ const OFF_THE_VALUE: usize = 1;
 /// is read the reference under the caret **at the release**, which is asserted here and, for the stale case, just below.
 #[test]
 fn a_primary_click_on_a_cue_value_lands_in_sound_with_that_cue_selected() {
-    let root = project("click", &[("family/bevy_siren.ron", CUES), ("data/door.yaml", DOOR)]);
+    let root = project("click", &[("family/bevy_siren.yaml", CUES), ("data/door.yaml", DOOR)]);
     let mut app = files_editor(&root, "data/door.yaml");
     assert_eq!(selected_cue(&app), None, "no cue is chosen before the click");
     caret_at(&mut app, 0, IN_THE_VALUE);
@@ -177,7 +182,7 @@ fn a_primary_click_on_a_cue_value_lands_in_sound_with_that_cue_selected() {
 /// nothing: the path asks the caret at the release, so a remembered one would be the dead link this series forbids.
 #[test]
 fn a_primary_click_off_the_reference_does_not_follow_a_caret_that_has_moved() {
-    let root = project("click_stale", &[("family/bevy_siren.ron", CUES), ("data/door.yaml", DOOR)]);
+    let root = project("click_stale", &[("family/bevy_siren.yaml", CUES), ("data/door.yaml", DOOR)]);
     let mut app = files_editor(&root, "data/door.yaml");
     // **On the value, then off it**: the second place is the one the click must read.
     caret_at(&mut app, 0, IN_THE_VALUE);
@@ -197,7 +202,7 @@ fn a_primary_click_off_the_reference_does_not_follow_a_caret_that_has_moved() {
 /// in the same workspace, so a click outside the editor's own bounds is a click on the workspace, not on a value.
 #[test]
 fn a_primary_click_on_the_tree_stays_in_files() {
-    let root = project("click_tree", &[("family/bevy_siren.ron", CUES), ("data/door.yaml", DOOR)]);
+    let root = project("click_tree", &[("family/bevy_siren.yaml", CUES), ("data/door.yaml", DOOR)]);
     let mut app = files_editor(&root, "data/door.yaml");
     caret_at(&mut app, 0, IN_THE_VALUE);
     assert_eq!(selected_cue(&app), None, "nothing is followed before the click");
@@ -228,7 +233,7 @@ fn a_primary_click_on_the_tree_stays_in_files() {
 /// respects that. Without the gate F12 would follow the reference behind the overlay the person is typing into.
 #[test]
 fn f12_with_the_finder_open_does_nothing() {
-    let root = project("f12_finder", &[("family/bevy_siren.ron", CUES), ("data/door.yaml", DOOR)]);
+    let root = project("f12_finder", &[("family/bevy_siren.yaml", CUES), ("data/door.yaml", DOOR)]);
     let mut app = files_editor(&root, "data/door.yaml");
     caret_at(&mut app, 0, IN_THE_VALUE);
     // Cmd/Ctrl+P opens the finder, whose search field takes the keyboard.
@@ -246,7 +251,7 @@ fn f12_with_the_finder_open_does_nothing() {
 /// **A click without the modifier only edits**: the caret goes where it was clicked and the editor stays where it is.
 #[test]
 fn a_plain_click_does_not_follow_the_reference() {
-    let root = project("plain", &[("family/bevy_siren.ron", CUES), ("data/door.yaml", DOOR)]);
+    let root = project("plain", &[("family/bevy_siren.yaml", CUES), ("data/door.yaml", DOOR)]);
     let mut app = files_editor(&root, "data/door.yaml");
     let editor = editor_entity(&mut app);
     bevy_gooey::testing::click(&mut app, editor);
@@ -258,7 +263,7 @@ fn a_plain_click_does_not_follow_the_reference() {
 /// **Acceptance 1b — F12.** The same follow from the keyboard, with the caret inside the value.
 #[test]
 fn f12_on_a_cue_value_lands_in_sound_with_that_cue_selected() {
-    let root = project("f12", &[("family/bevy_siren.ron", CUES), ("data/door.yaml", DOOR)]);
+    let root = project("f12", &[("family/bevy_siren.yaml", CUES), ("data/door.yaml", DOOR)]);
     let mut app = files_editor(&root, "data/door.yaml");
     caret_at(&mut app, 0, 8);
     press(&mut app, KeyCode::F12, Key::F12);
@@ -269,7 +274,7 @@ fn f12_on_a_cue_value_lands_in_sound_with_that_cue_selected() {
 /// **F12 off a reference says so** rather than doing nothing.
 #[test]
 fn f12_where_nothing_is_named_says_so() {
-    let root = project("f12_none", &[("family/bevy_siren.ron", CUES), ("data/door.yaml", DOOR)]);
+    let root = project("f12_none", &[("family/bevy_siren.yaml", CUES), ("data/door.yaml", DOOR)]);
     let mut app = files_editor(&root, "data/door.yaml");
     caret_at(&mut app, 0, 1);
     press(&mut app, KeyCode::F12, Key::F12);
@@ -281,7 +286,7 @@ fn f12_where_nothing_is_named_says_so() {
 /// **Acceptance 4 — never a dead link.** A cue the project does not hold is a warning on its own line, and following it says what is missing.
 #[test]
 fn a_reference_to_a_missing_cue_is_a_diagnostic_and_a_refusal_not_a_dead_link() {
-    let root = project("ghost", &[("family/bevy_siren.ron", CUES), ("data/ghost.yaml", GHOST)]);
+    let root = project("ghost", &[("family/bevy_siren.yaml", CUES), ("data/ghost.yaml", GHOST)]);
     let mut app = files_editor(&root, "data/ghost.yaml");
     // The errors wait for the person to stop typing; the clock is real, so wait it out.
     std::thread::sleep(std::time::Duration::from_millis(250));
@@ -306,7 +311,7 @@ fn a_reference_to_a_missing_cue_is_a_diagnostic_and_a_refusal_not_a_dead_link() 
 fn a_cues_used_by_lists_the_files_that_name_it() {
     let root = project(
         "used_by",
-        &[("family/bevy_siren.ron", CUES), ("data/door.yaml", "name: door\ncue: door.creak\n"), ("data/wind.yaml", "cue: wind.loop\n")],
+        &[("family/bevy_siren.yaml", CUES), ("data/door.yaml", "name: door\ncue: door.creak\n"), ("data/wind.yaml", "cue: wind.loop\n")],
     );
     let mut app = editor(&root);
     app.world_mut().resource_mut::<Revealing>().request_by_person("test", &Shown::Cue { name: "door.creak".to_owned() });
@@ -320,7 +325,7 @@ fn a_cues_used_by_lists_the_files_that_name_it() {
 /// **A cue nothing names says so**, rather than drawing an empty list.
 #[test]
 fn a_cue_nothing_names_says_so() {
-    let root = project("unused", &[("family/bevy_siren.ron", CUES)]);
+    let root = project("unused", &[("family/bevy_siren.yaml", CUES)]);
     let mut app = editor(&root);
     app.world_mut().resource_mut::<Revealing>().request_by_person("test", &Shown::Cue { name: "wind.loop".to_owned() });
     settle(&mut app);
@@ -362,7 +367,7 @@ fn open_piece_file_lands_in_the_library_at_the_piece() {
     let mut app = editor(&root);
     let piece_rel = {
         let project = app.world().resource::<Project>();
-        project.grimoire_dir.join("library.ron").strip_prefix(&project.root).unwrap_or_else(|e| panic!("{e}")).to_string_lossy().replace('\\', "/")
+        project.grimoire_dir.join("library.yaml").strip_prefix(&project.root).unwrap_or_else(|e| panic!("{e}")).to_string_lossy().replace('\\', "/")
     };
     assert!(editor::lock_on_placement(app.world_mut(), "bed@0"));
     settle(&mut app);

@@ -33,7 +33,7 @@ fn editor(tag: &str, mode: Mode) -> App {
         .bounded_composition("tile_b", (1.0, 2.4, 1.0), &tile)
         .bounded_composition("tile_c", (1.0, 2.4, 1.0), &tile)
         .build("m");
-    std::fs::copy(workspace_asset("grimoire/rigs.ron"), root.join("assets/grimoire/rigs.ron")).expect("rigs.ron");
+    std::fs::copy(workspace_asset("grimoire/rigs.yaml"), root.join("assets/grimoire/rigs.yaml")).expect("rigs.yaml");
     let mut app = bevy_cauldron::harness::build_headless_at(&root, "m", None, mode).unwrap_or_else(|e| panic!("{e}"));
     app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());
     app.add_plugins(bevy_cauldron::ops_brp::OpsBridgePlugin);

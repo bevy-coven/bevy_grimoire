@@ -114,7 +114,7 @@ pub fn scan(root: &Path, last: Option<u64>) -> Option<Scan> {
         }
         let Ok(text) = std::fs::read_to_string(root.join(rel)) else { continue };
         let schema = bevy_grimoire_core::reload_check::kind_of_path(rel)
-            .and_then(|(kind, _)| schemas.entry(kind.id).or_insert_with(|| bevy_grimoire_core::schema::for_kind(kind.id).ok()).as_ref());
+            .and_then(|kind| schemas.entry(kind.id).or_insert_with(|| bevy_grimoire_core::schema::for_kind(kind.id).ok()).as_ref());
         for found in files_lang::references(Lang::Yaml, &text, schema) {
             refs.push(Named { kind: found.kind, name: found.name, file: rel.clone(), line: found.line });
         }
