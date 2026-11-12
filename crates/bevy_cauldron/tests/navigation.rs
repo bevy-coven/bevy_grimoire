@@ -536,6 +536,23 @@ fn an_inspector_section(what: &'static str, label: &'static str, tag: &'static s
     Destination { what, steps, cost, reach }
 }
 
+/// **The problems list**, shown by one chord (NV-11, #397): the Map inspector's `PROBLEMS` heading was six wheel notches down.
+///
+/// Owner exception (2026-11-12, #397): the row was the generic inspector-section row (the wheel, up to [`WHEEL_BUDGET`] notches); the
+/// list now has a chord of its own, `Cmd/Ctrl+Shift+X`, which asks the reveal for the heading and scrolls it on screen, so the row
+/// drives the chord. The row asserts the arrival the same way every other row does — the heading on screen — and a chord that did not
+/// bring it is a row that does not arrive.
+fn the_problems_list() -> Destination {
+    let mut d = Driver::cold_start("problems");
+    d.chord(&[primary(), KeyCode::ShiftLeft, KeyCode::KeyX], "press Cmd/Ctrl+Shift+X (show the problems)");
+    let reach = if d.showing("PROBLEMS") {
+        Reach::Arrived
+    } else {
+        Reach::Unreachable("the show-problems chord was pressed and the PROBLEMS heading is not on screen".to_owned())
+    };
+    Destination { what: "The problems list", steps: d.steps, cost: d.cost, reach }
+}
+
 /// **The history list**, which is the rows beside REDO.
 fn the_history() -> Destination {
     let mut d = Driver::cold_start("history");
@@ -696,12 +713,7 @@ fn table() -> Vec<Destination> {
             "data",
             "the DATA table is a heading of the Map inspector and the wheel never reached it",
         ),
-        an_inspector_section(
-            "The problems list",
-            "PROBLEMS",
-            "problems",
-            "PROBLEMS is a heading of the Map inspector and the wheel never reached it",
-        ),
+        the_problems_list(),
         an_inspector_section("The notes", "NOTES", "notes", "NOTES is a heading of the Map inspector and the wheel never reached it"),
         the_history(),
         the_agent_block(),
@@ -816,7 +828,6 @@ const FILED: &[(&str, &str)] = &[
     ("A map's water", "#393"),
     ("A map's forest", "#394"),
     ("A map's lights", "#395"),
-    ("The problems list", "#397"),
 ];
 
 // ───────────────────────────── driving the finder ─────────────────────────────

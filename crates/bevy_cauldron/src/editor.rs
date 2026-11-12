@@ -4022,7 +4022,8 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 ..default()
             })
             .with_children(|s| {
-                crate::chrome::section(s, "PROBLEMS");
+                // **Named for the reveal** (NV-11, #397): the show-problems chord scrolls this heading on screen, where it was six wheel notches down.
+                crate::chrome::section(s, "PROBLEMS").insert(crate::reveal::Section(crate::reveal::InspectorSection::Problems));
                 s.spawn((
                     crate::problems_view::ProblemsList,
                     Node {

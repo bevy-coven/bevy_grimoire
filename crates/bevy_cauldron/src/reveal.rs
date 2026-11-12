@@ -69,6 +69,8 @@ pub enum InspectorSection {
     Notes,
     /// A family crate's settings, the `FAMILY SETTINGS` line.
     Family,
+    /// **The open map's problems** (NV-11, #397): the `PROBLEMS` list, which was six wheel notches down the inspector.
+    Problems,
 }
 
 /// **A heading's own name**, carried by the section it titles.
@@ -212,6 +214,7 @@ fn settings_page(section: &str) -> Result<Page, String> {
     }
     let heading = match lower.as_str() {
         "notes" => Some(InspectorSection::Notes),
+        "problems" => Some(InspectorSection::Problems),
         "data" => Some(InspectorSection::Data),
         // A family crate's settings are one line of the inspector's `FAMILY SETTINGS` block.
         other if crate::family_host::KNOWN.contains(&other) => Some(InspectorSection::Family),
@@ -226,7 +229,7 @@ fn settings_page(section: &str) -> Result<Page, String> {
         None => Err(format!(
             "`{section}` is not a section the editor draws: the settings screen has {}, the project \
              configuration draws the kit's packs and its family crates, and the inspector has notes, \
-             data and every family crate",
+             problems, data and every family crate",
             crate::setting_catalogue::CATEGORIES.join(", ")
         )),
     }
