@@ -44,6 +44,7 @@ use bevy::ui::{ComputedNode, ScrollPosition, UiGlobalTransform};
 
 use bevy_cauldron::build::Build;
 use bevy_cauldron::compose::ComposeState;
+use bevy_cauldron::goto::{GotoIndex, Kind};
 use bevy_cauldron::project::OpenMap;
 use bevy_cauldron::screen::Screen;
 use bevy_cauldron::selection::Selection;
@@ -586,9 +587,11 @@ fn the_history() -> Destination {
 /// **The AGENT block.**
 fn the_agent_block() -> Destination {
     let mut d = Driver::cold_start("agent_block");
-    d.click("View");
-    d.click("Show agent");
-    assert!(d.showing("AGENT"), "View ▸ Show agent did not put the AGENT block on screen: {:#?}", d.words());
+    // Owner exception (2026-11-12, NV-10 #387): the AGENT block is the Agent workspace's, one chord away (Cmd/Ctrl+9), where it was
+    // View ▸ Show agent; the compact block is still that toggle, and is not the destination measured here.
+    d.chord(&[primary(), KeyCode::Digit9], "press Cmd/Ctrl+9 (the Agent workspace)");
+    assert_eq!(d.panel_name(), Mode::Agent.label(), "Cmd/Ctrl+9 opens the Agent workspace");
+    assert!(d.showing("AGENT"), "the Agent workspace did not put the AGENT block on screen: {:#?}", d.words());
     // **The block's own three lines**, so this is the block and not a heading that happens to match.
     for line in ["HEARD", "NEWEST", "HAND-BACK"] {
         assert!(d.showing(line), "the AGENT block is on screen without its `{line}` line");
@@ -755,12 +758,112 @@ fn plural<'a>(n: usize, one: &'a str, many: &'a str) -> &'a str {
     if n == 1 { one } else { many }
 }
 
-/// **The document, rendered from the rows.** No clock, no paths, so two runs produce one text.
-fn render(rows: &[Destination]) -> String {
+/// **What the frozen baseline (`navigation-baseline.md`, NV-01 #378) said about one destination.**
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Was {
+    keys: u32,
+    pointer: u32,
+    arrives: bool,
+}
+
+/// **The frozen baseline's rows**, by destination, read from the document NV-01 left. A document that does not read is a failure: the
+/// comparison would otherwise be against nothing.
+fn baseline() -> Vec<(String, Was)> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/ui/navigation-baseline.md");
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let mut rows = Vec::new();
+    for line in text.lines().filter(|l| l.starts_with("| ") && !l.starts_with("| Destination")) {
+        let cells: Vec<&str> = line.trim_matches('|').split(" | ").map(str::trim).collect();
+        if cells.len() < 5 {
+            continue;
+        }
+        let (Ok(keys), Ok(pointer)) = (cells[2].parse::<u32>(), cells[3].parse::<u32>()) else { continue };
+        rows.push((cells[0].to_owned(), Was { keys, pointer, arrives: cells[4] == "yes" }));
+    }
+    assert!(rows.len() >= ROWS.len(), "the baseline lists {} destinations and this test measures {}", rows.len(), ROWS.len());
+    rows
+}
+
+/// **What NV-01 held a later change to**, per destination: a workspace in one press, or a named thing in the everything-finder.
+#[derive(Clone, Copy, Debug)]
+enum Target {
+    /// One key press, no pointer.
+    OnePress,
+    /// `Cmd+P`, its name, `Enter`: met when the finder's index holds an entry of that kind for the fixture's thing.
+    Finder(Kind),
+}
+
+/// Which target a destination is held to.
+fn target_of(what: &str) -> Target {
+    match what {
+        "A named map" => Target::Finder(Kind::Map),
+        "A named piece on the open map" => Target::Finder(Kind::Placement),
+        "A piece's library entry" => Target::Finder(Kind::Piece),
+        "A tile" => Target::Finder(Kind::Tile),
+        "A composition" => Target::Finder(Kind::Composition),
+        "One of a rig's clips" => Target::Finder(Kind::Rig),
+        "A game data file" => Target::Finder(Kind::Data),
+        "The notes" => Target::Finder(Kind::Note),
+        _ => Target::OnePress,
+    }
+}
+
+/// **The issues filed for a missed target**, by destination (NV-11, #388): a missed target is its own issue, naming the destination and
+/// the route. A miss with no entry here fails the test, so a target cannot be missed quietly.
+const FILED: &[(&str, &str)] = &[
+    ("A tile", "#390"),
+    ("One of a rig's clips", "#391"),
+    ("A sound cue", "#392"),
+    ("A map's water", "#393"),
+    ("A map's forest", "#394"),
+    ("A map's lights", "#395"),
+    ("A game data file", "#396"),
+    ("The problems list", "#397"),
+    ("The notes", "#398"),
+];
+
+/// **How many entries the everything-finder holds of each kind**, on the fixture project.
+fn finder_counts() -> Vec<(Kind, usize)> {
+    let d = Driver::cold_start("finder");
+    let index = d.app.world().resource::<GotoIndex>();
+    [Kind::Map, Kind::Placement, Kind::Piece, Kind::Tile, Kind::Composition, Kind::Rig, Kind::Data, Kind::Note]
+        .into_iter()
+        .map(|kind| (kind, index.of_kind(kind).count()))
+        .collect()
+}
+
+/// **Is the target met?** `Ok` or the measured reason it is not.
+fn target_met(row: &Destination, finder: &[(Kind, usize)]) -> Result<(), String> {
+    match target_of(row.what) {
+        Target::OnePress => {
+            let arrived = matches!(row.reach, Reach::Arrived);
+            if arrived && row.cost.presses <= 1 && row.cost.pointer == 0 {
+                Ok(())
+            } else {
+                Err(format!(
+                    "{} press(es) and {} pointer action(s) against one press{}",
+                    row.cost.presses,
+                    row.cost.pointer,
+                    if arrived { "" } else { ", and it does not arrive" }
+                ))
+            }
+        }
+        Target::Finder(kind) => {
+            if finder.iter().any(|(k, n)| *k == kind && *n > 0) {
+                Ok(())
+            } else {
+                Err(format!("the finder's index holds no {kind:?} entry for this fixture, so Cmd+P, its name, Enter does not reach it"))
+            }
+        }
+    }
+}
+
+/// **The document, rendered from the rows, the frozen baseline's rows and the targets.** No clock, no paths, so two runs produce one text.
+fn render(rows: &[Destination], was: &[(String, Was)], finder: &[(Kind, usize)]) -> String {
     let mut out = String::from(
         "# Getting around, as it is now\n\
          \n\
-         The baseline this is measured against is `navigation-baseline.md`, frozen as NV-01 (#378) left it.\n\
+         Measured against `navigation-baseline.md`, which is frozen as NV-01 (#378) left it (`the_navigation_baseline_stays_frozen`).\n\
          \n\
          Generated by `crates/bevy_cauldron/tests/navigation.rs` (`navigation::`), which drives the editor from a\n\
          cold start on a fixture project by the keys and pointer actions a person uses. The test **checks** this\n\
@@ -778,27 +881,45 @@ fn render(rows: &[Destination]) -> String {
          \n\
          ## What a later change is held to\n\
          \n\
-         - Any workspace in **1 press**.\n\
-         - Any named thing in at most **Cmd+P, its name and Enter** — one press, some typing, one press.\n\
-         - Back to where you were in **1 press**.\n\
+         - Any workspace in **1 press**: a destination of the workspace kind is *met* when it arrives in at most one press and no pointer action.\n\
+         - Any named thing in at most **Cmd+P, its name and Enter** — one press, some typing, one press: *met* when the finder's index holds an\n\
+         \x20 entry of that kind for the fixture's thing (the finder's own tests, `goto`, hold that a chosen row arrives).\n\
+         - Back to where you were in **1 press**: held by `back_and_forward_across_workspaces`, not a row here.\n\
+         - **Never worse than the baseline**: a destination that arrived then still arrives, and costs no more keys and pointer actions together.\n\
+         \n\
+         A target that is *missed* is filed as its own issue, naming the destination and the route; the issue is cited in the Target column and\n\
+         the test fails for a miss with none.\n\
          \n\
          ## The rows\n\
          \n\
-         | Destination | Route | Keys | Pointer | Arrives |\n\
-         |---|---|---|---|---|\n",
+         | Destination | Route | Keys | Pointer | Arrives | Baseline (keys, pointer, arrives) | Target |\n\
+         |---|---|---|---|---|---|---|\n",
     );
     for row in rows {
         let arrives = match &row.reach {
             Reach::Arrived => "yes".to_owned(),
             Reach::Unreachable(why) => format!("**no** — {why}"),
         };
+        let old = was
+            .iter()
+            .find(|(name, _)| name == row.what)
+            .map_or_else(|| "not in the baseline".to_owned(), |(_, w)| format!("{}, {}, {}", w.keys, w.pointer, if w.arrives { "yes" } else { "no" }));
+        let target = match target_met(row, finder) {
+            Ok(()) => "met".to_owned(),
+            Err(why) => {
+                let issue = FILED.iter().find(|(what, _)| *what == row.what).map_or("no issue filed", |(_, issue)| *issue);
+                format!("**missed** — {why} ({issue})")
+            }
+        };
         out.push_str(&format!(
-            "| {} | {} | {} | {} | {} |\n",
+            "| {} | {} | {} | {} | {} | {} | {} |\n",
             row.what,
             row.route(),
             row.cost.presses,
             row.cost.pointer,
-            arrives
+            arrives,
+            old,
+            target
         ));
     }
     out.push_str("\n## What the numbers say\n\n");
@@ -832,7 +953,34 @@ fn every_destination_is_measured_and_the_baseline_says_so() {
         rows.len()
     );
 
-    let rendered = render(&rows);
+    // **Never worse than the baseline** (NV-11, #388): what arrived then arrives now, at no more keys and pointer actions together.
+    let was = baseline();
+    for row in &rows {
+        let (_, old) = was.iter().find(|(name, _)| name == row.what).unwrap_or_else(|| panic!("`{}` is not in the frozen baseline", row.what));
+        let arrives = matches!(row.reach, Reach::Arrived);
+        assert!(!(old.arrives && !arrives), "reachability got worse: `{}` arrived in the baseline and does not now", row.what);
+        if old.arrives && arrives {
+            assert!(
+                row.cost.presses + row.cost.pointer <= old.keys + old.pointer,
+                "reachability got worse: `{}` cost {} key(s) and {} pointer action(s) in the baseline and costs {} and {} now",
+                row.what,
+                old.keys,
+                old.pointer,
+                row.cost.presses,
+                row.cost.pointer
+            );
+        }
+    }
+    // **Every missed target has its issue.**
+    let finder = finder_counts();
+    let unfiled: Vec<String> = rows
+        .iter()
+        .filter(|row| target_met(row, &finder).is_err() && !FILED.iter().any(|(what, _)| *what == row.what))
+        .map(|row| format!("{} ({}; route: {})", row.what, target_met(row, &finder).err().unwrap_or_default(), row.route()))
+        .collect();
+    let regenerating = std::env::var_os(REGENERATE).is_some();
+    assert!(unfiled.is_empty() || regenerating, "these targets are missed and no issue is filed for them (add each to FILED):\n  {}", unfiled.join("\n  "));
+    let rendered = render(&rows, &was, &finder);
     let path = baseline_path();
     let committed = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     if committed == rendered {

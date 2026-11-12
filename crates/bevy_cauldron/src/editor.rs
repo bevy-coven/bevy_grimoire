@@ -2609,7 +2609,7 @@ impl Plugin for EditorPlugin {
                     crate::light_overlay::follow_the_light_map_tick,
                     crate::light_overlay::draw_light_overlay
                         .after(crate::light_overlay::refresh_light_overlay)
-                        .run_if(in_map_mode)
+                        .run_if(in_map_or_world_mode)
                         .run_if(resource_exists::<OpenMap>)
                         .run_if(resource_exists::<Project>),
                 ),
@@ -2638,6 +2638,8 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::workspace_panels::WorkspacePanelsPlugin);
         // **The Game workspace** (NV-09, #386): the running game's panel, its log and its state, and the watching of it.
         app.add_plugins(crate::game_view::GameViewPlugin);
+        // **The Agent workspace** (NV-10, #387): the Familiar's block and history, in a workspace of their own.
+        app.add_plugins(crate::agent_view::AgentViewPlugin);
         app.add_plugins(crate::app_verbs::AppVerbsPlugin);
         // **Each panel header's "?"** (UI-91, #257): the guide page that covers what the panel holds.
         app.add_plugins(crate::help::HelpPlugin);
@@ -9236,6 +9238,13 @@ pub fn sense_context(
 /// `Workspace::map_is_open`, and for the same reason.
 pub(crate) fn in_map_mode(mode: Option<Res<crate::tiles::Mode>>) -> bool {
     mode.is_some_and(|m| *m == crate::tiles::Mode::Map)
+}
+
+/// **Is the Map or the World panel showing?** (NV-08, #385.) What the light map's overlay draws under: its button is in the World
+/// workspace now, and a toggle whose result is drawn only in the Map would show nothing where it was pressed.
+#[cfg(feature = "bevy_light_grid")]
+pub(crate) fn in_map_or_world_mode(mode: Option<Res<crate::tiles::Mode>>) -> bool {
+    mode.is_some_and(|m| matches!(*m, crate::tiles::Mode::Map | crate::tiles::Mode::World))
 }
 
 /// **The rule seed the project states for this map**, or `none` when no rule names it.

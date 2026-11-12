@@ -88,6 +88,8 @@ pub enum Context {
     /// **The Game tab** (NV-09, #386): the running game's panel. No keys of its own, like [`Context::World`]: Play and Stop
     /// are buttons and the commands they already are.
     Game,
+    /// **The Agent tab** (NV-10, #387): the Familiar's panel. No keys of its own, like [`Context::World`].
+    Agent,
     /// A text field is taking raw keys. Overlaps everything, and suppresses everything.
     ///
     /// **A filter box sets this too**, and says so a second way: `Live.2` carries
@@ -100,7 +102,7 @@ impl Context {
     /// **Every context a binding could be judged against**, in one place for the same reason
     /// [`Stance::ALL`] is: the badge tests sweep it, and a seventh context therefore costs one
     /// edit here rather than a hand-written list in each test that silently stops reaching it.
-    pub const ALL: [Context; 10] = [
+    pub const ALL: [Context; 11] = [
         Context::Global,
         Context::Map,
         Context::Meshes,
@@ -110,6 +112,7 @@ impl Context {
         Context::World,
         Context::Sound,
         Context::Game,
+        Context::Agent,
         Context::Typing,
     ];
 
@@ -130,7 +133,8 @@ impl Context {
             | (Compose, Compose)
             | (World, World)
             | (Sound, Sound)
-            | (Game, Game) => true,
+            | (Game, Game)
+            | (Agent, Agent) => true,
             // **The tabs are never live together**, which is what lets them reuse each other's
             // letters freely: the Tiles tab walks a lattice with `T`/`F`/`G`/`H` and so does Meshes,
             // one tab over. `the_key_space_has_no_collisions` polices that they only do so here.

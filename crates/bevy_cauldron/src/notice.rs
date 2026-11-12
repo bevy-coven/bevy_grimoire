@@ -56,7 +56,7 @@ pub(crate) struct Showing {
 /// the person dismissed must not come back because they changed tab.
 fn source_of(tab: Mode) -> u8 {
     match tab {
-        Mode::Map | Mode::World | Mode::Sound | Mode::Game => 0,
+        Mode::Map | Mode::World | Mode::Sound | Mode::Game | Mode::Agent => 0,
         Mode::Meshes | Mode::Tiles => 1,
         Mode::Anim => 2,
         Mode::Compose => 3,
@@ -166,7 +166,7 @@ fn paint_notices(mode: Res<Mode>, tabs: TabStatuses, mut showing: ResMut<Showing
     let TabStatuses { editor, import, bench, compose } = tabs;
     let tab = *mode;
     let status = match tab {
-        Mode::Map | Mode::World | Mode::Sound | Mode::Game => &editor.status,
+        Mode::Map | Mode::World | Mode::Sound | Mode::Game | Mode::Agent => &editor.status,
         // **Both tabs report through `ImportState`.** The Tiles tab's own verbs write there too —
         // one status line for one file's worth of work, rather than a second channel to keep in step.
         Mode::Meshes | Mode::Tiles => &import.status,
@@ -302,7 +302,7 @@ fn dismiss(
         return;
     }
     match *mode {
-        Mode::Map | Mode::World | Mode::Sound | Mode::Game => {}
+        Mode::Map | Mode::World | Mode::Sound | Mode::Game | Mode::Agent => {}
         Mode::Meshes | Mode::Tiles => import.status.dismiss(),
         Mode::Anim => bench.status.dismiss(),
         Mode::Compose => compose.status.dismiss(),
@@ -358,7 +358,7 @@ fn copy_out(
     // rather than a helper returning `&mut Status`, because four `ResMut` params cannot be handed
     // to one function and returned from it without borrowing all four for the rest of the system.
     let status: &mut crate::chrome::Status = match tab {
-        Mode::Map | Mode::World | Mode::Sound | Mode::Game => &mut editor.status,
+        Mode::Map | Mode::World | Mode::Sound | Mode::Game | Mode::Agent => &mut editor.status,
         Mode::Meshes | Mode::Tiles => &mut import.status,
         Mode::Anim => &mut bench.status,
         Mode::Compose => &mut compose.status,

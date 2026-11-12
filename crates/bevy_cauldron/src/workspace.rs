@@ -163,7 +163,8 @@ impl Workspace {
             // a page of their own (NV-08, NV-09, NV-10), and until they are built they show no
             // panel and are not registered.
             Workspace::Game => &[Mode::Game],
-            Workspace::Project | Workspace::Files | Workspace::Agent => &[],
+            Workspace::Agent => &[Mode::Agent],
+            Workspace::Project | Workspace::Files => &[],
         }
     }
 
@@ -193,7 +194,10 @@ impl Workspace {
     /// A workspace that is not built is refused rather than shown empty: the vision's *"no
     /// placeholder screens"*.
     pub const fn is_built(self) -> bool {
-        matches!(self, Workspace::Map | Workspace::Kit | Workspace::Animation | Workspace::World | Workspace::Sound | Workspace::Game)
+        matches!(
+            self,
+            Workspace::Map | Workspace::Kit | Workspace::Animation | Workspace::World | Workspace::Sound | Workspace::Game | Workspace::Agent
+        )
     }
 
     /// **What this workspace is waiting for**, in the issue series' own words, or `None` when it is
@@ -203,8 +207,13 @@ impl Workspace {
         match self {
             Workspace::Project => Some("the Project workspace arrives with NV-08 (#385)"),
             Workspace::Files => Some("the Files workspace arrives with GD-11"),
-            Workspace::Agent => Some("the Agent workspace arrives with NV-10 (#387)"),
-            Workspace::Map | Workspace::Kit | Workspace::Animation | Workspace::World | Workspace::Sound | Workspace::Game => None,
+            Workspace::Map
+            | Workspace::Kit
+            | Workspace::Animation
+            | Workspace::World
+            | Workspace::Sound
+            | Workspace::Game
+            | Workspace::Agent => None,
         }
     }
 
@@ -260,6 +269,11 @@ impl Workspace {
     /// **Run condition: is the Game workspace open?** (NV-09, #386.)
     pub fn game_is_open(workspace: Option<Res<Workspace>>) -> bool {
         workspace.is_some_and(|w| *w == Workspace::Game)
+    }
+
+    /// **Run condition: is the Agent workspace open?** (NV-10, #387.)
+    pub fn agent_is_open(workspace: Option<Res<Workspace>>) -> bool {
+        workspace.is_some_and(|w| *w == Workspace::Agent)
     }
 
     /// Whether this workspace's middle is the world — the workspaces that share one viewport

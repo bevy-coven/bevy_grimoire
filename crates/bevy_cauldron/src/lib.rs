@@ -78,6 +78,7 @@ pub mod outliner;
 pub mod library_browser;
 pub mod game_ui_preview;
 pub mod game_view;
+pub mod agent_view;
 pub mod shell_view;
 pub mod app_verbs;
 pub mod menu_bar;
