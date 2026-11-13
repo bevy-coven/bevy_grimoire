@@ -286,10 +286,16 @@ const UNCHECKED: &[&str] = &[
     // as a whole and refuses what it cannot serve, which `bevy_cauldron::agent_guide::sync_guide_reload`
     // decides. Owner exception (2026-11-10): the list grows by the kind this issue registers.
     "guide",
+    // **The design tree is a folder, not a file** (SG-01, #400): `design/**` is a tree of places whose files
+    // are Markdown prose plus each area's `area.yaml`. One `check` gets one file's text, and what a tree can
+    // be wrong about — a level folder with no map, two areas that overlap, a chain over its limit, a picture
+    // that is not there — is a question about the folder, which `bevy_grimoire_core::design::Tree::read`
+    // answers and names the path for. The list grows by the kind this issue registers.
+    "design",
 ];
 
 /// **A literal, not `UNCHECKED.len()`**: a number that is its own measure can never fail.
-const UNCHECKED_MAX: usize = 13;
+const UNCHECKED_MAX: usize = 14;
 
 #[test]
 fn the_unchecked_list_only_shrinks() {

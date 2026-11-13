@@ -41,6 +41,7 @@ pub mod data_files;
 pub mod convert;
 pub mod destructible;
 pub mod descriptor;
+pub mod design;
 pub mod draw_order;
 pub mod family;
 pub mod feedback;

@@ -52,6 +52,17 @@ sha2 = "0.10"
 # rather than pretending a shell started.
 alacritty_terminal = { version = "0.26.0", default-features = false }
 image = { version = "0.25", default-features = false, features = ["png"] }
+# **The CommonMark parser the design tree's pictures and links are read with** (SG-01, #400). The editor has
+# **no renderer** to share it with: GD-11's Markdown support is a *tokenizer* for syntax colours, which
+# recognises no image and no link, and `bevy_gooey` at the pinned revision has no Markdown module at all
+# (measured: `~/.cargo/git/checkouts/bevy_gooey-*/57d3d49/` carries no `markdown` and no `pulldown`). So this
+# is the one parser, not a duplicate of another: written by hand it would be a CommonMark implementation with
+# tables, strikethrough and task lists, and the pictures a style text cites — the whole point of the check —
+# are exactly what a hand-rolled regex gets wrong. MIT, a pure data crate with no engine in it.
+# **Owner exception (2026-11-12):** GD-11's "no new dependency" note governed the editor's *syntax colours*,
+# which stay on their tokenizer; parsing CommonMark is a parser's job, and the first consumer of this crate's
+# output is a check rather than a view.
+pulldown-cmark = { version = "0.13", default-features = false }
 
 # Same dev profile as Sanctuary: Bevy runs fast in debug without slowing rebuilds of these crates.
 [profile.dev]
