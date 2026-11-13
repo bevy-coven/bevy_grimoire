@@ -760,7 +760,17 @@ impl Talk {
         let p: TalkParams = serde_json::from_value(params.clone())
             .map_err(|e| bad_params(self.name(), "`id`, `agent`, `question`, `answer`, `summary`, `assumptions`, `ops`, `captures`", e))?;
         let source = ctx.source;
-        let refs = ctx.open.as_ref().and_then(|o| bevy_grimoire_core::references::References::load(&bevy_grimoire_core::references::path_for_map(&o.map_path)).ok()).unwrap_or_default();
+        // **Every picture on any board of the project**: a note cites one by its path (`board picture <path>`).
+        let on_boards: Vec<String> = ctx
+            .root_or_project()
+            .map(|root| {
+                bevy_grimoire_core::board::places_with_a_board(&root)
+                    .iter()
+                    .filter_map(|place| bevy_grimoire_core::board::Board::of_place(&root, place).ok())
+                    .flat_map(|b| b.pictures.into_iter().map(|e| e.path))
+                    .collect()
+            })
+            .unwrap_or_default();
         run(ctx, write, |notes, _| {
             let before = notes.notes.clone();
             if let Some(before) = &p.restore {
@@ -793,9 +803,12 @@ impl Talk {
                         // A person finishing a note by hand has no pictures to name; the record says so.
                         captures = vec!["(none: resolved by a person)".to_owned(); 2];
                     }
-                    let cited = refs.unknown_citations(p.summary.iter().map(String::as_str).chain(p.assumptions.iter().map(String::as_str)));
+                    let cited: Vec<String> = bevy_grimoire_core::board::citations(p.summary.iter().map(String::as_str).chain(p.assumptions.iter().map(String::as_str)))
+                        .into_iter()
+                        .filter(|path| !on_boards.contains(path))
+                        .collect();
                     if !cited.is_empty() {
-                        return Err(Refusal::new(format!("{} cites {} but this map has no such reference (see `references` in grimoire_state). Nothing was changed.", self.name(), cited.join(", "))));
+                        return Err(Refusal::new(format!("{} cites the board picture {} but no board of this project has it (see `board` in grimoire_state). Nothing was changed.", self.name(), cited.join(", "))));
                     }
                     let record = notes::Resolution { summary: need(&p.summary, "summary")?, assumptions: p.assumptions.clone(), ops: p.ops.clone(), captures };
                     notes.resolve_record(id, &by, record, now).map_err(Refusal::new)?;
@@ -840,7 +853,7 @@ macro_rules! talk_operation {
                 state_of_open(ctx)
             }
             fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
-                let mut scratch = Ctx { open: ctx.open.clone(), source: ctx.source, ..Ctx::default() };
+                let mut scratch = Ctx { open: ctx.open.clone(), project: ctx.project.clone(), root: ctx.root.clone(), source: ctx.source, ..Ctx::default() };
                 $talk.apply(&mut scratch, params, false)?;
                 Ok(params.clone())
             }

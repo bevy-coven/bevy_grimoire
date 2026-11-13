@@ -697,7 +697,7 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::oplog_view::OplogView", Ownership::Project),
     // **Derived from the open project's `data.yaml` and the files it lists**: what the editor last found when it read them (#200). Another project's registry starts it afresh.
     ("bevy_cauldron::data_view::DataView", Ownership::Project),
-    // **Derived from the open map's `references.yaml` and the pictures it lists**: what the editor last found when it read their headers (#200). Another map or project starts it afresh.
+    // **Derived from every board's `board.yaml` and the pictures they list**: what the editor last found when it read their headers (#200). Another map or project starts it afresh.
     ("bevy_cauldron::reference_view::ReferenceView", Ownership::Project),
     ("bevy_cauldron::family_host::FamilySettings", Ownership::Session),
     // **`Session`, for `FamilySettings`' reason**: the project's `family/bevy_gooey.yaml` read as the game

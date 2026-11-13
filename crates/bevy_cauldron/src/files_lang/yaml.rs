@@ -1,114 +1,60 @@
-//! **What the file editor knows about the languages a project holds** (GD-11, #373, and GD-12, #374).
-//!
-//! Engine-free: text in, byte ranges out. [`crate::files`] is what turns these answers into what
-//! `bevy_gooey`'s `code_editor` draws (`Highlights`, `Diagnostics`, `FoldRanges`, `CodeCompletions`,
-//! `CodeHover`), so a rule about a language is stated once, here, and a test reads it without a window.
-//!
-//! # Colours and errors cannot disagree, because they are read from the same place
-//!
-//! - **YAML** is scanned line by line in the one shape the project's writer emits (block style, a key a
-//!   line, an item a line: `bevy_grimoire_core::yaml`'s "written style"), and *its errors are the
-//!   loader's*: a file of a known kind is refused by [`bevy_grimoire_core::reload_check::check`], the
-//!   reader the game loads it with, and any other file by the event walk
-//!   ([`bevy_grimoire_core::yaml::to_json`]) that refuses a duplicate key, an anchor, a tab and a second
-//!   document. A key colour is the key the walk would name.
-//! - **A reference is a link.** A field the kind's JSON Schema marks `x-dark-factory-ref` (a placement's
-//!   `descriptor` names a library piece) is drawn as `SyntaxRole::Reference`; the schema is the one
-//!   [`bevy_grimoire_core::schema`] generates from the Rust type, so nothing here knows which fields
-//!   name another file's value.
-//! - **Completion and hover are the schema's**: the field names a mapping may hold, the values an enum
-//!   may take, the ids a reference may point at, and each field's doc comment.
-//!
-//! # Not a parser, and why that is a decision and not a shortcut
-//!
-//! The colours of RON, Rhai and Markdown come from a small tokenizer each (no new dependency: the
-//! owner's call of 2026-11-12). Their *errors* are not guessed by it: RON (no project file is RON any more, so
-//! it is only a file a game keeps of its own) and Rhai's are only what a scan can be sure of (a bracket that
-//! never closes, a string that never ends: the engine's own compile is a crate the editor does not link), and
-//! Markdown has none.
-
-use std::ops::Range;
+//! **YAML**: the project's own files, by the loader's own readers (see the module note of [`super`]).
 
 use std::collections::HashMap;
+use std::ops::Range;
 
 use bevy_gooey::{CodeSeverity, SyntaxRole};
-use bevy_grimoire_core::yaml::SpanKind;
 use bevy_grimoire_core::reload_check::{self, Check};
+use bevy_grimoire_core::yaml::SpanKind;
 use serde_json::Value;
 
-/// **The languages the editor colours**, by the file's extension.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Lang {
-    Yaml,
-    Ron,
-    Rhai,
-    Markdown,
-    /// Anything else the project holds as text: no colour, no folds, no findings.
-    Plain,
-}
+use super::{Completion, Env, Finding, Lang, Language, Lines, finding_on, word_before};
 
-impl Lang {
-    /// The language of a path.
-    pub fn of(path: &str) -> Lang {
-        let ext = path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
-        match ext.as_deref() {
-            Some("yaml" | "yml") => Lang::Yaml,
-            Some("ron") => Lang::Ron,
-            Some("rhai") => Lang::Rhai,
-            Some("md" | "markdown") => Lang::Markdown,
-            _ => Lang::Plain,
-        }
-    }
-}
+/// The language of `.yaml` and `.yml` files.
+pub struct Yaml;
 
-/// **Whether a file is one the editor shows read-only**: the files in `trust::COMMAND_FILES` (`agent`
-/// and `play`, which name a program to start; the guide, which tells an agent what to do) and the YAML
-/// spelling of the first two. Changing them is a decision with its own page and its own trust check, so
-/// an edit here must not be a way round it.
-pub fn is_command_file(rel: &str) -> bool {
-    let name = rel.rsplit('/').next().unwrap_or(rel);
-    bevy_grimoire_core::trust::COMMAND_FILES.contains(&name)
-        || rel == bevy_grimoire_core::agent_guide::PROJECT_PATH
-}
-
-/// The sentence a read-only file's tab says, so nobody wonders why the keys do nothing.
-pub const READ_ONLY_NOTE: &str = "Read-only here: this file is changed on its own page, so an edit cannot bypass its trust check";
-
-// ── Lines ────────────────────────────────────────────────────────────────────
-
-/// **A text's lines**, as byte ranges: a line's range excludes its `\n` and its `\r`.
-pub struct Lines<'a> {
-    text: &'a str,
-    starts: Vec<usize>,
-}
-
-impl<'a> Lines<'a> {
-    pub fn new(text: &'a str) -> Lines<'a> {
-        let mut starts = vec![0];
-        starts.extend(text.match_indices('\n').map(|(at, _)| at + 1));
-        Lines { text, starts }
+impl Language for Yaml {
+    fn lang(&self) -> Lang {
+        Lang::Yaml
     }
 
-    /// How many lines there are: a text that ends in `\n` has an empty last one, as the editor counts.
-    pub fn count(&self) -> usize {
-        self.starts.len()
+    fn extensions(&self) -> &'static [&'static str] {
+        &["yaml", "yml"]
     }
 
-    /// The bytes of line `n` (0-based), without its line break.
-    pub fn range(&self, n: usize) -> Range<usize> {
-        let start = self.starts.get(n).copied().unwrap_or(self.text.len());
-        let end = self.starts.get(n + 1).map_or(self.text.len(), |next| next - 1);
-        let end = end.max(start);
-        if self.text[start..end].ends_with('\r') { start..end - 1 } else { start..end }
+    fn highlights(&self, text: &str, schema: Option<&Value>) -> Vec<(Range<usize>, SyntaxRole)> {
+        yaml_highlights(text, schema.map(Schema::new))
     }
 
-    /// The line a byte offset is on.
-    pub fn line_of(&self, offset: usize) -> usize {
-        self.starts.partition_point(|&s| s <= offset).saturating_sub(1)
+    fn folds(&self, text: &str) -> Vec<Range<usize>> {
+        yaml_folds(text)
     }
 
-    pub fn text(&self, n: usize) -> &'a str {
-        &self.text[self.range(n)]
+    /// **What is wrong with a YAML file**: a project file by its kind's own reader, any other by the event walk.
+    fn diagnose(&self, path: &str, text: &str, _env: &Env<'_>) -> Vec<Finding> {
+        let lines = Lines::new(text);
+        let refused = match reload_check::kind_of_path(path) {
+            Some(kind) => match reload_check::check(kind, path, text) {
+                Check::Refused(r) => Some((r.reason, r.field)),
+                Check::Valid => None,
+                Check::Unchecked => walk_refusal(path, text),
+            },
+            None => walk_refusal(path, text),
+        };
+        let Some((reason, field)) = refused else { return Vec::new() };
+        let (line, message) = split_position(&reason);
+        let line = line
+            .or_else(|| field.as_deref().and_then(|f| bevy_grimoire_core::yaml::lines(text).get(f).copied()))
+            .unwrap_or(1);
+        vec![finding_on(&lines, text, line, message, CodeSeverity::Error)]
+    }
+
+    fn complete(&self, _path: &str, text: &str, offset: usize, schema: Option<&Value>, env: &Env<'_>) -> Completion {
+        complete_yaml(text, offset, schema, env.refs)
+    }
+
+    fn hover(&self, _path: &str, text: &str, offset: usize, schema: Option<&Value>, _env: &Env<'_>) -> Option<(Range<usize>, String)> {
+        hover_yaml(text, offset, schema)
     }
 }
 
@@ -502,21 +448,6 @@ fn first_sentence(doc: &str) -> String {
 
 // ── Colour ───────────────────────────────────────────────────────────────────
 
-/// **The spans a file's text is coloured in**, by byte range. `schema` is the file's kind's JSON Schema
-/// when it has one: YAML values it marks as references are links.
-pub fn highlights(lang: Lang, text: &str, schema: Option<&Value>) -> Vec<(Range<usize>, SyntaxRole)> {
-    if text.len() > COLOUR_LIMIT_BYTES {
-        return Vec::new();
-    }
-    match lang {
-        Lang::Yaml => yaml_highlights(text, schema.map(Schema::new)),
-        Lang::Ron => code_highlights(text, Code::Ron).0,
-        Lang::Rhai => code_highlights(text, Code::Rhai).0,
-        Lang::Markdown => markdown_highlights(text),
-        Lang::Plain => Vec::new(),
-    }
-}
-
 fn scalar_role(value: &str) -> Option<SyntaxRole> {
     let first = value.chars().next()?;
     if matches!(first, '"' | '\'') {
@@ -639,319 +570,6 @@ fn segs_of(path: &str) -> Vec<Seg> {
     out
 }
 
-/// **The largest text the editor colours and folds**, in bytes. Past this a file is data a program wrote: it is shown
-/// plain, because the colours are recomputed on every revision.
-pub const COLOUR_LIMIT_BYTES: usize = 1024 * 1024;
-// ── RON and Rhai ─────────────────────────────────────────────────────────────
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Code {
-    Ron,
-    Rhai,
-}
-
-const RHAI_KEYWORDS: [&str; 26] = [
-    "let", "const", "fn", "private", "if", "else", "while", "do", "until", "loop", "for", "in", "break", "continue", "return",
-    "switch", "throw", "try", "catch", "true", "false", "import", "export", "as", "this", "global",
-];
-
-const RON_KEYWORDS: [&str; 4] = ["true", "false", "None", "Some"];
-
-/// One bracket the scan met: the character, and the line it is on.
-#[derive(Clone, Copy)]
-struct Bracket {
-    ch: u8,
-    at: usize,
-    line: usize,
-}
-
-/// What a scan of RON or Rhai found: the spans, the brackets in order, and a string that never ended.
-struct Scan {
-    brackets: Vec<Bracket>,
-    unterminated: Option<usize>,
-}
-
-fn code_highlights(text: &str, code: Code) -> (Vec<(Range<usize>, SyntaxRole)>, Scan) {
-    let bytes = text.as_bytes();
-    let mut spans = Vec::new();
-    let mut scan = Scan { brackets: Vec::new(), unterminated: None };
-    let mut line = 0;
-    let mut at = 0;
-    while at < bytes.len() {
-        let b = bytes[at];
-        match b {
-            b'\n' => {
-                line += 1;
-                at += 1;
-            }
-            b'/' if bytes.get(at + 1) == Some(&b'/') => {
-                let end = text[at..].find('\n').map_or(text.len(), |n| at + n);
-                spans.push((at..end, SyntaxRole::Comment));
-                at = end;
-            }
-            b'/' if bytes.get(at + 1) == Some(&b'*') => {
-                let mut depth = 0;
-                let mut end = at;
-                while end < bytes.len() {
-                    if bytes[end..].starts_with(b"/*") {
-                        depth += 1;
-                        end += 2;
-                    } else if bytes[end..].starts_with(b"*/") {
-                        depth -= 1;
-                        end += 2;
-                        if depth == 0 {
-                            break;
-                        }
-                    } else {
-                        if bytes[end] == b'\n' {
-                            line += 1;
-                        }
-                        end += 1;
-                    }
-                }
-                spans.push((at..end.min(text.len()), SyntaxRole::Comment));
-                at = end.min(text.len());
-            }
-            // **A character literal is a string of one character** (`'"'`, `'('`, `'\n'`): its quote and what is inside it
-            // open no string and no bracket. A lone `'` (a lifetime in a RON enum name, an apostrophe) is only itself.
-            b'\'' => {
-                match char_literal_end(text, at) {
-                    Some(end) => {
-                        spans.push((at..end, SyntaxRole::String));
-                        at = end;
-                    }
-                    None => at += 1,
-                }
-            }
-            b'"' | b'`' => {
-                let quote = b;
-                let begin = at;
-                at += 1;
-                let mut closed = false;
-                while at < bytes.len() {
-                    match bytes[at] {
-                        // A backslash takes the next byte with it, and a line break it takes is still a line.
-                        b'\\' if quote == b'"' => {
-                            if bytes.get(at + 1) == Some(&b'\n') {
-                                line += 1;
-                            }
-                            at += 2;
-                        }
-                        c if c == quote => {
-                            at += 1;
-                            closed = true;
-                            break;
-                        }
-                        b'\n' if quote == b'"' => break,
-                        b'\n' => {
-                            line += 1;
-                            at += 1;
-                        }
-                        _ => at += 1,
-                    }
-                }
-                let at_end = at.min(text.len());
-                if !closed && scan.unterminated.is_none() {
-                    scan.unterminated = Some(begin);
-                }
-                spans.push((begin..at_end, SyntaxRole::String));
-                at = at_end;
-            }
-            b'(' | b')' | b'[' | b']' | b'{' | b'}' => {
-                scan.brackets.push(Bracket { ch: b, at, line });
-                at += 1;
-            }
-            b'0'..=b'9' => {
-                let begin = at;
-                at += 1;
-                while at < bytes.len() {
-                    match bytes[at] {
-                        b'0'..=b'9' | b'_' | b'.' | b'a'..=b'z' | b'A'..=b'Z' => at += 1,
-                        b'+' | b'-' if matches!(bytes[at - 1], b'e' | b'E') => at += 1,
-                        _ => break,
-                    }
-                }
-                spans.push((begin..at, SyntaxRole::Number));
-            }
-            b'-' if bytes.get(at + 1).is_some_and(u8::is_ascii_digit) => {
-                let begin = at;
-                at += 1;
-                while at < bytes.len() && (bytes[at].is_ascii_alphanumeric() || matches!(bytes[at], b'_' | b'.')) {
-                    at += 1;
-                }
-                spans.push((begin..at, SyntaxRole::Number));
-            }
-            c if c.is_ascii_alphabetic() || c == b'_' => {
-                let begin = at;
-                while at < bytes.len() && (bytes[at].is_ascii_alphanumeric() || bytes[at] == b'_') {
-                    at += 1;
-                }
-                let word = &text[begin..at];
-                let next = text[at..].trim_start_matches([' ', '\t']);
-                let role = if code == Code::Ron && RON_KEYWORDS.contains(&word) || code == Code::Rhai && RHAI_KEYWORDS.contains(&word) {
-                    Some(SyntaxRole::Keyword)
-                } else if next.starts_with(':') && !next.starts_with("::") {
-                    Some(SyntaxRole::Key)
-                } else if code == Code::Rhai && next.starts_with('(') {
-                    Some(SyntaxRole::Function)
-                } else if code == Code::Ron && word.starts_with(|c: char| c.is_ascii_uppercase()) {
-                    Some(SyntaxRole::Type)
-                } else {
-                    None
-                };
-                if let Some(role) = role {
-                    spans.push((begin..at, role));
-                }
-            }
-            _ => at += 1,
-        }
-    }
-    (spans, scan)
-}
-
-fn bracket_folds(scan: &Scan) -> Vec<Range<usize>> {
-    let mut stack: Vec<Bracket> = Vec::new();
-    let mut seen: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
-    let mut out: Vec<Range<usize>> = Vec::new();
-    for bracket in &scan.brackets {
-        match bracket.ch {
-            b'(' | b'[' | b'{' => stack.push(*bracket),
-            _ => {
-                if let Some(open) = stack.pop()
-                    && open.line < bracket.line
-                    && seen.insert((open.line, bracket.line))
-                {
-                    out.push(open.line..bracket.line);
-                }
-            }
-        }
-    }
-    out.sort_by_key(|r| (r.start, std::cmp::Reverse(r.end)));
-    out
-}
-
-/// **Where a character literal that starts at `at` (a `'`) ends**, past its closing quote, or `None` when what follows
-/// is not one: `'x'`, `'"'`, `'\n'`, `'\u{1F600}'` are; a lone quote is not.
-fn char_literal_end(text: &str, at: usize) -> Option<usize> {
-    let rest = &text[at + 1..];
-    let mut chars = rest.char_indices();
-    let (_, first) = chars.next()?;
-    if first == '\'' || first == '\n' {
-        return None;
-    }
-    if first == '\\' {
-        // An escape: one character after the backslash (which may itself be a quote), or a `u{...}` code, then the closing quote.
-        let after = &rest[1..];
-        let escaped = after.chars().next()?;
-        let body = if escaped == 'u' && after[1..].starts_with('{') {
-            let close = after.find('}')?;
-            (close <= CHAR_ESCAPE_BYTES).then_some(close + 1)?
-        } else {
-            escaped.len_utf8()
-        };
-        return after[body..].starts_with('\'').then_some(at + 1 + 1 + body + 1);
-    }
-    let (next, c) = chars.next()?;
-    (c == '\'').then_some(at + 1 + next + 1)
-}
-
-/// The longest an escaped character literal is, in bytes between its backslash and its closing quote (`\u{10FFFF}`).
-const CHAR_ESCAPE_BYTES: usize = 10;
-// ── Markdown ─────────────────────────────────────────────────────────────────
-
-fn fence_of(line: &str) -> Option<&str> {
-    let t = line.trim_start();
-    ["```", "~~~"].into_iter().find(|f| t.starts_with(f))
-}
-
-fn heading_level(line: &str) -> Option<usize> {
-    let hashes = line.bytes().take_while(|b| *b == b'#').count();
-    (1..=6).contains(&hashes).then_some(()).and_then(|()| (line[hashes..].starts_with(' ')).then_some(hashes))
-}
-
-fn markdown_highlights(text: &str) -> Vec<(Range<usize>, SyntaxRole)> {
-    let lines = Lines::new(text);
-    let mut spans = Vec::new();
-    let mut fenced = false;
-    for n in 0..lines.count() {
-        let range = lines.range(n);
-        let line = &text[range.clone()];
-        if fence_of(line).is_some() {
-            spans.push((range, SyntaxRole::Operator));
-            fenced = !fenced;
-            continue;
-        }
-        if fenced {
-            if !line.is_empty() {
-                spans.push((range, SyntaxRole::String));
-            }
-            continue;
-        }
-        if heading_level(line).is_some() {
-            spans.push((range, SyntaxRole::Keyword));
-            continue;
-        }
-        if line.starts_with('>') {
-            spans.push((range, SyntaxRole::Comment));
-            continue;
-        }
-        let indent = line.len() - line.trim_start().len();
-        let body = &line[indent..];
-        let marker = if body.starts_with("- ") || body.starts_with("* ") || body.starts_with("+ ") {
-            1
-        } else {
-            let digits = body.bytes().take_while(u8::is_ascii_digit).count();
-            if digits > 0 && body[digits..].starts_with(". ") { digits + 1 } else { 0 }
-        };
-        if marker > 0 {
-            spans.push((range.start + indent..range.start + indent + marker, SyntaxRole::Operator));
-        }
-        // Inline: `code` is a string, `[text](target)` a link.
-        let mut at = 0;
-        while at < line.len() {
-            let rest = &line[at..];
-            if let Some(inner) = rest.strip_prefix('`') {
-                match inner.find('`') {
-                    Some(end) => {
-                        spans.push((range.start + at..range.start + at + end + 2, SyntaxRole::String));
-                        at += end + 2;
-                    }
-                    None => at += 1,
-                }
-            } else if rest.starts_with('[') {
-                let link = rest.find("](").and_then(|mid| rest[mid..].find(')').map(|close| mid + close + 1));
-                match link {
-                    Some(end) => {
-                        spans.push((range.start + at..range.start + at + end, SyntaxRole::Reference));
-                        at += end;
-                    }
-                    None => at += 1,
-                }
-            } else {
-                at += rest.chars().next().map_or(1, char::len_utf8);
-            }
-        }
-    }
-    spans
-}
-
-// ── Folds ────────────────────────────────────────────────────────────────────
-
-/// **Where a file can fold**, as `start..end` over lines (the header stays drawn, `start + 1..end` hides):
-/// every YAML mapping and sequence, every Rhai or RON block, every Markdown section and code fence.
-pub fn folds(lang: Lang, text: &str) -> Vec<Range<usize>> {
-    if text.len() > COLOUR_LIMIT_BYTES {
-        return Vec::new();
-    }
-    match lang {
-        Lang::Yaml => yaml_folds(text),
-        Lang::Ron => bracket_folds(&code_highlights(text, Code::Ron).1),
-        Lang::Rhai => bracket_folds(&code_highlights(text, Code::Rhai).1),
-        Lang::Markdown => markdown_folds(text),
-        Lang::Plain => Vec::new(),
-    }
-}
-
 fn yaml_folds(text: &str) -> Vec<Range<usize>> {
     let lines = scan_yaml(text);
     let mut out = Vec::new();
@@ -994,102 +612,6 @@ impl YLine {
     /// Whether this line starts a block scalar (`key: |`) with body lines under it.
     fn block_body_start(&self, lines: &[YLine], at: usize) -> bool {
         self.value.is_some() && lines.get(at + 1).is_some_and(|next| next.block_body)
-    }
-}
-
-fn markdown_folds(text: &str) -> Vec<Range<usize>> {
-    let lines = Lines::new(text);
-    let mut out = Vec::new();
-    let mut headings: Vec<(usize, usize)> = Vec::new();
-    let mut fence_start: Option<usize> = None;
-    let count = lines.count();
-    let last_content = (0..count).rev().find(|&n| !lines.text(n).trim().is_empty()).map_or(0, |n| n + 1);
-    for n in 0..count {
-        let line = lines.text(n);
-        if fence_of(line).is_some() {
-            match fence_start.take() {
-                Some(start) => out.push(start..n),
-                None => fence_start = Some(n),
-            }
-            continue;
-        }
-        if fence_start.is_some() {
-            continue;
-        }
-        if let Some(level) = heading_level(line) {
-            while let Some(&(start, open_level)) = headings.last() {
-                if open_level >= level {
-                    out.push(start..n);
-                    headings.pop();
-                } else {
-                    break;
-                }
-            }
-            headings.push((n, level));
-        }
-    }
-    for (start, _) in headings {
-        out.push(start..last_content.max(start + 1));
-    }
-    out.sort_by_key(|r| (r.start, std::cmp::Reverse(r.end)));
-    out
-}
-
-// ── Findings ─────────────────────────────────────────────────────────────────
-
-/// **One thing wrong in a file**, by byte range.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Finding {
-    pub range: Range<usize>,
-    pub severity: CodeSeverity,
-    pub message: String,
-}
-
-
-/// **A finding on line `line` (1-based)**: the line's text, or the word the message names in backticks
-/// when the line holds it (an unknown key points at the key).
-fn finding_on(lines: &Lines<'_>, text: &str, line: usize, message: String, severity: CodeSeverity) -> Finding {
-    let n = line.saturating_sub(1).min(lines.count().saturating_sub(1));
-    let range = lines.range(n);
-    let line_text = &text[range.clone()];
-    let indent = line_text.len() - line_text.trim_start().len();
-    let named = message.split('`').nth(1).filter(|w| !w.is_empty() && !w.contains(' ')).and_then(|w| line_text.find(w).map(|at| at..at + w.len()));
-    let range = match named {
-        Some(w) => range.start + w.start..range.start + w.end,
-        None => range.start + indent..range.end.max(range.start + indent),
-    };
-    // An empty line (a missing field at the end of a file) still needs a range the editor can draw.
-    let range = if range.is_empty() { range.start..(range.start + 1).min(text.len()).max(range.start) } else { range };
-    Finding { range, severity, message }
-}
-
-/// **What is wrong with a file**, read the way the game reads it (see the module note): a project file by
-/// its kind's own reader, any other YAML by the event walk, RON and Rhai by a bracket scan.
-///
-/// `path` is the file's path under the project, with `/`.
-pub fn diagnose(path: &str, text: &str) -> Vec<Finding> {
-    let lines = Lines::new(text);
-    let error = |line: usize, message: String| finding_on(&lines, text, line, message, CodeSeverity::Error);
-    match Lang::of(path) {
-        Lang::Yaml => {
-            let refused = match reload_check::kind_of_path(path) {
-                Some(kind) => match reload_check::check(kind, path, text) {
-                    Check::Refused(r) => Some((r.reason, r.field)),
-                    Check::Valid => None,
-                    Check::Unchecked => walk_refusal(path, text),
-                },
-                None => walk_refusal(path, text),
-            };
-            let Some((reason, field)) = refused else { return Vec::new() };
-            let (line, message) = split_position(&reason);
-            let line = line
-                .or_else(|| field.as_deref().and_then(|f| bevy_grimoire_core::yaml::lines(text).get(f).copied()))
-                .unwrap_or(1);
-            vec![error(line, message)]
-        }
-        Lang::Ron => bracket_findings(text, Code::Ron),
-        Lang::Rhai => bracket_findings(text, Code::Rhai),
-        Lang::Markdown | Lang::Plain => Vec::new(),
     }
 }
 
@@ -1139,62 +661,11 @@ fn split_position(reason: &str) -> (Option<usize>, String) {
     (None, reason.to_owned())
 }
 
-/// **What a bracket scan can be sure of** in a RON or Rhai file: a bracket that closes nothing or never closes, a
-/// string that never ends.
-fn bracket_findings(text: &str, code: Code) -> Vec<Finding> {
-    let (_, scan) = code_highlights(text, code);
-    let mut out = Vec::new();
-    let mut stack: Vec<Bracket> = Vec::new();
-    let error = |at: usize, message: String| Finding { range: at..at + 1, severity: CodeSeverity::Error, message };
-    for bracket in &scan.brackets {
-        match bracket.ch {
-            b'(' | b'[' | b'{' => stack.push(*bracket),
-            close => {
-                let want = match close {
-                    b')' => b'(',
-                    b']' => b'[',
-                    _ => b'{',
-                };
-                match stack.pop() {
-                    Some(open) if open.ch == want => {}
-                    Some(open) => {
-                        out.push(error(bracket.at, format!("`{}` does not close `{}` from line {}", close as char, open.ch as char, open.line + 1)));
-                    }
-                    None => out.push(error(bracket.at, format!("`{}` closes nothing", close as char))),
-                }
-            }
-        }
-    }
-    for open in stack {
-        out.push(error(open.at, format!("`{}` is never closed", open.ch as char)));
-    }
-    if let Some(at) = scan.unterminated {
-        out.push(error(at, "this string never ends".to_owned()));
-    }
-    out.sort_by_key(|f| f.range.start);
-    out
-}
-
-// ── Completion and hover ─────────────────────────────────────────────────────
-
-/// **What the editor may offer at the caret**: the start of the word being completed, and the rows.
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct Completion {
-    pub anchor: usize,
-    /// `(label, detail, text to insert instead of the label)`.
-    pub items: Vec<(String, String, Option<String>)>,
-}
-
-fn word_before(text: &str, offset: usize) -> usize {
-    let head = &text[..offset];
-    head.rfind(|c: char| !(c.is_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | '@'))).map_or(0, |at| at + head[at..].chars().next().map_or(1, char::len_utf8))
-}
-
 /// **Complete a YAML file at `offset`**, from the kind's schema: at a key, the fields the mapping may hold;
 /// at a value, the enum's values, a boolean's two, or the ids a reference may point at (`refs(kind)`).
 /// Nothing for a file with no schema, or in any language but YAML.
-pub fn complete(lang: Lang, text: &str, offset: usize, schema: Option<&Value>, refs: &dyn Fn(&str) -> Vec<String>) -> Completion {
-    let (Lang::Yaml, Some(schema), true) = (lang, schema, text.is_char_boundary(offset)) else { return Completion::default() };
+fn complete_yaml(text: &str, offset: usize, schema: Option<&Value>, refs: &dyn Fn(&str) -> Vec<String>) -> Completion {
+    let Some(schema) = schema else { return Completion::default() };
     let schema = Schema::new(schema);
     let lines = Lines::new(text);
     let at = lines.line_of(offset);
@@ -1242,8 +713,8 @@ pub fn complete(lang: Lang, text: &str, offset: usize, schema: Option<&Value>, r
 
 /// **What to say about the text at `offset`**: the doc comment of the field whose key is there (and that it
 /// is a reference, to what), by the schema. The range is the key's bytes.
-pub fn hover(lang: Lang, text: &str, offset: usize, schema: Option<&Value>) -> Option<(Range<usize>, String)> {
-    let (Lang::Yaml, Some(schema)) = (lang, schema) else { return None };
+fn hover_yaml(text: &str, offset: usize, schema: Option<&Value>) -> Option<(Range<usize>, String)> {
+    let schema = schema?;
     let schema = Schema::new(schema);
     let lines = Lines::new(text);
     let at = lines.line_of(offset);
@@ -1334,4 +805,3 @@ pub fn references(lang: Lang, text: &str, schema: Option<&Value>) -> Vec<Referen
 pub fn reference_at(lang: Lang, text: &str, offset: usize, schema: Option<&Value>) -> Option<Reference> {
     references(lang, text, schema).into_iter().find(|r| r.range.start <= offset && offset <= r.range.end)
 }
-

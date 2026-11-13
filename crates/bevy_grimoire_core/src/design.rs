@@ -1005,3 +1005,124 @@ fn resolve(file: &str, cited: &str) -> Option<String> {
     }
     Some(parts.join("/"))
 }
+
+/// **One link or picture a page writes**: where its destination is in the text, and the file of this project it names.
+///
+/// [`pictures`] is what the tree checks (a picture is the construct a style page cannot lose); this is the same reader
+/// with the links too and the destination's own bytes, which is what the file editor needs to put a finding on the path
+/// itself and to say something when the caret is on one (SG-04, #403).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Cite {
+    /// A picture (`![alt](path)`) and not a link (`[text](path)`).
+    pub image: bool,
+    /// The destination as written, fragment and query included.
+    pub cited: String,
+    /// The line it is written on, counted from 1 as an editor shows it.
+    pub line: usize,
+    /// The path relative to the project root, `/`-separated, with any `#fragment` or `?query` taken off: `None` for
+    /// a URL, a `mailto:`, a bare `#section` and a path that climbs out of the project, which name no file here.
+    pub file: Option<String>,
+    /// The destination's bytes in the text. When the destination cannot be found where it is written (a
+    /// reference-style link, whose destination is a definition elsewhere), the whole element's bytes.
+    pub range: std::ops::Range<usize>,
+}
+
+/// **Every link and picture `text` writes, in the order it writes them.** `file` is the text's path relative to the
+/// project root; a destination is resolved against the text's own folder, as [`pictures`] does.
+pub fn cites(text: &str, file: &str) -> Vec<Cite> {
+    use pulldown_cmark::{Event, Parser, Tag};
+    let mut out = Vec::new();
+    for (event, range) in Parser::new_ext(text, options()).into_offset_iter() {
+        let (image, dest) = match event {
+            Event::Start(Tag::Image { dest_url, .. }) => (true, dest_url),
+            Event::Start(Tag::Link { dest_url, .. }) => (false, dest_url),
+            _ => continue,
+        };
+        let cited = dest.to_string();
+        let range = range.start.min(text.len())..range.end.min(text.len());
+        let line = text[..range.start].matches('\n').count() + 1;
+        let at = destination_in(text, &range, &cited).unwrap_or(range);
+        out.push(Cite { image, file: target_of(file, &cited), cited, line, range: at });
+    }
+    out
+}
+
+/// The bytes of `cited` in the `](cited)` that closes the element at `element`.
+fn destination_in(text: &str, element: &std::ops::Range<usize>, cited: &str) -> Option<std::ops::Range<usize>> {
+    if cited.is_empty() {
+        return None;
+    }
+    let slice = &text[element.clone()];
+    let open = slice.rfind("](")? + 2;
+    let after = &slice[open..];
+    let skip = usize::from(after.starts_with('<'));
+    after[skip..].starts_with(cited).then(|| {
+        let start = element.start + open + skip;
+        start..start + cited.len()
+    })
+}
+
+/// **The project-relative file a link or picture names**, or `None` when it names none of this project's.
+fn target_of(file: &str, cited: &str) -> Option<String> {
+    let path = cited.split(['#', '?']).next().unwrap_or("");
+    // A scheme (`https:`, `mailto:`, `data:`) is a place that is not a file of this project.
+    let first = path.split('/').next().unwrap_or("");
+    if first.contains(':') {
+        return None;
+    }
+    resolve(file, &percent_decoded(path))
+}
+
+/// `%20` and its kind decoded, as a Markdown reader would hand the path to a file system.
+fn percent_decoded(path: &str) -> String {
+    let bytes = path.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut at = 0;
+    while at < bytes.len() {
+        let hex = |b: u8| char::from(b).to_digit(16).and_then(|d| u8::try_from(d).ok());
+        match (bytes[at], bytes.get(at + 1).copied().and_then(hex), bytes.get(at + 2).copied().and_then(hex)) {
+            (b'%', Some(hi), Some(lo)) => {
+                out.push(hi << 4 | lo);
+                at += 3;
+            }
+            (b, _, _) => {
+                out.push(b);
+                at += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// **One heading of a page**: its level (1 for `#`), its text, and its line (0-based, as the editor counts).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Heading {
+    pub level: usize,
+    pub title: String,
+    pub line: usize,
+}
+
+/// **The headings of `text`, in order**, as the Markdown reader reads them: a `#` line and a setext underline, and not
+/// a `#` inside a code fence.
+pub fn headings(text: &str) -> Vec<Heading> {
+    use pulldown_cmark::{Event, Parser, Tag, TagEnd};
+    let mut out: Vec<Heading> = Vec::new();
+    let mut open = false;
+    for (event, range) in Parser::new_ext(text, options()).into_offset_iter() {
+        match event {
+            Event::Start(Tag::Heading { level, .. }) => {
+                let line = text[..range.start.min(text.len())].matches('\n').count();
+                out.push(Heading { level: level as usize, title: String::new(), line });
+                open = true;
+            }
+            Event::End(TagEnd::Heading(_)) => open = false,
+            Event::Text(chunk) | Event::Code(chunk) if open => {
+                if let Some(heading) = out.last_mut() {
+                    heading.title.push_str(&chunk);
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}

@@ -49,12 +49,12 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use bevy_grimoire_core::problem::{Detail, Location, Problem};
-use bevy_grimoire_core::reload::{Base, FileKind, KINDS};
+use bevy_grimoire_core::reload::{Base, FileKind, KINDS, Lifetime, ReloadClass};
 use bevy_grimoire_core::{composition::Compositions, destructible::{Bake, Marks}, family::Family, heightfield::Heightfield,
     kits::Kits, library::Library, map::Map, note_agent::AgentSettings, notes::Notes, plan::Plan,
-    play::PlayConfig, policy::Policy, references::References, relations::Relations,
+    play::PlayConfig, policy::Policy, relations::Relations,
     repetition::RepetitionRules, rigs::Rigs, rules::Rules, standards::Standards, vocab::Vocabularies,
-    volume::Volume, water::{WaterField, WaterPlan}, data_files::DataFiles, yaml};
+    volume::Volume, water::{WaterField, WaterPlan}, data_files::DataFiles, yaml, board::{self, Board, Entry}};
 
 /// **The extension a project file carries now.** A project file's name ends in this, where it used to
 /// end in [`RON_EXT`].
@@ -204,10 +204,15 @@ pub fn plan_and_unread(root: &Path) -> Result<PlanList, Problem> {
     let planned = out
         .into_iter()
         .filter_map(|rel| {
-            if !rel.ends_with(&format!(".{RON_EXT}")) || is_archived(&rel) {
+            if is_archived(&rel) {
                 return None;
             }
             let kind = kind_of_rel(&rel)?;
+            // **A kind's own files are the `.ron` ones** (its `.yaml` is the answer, not the work); the references file of a
+            // map is the one kind that has work in either spelling, because both move to the level's board.
+            if !rel.ends_with(&format!(".{RON_EXT}")) && kind.id != LEGACY_REFERENCES.id {
+                return None;
+            }
             Some((root.join(&rel), rel, kind))
         })
         .collect();
@@ -245,6 +250,105 @@ fn kind_of_rel(rel: &str) -> Option<&'static FileKind> {
         let before = ron_spelling_of(k.pattern);
         under.is_some_and(|rest| k.matches(rest) || bevy_grimoire_core::reload::matches_pattern(&before, rest))
     })
+    .or_else(|| {
+        let rest = rel.strip_prefix(GRIMOIRE_DIR)?.strip_prefix('/')?;
+        let before = ron_spelling_of(LEGACY_REFERENCES.pattern);
+        (LEGACY_REFERENCES.matches(rest) || bevy_grimoire_core::reload::matches_pattern(&before, rest)).then_some(&LEGACY_REFERENCES)
+    })
+}
+
+/// **The reference images of a map, as they were kept before the dream board** (SG-03, #402): `maps/<map>.references.ron`,
+/// or `.references.yaml` once the cutover had reached it.
+///
+/// **Not a kind of the registry any more**: nothing reads or writes it, and the registry lists what the editor reads. It is
+/// here because a project made before the board has the file, and "moves through `migrate`" is the whole of how it leaves:
+/// each becomes the board of the map's level, with the same captions in the same order.
+pub static LEGACY_REFERENCES: FileKind = FileKind {
+    id: "references",
+    base: Base::Grimoire,
+    pattern: "maps/<name>.references.yaml",
+    parses_to: "the reference images of a map",
+    class: ReloadClass::Live,
+    lifetime: Lifetime::PerMap,
+    other_writers: "",
+    note: "Replaced by the level's board (`board`).",
+};
+
+/// **One reference of the file this replaced**: the id and the counter are what the board does without.
+#[derive(serde::Deserialize)]
+struct LegacyReference {
+    path: String,
+    caption: String,
+}
+
+/// **`maps/<map>.references.<ron|yaml>` as it was written**, read for its pictures and their order.
+#[derive(serde::Deserialize)]
+struct LegacyReferences {
+    version: u32,
+    refs: Vec<LegacyReference>,
+}
+
+/// The version of a references file this build moves.
+const LEGACY_REFERENCES_VERSION: u32 = 1;
+
+/// **The map a legacy references file belongs to**: `maps/yard.references.ron` → `yard`.
+fn legacy_map_of(rel: &str) -> Option<&str> {
+    let name = rel.rsplit('/').next()?;
+    name.strip_suffix(&format!(".references.{RON_EXT}")).or_else(|| name.strip_suffix(&format!(".references.{YAML_EXT}")))
+}
+
+/// **A legacy references file as the board it becomes**, its comments carried where they have a field, or a refusal naming the file.
+///
+/// The pictures keep their order and their captions word for word, **and an empty caption stays empty**: the board's reader lists
+/// a picture with none (`grimoire_state.board`) rather than the migration inventing a sentence for it. The result is read back as
+/// a [`Board`] and compared with what the file held, so a picture lost or reordered stops the migration.
+#[allow(clippy::result_large_err)]
+fn convert_references(text: &str, rel: &str, command: &str) -> Result<Converted, Problem> {
+    let refuse = |what: String, because: String| {
+        Problem::with(what, Detail::default().at(Location::file(rel.to_owned())).because(because).fix(format!("a file this old is read by the build that wrote it; `{command}` refuses rather than guessing")).docs(DOCS))
+    };
+    let old: LegacyReferences = if rel.ends_with(&format!(".{RON_EXT}")) {
+        ron::from_str(text).map_err(|e| refuse(format!("{rel} did not read as RON, so nothing was migrated"), e.to_string()))?
+    } else {
+        yaml::from_str(text, rel).map_err(|p| Problem::with(format!("{rel} did not read, so nothing was migrated"), p.detail()))?
+    };
+    if old.version != LEGACY_REFERENCES_VERSION {
+        return Err(refuse(format!("{rel} is version {}, so nothing was migrated", old.version), format!("this build moves version {LEGACY_REFERENCES_VERSION} of a references file")));
+    }
+    let mut board = Board::default();
+    for r in &old.refs {
+        let path = board::normalise(&r.path).map_err(|e| refuse(format!("{rel} lists a picture that cannot be on a board, so nothing was migrated"), e))?;
+        board.pictures.push(Entry::new(&path, &r.caption));
+    }
+    let plain = board.to_yaml().map_err(|e| refuse(format!("{rel} did not write as a board, so nothing was migrated"), e))?;
+    let (written, comments_carried, unplaced) = if rel.ends_with(&format!(".{RON_EXT}")) { carry_comments(text, &plain, rel) } else { (plain.clone(), 0, Vec::new()) };
+    let back = Board::parse(&written).map_err(|e| refuse(format!("{rel} wrote as a board and did not read back, so nothing was migrated"), e))?;
+    let same = back.pictures.len() == old.refs.len()
+        && back.pictures.iter().zip(&old.refs).all(|(b, o)| b.path == o.path.trim_start_matches("./") && b.caption == o.caption);
+    if !same {
+        return Err(refuse(format!("{rel} would change what it holds as a board, so nothing was migrated"), "a picture or a caption read back different from the file".to_owned()));
+    }
+    Ok(Converted { rom: String::new(), yaml: String::new(), kind: "", comments_carried, unplaced, text: written })
+}
+
+/// **Where a file the migration converts is written**: its name with `.yaml` for `.ron`, and for a references file the board of its
+/// map's level.
+#[allow(clippy::result_large_err)]
+fn target_of(root: &Path, path: &Path, rel: &str, kind: &FileKind) -> Result<(PathBuf, String), Problem> {
+    if kind.id == LEGACY_REFERENCES.id {
+        let map = legacy_map_of(rel).ok_or_else(|| Problem::new(format!("{rel} is not a references file of a map")))?;
+        let target_rel = board::file_of(&board::level_place(root, map));
+        return Ok((root.join(&target_rel), target_rel));
+    }
+    let target = yaml_path(path).ok_or_else(|| {
+        Problem::new(format!("{rel} ends in `.{RON_EXT}` and has no stub to build a `.{YAML_EXT}` name from"))
+    })?;
+    // The project's own spelling of the target, for the report and the refusal.
+    let target_rel = rel
+        .strip_suffix(&format!(".{RON_EXT}"))
+        .map(|stem| format!("{stem}.{YAML_EXT}"))
+        .unwrap_or_else(|| target.display().to_string());
+    Ok((target, target_rel))
 }
 
 /// **A kind's path pattern as the cutover left it**: `play.yaml` → `play.ron`, `maps/<name>.map.yaml` →
@@ -479,7 +583,7 @@ fn write_kind(kind: &FileKind, text: &str, file: &str, command: &str) -> Result<
         "rigs" => convert::<Rigs>(text, file, command),
         "notes" => convert::<Notes>(text, file, command),
         "plan" => convert::<Plan>(text, file, command),
-        "references" => convert::<References>(text, file, command),
+        "references" => convert_references(text, file, command),
         "relations" => convert::<Relations>(text, file, command),
         "map" => convert::<Map>(text, file, command),
         "terrain" => convert::<Heightfield>(text, file, command),
@@ -721,18 +825,11 @@ fn migrate_where(
     let root = root.as_path();
     let (planned, unread) = plan_all(root)?;
     let plan: Vec<_> = planned.into_iter().filter(|(_, _, kind)| wants(kind)).collect();
-    let mut converted = Vec::new();
+    let mut converted: Vec<Converted> = Vec::new();
     let mut pending: Vec<(PathBuf, String, PathBuf)> = Vec::new();
     let mut unplaced = Vec::new();
     for (path, rel, kind) in &plan {
-        let target = yaml_path(path).ok_or_else(|| {
-            Problem::new(format!("{rel} ends in `.{RON_EXT}` and has no stub to build a `.{YAML_EXT}` name from"))
-        })?;
-        // The project's own spelling of the target, for the report and the refusal.
-        let target_rel = rel
-            .strip_suffix(&format!(".{RON_EXT}"))
-            .map(|stem| format!("{stem}.{YAML_EXT}"))
-            .unwrap_or_else(|| target.display().to_string());
+        let (target, target_rel) = target_of(root, path, rel, kind)?;
         let text = std::fs::read_to_string(path).map_err(|e| io_problem(path, e))?;
         let mut done = write_kind(kind, &text, rel, command)?;
         // **Nothing is replaced.** A `kits.yaml` already beside its RON is a file a person made, and the
@@ -744,6 +841,17 @@ fn migrate_where(
                     .at(Location::file(target_rel.clone()))
                     .because(format!("`{rel}` converts to a name a file is already at"))
                     .fix("move or delete the existing file, then run the migration again".to_owned())
+                    .docs(DOCS),
+            ));
+        }
+        // **Two files that become one board are refused**: a map's references in both spellings would write one file twice.
+        if let Some(first) = converted.iter().find(|c| c.yaml == target_rel) {
+            return Err(Problem::with(
+                format!("{rel} and {} both become {target_rel}, so nothing was migrated", first.rom),
+                Detail::default()
+                    .at(Location::file(target_rel.clone()))
+                    .because("a map's level has one board".to_owned())
+                    .fix("keep the references file that is right, move the other out of the project, then run the migration again".to_owned())
                     .docs(DOCS),
             ));
         }
@@ -1274,10 +1382,16 @@ pub fn written_as_yaml(rel: &str, text: &str, command: &str) -> Result<(String, 
         )
     })?;
     let done = write_kind(kind, text, rel, command)?;
-    let yaml = rel
-        .strip_suffix(&format!(".{RON_EXT}"))
-        .map(|stem| format!("{stem}.{YAML_EXT}"))
-        .unwrap_or_else(|| rel.to_owned());
+    // A references file is written as the board of its map's level, wherever the map's level will be: no project folder is in hand here,
+    // so it is the level in no region.
+    let yaml = if kind.id == LEGACY_REFERENCES.id {
+        let map = legacy_map_of(rel).ok_or_else(|| Problem::new(format!("{rel} is not a references file of a map")))?;
+        board::file_of(&format!("{}/{}/{map}", bevy_grimoire_core::design::DESIGN_DIR, bevy_grimoire_core::design::LEVELS_DIR))
+    } else {
+        rel.strip_suffix(&format!(".{RON_EXT}"))
+            .map(|stem| format!("{stem}.{YAML_EXT}"))
+            .unwrap_or_else(|| rel.to_owned())
+    };
     Ok((yaml, done.text))
 }
 

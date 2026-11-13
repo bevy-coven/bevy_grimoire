@@ -195,7 +195,7 @@ pub fn check(kind: &FileKind, file: &str, text: &str) -> Check {
         composition::Compositions, data_files::DataFiles, destructible::{Bake, Marks}, family::Family,
         heightfield::Heightfield,
         kits::Kits, library::Library, map::Map, note_agent::AgentSettings, notes::Notes, plan::Plan,
-        play::PlayConfig, policy::Policy, references::References, relations::Relations,
+        play::PlayConfig, policy::Policy, relations::Relations,
         repetition::RepetitionRules, rigs::Rigs, rules::Rules, standards::Standards,
         vocab::Vocabularies, volume::Volume, water::{WaterField, WaterPlan},
     };
@@ -218,7 +218,7 @@ pub fn check(kind: &FileKind, file: &str, text: &str) -> Check {
         "rigs" => run_yaml(text, Rigs::parse),
         "notes" => run_yaml(text, Notes::parse),
         "plan" => run_yaml(text, Plan::parse),
-        "references" => run_yaml(text, References::parse),
+        "board" => run_yaml(text, crate::board::Board::parse),
         "relations" => run_yaml(text, Relations::parse),
         "map" => run_yaml(text, Map::parse),
         "terrain" => run_yaml(text, Heightfield::parse),

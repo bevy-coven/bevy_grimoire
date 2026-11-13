@@ -31,7 +31,7 @@ use bevy_grimoire_core::notes::Notes;
 use bevy_grimoire_core::plan::Plan;
 use bevy_grimoire_core::play::{PlayConfig};
 use bevy_grimoire_core::policy::Policy;
-use bevy_grimoire_core::references::References;
+use bevy_grimoire_core::board::Board;
 use bevy_grimoire_core::relations::Relations;
 use bevy_grimoire_core::repetition::RepetitionRules;
 use bevy_grimoire_core::rules::Rules;
@@ -90,7 +90,7 @@ fn project() -> Vec<(&'static str, String)> {
         ("repetition.yaml", round_trip::<RepetitionRules>("repetition.yaml", frozen("core-0.3.0/repetition.ron", "repetition.ron"))),
         ("maps/yard.notes.yaml", round_trip::<Notes>("maps/yard.notes.yaml", frozen("core-0.3.0/notes.ron", "maps/yard.notes.ron"))),
         ("maps/yard.plan.yaml", round_trip::<Plan>("maps/yard.plan.yaml", frozen("core-0.3.0/plan.ron", "maps/yard.plan.ron"))),
-        ("maps/yard.references.yaml", round_trip::<References>("maps/yard.references.yaml", frozen("core-0.3.0/references.ron", "maps/yard.references.ron"))),
+        ("design/board/board.yaml", round_trip::<Board>("design/board/board.yaml", frozen("core-0.3.0/references.ron", "maps/yard.references.ron"))),
         ("maps/yard.relations.yaml", round_trip::<Relations>("maps/yard.relations.yaml", frozen("core-0.3.0/relations.ron", "maps/yard.relations.ron"))),
         ("site/terrain/yard.yaml", round_trip::<Heightfield>("site/terrain/yard.yaml", frozen("core-0.3.0/terrain.ron", "site/terrain/yard.ron"))),
         ("site/water/yard.yaml", round_trip::<WaterPlan>("site/water/yard.yaml", frozen("core-0.3.0/water_plan.ron", "site/water/yard.ron"))),

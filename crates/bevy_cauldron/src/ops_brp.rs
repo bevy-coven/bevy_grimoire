@@ -984,6 +984,9 @@ struct Loaded<'w> {
     live: Option<Res<'w, crate::live::LiveWrite>>,
     diagnostics: Option<Res<'w, bevy::diagnostic::DiagnosticsStore>>,
     busy: Option<Res<'w, FrameBusy>>,
+    /// The file editor's open files and the tabs that say which is shown: `file_outline` is read from them.
+    files: Option<Res<'w, crate::files::Files>>,
+    session: Option<Res<'w, crate::session::Session>>,
 }
 
 /// **The parameters of `grimoire/state`.** Only the pin page is a parameter; the rest of the summary is
@@ -1051,7 +1054,7 @@ fn editor_state(
     #[cfg(feature = "bevy_elements")] clock: Option<Res<bevy_elements::WorldClock>>,
     #[cfg(feature = "bevy_elements")] scrub: Option<Res<crate::environment::ClockScrub>>,
 ) -> Result<Value, String> {
-    let Loaded { project, open, game, reloads, live, diagnostics, busy } = loaded;
+    let Loaded { project, open, game, reloads, live, diagnostics, busy, files, session } = loaded;
     // **The agent's presentation, and the person's answer to it** (S1.7). `None` until an agent
     // presents something; then an object whose `answer` is `null` while the question is up. This is
     // the only channel an agent has for what a person did after its call returned.
@@ -1231,8 +1234,11 @@ fn editor_state(
             params.note.as_deref(),
             std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()),
         )),
-        // **The reference images beside this map** (#124), each with its id to cite and whether its file is there.
-        "references": open.as_ref().map(|o| crate::ops_references::state_json(o, project.as_ref().map(|p| p.root.as_path()))),
+        // **The dream boards** (SG-03, #402): the open map's level, and every place that has one, each picture with its
+        // caption and whether its file is on this machine. It took the place of `references`.
+        // **The headings of the page open in the file editor** (SG-04, #403): its path, and each heading's level, title and line.
+        "file_outline": crate::file_outline::state_json(files.as_deref(), session.as_deref()),
+        "board": project.as_ref().map(|p| crate::ops_board::state_json(open.as_deref(), p.root.as_path())),
         // **The agent's plan for this map** (E-069): items with a status each, and a count per status.
         "plan": open.as_ref().map(|o| crate::ops_plan::state_json(o)),
         // **The repeats a player will notice first** (#136): same piece, yaw (any yaw for a round
