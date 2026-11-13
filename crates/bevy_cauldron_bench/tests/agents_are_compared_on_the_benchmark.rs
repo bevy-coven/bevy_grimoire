@@ -391,3 +391,43 @@ fn a_claude_code_run_writes_trials_with_tokens_and_calls_read_from_the_transcrip
     assert_eq!(record["tokens_cache_read"], 600);
     assert_eq!(record["refusals"], 1);
 }
+
+/// **A Claude Code header names its model** (review of #416, M2): the header is built by `probe::header`, and
+/// `claude-code:sonnet` and `claude-code:opus` are two pairs, so a matrix holds both and a comparison sees two
+/// agents.
+#[test]
+fn a_claude_code_header_names_its_model_and_two_models_are_two_pairs() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().expect("repo");
+    let header_of = |model: &str| {
+        let options = bevy_cauldron_bench::run::Options {
+            root: repo.clone(),
+            tasks: repo.join("bench/tasks"),
+            agent: Agent::ClaudeCode,
+            trials: 2,
+            jobs: 1,
+            model: model.to_owned(),
+            variant: None,
+            out: std::env::temp_dir(),
+            editor: PathBuf::new(),
+            server: PathBuf::new(),
+            repo: repo.clone(),
+            label: format!("claude-{model}"),
+            publish: None,
+            only: Vec::new(),
+        };
+        bevy_cauldron_bench::probe::header(&options, &options.label)
+    };
+    let (sonnet, opus) = (header_of("sonnet"), header_of("opus"));
+    assert_eq!(sonnet.model.as_deref(), Some("sonnet"), "the header names the model Claude Code ran");
+    assert_eq!(sonnet.pair(), "claude-code:sonnet");
+    assert_eq!(opus.pair(), "claude-code:opus");
+
+    let dir = scratch("claude-models");
+    let a = run_of(&dir.join("a"), &sonnet, 3, 0, &[]);
+    let b = run_of(&dir.join("b"), &opus, 2, 0, &[]);
+    let matrix = Matrix::build("models", &[a.clone(), b.clone()]).expect("two Claude models are two pairs");
+    assert_eq!(matrix.rows.len(), 2);
+    let differ = bevy_cauldron_bench::compare::differences(&a, &b);
+    assert!(differ.iter().any(|d| d.contains("agents differ")), "two models are two agents: {differ:?}");
+    assert!(a.markdown().contains("| Model | sonnet |"), "and the report says which: {}", a.markdown());
+}

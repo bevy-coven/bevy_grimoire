@@ -41,7 +41,7 @@ pub fn header(options: &Options, label: &str) -> Header {
         guide_sha256: guide_sha256(&options.repo),
         agent: options.agent.name().to_owned(),
         agent_version,
-        model: (options.agent == Agent::Omp).then(|| options.model.clone()),
+        model: options.agent.has_model().then(|| options.model.clone()),
         variant: options.variant.clone(),
         suite: options
             .tasks
@@ -106,16 +106,30 @@ pub fn today() -> String {
     civil_date(now / DAY_S)
 }
 
+/// **Days from 0000-03-01 to 1970-01-01**: the shift that puts the epoch on the algorithm's own calendar, which
+/// starts each year in March so the leap day is the year's last.
+const DAYS_TO_EPOCH_FROM_ERA_START: i64 = 719_468;
+/// **Days in a 400-year era**, the Gregorian calendar's full cycle.
+const DAYS_PER_ERA: i64 = 146_097;
+/// **Days in a 4-year, a 100-year and a 400-year step**, which the leap-day correction subtracts and adds.
+const DAYS_PER_4_YEARS: i64 = 1_460;
+const DAYS_PER_100_YEARS: i64 = 36_524;
+const DAYS_PER_400_YEARS_LESS_ONE: i64 = 146_096;
+/// **Days in a year**, and the months-from-March arithmetic's `(5 * doy + 2) / 153` pair: 153 days make five
+/// months from March, and the `+ 2` is the offset that lands each month's first day.
+const DAYS_PER_YEAR: i64 = 365;
+const DAYS_IN_FIVE_MONTHS: i64 = 153;
+
 /// **The calendar date of a day count since 1970-01-01** (Howard Hinnant's `civil_from_days`).
 pub fn civil_date(days: u64) -> String {
-    let z = days as i64 + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let z = days as i64 + DAYS_TO_EPOCH_FROM_ERA_START;
+    let era = z.div_euclid(DAYS_PER_ERA);
+    let doe = z.rem_euclid(DAYS_PER_ERA);
+    let yoe = (doe - doe / DAYS_PER_4_YEARS + doe / DAYS_PER_100_YEARS - doe / DAYS_PER_400_YEARS_LESS_ONE) / DAYS_PER_YEAR;
     let year = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = doy - (153 * mp + 2) / 5 + 1;
+    let doy = doe - (DAYS_PER_YEAR * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / DAYS_IN_FIVE_MONTHS;
+    let day = doy - (DAYS_IN_FIVE_MONTHS * mp + 2) / 5 + 1;
     let month = if mp < 10 { mp + 3 } else { mp - 9 };
     let year = if month <= 2 { year + 1 } else { year };
     format!("{year:04}-{month:02}-{day:02}")
