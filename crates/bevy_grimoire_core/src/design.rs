@@ -515,17 +515,18 @@ impl Tree {
             }
         }
         for (file, picture) in missing {
-            let rel = picture.file.clone().unwrap_or_default();
             self.problems.push(Problem::with(
                 format!("`{file}` cites a picture that is not there, on line {}", picture.line),
                 Detail::default()
                     // **The line is carried as a number as well as said**, so a caller that jumps to it reads
                     // it here instead of scraping it out of the sentence.
                     .at(Location::file(file.clone()).line(picture.line))
-                    // **Only the line and the path**: a caption, a title or alt text is the file's own words, and this sentence reaches an
-                    // agent through `grimoire_state.design.problems` with no check of the person's trust.
-                    .because(format!("line {} cites `{}`, and {rel} is not there", picture.line, picture.cited))
-                    .fix(format!("put the picture at {rel}, or change the line to name one that is there")),
+                    // **Nothing the file said**: not the caption, the title, the alt text, nor the destination, which in
+                    // CommonMark may be any prose in angle brackets. This sentence reaches an agent through
+                    // `grimoire_state.design.problems` with no check of the person's trust, and the person finds the path
+                    // in the file at that line.
+                    .because(format!("line {} cites a picture that is not in the project", picture.line))
+                    .fix(format!("put the picture where line {} cites it, or change the line to name one that is there", picture.line)),
             ));
         }
     }
