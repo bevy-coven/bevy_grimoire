@@ -47,7 +47,9 @@ impl Language for Markdown {
                 continue;
             }
             let what = if cite.image { "picture" } else { "page" };
-            let message = format!("this {what} is not there: `{}` is {rel}. Put it there, or name one that is.", cite.cited);
+            // **No text of the page**: this finding reaches an agent through the open file's diagnostics, and a destination
+            // may be any prose. Its range sits on the destination, which is where the person looks.
+            let message = format!("this {what} is not there. Put it there, or name one that is.");
             out.push(Finding { range: cite.range, severity: CodeSeverity::Error, message });
         }
         out

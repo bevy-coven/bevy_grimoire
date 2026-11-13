@@ -8,6 +8,14 @@
 
 **Before you change a map, learn what it is made of.** `grimoire_list_pieces` is the library, a page at a time with each piece's labels; `grimoire_list_rules` is the grammar a generated layout comes from. `grimoire_read_oplog` says what has already been done to this project, by anyone, and whether it was taken back.
 
+## Know the style before you shape a place
+
+**Call `grimoire_style` for a place before you shape it.** The game's look and feel is written down in `design/`, one folder per place: the whole game, a region, a level (named after its map) and an area of a level. The tool returns the chain an agent reads, the game's files first and the most specific place last, each file under a heading naming its path. Pass `map` for a level, `at` (`[x, z]` in map metres) for the area that holds that point, and `topic` (`dialogue`, `sound`, `ui`) when the task is about one of them; with no `map` you get the game's files alone. The pictures the text cites come back as images, each after its caption, at most eight; one it left out is named with its path and its caption, so the words are still yours.
+
+**A style file that says it is waiting for the person is not yours to read.** The person allows a project's style the way they allow its guide: that exact content, or the whole project, and one changed byte asks again. Until then the tool gives you one line in the file's place and never its text, so do not go round it with a shell: say in your hand-back that you worked without that file.
+
+**Say in your wish what the style did not tell you.** After the hand-back, `grimoire_wish` is where a question about the place that the style left unanswered belongs: it tells the person which file to write next.
+
 ## Change
 
 **Four tools, in this order.** `grimoire_list_operations` says what operations exist and what parameters each takes — call it first, because a parameter name you guessed is a refused operation. `grimoire_preview_operation` runs the operation's own check and returns what would change while changing nothing. `grimoire_apply_operation` makes the change and records it in the operation log, returning the id you cite later. `grimoire_undo_operation` takes one change back by that id, and `dry_run` on either of the middle two previews without writing.

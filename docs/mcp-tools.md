@@ -14,6 +14,14 @@ The server speaks the Model Context Protocol over **stdio**, and reaches the run
 
 **Before you change a map, learn what it is made of.** `grimoire_list_pieces` is the library, a page at a time with each piece's labels; `grimoire_list_rules` is the grammar a generated layout comes from. `grimoire_read_oplog` says what has already been done to this project, by anyone, and whether it was taken back.
 
+## Know the style before you shape a place
+
+**Call `grimoire_style` for a place before you shape it.** The game's look and feel is written down in `design/`, one folder per place: the whole game, a region, a level (named after its map) and an area of a level. The tool returns the chain an agent reads, the game's files first and the most specific place last, each file under a heading naming its path. Pass `map` for a level, `at` (`[x, z]` in map metres) for the area that holds that point, and `topic` (`dialogue`, `sound`, `ui`) when the task is about one of them; with no `map` you get the game's files alone. The pictures the text cites come back as images, each after its caption, at most eight; one it left out is named with its path and its caption, so the words are still yours.
+
+**A style file that says it is waiting for the person is not yours to read.** The person allows a project's style the way they allow its guide: that exact content, or the whole project, and one changed byte asks again. Until then the tool gives you one line in the file's place and never its text, so do not go round it with a shell: say in your hand-back that you worked without that file.
+
+**Say in your wish what the style did not tell you.** After the hand-back, `grimoire_wish` is where a question about the place that the style left unanswered belongs: it tells the person which file to write next.
+
 ## Change
 
 **Four tools, in this order.** `grimoire_list_operations` says what operations exist and what parameters each takes — call it first, because a parameter name you guessed is a refused operation. `grimoire_preview_operation` runs the operation's own check and returns what would change while changing nothing. `grimoire_apply_operation` makes the change and records it in the operation log, returning the id you cite later. `grimoire_undo_operation` takes one change back by that id, and `dry_run` on either of the middle two previews without writing.
@@ -270,6 +278,16 @@ The reports the person filed about Cauldron itself, newest first: each one's nam
 ### `grimoire_project_feedback_list`
 
 The reports the person filed about this project, newest first: each one's name, when it was taken, which screen and which project were up, the window's shape, each thing that was pointed at (a node of the interface with its chain of roles and text, a dragged area, the whole screen, or a point in the map with its cell and the piece there), the relation between every two of them worked out from their rectangles (contains, overlaps, touches or apart, the overlap in square pixels, and which is drawn in front), the note the person typed, and the editor's log tail. The files are in the project's target/feedback. Each entry names its whole picture and the same picture with every pick outlined and every overlap washed, and the newest picture comes back as an image. It reads files the editor wrote, so it needs no editor running and changes nothing. Returns how many reports there are, how many are shown, and each .json file in the folder that is not a report or has no picture, with the reason.
+
+| annotation | value |
+|---|---|
+| `readOnlyHint` | true |
+| `destructiveHint` | false |
+| `idempotentHint` | true |
+
+### `grimoire_style`
+
+The style of one place, as an agent should read it before shaping that place: the game's style files first, then the region's, the level's and the area's that holds `at`, so the most specific place comes last. Each place gives its style.md and, when `topic` is asked for, its file for that topic; each file arrives under a heading naming its path. With no `map` you get the game's files alone. A style file is served only once the person has allowed that exact content (or trusted the project): one that has not been allowed is withheld and arrives as one line saying it is waiting for them, never as its text. The pictures the served text cites come back as images, each after a line with its path and its caption, at most 8 of at most 1 MiB each; one left out is named with its path, its caption and the reason. `map` must be a map of the project, `at` ([x, z] in map metres) must be inside it, and `topic` must be one the game has: anything else is refused with the reason. It changes nothing.
 
 | annotation | value |
 |---|---|

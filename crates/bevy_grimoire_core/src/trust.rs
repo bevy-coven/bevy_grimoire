@@ -34,11 +34,13 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-/// The version of the store's file. **2** added guide grants ([`GuideGrant`]); a version 1 store is still
-/// read, with no guides allowed, because the projects a person trusted yesterday are still trusted.
-pub const TRUST_VERSION: u32 = 2;
+/// The version of the store's file. **2** added guide grants; **3** (#401) replaced them with one
+/// [`TextGrant`] per file, so the guide and every style file share one store and one question. A version 1
+/// or 2 store is still read, and a version 2 store's guide grants become text grants for the guide's path:
+/// the projects and guides a person allowed yesterday are still allowed.
+pub const TRUST_VERSION: u32 = 3;
 
-/// The version this build still reads, so a store written before guide grants existed is not a refusal.
+/// The version this build still reads, so a store written before text grants existed is not a refusal.
 pub const TRUST_VERSION_READS_FROM: u32 = 1;
 
 /// **The project files whose content names a program to start, or tells an agent what to do.** Nothing
@@ -129,17 +131,30 @@ struct Grant {
     command: CommandSpec,
 }
 
-/// **A person allowed one project's guide, as it read at that moment.**
+/// **A person allowed one text of a project, as it read at that moment** (#401): the project's guide, or
+/// one of its style files.
 ///
-/// The digest is of the file's **bytes**, so one changed byte is a different guide and asks again: a guide
-/// an agent rewrote through its shell has not been allowed. A `Scope::Project` grant covers the guide
-/// too, which is what trusting a project means.
+/// The digest is of the file's **bytes**, so one changed byte is a different text and asks again: a file an
+/// agent rewrote through its shell has not been allowed. The `path` is part of the grant, so a text moved
+/// to another file asks again too. A `Scope::Project` grant covers every text, which is what trusting a
+/// project means.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct GuideGrant {
+pub struct TextGrant {
     pub project: PathBuf,
+    /// The file, relative to the project root and `/`-separated: `.dark_factory/AGENTS.md`, `design/style.md`.
+    pub path: String,
     /// The SHA-256 of the text, lowercase hex — see [`sha256_hex`].
     pub sha256: String,
+}
+
+/// **What version 2 wrote for a guide**: the project and the digest, with no path because the guide was
+/// the only text. Read and migrated by [`TrustStore::load`], never written.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GuideGrantV2 {
+    project: PathBuf,
+    sha256: String,
 }
 
 /// **Everything this person has allowed.**
@@ -149,16 +164,20 @@ pub struct TrustStore {
     version: u32,
     projects: Vec<PathBuf>,
     commands: Vec<Grant>,
-    /// **The guides allowed, one per project.** Empty for a store written before this field existed, which
-    /// is why it has a default: the projects that store trusted are still trusted.
+    /// **The guide grants a version 2 store holds.** Moved into `texts` by [`TrustStore::load`], so this is
+    /// empty in every store a caller holds and is never written.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    guides: Vec<GuideGrantV2>,
+    /// **The texts allowed, one grant per project, file and content.** Empty for a store written before this
+    /// field existed, which is why it has a default: the projects that store trusted are still trusted.
     #[serde(default)]
-    guides: Vec<GuideGrant>,
+    texts: Vec<TextGrant>,
 }
 
 impl Default for TrustStore {
     /// A person who has trusted nothing.
     fn default() -> Self {
-        TrustStore { version: TRUST_VERSION, projects: Vec::new(), commands: Vec::new(), guides: Vec::new() }
+        TrustStore { version: TRUST_VERSION, projects: Vec::new(), commands: Vec::new(), guides: Vec::new(), texts: Vec::new() }
     }
 }
 
@@ -190,9 +209,15 @@ impl TrustStore {
                 store.version
             ));
         }
-        // **A store from before guide grants reads as one with none**, and is written at this build's
+        // **A store from before text grants reads as one that has them**, and is written at this build's
         // version the next time a person allows anything — which is a migration, not a silent upgrade: the
-        // projects it trusted are kept.
+        // projects it trusted are kept, and so is every guide it allowed, now a grant for the guide's path.
+        for old in std::mem::take(&mut store.guides) {
+            let grant = TextGrant { project: old.project, path: crate::agent_guide::PROJECT_PATH.to_owned(), sha256: old.sha256 };
+            if !store.texts.contains(&grant) {
+                store.texts.push(grant);
+            }
+        }
         store.version = TRUST_VERSION;
         Ok(store)
     }
@@ -236,30 +261,42 @@ impl TrustStore {
         Ok(())
     }
 
-    /// **Has a person allowed this project's guide, as this text?** An `Err` when the project folder
-    /// cannot be resolved. The text's digest is what a [`GuideGrant`] holds, so any edit is a new question.
-    pub fn guide_decision(&self, root: &Path, text: &str) -> Result<Decision, String> {
+    /// **Has a person allowed this text of this project?** `path` is the file, relative to the project root and
+    /// `/`-separated. An `Err` when the project folder cannot be resolved. The text's digest is what a
+    /// [`TextGrant`] holds, so any edit is a new question.
+    pub fn text_decision(&self, root: &Path, path: &str, text: &str) -> Result<Decision, String> {
         let root = resolve(root)?;
         if self.projects.contains(&root) {
             return Ok(Decision::Trusted(Scope::Project));
         }
         let digest = sha256_hex(text.as_bytes());
-        if self.guides.iter().any(|g| g.project == root && g.sha256 == digest) {
+        if self.texts.iter().any(|g| g.project == root && g.path == path && g.sha256 == digest) {
             return Ok(Decision::Trusted(Scope::Command));
         }
         Ok(Decision::Untrusted)
     }
 
-    /// **A person allows this project's guide, exactly as it reads now.**
-    pub fn trust_guide(&mut self, root: &Path, text: &str) -> Result<(), String> {
+    /// **A person allows this text of this project, exactly as it reads now.**
+    pub fn trust_text(&mut self, root: &Path, path: &str, text: &str) -> Result<(), String> {
         let project = resolve(root)?;
-        // **One grant per (project, text)**: an older grant is kept, so a person who edits back to a wording
-        // they already allowed is not asked again for a guide they have read; a new text is a new entry.
-        let grant = GuideGrant { project: project.clone(), sha256: sha256_hex(text.as_bytes()) };
-        if !self.guides.contains(&grant) {
-            self.guides.push(grant);
+        // **One grant per (project, file, text)**: an older grant is kept, so a person who edits back to a wording
+        // they already allowed is not asked again for a text they have read; a new text is a new entry.
+        let grant = TextGrant { project, path: path.to_owned(), sha256: sha256_hex(text.as_bytes()) };
+        if !self.texts.contains(&grant) {
+            self.texts.push(grant);
         }
         Ok(())
+    }
+
+    /// **Has a person allowed this project's guide, as this text?** The guide is one text among the
+    /// project's, at [`crate::agent_guide::PROJECT_PATH`].
+    pub fn guide_decision(&self, root: &Path, text: &str) -> Result<Decision, String> {
+        self.text_decision(root, crate::agent_guide::PROJECT_PATH, text)
+    }
+
+    /// **A person allows this project's guide, exactly as it reads now.**
+    pub fn trust_guide(&mut self, root: &Path, text: &str) -> Result<(), String> {
+        self.trust_text(root, crate::agent_guide::PROJECT_PATH, text)
     }
 
     /// **What to say when a command is not allowed**: what it is, where it came from and who can allow it.
@@ -273,8 +310,8 @@ impl TrustStore {
     }
 }
 
-/// **The SHA-256 of `bytes`, as lowercase hex**, which is what a [`GuideGrant`] holds: whether a project's
-/// guide is the exact text a person read. The published construction, with published vectors checked in
+/// **The SHA-256 of `bytes`, as lowercase hex**, which is what a [`TextGrant`] holds: whether a project's
+/// text is the exact text a person read. The published construction, with published vectors checked in
 /// `tests/a_projects_guide_needs_the_persons_trust.rs` — the question is identity, not secrecy, and a
 /// digest that was subtly wrong would withhold a guide whose grant was made and read as a trust bug.
 pub fn sha256_hex(bytes: &[u8]) -> String {
@@ -289,6 +326,17 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
 pub fn withheld_sentence(root: &Path) -> String {
     format!(
         "{} has a guide at `.dark_factory/AGENTS.md` that no person has allowed, so it was not served. Ask them to allow it in the editor; an agent cannot.",
+        root.display()
+    )
+}
+
+/// **What an agent is told when a style file is withheld** (#401).
+///
+/// One line, standing where the file's text would have been: the agent is not shown the text, and it is told
+/// that the file is waiting for the person and who can change that.
+pub fn withheld_text_sentence(root: &Path, path: &str) -> String {
+    format!(
+        "`{path}` in {} is waiting for the person to allow it, so its text was not served. Ask them to allow it in the editor; an agent cannot.",
         root.display()
     )
 }

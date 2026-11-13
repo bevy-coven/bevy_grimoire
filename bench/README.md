@@ -22,11 +22,12 @@ cargo run -p bevy_cauldron_bench -- run --variant no-frame-view --agent oracle
    check with the value it measured, the agent's tool calls, tokens and wall time, the tools its
    `tools/list` held, and the wishes it made.
 
-## The three agents
+## The four agents
 
 | `--agent` | What it does | What it must score |
 |---|---|---|
 | `omp` (default) | a real model harness, `omp -p --mode json --model <model>` | whatever it scores — that is the measurement |
+| `claude-code` | Claude Code, `claude -p --output-format stream-json --verbose --mcp-config <the editor's config> --strict-mcp-config --model <model>` (default `sonnet`) | whatever it scores — that is the measurement |
 | `oracle` | calls the task's own `solution` through the real MCP server | **passes every task** |
 | `nothing` | connects, reads `tools/list`, and stops | **passes none** |
 
@@ -34,12 +35,79 @@ cargo run -p bevy_cauldron_bench -- run --variant no-frame-view --agent oracle
 answered, the config worked, the changes landed in the project, and the grader read them. A suite where
 the oracle fails a task, or `nothing` passes one, is a harness problem rather than a result.
 
+### Claude Code is isolated the way `omp` is (BM-06)
+
+- **`CLAUDE_CONFIG_DIR` is a scratch directory of the trial's own** and so is `HOME`: no user `CLAUDE.md`, no
+  memory, no user settings, no session store. `--strict-mcp-config` leaves the Dark Factory's server the
+  only one, and `--disable-slash-commands` loads no skill.
+- **The credential is carried in and nothing else**: `ANTHROPIC_API_KEY` if the environment has it, else the
+  login file `~/.claude/.credentials.json`. A host with neither is a harness error that says to log in.
+- **The transcript is the measurement.** `tokens_in/out/cache_*` are the `result` event's usage, the calls are
+  the `tool_use` blocks and whether each was refused is its `tool_result`, and the cost Claude Code reports
+  (`total_cost_usd`) is kept for a model with no listed price.
+- **A transcript that shows anything else is a harness error**: an MCP server other than the editor's, a tool
+  outside the editor's and Claude Code's own set (`claude::BUILTIN_TOOLS`), or a server that did not connect.
+
+## Agents and models compared: `matrix` (BM-06)
+
+```sh
+cauldron-bench matrix --trials 5 --label agents \
+  --pairs omp:ollama-cloud/deepseek-v4.1-flash:1017,omp:llama.cpp/bonsai-2-27b,claude-code:sonnet
+```
+
+One suite, once per pair, **on the same tasks, trials, variant and editor commit**: the only difference
+between two rows is the agent and model, and a matrix of runs at different commits, guides, suites or trial
+counts is refused. It writes **one report with a row per pair** (success with its interval, `pass^k`, wall
+time, tool calls, edits behind the editor's back, cost per trial, per success and for the run), marks the
+pairs **on the cost-versus-success frontier** (no other pair succeeds at least as often for no more cost),
+and per pair lists the tools it called most, its refusals by tool and its wishes, then says which tools were
+refused to **every** pair (the Dark Factory's hard spot) and which to **one** pair only (that agent's).
+A model with an unlisted price costs `unknown` and is not placed on the frontier; a local model's listed
+price is often 0, and its wall time is in the table. With `--label`, the matrix is published as
+`docs/bench/matrices/<date>-<label>.md` and `.json` and listed in `docs/bench/README.md`.
+
 ## Outcomes
 
 `pass`, `fail`, and **`harness_error`** — and a harness error is never scored as either of the other two.
 An editor that did not start, a port that did not open, a transcript that could not be read, a `--hide-tools`
 name this build has no tool for: those are facts about the harness, with the reason in the record, and the
 run exits non-zero so a script notices.
+
+## The report, and what changed between two runs (BM-03)
+
+Every run ends with a report, `report.md` and `report.json` beside its trials. **Name a run with `--label`**
+and it is also published as `docs/bench/runs/<date>-<label>.md` and `.json` and listed in
+`docs/bench/README.md`, newest first; the raw trial directories are never committed.
+
+```sh
+cauldron-bench run --trials 5 --label baseline         # trials, then the report
+cauldron-bench report <run directory> --label baseline # the same report, from trials already run
+cauldron-bench compare docs/bench/runs/<a>.json docs/bench/runs/<b>.json
+cauldron-bench compare <a> <b> --across                # a different suite, agent or trial count
+```
+
+- **The header** names the editor and MCP server commit (`+dirty` when the tree had changes), the SHA-256 of
+  the shipped guide, the agent and its version, the model and its listed price, the variant, the trials per
+  task, the host and the date, so a reader can reproduce the run.
+- **Per task**: trials `n`, successes `c`, `c/n`, **`pass^k`** for `k = 1..n` (`C(c,k)/C(n,k)`, τ-bench,
+  `10.48550/arXiv.2406.12045`), median and p90 wall time, mean tool calls, refusals, undos, **edits behind the
+  editor's back** (files changed that no operation-log line explains: the agent went around the tools),
+  tokens, cost and wishes; and for each failed trial the **first failing check** with what it wanted and
+  measured, and the agent's **last five tool calls**.
+- **Per suite and per tag** (dev tasks): mean success with a 95% bootstrap interval (tasks, then trials within
+  tasks, resampled `BOOTSTRAP_RESAMPLES = 10_000` times from a fixed seed), mean `pass^k`, cost, cost per
+  success and the harness-error count.
+- **Held-out tasks are a total and nothing else**: never named, never with a prompt, never by tag.
+- **Cost is the model's listed price times the tokens the harness reported** (`omp models find --json`).
+  A model with no fixed price costs `unknown`, never `0`; a harness that reports its own cost (Claude Code)
+  is used only when no price is listed.
+- **A run is unfit for comparison** when more than `HARNESS_ERROR_MAX_FRACTION = 0.10` of its trials are
+  harness errors. The report says so at the top and `compare` refuses it.
+- **`compare <a> <b>`** pairs the tasks both runs scored and answers `better`, `worse` or `no measurable
+  change` with a paired 95% bootstrap interval of the difference; the interval including zero is no
+  measurable change. It lists every task whose success moved with both counts, each marked as a single task
+  that is not significant alone. Runs with different suites, agents or trial counts are refused unless
+  `--across`, which says which differ.
 
 ## Variants
 
