@@ -763,6 +763,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_cauldron_bench"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy_cauldron",
+ "bevy_fairy",
+ "bevy_grimoire_core",
+ "serde",
+ "serde_json",
+ "sha2",
+ "ureq",
+]
+
+[[package]]
 name = "bevy_cauldron_mcp"
 version = "0.1.0"
 dependencies = [

@@ -29,6 +29,15 @@ fn main() -> AppExit {
         println!("{}", args::USAGE);
         return AppExit::Success;
     }
+    // **`--print-operations` prints the registry and exits**, so a benchmark asks the binary it is about to
+    // run which operations exist rather than trusting a list baked into the harness (`cauldron-bench`,
+    // BM-02). It opens nothing: no window, no project, no device.
+    if args::asks_for_operations(&argv) {
+        for op in bevy_cauldron::ops::registry() {
+            println!("{}", op.name());
+        }
+        return AppExit::Success;
+    }
     // **`migrate` runs and exits** (GD-03, #365): a project's files are moved from RON to YAML, and the
     // editor is never started, so the command works with no window, on a machine with no GPU, over ssh.
     // It is a *subcommand* rather than a flag because it changes a project on disk and never opens one —

@@ -1,0 +1,38 @@
+# **The map the benchmark's tasks open** (BM-01, #411), laid over a trial's copy of the project from
+# `bench/fixture/`. It is not under `assets/grimoire/maps/` on purpose: the shipped project's maps are
+# counted by tests and edited by people, and a task's starting position may not move when either does.
+#
+# A small bedroom: 6 x 3 x 5 m, three pieces well clear of each other, and a lot of empty floor, so a task
+# about placing something has somewhere to put it. North is -Z (see `descriptor::Face`), so the north wall
+# is the `z = -2.5` plane.
+version: 9
+name: bench_bedroom
+note: The benchmark's bedroom. Three pieces, no overlaps, and room to place more.
+origin:
+- 0.0
+- 0.0
+- 0.0
+bounds:
+- 6.0
+- 3.0
+- 5.0
+bash: null
+placements:
+- id: dresser
+  descriptor: dresser_tall
+  at:
+  - -2.5
+  - -2.0
+  yaw: 0.0
+- id: chair
+  descriptor: chair
+  at:
+  - 2.0
+  - 1.5
+  yaw: 270.0
+- id: drawer
+  descriptor: drawer
+  at:
+  - 0.0
+  - 2.0
+  yaw: 0.0

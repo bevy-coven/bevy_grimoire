@@ -466,6 +466,34 @@ pub struct AgentLaunch {
     pub post: AgentPost,
 }
 
+/// **The MCP config a person's agent is handed**, with `args` extra on the server line.
+///
+/// **One builder, because there is one way an agent is connected.** The terminal tab writes this and an
+/// agent the benchmark launches reads it (`grimoire/agent_setup`, BM-02), so a change to how an agent
+/// finds the editor cannot leave one of them measuring or using a stale path. `token` is the tab's
+/// (`CAULDRON_AGENT_TOKEN`), which is how the editor tells two agents' work apart.
+pub fn mcp_config(
+    server: &Path,
+    port: u16,
+    token: &str,
+    project: Option<&Path>,
+    args: &[String],
+) -> Value {
+    let mut base: Vec<String> = project
+        .map_or_else(Vec::new, |p| vec!["--project".to_owned(), p.to_string_lossy().into_owned()]);
+    base.extend(args.iter().cloned());
+    json!({
+        "mcpServers": {
+            MCP_SERVER_NAME: {
+                "type": "stdio",
+                "command": server.to_string_lossy(),
+                "args": base,
+                "env": {"BEVY_BRP_PORT": port.to_string(), "CAULDRON_AGENT_TOKEN": token},
+            },
+        },
+    })
+}
+
 /// **Plan an agent tab**: write the MCP configs, and decide the line and the environment.
 ///
 /// Check 0 fails, and nothing is typed, when the editor has no agent setup, no remote protocol, no
@@ -533,17 +561,7 @@ pub fn plan_resuming(
             format!("the tools server is not at {}: build it with cargo build -p {MCP_BINARY}", setup.server.display()),
         );
     }
-    let args: Vec<String> = project.map_or_else(Vec::new, |p| vec!["--project".to_owned(), p.to_string_lossy().into_owned()]);
-    let config = json!({
-        "mcpServers": {
-            MCP_SERVER_NAME: {
-                "type": "stdio",
-                "command": setup.server.to_string_lossy(),
-                "args": args,
-                "env": {"BEVY_BRP_PORT": port.to_string(), "CAULDRON_AGENT_TOKEN": token},
-            },
-        },
-    });
+    let config = mcp_config(&setup.server, port, &token, project, &[]);
     let config_text = match serde_json::to_string_pretty(&config) {
         Ok(text) => text + "\n",
         Err(e) => return nothing(post, format!("the MCP config did not serialise: {e}")),

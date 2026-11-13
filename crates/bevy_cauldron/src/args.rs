@@ -186,6 +186,7 @@ Cauldron: the editor that writes a grimoire, the book your game loads.
 usage: bevy_cauldron [ROOT] [MAP] [--workspace <id>] [--kit NAME] [--live]
        bevy_cauldron migrate <project folder>
        bevy_cauldron bake <project folder> --out <folder>
+       bevy_cauldron --print-operations
 
   ROOT          the project's root, the folder holding assets/grimoire (default: the current folder)
   MAP           the map to open on the Map workspace; naming one, or a --workspace, skips the launcher
@@ -194,9 +195,18 @@ usage: bevy_cauldron [ROOT] [MAP] [--workspace <id>] [--kit NAME] [--live]
   --kit NAME    the kit to author in, when the project binds more than one
   --live        write every committed change to disk at once, for a game that watches the project
   -h, --help    print this and exit
+  --print-operations
+                print every operation this build has, one name a line, and exit (opens nothing)
 
   migrate       move a project's files from RON to YAML and exit (does not open the editor)
   bake          turn every YAML file a game loads into binaries for a release, proved against the YAML, and exit";
+
+/// **Whether the arguments ask for the operation list and an exit**, which is what a benchmark asks a
+/// binary it is about to run (BM-02, #412): whether an operation exists is the registry's answer, and a
+/// harness that baked its own copy of the list would measure a build it is not running.
+pub fn asks_for_operations(args: &[String]) -> bool {
+    args.iter().any(|a| a == "--print-operations")
+}
 
 /// Whether the arguments ask for [`USAGE`] rather than a window.
 pub fn asks_for_help(args: &[String]) -> bool {

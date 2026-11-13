@@ -1,0 +1,51 @@
+[package]
+name = "bevy_cauldron_bench"
+version = "0.1.0"
+edition = "2024"
+description = "A benchmark task for the Cauldron: its prompt, its fixture, its checks, and the grader that measures a run from the files it left."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/bevy-coven/bevy_grimoire"
+keywords = ["bevy", "gamedev", "level-design", "benchmark"]
+categories = ["game-development"]
+rust-version = "1.88"
+# **Not on crates.io**, the same call `bevy_cauldron` makes: this is a harness that runs a benchmark against
+# this repository's own editor and fixture, and nothing outside the workspace has a use for it.
+publish = false
+
+# **Engine-free, on purpose.** A task's checks are measured from the files a run left — the map, the
+# library, the operation log — so the grader holds no `bevy` type and needs no window, no device and
+# no editor process to answer. That is what lets the same grader score a headless proof in the push
+# gate (`every_task_is_valid`) and a real agent's trial, and it is the rule the checks exist for: a
+# check that called the operation which made the change could not catch that operation's bug.
+[dependencies]
+bevy_grimoire_core = { path = "../bevy_grimoire_core" }
+serde.workspace = true
+serde_json.workspace = true
+# The digest a file's bytes are compared by (`unchanged` checks), the workspace's one digest.
+sha2.workspace = true
+# **The runner's HTTP client, and its only network code** (BM-02, #412): one POST per BRP call to an
+# editor on this machine. `ureq` is already in the workspace's graph through the MCP server, which speaks
+# the same protocol to the same door, so this is the same client rather than a second dialect of it.
+ureq = { version = "3", features = ["json"] }
+
+[[bin]]
+name = "cauldron-bench"
+path = "src/bin/cauldron_bench.rs"
+
+# **The proof that every task is valid**, and it is a test of THIS crate** (BM-01, #411).
+#
+# It lives here rather than in `bevy_cauldron`'s test binary for one reason that decides it: #411's own
+# acceptance is `cargo nextest run --workspace`, and a test of the benchmark that ran under another
+# crate's name would go on passing while `-p bevy_cauldron_bench` proved nothing. So the crate that owns
+# the task format owns the proof that its tasks are solvable, and the editor is a dev-dependency here.
+[dev-dependencies]
+# **The real editor, headless**, because a task is proved by the editor's own dispatch: `setup` and
+# `solution` are applied through `ops::dispatch`, the same function an agent's `grimoire_apply_operation`
+# reaches, and the hand-back is made over the bridge the MCP server calls. `default-features = false`
+# would drop `debugger`, which owns the bridge, so the default build is what a proof needs.
+bevy_cauldron = { path = "../bevy_cauldron" }
+bevy.workspace = true
+# **The agent's bridge**, so a task's `grimoire_present` step is made the way an agent makes one. The
+# editor puts it behind its `debugger` feature, which is on by default; a test that added the plugin itself
+# would be proving a graph the editor does not build.
+bevy_debugger_bevy = { package = "bevy_fairy", git = "https://github.com/bevy-coven/bevy_fairy", rev = "06c9c1805651fabb2474a9d09af84c761be406aa", default-features = false, features = ["plugin", "plugin-guide", "plugin-screenshot"] }

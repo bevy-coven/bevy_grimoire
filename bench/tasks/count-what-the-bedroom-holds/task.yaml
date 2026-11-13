@@ -1,0 +1,37 @@
+# **A read-only question, answered by a hand-back** (BM-01, #411).
+#
+# The third shape of task, and the one a benchmark is easiest to get wrong about: an agent asked to *report*
+# rather than to change. There is no operation to grade, so the whole grade is whether the words are right
+# and whether the map was left alone — and both are measured from the files and the transcript, with no
+# model in the loop.
+#
+# The bedroom holds three pieces (`dresser`, `chair`, `drawer`), so an answer that says three is the answer
+# this map gives. The fact list is deliberately the parts of that answer a person would check: the count,
+# and the piece that is nearest the north wall.
+id: count-what-the-bedroom-holds
+title: Count what the bedroom holds
+split: dev
+tags: [read, handback]
+map: bench_bedroom
+prompt: |
+  Look at the bedroom map and tell me two things: how many pieces stand on it, and which one is nearest the
+  north wall.
+
+  Do not change anything. Answer with grimoire_present, putting the count and the piece in the summary.
+setup: []
+solution:
+  - op: grimoire_present
+    params:
+      title: The bedroom holds three pieces
+      summary: Three pieces stand on the bedroom map — a dresser, a chair and a drawer. The dresser is the one nearest the north wall, at z = -2.0.
+      specified:
+        - how many pieces stand on the map
+        - which piece is nearest the north wall
+      inferred:
+        - nearest the north wall is measured by each piece's own position on z, not by eye
+checks:
+  - project_unchanged: {}
+  - unchanged: [maps/bench_bedroom.map.yaml]
+  - oplog_lacks: {op: placement_add}
+  - handback_contains: [three, dresser]
+budget: {wall_s: 600, tool_calls: 60}
