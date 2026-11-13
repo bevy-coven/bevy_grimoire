@@ -188,11 +188,6 @@ bevy_gooey = { git = "https://github.com/bevy-coven/bevy_gooey", rev = "57d3d49b
 # Reads a face's own character map, so a test can say the terminal's face has the icons a prompt draws
 # (#323). Already in the lock through Bevy's text stack; a test dependency only.
 ttf-parser = "0.25"
-# **The benchmark's tasks, proved in the gate** (BM-01, #411). A test dependency only: the editor is the
-# application and the bench crate is engine-free, so this is the one direction the dependency can run —
-# `every_task_is_valid` boots the headless editor and grades each task both ways, which the bench crate
-# could not do for itself.
-bevy_cauldron_bench = { path = "../bevy_cauldron_bench" }
 
 [[test]]
 name = "editor"

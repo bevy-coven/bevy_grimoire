@@ -1,0 +1,16 @@
+# **The arms a suite can be run as** (BM-02, #412), beside its tasks.
+#
+# A variant is a way to run the *suite*, not a different task: tools an agent must not be offered, and
+# project files laid over the trial's copy so a guide or a prompt can differ per arm. Comparing two editor
+# versions needs no variant — that is two runs at two commits.
+#
+# `hide_tools` reaches the MCP server as `--hide-tools`, so the tool is **absent from the agent's tool
+# list** rather than refused when it is called: an agent that reads a tool's name spends a call learning it
+# cannot be used, which is a different question from "what does it do without this tool".
+version: 1
+variants:
+  # The arm #412 asks for: the agent is not offered the camera, so a task can ask what it does when it
+  # cannot frame a picture of the result.
+  - name: no-frame-view
+    hide_tools:
+      - grimoire_frame_view

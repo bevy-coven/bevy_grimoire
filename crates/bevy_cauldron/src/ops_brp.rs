@@ -542,6 +542,63 @@ fn agent_hello(
     crate::terminal_agent::agent_hello(&mut terminal, &params, time.elapsed_secs_f64())
 }
 
+/// **The parameters of `grimoire/agent_setup`** (BM-02, #412).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentSetupParams {
+    /// **Arguments the launched MCP server is given**, in addition to `--project`. `--hide-tools` is
+    /// what a benchmark arm uses, so the server does not serve them at all.
+    #[serde(default)]
+    pub server_args: Vec<String>,
+}
+
+/// **`grimoire/agent_setup` — the MCP config a person's agent is handed, with a fresh token.**
+///
+/// **One way to connect an agent.** The terminal tab writes this config from
+/// [`crate::terminal_agent::mcp_config`] and types a harness at its shell; a benchmark launches a harness
+/// with the same text, so a change to how agents find the editor cannot leave one of them pointing at a
+/// stale path. The token is fresh per call, so two launches are two agents to the editor, and the changes
+/// each one makes are attributed to it.
+///
+/// **Refused when this editor cannot hand an agent its tools at all** — no `AgentSetup` (a test harness,
+/// or a binary started without one), no remote port, or no server binary beside this one — naming which,
+/// because a benchmark that silently launched an agent at nothing would report the agent's failure.
+fn agent_setup(
+    In(p): In<AgentSetupParams>,
+    setup: Option<Res<crate::terminal_agent::AgentSetup>>,
+    project: Option<Res<crate::project::Project>>,
+) -> Result<Value, String> {
+    let Some(setup) = setup else {
+        return Err("this editor was started without an agent setup, so it cannot hand an agent its tools".to_owned());
+    };
+    let Some(port) = setup.port else {
+        return Err("this build has no remote protocol (the debugger feature), so no agent can reach the editor".to_owned());
+    };
+    if !setup.server.is_file() {
+        return Err(format!(
+            "the tools server is not at {}: build it with cargo build -p {}",
+            setup.server.display(),
+            crate::terminal_agent::MCP_BINARY
+        ));
+    }
+    // **Fresh per call**: two launches are two agents, and the editor tells their work apart by this.
+    let token = format!(
+        "{:x}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos())
+    );
+    let root = project.as_ref().map(|p| p.root.clone());
+    let config = crate::terminal_agent::mcp_config(&setup.server, port, &token, root.as_deref(), &p.server_args);
+    Ok(json!({
+        "token": token,
+        "port": port,
+        "server": setup.server,
+        "project": root,
+        "config": config,
+    }))
+}
+
 /// **`grimoire/self_test_result` — what `grimoire_self_test` found**, for its tab's card.
 fn self_test_result(In(params): In<Value>, mut terminal: ResMut<crate::terminal::Terminal>) -> Result<Value, String> {
     crate::terminal_agent::self_test_result(&mut terminal, &params)
@@ -2904,6 +2961,20 @@ impl Plugin for OpsBridgePlugin {
             )
             .example(json!({"token": "1a2b", "client": {"name": "omp", "version": "18.16.0"}, "tools": 22})),
             agent_hello,
+        );
+
+        app.add_debug_command(
+            DebugCommandInfo::new(
+                "grimoire/agent_setup",
+                "The MCP config a person's agent is handed, with a fresh token: the command, its arguments \
+                 (`--project` and any `server_args`, such as `--hide-tools`), and the environment. This is \
+                 what the terminal's agent tab writes, so a harness a benchmark launches is connected the \
+                 way a person's is. Refused when this editor cannot hand an agent its tools: no setup, no \
+                 remote protocol, or no server binary beside this one.",
+            )
+            .params("server_args: extra arguments for the MCP server, e.g. [\"--hide-tools\", \"a,b\"]")
+            .example(json!({"server_args": ["--hide-tools", "grimoire_frame_view"]})),
+            agent_setup,
         );
 
         app.add_debug_command(

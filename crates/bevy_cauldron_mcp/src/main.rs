@@ -542,6 +542,14 @@ pub struct Grimoire {
     /// **The project directory, and the only place the server may point at**, when one was named.
     /// `None` follows whatever the editor has open.
     project: Option<PathBuf>,
+    /// **Tools this server does not serve at all** (`--hide-tools`), so they are absent from an agent's
+    /// tool list rather than refused when it calls one.
+    ///
+    /// A benchmark arm that hides `grimoire_frame_view` is asking what an agent does *without* that tool,
+    /// and a tool that is in the list and refuses every call answers a different question — the agent
+    /// reads the name, decides to try it, and burns a call learning it cannot. So this is the list the
+    /// `tools/list` answer leaves out, and `call_tool` refuses a hidden name as it refuses an unknown one.
+    hidden: Vec<String>,
     tool_router: ToolRouter<Self>,
 }
 
@@ -549,12 +557,36 @@ pub struct Grimoire {
 impl Grimoire {
     /// **A server for the editor at `editor`, rooted at `project`, or following the editor when `None`.**
     pub fn new(editor: Brp, project: Option<PathBuf>) -> Self {
+        Self::with_hidden(editor, project, Vec::new())
+    }
+
+    /// **The same server, serving every tool but `hidden`.**
+    ///
+    /// A name in `hidden` that this build has no tool for is **refused at start** by [`checked_hidden`],
+    /// not silently ignored: a benchmark arm naming a tool that does not exist would otherwise measure
+    /// the full tool set while its report said one was missing.
+    pub fn with_hidden(editor: Brp, project: Option<PathBuf>, hidden: Vec<String>) -> Self {
         let tool_router = Self::tool_router();
         Grimoire {
             editor,
             project,
+            hidden,
             tool_router,
         }
+    }
+
+    /// **Every tool this build has**, whatever is hidden, so a start can check a `--hide-tools` name.
+    pub fn tool_names(&self) -> Vec<String> {
+        self.tool_router
+            .list_all()
+            .iter()
+            .map(|t| t.name.as_ref().to_owned())
+            .collect()
+    }
+
+    /// **Whether this server serves `name`.**
+    fn serves(&self, name: &str) -> bool {
+        self.tool_router.get(name).is_some() && !self.hidden.iter().any(|h| h == name)
     }
 
     /// **The project's root, for a tool that names a file**, when the server was given one.
@@ -2366,6 +2398,27 @@ fn png_size(bytes: &[u8]) -> Option<(u32, u32)> {
 
 #[tool_handler]
 impl rmcp::ServerHandler for Grimoire {
+    /// **`tools/list` serves everything this server has, less the tools `--hide-tools` names.**
+    ///
+    /// **A hidden tool is absent, not refused.** An arm that hides `grimoire_frame_view` asks what an
+    /// agent does without that tool; a tool that is listed and refuses every call answers a different
+    /// question, because the agent reads the name, spends a call on it, and learns only then that it
+    /// cannot be used. The generated handler lists the whole router, so this is the one call it needs
+    /// replacing for.
+    async fn list_tools(
+        &self,
+        _request: Option<rmcp::model::PaginatedRequestParams>,
+        _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
+    ) -> Result<rmcp::model::ListToolsResult, rmcp::ErrorData> {
+        let tools = self
+            .tool_router
+            .list_all()
+            .into_iter()
+            .filter(|t| self.serves(t.name.as_ref()))
+            .collect();
+        Ok(rmcp::model::ListToolsResult::with_all_items(tools))
+    }
+
     /// **A tool that does not exist is refused with the list of the ones that do.**
     ///
     /// **The generated handler answers "tool not found"**, which tells an agent that it guessed
@@ -2378,9 +2431,14 @@ impl rmcp::ServerHandler for Grimoire {
         context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> Result<rmcp::model::CallToolResponse, rmcp::ErrorData> {
         let name = request.name.as_ref();
-        if self.tool_router.get(name).is_none() {
-            let all = self.tool_router.list_all();
-            let names: Vec<&str> = all.iter().map(|t| t.name.as_ref()).collect();
+        if !self.serves(name) {
+            let names: Vec<String> = self
+                .tool_router
+                .list_all()
+                .iter()
+                .map(|t| t.name.as_ref().to_owned())
+                .filter(|n| self.serves(n))
+                .collect();
             let result = CallToolResult::structured_error(json!({
                 "refused": format!(
                     "`{name}` is not a tool this server has. The tools are: {}.",
@@ -2432,10 +2490,19 @@ impl rmcp::ServerHandler for Grimoire {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut project: Option<PathBuf> = None;
+    let mut hidden: Vec<String> = Vec::new();
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--project" => project = args.next().map(PathBuf::from),
+            // **A tool the server does not serve at all** (BM-02, #412), so an agent's tool list does not
+            // hold it. Comma-separated, and each name is checked against the router at start: a name this
+            // build has no tool for is refused, because an arm that silently hid nothing would measure the
+            // full tool set while its report said one was missing.
+            "--hide-tools" => {
+                let given = args.next().unwrap_or_default();
+                hidden.extend(given.split(',').map(str::trim).filter(|n| !n.is_empty()).map(str::to_owned));
+            }
             "--emit-docs" => {
                 // **The document is written to stdout, and the shell redirects it.** The server
                 // never writes a file in the project — it does not own the project directory —
@@ -2446,10 +2513,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "--help" | "-h" => {
                 println!(
                     "bevy_cauldron_mcp — the bevy_grimoire editor over the Model Context Protocol.\n\n\
-                     USAGE:\n    bevy_cauldron_mcp [--project <dir>]\n\n\
+                     USAGE:\n    bevy_cauldron_mcp [--project <dir>] [--hide-tools <a,b>]\n\n\
                      --project <dir>   the project the editor is working on; the server refuses a \
                      change made while the editor has another one open. Without it the server \
-                     follows whatever the editor has open, including none (the Projects home).\n\n\
+                     follows whatever the editor has open, including none (the Projects home).\n\
+                     --hide-tools <a,b> tool names that are not served at all, so an agent's tool list \
+                     does not hold them: a benchmark arm, not a permission.\n\n\
                      The editor's BRP endpoint comes from BEVY_BRP_PORT (default 15702), which is \
                      the same variable the editor reads."
                 );
@@ -2462,7 +2531,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    let server = Grimoire::new(Brp::from_env(), project);
+    // **A hidden name this build has no tool for is refused at start**, naming it and the tool that
+    // would have matched: an arm that hid nothing would measure the whole tool set while its report said
+    // one was missing, and the run would look like a result about a tool it never removed.
+    let known = Grimoire::new(Brp::from_env(), project.clone()).tool_names();
+    if let Some(unknown) = hidden.iter().find(|h| !known.iter().any(|k| k == *h)) {
+        eprintln!(
+            "bevy_cauldron_mcp: `{unknown}` is in --hide-tools but this server has no tool by that name."
+        );
+        eprintln!("The tools are: {}.", known.join(", "));
+        std::process::exit(2);
+    }
+    let server = Grimoire::with_hidden(Brp::from_env(), project, hidden);
     // **The project is checked when a tool is called, not when the server starts.**
     //
     // **A server that refuses to start is a server an agent cannot ask anything.** The editor may

@@ -50,6 +50,10 @@
 pub mod check;
 pub mod fixture;
 pub mod grade;
+// **The runner** (BM-02, #412): a real agent against a real editor, on a fresh copy, n times. It holds the
+// HTTP client and the process handling that a trial needs; the grader above it holds none of that, which is
+// why the gate can prove a task with no editor and this can prove the editor with no model.
+pub mod run;
 pub mod suite;
 pub mod task;
 
@@ -59,7 +63,8 @@ pub use check::{
     Unchanged, Verdict, Wall, CHECK_NAMES,
 };
 pub use grade::{Grading, Handback, Left, Outcome, Snapshot};
-pub use suite::Suite;
+pub use suite::{Suite, Variant, Variants};
+pub use run::{Agent, Options, TrialRecord};
 pub use task::{Budget, Step, Task, TASK_TOOL_CALLS_DEFAULT, TASK_WALL_S_DEFAULT};
 
 /// **Where the suite's tasks live**, relative to the repository (or a game) root: one directory per
