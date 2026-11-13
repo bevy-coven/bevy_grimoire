@@ -15,7 +15,7 @@ categories = ["game-development"]
 bevy = { workspace = true, features = ["serialize"] }
 # **For `Problem`, and nothing else.** It is the workspace's one refusal shape, so a script's fault reaches a
 # game's log the way a refused project file does. Engine-free, so nothing new is drawn in.
-bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.10.0" }
+bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.11.0" }
 # **The one Rhai host** (GD-06, #368). The owner decided it lives in this workspace rather than in
 # `bevy_society`: that crate's `ScriptEngine` registers only society types and keeps its entry points
 # `pub(crate)`, so it is not a general host, and building a second one beside it is the two-paths shape

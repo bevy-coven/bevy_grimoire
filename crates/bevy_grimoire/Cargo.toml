@@ -1,6 +1,6 @@
 [package]
 name = "bevy_grimoire"
-version = "0.4.9"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.97.1"
 description = "The runtime half of grimoire: load a library and a map, and put it in a Bevy world."
@@ -13,7 +13,7 @@ repository = "https://github.com/bevy-coven/bevy_grimoire"
 # stops being true); this turns its data into entities. The game and `bevy_cauldron` both depend on
 # THIS rather than each growing a spawner, so a map looks the same in the editor and in play.
 [dependencies]
-bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.10.0" }
+bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.11.0" }
 bevy = { workspace = true, features = ["jpeg", "serialize", "reflect_documentation"] }
 # **The schema export, and nothing else of `bevy_remote`.** `registry.schema` is the only function that can say
 # what a game's own components are, so `game.schema.json` cannot be written without it — and a game that ships
