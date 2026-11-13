@@ -15,6 +15,7 @@
 //! must be unique to its test (its name and `std::process::id()`), never a fixed name.
 
 mod a_chord_shows_the_problems_list;
+mod a_dock_tab_reordered_glides_to_its_place;
 mod a_game_field_opens_the_file_that_sets_it;
 mod a_maps_forest_is_listed_in_the_world_workspace;
 mod a_maps_lights_are_listed_without_bevy_lights;
