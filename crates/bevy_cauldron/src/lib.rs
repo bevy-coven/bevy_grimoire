@@ -185,7 +185,7 @@ pub mod reload_files;
 pub mod report;
 pub mod ops_play;
 pub mod ops_notes;
-pub mod ops_references;
+pub mod ops_board;
 pub mod ops_people;
 pub mod ops_scripts;
 pub mod ops_runs;

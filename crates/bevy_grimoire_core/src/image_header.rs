@@ -1,7 +1,7 @@
-//! **The header of a reference image, read well enough to say whether the file is the picture its name
+//! **The header of a board picture, read well enough to say whether the file is the picture its name
 //! claims** (#200, H3, kind `reference_images`).
 //!
-//! A reference (`crate::references`) is a project-relative picture an agent is told to look at. Nothing
+//! A picture on a board (`crate::board`) is a project-relative picture an agent is told to look at. Nothing
 //! in this repository decodes it, so a file that was cut off by a full disk, saved over by a text, or
 //! renamed from another format used to look fine until an agent was sent to read it. [`read`] opens
 //! the container's own header (a PNG's `IHDR`, a JPEG's frame header, a GIF's screen descriptor, a

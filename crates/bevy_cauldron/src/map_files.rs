@@ -25,8 +25,8 @@ pub const READ_HERE: &[&str] = &["forest", "people", "scripts", "trees"];
 /// **The registry kinds a watcher in this layer reads with a named refusal** (`checks`: the decision
 /// crate's type, held by [`crate::checks_view::ChecksView`]; `oplog`: this layer's own entry type,
 /// looked at by [`crate::oplog_view::OplogView`]; `game_data`: a game's own files, checked against the
-/// registry's bounds by [`crate::data_view::DataView`]; `reference_images`: the pictures the open map
-/// lists, whose header [`crate::reference_view::ReferenceView`] reads; `family`: a family crate's
+/// registry's bounds by [`crate::data_view::DataView`]; `reference_images`: the pictures on the boards
+/// of the design tree, whose header [`crate::reference_view::ReferenceView`] reads; `family`: a family crate's
 /// settings, read as the crate's own type by [`crate::family_host::reload_settings`] in a build that
 /// has the type; `editor_settings`: the project's settings layer, which [`crate::settings::sync_settings`] reads). No operation needs these files to read in order to rewrite them (`data_set` refuses a
 /// file that does not scan, but a wrong type or a missing leaf does not stop it setting another leaf), so

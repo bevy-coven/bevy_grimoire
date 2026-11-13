@@ -1183,8 +1183,9 @@ fn editor_state(
             params.note.as_deref(),
             std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()),
         )),
-        // **The reference images beside this map** (#124), each with its id to cite and whether its file is there.
-        "references": open.as_ref().map(|o| crate::ops_references::state_json(o, project.as_ref().map(|p| p.root.as_path()))),
+        // **The dream boards** (SG-03, #402): the open map's level, and every place that has one, each picture with its
+        // caption and whether its file is on this machine. It took the place of `references`.
+        "board": project.as_ref().map(|p| crate::ops_board::state_json(open.as_deref(), p.root.as_path())),
         // **The agent's plan for this map** (E-069): items with a status each, and a count per status.
         "plan": open.as_ref().map(|o| crate::ops_plan::state_json(o)),
         // **The repeats a player will notice first** (#136): same piece, yaw (any yaw for a round

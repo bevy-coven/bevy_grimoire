@@ -15,7 +15,6 @@ use bevy_grimoire_core::destructible::{Bake, Chunk, DESTRUCTIBLE_VERSION, Marks}
 use bevy_grimoire_core::map::{MAP_VERSION, Map};
 use bevy_grimoire_core::notes::Notes;
 use bevy_grimoire_core::plan::Plan;
-use bevy_grimoire_core::references::References;
 use bevy_grimoire_core::relations::Relations;
 use bevy_grimoire_core::reload::{self, KINDS};
 use bevy_grimoire_core::reload_check::{self, Check, Refusal};
@@ -54,7 +53,7 @@ fn samples() -> Vec<Sample> {
         s("map", "maps/yard.map.yaml", Map { version: MAP_VERSION, name: "yard".to_owned(), bounds: (10.0, 4.0, 10.0), ..Map::default() }.to_yaml().unwrap(), "version", true),
         s("notes", "maps/yard.notes.yaml", Notes::default().to_yaml().unwrap(), "version", true),
         s("plan", "maps/yard.plan.yaml", Plan::default().to_yaml().unwrap(), "version", true),
-        s("references", "maps/yard.references.yaml", References::default().to_yaml().unwrap(), "version", true),
+        s("board", "design/board/board.yaml", bevy_grimoire_core::board::Board::default().to_yaml().unwrap(), "version", true),
         s("relations", "maps/yard.relations.yaml", Relations::default().to_yaml().unwrap(), "version", true),
         s("terrain", "site/terrain/yard.yaml", "origin: [0.0, 0.0]\ncell_m: 1.0\nwidth: 2\ndepth: 2\nheights: [0.0, 0.0, 0.0, 0.0]\n".to_owned(), "cell_m", true),
         s("family_list", "family.yaml", format!("version: {}\ncrates: []\n", bevy_grimoire_core::family::FAMILY_VERSION), "version", true),

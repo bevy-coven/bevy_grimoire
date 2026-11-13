@@ -62,7 +62,9 @@ const FROZEN: &[Frozen] = &[
     frozen!("map", "maps/yard.map.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/map.ron"),
     frozen!("notes", "maps/yard.notes.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/notes.ron"),
     frozen!("plan", "maps/yard.plan.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/plan.ron"),
-    frozen!("references", "maps/yard.references.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/references.ron"),
+    // Owner exception (2026-11-13): this row was kind `references`, which the dream board replaced (SG-03, #402). The file is still
+    // the one a release wrote and still goes through the migration, which writes it as the level's board; so the kind is `board`.
+    frozen!("board", "maps/yard.references.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/references.ron"),
     frozen!("relations", "maps/yard.relations.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/relations.ron"),
     frozen!("terrain", "site/terrain/yard.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/terrain.ron"),
     frozen!("water_plan", "site/water/yard.yaml", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/water_plan.ron"),
@@ -132,7 +134,15 @@ fn every_kind_the_check_reads_has_frozen_data_and_each_file_is_its_kinds() {
         // **The spelling the file is read in today**: a frozen file keeps the name it had, and the
         // pattern it is compared with is the kind's current one (`kits.yaml`) or the old one (`kits.ron`),
         // whichever the cutover has moved that kind to.
-        let named = if reads_yaml(f.kind) { written_by_an_earlier_release(f.file) } else { f.file.to_owned() };
+        // Owner exception (2026-11-13): a references file became a board, which sits in a place of the design tree, not beside the map;
+        // the board kind's row names the game's own board, so that is the name it is compared with.
+        let named = if f.kind == "board" {
+            "design/board/board.yaml".to_owned()
+        } else if reads_yaml(f.kind) {
+            written_by_an_earlier_release(f.file)
+        } else {
+            f.file.to_owned()
+        };
         assert!(
             kind.matches(&named),
             "`{}` is not a path of kind `{}`",

@@ -1,10 +1,10 @@
-//! **The pictures the open map references, as the editor looks at them** (#200, H3).
+//! **The pictures on the project's boards, as the editor looks at them** (#200, H3; SG-03, #402).
 //!
-//! A reference (`reference_set`) is a project-relative picture an agent is told to look at. Nothing in
+//! A picture on a board (`board_set`) is a project-relative picture an agent is told to look at. Nothing in
 //! this repository decodes it, so a file that a full disk cut off, that a text saved over or that was
 //! renamed from another format cost the agent a picture it could not open, and the author a sentence
-//! nobody said. One system looks at the map's `references.yaml` and every picture it lists when one of
-//! them moved, or once a second, and decides into `grimoire_state.reloads`, kind `reference_images`, per
+//! nobody said. One system looks at every board's `board.yaml` (`bevy_grimoire_core::board::places_with_a_board`) and every
+//! picture they list when one of them moved, or once a second, and decides into `grimoire_state.reloads`, kind `reference_images`, per
 //! file:
 //!
 //! - `refused` with the file and the header field (`signature`, `format`, `header`, `width`, `height`;
@@ -12,8 +12,8 @@
 //! - `applied` when a refused picture is a picture again, or an edit left one that reads as other
 //!   dimensions.
 //!
-//! **A picture first seen reading is no news**: opening a map, or adding a reference, is not an edit.
-//! **A listed picture that is not there is not decided here**: `grimoire_state.references` already says
+//! **A picture first seen reading is no news**: opening a map, or adding a picture, is not an edit.
+//! **A listed picture that is not there is not decided here**: `grimoire_state.board` already says
 //! `missing: true` for it, and a project may name a file it is about to add. **One edit is one verdict**:
 //! a look decides only what differs from the look before, and everything one look finds is one `seq`.
 //!
@@ -29,7 +29,7 @@ use std::time::SystemTime;
 use bevy::prelude::*;
 use bevy_grimoire_core::image_header::{self, Header};
 use bevy_grimoire_core::live::{KindVerdict, Outcome};
-use bevy_grimoire_core::references::{self, References};
+use bevy_grimoire_core::board::{self, Board};
 
 use crate::editor::EditorState;
 use crate::live::EditorReloads;
@@ -55,14 +55,14 @@ enum Look {
 
 type Stat = Option<(SystemTime, u64)>;
 
-/// **What the editor last made of the open map's referenced pictures.**
+/// **What the editor last made of the pictures on the boards.**
 #[derive(Resource, Default)]
 pub struct ReferenceView {
-    /// The references file this describes; another map (or project) starts the view afresh.
-    refs_file: PathBuf,
+    /// The map this describes; another map (or project) starts the view afresh.
+    map_path: PathBuf,
     /// The project's root the pictures are under.
     root: PathBuf,
-    /// Every file looked at (the references file first) and its size and modification time **before** it
+    /// Every file looked at (the boards' files first) and its size and modification time **before** it
     /// was read, so a picture written while it was being read looks moved at the next frame.
     stats: Vec<(PathBuf, Stat)>,
     /// Seconds since the files were last read.
@@ -121,7 +121,7 @@ fn inside(path: &str) -> bool {
     !path.is_empty() && Path::new(path).components().all(|c| matches!(c, Component::Normal(_)))
 }
 
-/// **Look at the open map's referenced pictures, and decide what differs from the look before.**
+/// **Look at the pictures on every board, and decide what differs from the look before.**
 ///
 /// Looked at every frame by size and modification time, and read again when one moved or once a second
 /// regardless. A map that is no longer open, or another one, clears every verdict this view made.
@@ -143,21 +143,24 @@ pub fn sync_reference_view(
         }
         return;
     };
-    let refs_file = references::path_for_map(&open.map_path);
+    let map_path = open.map_path.clone();
     let root = project.root.clone();
-    let same = view.looked && view.refs_file == refs_file && view.root == root;
+    // **The open level's board file is always looked at**, whether it exists yet or not: a board made now is seen at once, where the walk of the
+    // other places' boards waits for the next recheck.
+    let level_file = root.join(board::file_of(&board::level_place(&root, &open.map.name)));
+    let same = view.looked && view.map_path == map_path && view.root == root;
     view.since += time.delta_secs();
     let stats: Vec<(PathBuf, Stat)> = if same {
         view.stats.iter().map(|(p, _)| (p.clone(), stat_of(p))).collect()
     } else {
-        vec![(refs_file.clone(), None)]
+        vec![(level_file.clone(), None)]
     };
     if same && view.stats == stats && view.since < RECHECK_SECS {
         return;
     }
     view.since = 0.0;
     if !same {
-        view.refs_file = refs_file.clone();
+        view.map_path = map_path.clone();
         view.root = root.clone();
         view.last.clear();
         view.looked = false;
@@ -166,18 +169,25 @@ pub fn sync_reference_view(
         }
     }
 
-    // A references file that does not read is the `references` kind's to say; nothing is listed from it.
-    let mut paths = vec![(refs_file.clone(), stat_of(&refs_file))];
+    // A board file that does not read is the `board` kind's to say; nothing is listed from it. The boards are found by
+    // a walk of the design folder's directories, so a board made since the last look is seen at the next one.
+    let mut paths: Vec<(PathBuf, Stat)> = vec![(level_file.clone(), stat_of(&level_file))];
     let mut now: BTreeMap<String, Look> = BTreeMap::new();
-    for r in References::load(&refs_file).map(|r| r.refs).unwrap_or_default() {
-        if !inside(&r.path) {
-            continue;
+    for place in board::places_with_a_board(&root) {
+        let file = root.join(board::file_of(&place));
+        if file != level_file {
+            paths.push((file.clone(), stat_of(&file)));
         }
-        let path = root.join(&r.path);
-        // The stat is taken before the read: a write that lands during it moves the stat again.
-        paths.push((path.clone(), stat_of(&path)));
-        if let Some(look) = look_at(&path, &r.path) {
-            now.insert(r.path, look);
+        for picture in Board::load(&file).map(|b| b.pictures).unwrap_or_default() {
+            if !inside(&picture.path) {
+                continue;
+            }
+            let path = root.join(&picture.path);
+            // The stat is taken before the read: a write that lands during it moves the stat again.
+            paths.push((path.clone(), stat_of(&path)));
+            if let Some(look) = look_at(&path, &picture.path) {
+                now.insert(picture.path, look);
+            }
         }
     }
     view.stats = paths;
