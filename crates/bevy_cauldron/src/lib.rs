@@ -189,6 +189,7 @@ pub mod ops_notes;
 pub mod ops_board;
 pub mod ops_design;
 pub mod design_areas;
+pub mod design_templates;
 pub mod ops_people;
 pub mod ops_scripts;
 pub mod ops_runs;

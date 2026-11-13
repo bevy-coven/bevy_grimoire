@@ -183,7 +183,7 @@ pub fn create(form: &NewProject) -> Result<PathBuf, String> {
     let place = Path::new(form.location.trim());
     std::fs::create_dir_all(place).map_err(|e| format!("cannot make {}: {e}", place.display()))?;
     let dir = crate::catalog::create_project_with(place, &form.name, VOCAB)?;
-    if let Err(e) = fill(&dir, form.template) {
+    if let Err(e) = fill(&dir, form.template, form.name.trim()) {
         // Made a moment ago by this call and nothing else has opened it.
         let _ = std::fs::remove_dir_all(&dir);
         return Err(format!("{} was not made: {e}", dir.display()));
@@ -192,7 +192,7 @@ pub fn create(form: &NewProject) -> Result<PathBuf, String> {
 }
 
 /// The template's kit, its pieces, and the first map, written into the project at `dir`.
-fn fill(dir: &Path, template: Template) -> Result<(), String> {
+fn fill(dir: &Path, template: Template, name: &str) -> Result<(), String> {
     crate::catalog::create_kit(dir, template.kit())?;
     if template == Template::Starter {
         copy_prototype_kit(dir)?;
@@ -202,6 +202,9 @@ fn fill(dir: &Path, template: Template) -> Result<(), String> {
     // person's trust file — the form's Create button and the project page — because the store is the
     // person's and not the project's.
     crate::guide_template::write_file(dir)?;
+    // **And with a style** (SG-08, #407): `design/style.md`, the nine sections of the game's look and feel, each one prompt line, so the
+    // file's shape is found rather than read about. Only a project the editor makes gets one: opening any other writes no file.
+    crate::design_templates::write_style(dir, bevy_grimoire_core::design::DESIGN_DIR, name)?;
     // **The derived folder is not the project's work** (#366): `.dark_factory/schema/` holds JSON Schema
     // files generated from the types at every open and from the game's registry at every start, so a project
     // that committed them would diff a file nobody edited every time a type changed. The guide and the

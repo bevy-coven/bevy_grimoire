@@ -153,6 +153,11 @@ pub fn is_area_name(name: &str) -> bool {
         && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
+/// **Whether `name` is a name a topic can have**: the rule of an area's name, because both are a file or folder name an agent is told.
+pub fn is_topic_name(name: &str) -> bool {
+    is_area_name(name)
+}
+
 /// **An area's folder**, relative to the project root: `<level>/areas/<name>`.
 pub fn area_folder(level: &str, name: &str) -> String {
     format!("{level}/{AREAS_DIR}/{name}")
