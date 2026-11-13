@@ -519,6 +519,15 @@ pub fn listed_files(root: &Path) -> Vec<String> {
 
 // ── Components ───────────────────────────────────────────────────────────────
 
+/// **The headings of the open page**, as of one revision of its text (SG-04, #403): what an outline lists. A language with no
+/// headings has none. Kept on the code editor's own entity beside its folds, by the one system that decorates it.
+#[derive(Component, Clone, Debug, Default, PartialEq, Eq)]
+pub struct FileOutline {
+    /// The revision of the text the headings are of.
+    pub revision: u64,
+    pub headings: Vec<files_lang::Heading>,
+}
+
 /// The tree panel in the left dock.
 #[derive(Component)]
 pub struct FilesPanel;
@@ -956,6 +965,7 @@ fn decorate_the_editor(
     mut editors: Query<(Entity, &mut FileEditor, &CodeEditorValue)>,
 ) {
     let now = time.elapsed_secs_f64();
+    let root = files.root.clone();
     for (entity, mut editor, value) in &mut editors {
         let Some(rel) = editor.shown.clone() else { continue };
         let revision = value.revision();
@@ -965,12 +975,15 @@ fn decorate_the_editor(
             commands.entity(entity).insert((
                 Highlights::new(revision, files_lang::highlights(lang, value.text(), schema.as_deref())),
                 FoldRanges::new(revision, files_lang::folds(lang, value.text())),
+                FileOutline { revision, headings: files_lang::outline(lang, value.text()) },
             ));
             editor.highlighted = revision;
         }
         let waiting = files.open.get(&rel).and_then(|f| f.edited_at).is_some_and(|at| now - at < DIAGNOSE_IDLE_S);
         if editor.analysed != revision && !waiting {
-            let mut items: Vec<Diagnostic> = files_lang::diagnose(&rel, value.text()).into_iter().map(|f| Diagnostic::new(f.range, f.severity, f.message)).collect();
+            // **The project around the file**: a Markdown page's links and pictures are looked for under its root.
+            let around = files_lang::Env { root: root.as_deref(), refs: &|_: &str| Vec::new(), files: &Vec::new };
+            let mut items: Vec<Diagnostic> = files_lang::diagnose_in(&around, &rel, value.text()).into_iter().map(|f| Diagnostic::new(f.range, f.severity, f.message)).collect();
             if let Some(file) = files.open.get(&rel) {
                 items.extend(agent_marks(value.text(), &file.agent_lines));
             }
@@ -1219,6 +1232,7 @@ fn on_completion_request(
     request: On<CodeCompletionRequested>,
     mut files: ResMut<Files>,
     editors: Query<(&FileEditor, &CodeEditorValue)>,
+    trees: Query<&TreeNames, With<FilesTree>>,
     project: Option<Res<Project>>,
     mut commands: Commands,
 ) {
@@ -1233,7 +1247,11 @@ fn on_completion_request(
             _ => Vec::new(),
         }
     };
-    let found = files_lang::complete(Lang::of(&rel), value.text(), request.offset, schema.as_deref(), &refs);
+    // **The files the tree lists** are what a Markdown path may name after the board's pictures.
+    let listed = || -> Vec<String> { trees.iter().next().map(|t| t.names.values().filter(|(_, dir)| !dir).map(|(rel, _)| rel.clone()).collect()).unwrap_or_default() };
+    let root = files.root.clone();
+    let around = files_lang::Env { root: root.as_deref(), refs: &refs, files: &listed };
+    let found = files_lang::complete(&rel, value.text(), request.offset, schema.as_deref(), &around);
     let items = found
         .items
         .into_iter()
@@ -1248,12 +1266,14 @@ fn on_completion_request(
     commands.entity(request.entity).insert(CodeCompletions { anchor: found.anchor, items });
 }
 
-/// **Say what a key is**, from its doc comment.
+/// **Say what a key is**, from its doc comment, and what a picture is, from its place's board.
 fn on_hover_request(request: On<CodeHoverRequested>, mut files: ResMut<Files>, editors: Query<(&FileEditor, &CodeEditorValue)>, mut commands: Commands) {
     let Ok((editor, value)) = editors.get(request.entity) else { return };
     let Some(rel) = editor.shown.clone() else { return };
     let schema = files.schema_for(&rel);
-    if let Some((range, text)) = files_lang::hover(Lang::of(&rel), value.text(), request.offset, schema.as_deref()) {
+    let root = files.root.clone();
+    let around = files_lang::Env { root: root.as_deref(), refs: &|_: &str| Vec::new(), files: &Vec::new };
+    if let Some((range, text)) = files_lang::hover(&rel, value.text(), request.offset, schema.as_deref(), &around) {
         commands.entity(request.entity).insert(CodeHover { revision: request.revision, range, text });
     }
 }

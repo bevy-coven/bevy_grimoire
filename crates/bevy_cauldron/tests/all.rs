@@ -320,6 +320,7 @@ mod light_overlay;
 mod light_pool;
 mod light_view;
 mod live_writes_each_change_through;
+mod markdown_in_the_file_editor;
 mod navigation;
 mod no_colour_lives_in_chrome;
 mod no_internal_words_on_screen;
