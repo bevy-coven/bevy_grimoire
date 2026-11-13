@@ -8,7 +8,8 @@ set -euo pipefail
 [ $# -eq 4 ] || { echo "usage: launch.sh <host> <cluster> <base-ref> <brief-file>" >&2; exit 2; }
 host=$1 cluster=$2 base=$3 brief=$4
 [[ $cluster =~ ^[a-z]+$ ]] || { echo "cluster must be lower-case letters only: $cluster" >&2; exit 2; }
-MODEL=ollama-cloud/deepseek-v4.1-flash:1017
+# Owner, 2026-11-13: ollama cloud ran out of credits, so every fleet worker is Claude Sonnet 5.5.
+MODEL=${FLEET_MODEL:-anthropic/claude-sonnet-5-5}
 
 if [ "$host" = local ]; then
   common=$(git rev-parse --path-format=absolute --git-common-dir)
