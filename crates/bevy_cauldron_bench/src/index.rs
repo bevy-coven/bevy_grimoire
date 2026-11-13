@@ -33,7 +33,7 @@ pub fn publish(bench_dir: &Path, report: &Report) -> Result<(PathBuf, PathBuf), 
     let md = runs.join(format!("{stem}.md"));
     let json = runs.join(format!("{stem}.json"));
     bevy_grimoire_core::atomic_file::write(&md, report.markdown()).map_err(|e| format!("{}: {e}", md.display()))?;
-    bevy_grimoire_core::atomic_file::write(&json, report.json()).map_err(|e| format!("{}: {e}", json.display()))?;
+    bevy_grimoire_core::atomic_file::write(&json, report.json()?).map_err(|e| format!("{}: {e}", json.display()))?;
     let readme = bench_dir.join(README);
     bevy_grimoire_core::atomic_file::write(&readme, index(bench_dir)?)
         .map_err(|e| format!("{}: {e}", readme.display()))?;
@@ -67,7 +67,7 @@ pub fn index(bench_dir: &Path) -> Result<String, String> {
         "# The benchmark's runs\n\n\
          Each row is one committed run of `cauldron-bench` (BM-03, #413): a report beside the JSON \
          `cauldron-bench compare` reads. The raw trial directories are not committed. This file is \
-         written by `cauldron-bench report`, newest first, so edit the reports and not this list.\n\n\
+         written by `cauldron-bench report --label`, `run --label` and `matrix --label`, newest first, so edit the reports and not this list.\n\n\
          ```sh\n\
          cauldron-bench report <run directory> --label baseline   # writes docs/bench/runs/<date>-baseline.md\n\
          cauldron-bench compare docs/bench/runs/<a>.json docs/bench/runs/<b>.json\n\
@@ -128,7 +128,7 @@ pub fn publish_matrix(bench_dir: &Path, matrix: &crate::matrix::Matrix) -> Resul
     let md = dir.join(format!("{stem}.md"));
     let json = dir.join(format!("{stem}.json"));
     bevy_grimoire_core::atomic_file::write(&md, matrix.markdown()).map_err(|e| format!("{}: {e}", md.display()))?;
-    bevy_grimoire_core::atomic_file::write(&json, matrix.json()).map_err(|e| format!("{}: {e}", json.display()))?;
+    bevy_grimoire_core::atomic_file::write(&json, matrix.json()?).map_err(|e| format!("{}: {e}", json.display()))?;
     let readme = bench_dir.join(README);
     bevy_grimoire_core::atomic_file::write(&readme, index(bench_dir)?)
         .map_err(|e| format!("{}: {e}", readme.display()))?;

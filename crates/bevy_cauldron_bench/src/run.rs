@@ -942,7 +942,7 @@ pub fn write_reports(options: &Options) -> Result<(crate::report::Report, Vec<Pa
     let md = options.out.join("report.md");
     let json = options.out.join("report.json");
     bevy_grimoire_core::atomic_file::write(&md, report.markdown()).map_err(|e| format!("{}: {e}", md.display()))?;
-    bevy_grimoire_core::atomic_file::write(&json, report.json()).map_err(|e| format!("{}: {e}", json.display()))?;
+    bevy_grimoire_core::atomic_file::write(&json, report.json()?).map_err(|e| format!("{}: {e}", json.display()))?;
     let mut written = vec![md, json];
     if let Some(bench) = &options.publish {
         let (md, json) = crate::index::publish(bench, &report)?;
