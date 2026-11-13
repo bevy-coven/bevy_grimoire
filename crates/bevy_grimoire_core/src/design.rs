@@ -516,15 +516,15 @@ impl Tree {
         }
         for (file, picture) in missing {
             let rel = picture.file.clone().unwrap_or_default();
-            let caption =
-                if picture.caption.is_empty() { String::new() } else { format!(", whose caption says '{}'", picture.caption) };
             self.problems.push(Problem::with(
                 format!("`{file}` cites a picture that is not there, on line {}", picture.line),
                 Detail::default()
                     // **The line is carried as a number as well as said**, so a caller that jumps to it reads
                     // it here instead of scraping it out of the sentence.
                     .at(Location::file(file.clone()).line(picture.line))
-                    .because(format!("line {} cites `{}`{caption}, and {rel} is not there", picture.line, picture.cited))
+                    // **Only the line and the path**: a caption, a title or alt text is the file's own words, and this sentence reaches an
+                    // agent through `grimoire_state.design.problems` with no check of the person's trust.
+                    .because(format!("line {} cites `{}`, and {rel} is not there", picture.line, picture.cited))
                     .fix(format!("put the picture at {rel}, or change the line to name one that is there")),
             ));
         }
