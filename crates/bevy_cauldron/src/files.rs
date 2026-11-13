@@ -47,12 +47,12 @@ use std::time::SystemTime;
 
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
-use bevy::ui::InteractionDisabled;
+use bevy::ui::{ComputedNode, InteractionDisabled, ScrollPosition, UiGlobalTransform};
 use bevy::ui_widgets::{Activate, ValueChange};
 use bevy_gooey::{
     CodeAuthor, CodeCompletionRequested, CodeCompletions, CodeEdit, CodeEditor, CodeEditorValue, CodeHover, CodeHoverRequested, CodeIndent,
-    CodeIndentation, CodeMinimap, CodePos, CodeSeverity, CompletionItem, Diagnostic, Diagnostics, FoldRanges, Highlights, SelectMode, TableSelection, Tree,
-    TreeNode, observe, tree,
+    CodeIndentation, CodeMinimap, CodePos, CodeSeverity, CompletionItem, Diagnostic, Diagnostics, FoldRanges, Highlights, ListView, RowSource, SelectMode,
+    TableSelection, Tree, TreeNode, observe, tree,
 };
 use serde_json::Value;
 
@@ -616,6 +616,7 @@ impl Plugin for FilesPlugin {
                     keep_the_header,
                     keep_the_conflict_bar,
                     keep_the_tree,
+                    reveal_the_active_row,
                 )
                     .chain()
                     .run_if(in_state(Screen::Editor))
@@ -727,6 +728,10 @@ struct TreeNames {
     fingerprint: u64,
     next_poll: f64,
     selected: Option<u64>,
+    /// The row key the tree has been opened and scrolled to (#359), so a person who scrolls away is not pulled back.
+    revealed: Option<u64>,
+    /// How many frames in a row the revealed row has been inside the viewport: layout is a frame behind the rows.
+    steady: u8,
     truncated: bool,
     /// The walk in flight, on a thread of its own: the tree is read off the UI thread.
     scan: Option<std::sync::Mutex<std::sync::mpsc::Receiver<Walked>>>,
@@ -1356,6 +1361,62 @@ fn keep_the_tree(
         }
     }
 }
+/// **How many frames the active file's row must stay inside the tree's viewport before the reveal lets go of it.** Layout
+/// reads the rows of the frame before, so a row that fits once may be moved by the scroll bounds the next.
+const REVEAL_STEADY_FRAMES: u8 = 2;
+
+/// **Open the folders above the active file and scroll its row into view** (#359, AF-03). A selection alone names a row
+/// the tree may not have: a file in a shut folder has none, and a long tree keeps the one it has below its fold. gooey
+/// scrolls a table to its cursor for a key or a click only, so this puts the viewport where the row is the way the
+/// DATA table's reveal does (`reveal::table_row_geometry` and `chrome::scroll_to_reveal`, the editor's one pair of
+/// scroll sums), once per file made active, and stops when the row has been inside for [`REVEAL_STEADY_FRAMES`].
+fn reveal_the_active_row(
+    mut trees: Query<(Entity, &mut bevy_gooey::Table, &mut TreeNames), With<FilesTree>>,
+    children: Query<&Children>,
+    mut viewports: Query<(&ComputedNode, &UiGlobalTransform, &ListView, &mut ScrollPosition)>,
+) {
+    for (entity, mut table, mut names) in &mut trees {
+        let Some(key) = names.selected else {
+            names.revealed = None;
+            continue;
+        };
+        if names.revealed == Some(key) {
+            continue;
+        }
+        let Some(rel) = names.names.get(&key).map(|(rel, _)| rel.clone()) else { continue };
+        let Some(tree) = table.source_mut::<Tree>() else { continue };
+        // Every folder above the file: the prefixes before each `/`.
+        for (at, _) in rel.match_indices('/') {
+            tree.set_open(key_of(&rel[..at]), true);
+        }
+        let Some(row) = (0..RowSource::len(tree)).find(|row| RowSource::key(tree, *row) == key) else { continue };
+        // The viewport is the nearest descendant of the tree that is a `ListView`.
+        let Some(viewport) = children.iter_descendants(entity).find(|e| viewports.contains(*e)) else { continue };
+        let Ok((node, at, view, mut scroll)) = viewports.get_mut(viewport) else { continue };
+        if view.rows <= 0.0 || node.size().y <= 0.0 {
+            continue;
+        }
+        let (scroll_y, max) = chrome::scroll_bounds(node);
+        let inv = node.inverse_scale_factor();
+        let Some((row_mid, pitch)) = crate::reveal::table_row_geometry((at.translation.y, node.size().y), view.rows, row, scroll_y, inv) else { continue };
+        match chrome::scroll_to_reveal((row_mid, pitch * 0.5), (at.translation.y, node.size().y * 0.5), scroll_y, max, inv) {
+            Some(want) => {
+                names.steady = 0;
+                if (scroll.0.y - want).abs() > 0.5 {
+                    scroll.0.y = want;
+                }
+            }
+            None => {
+                names.steady += 1;
+                if names.steady >= REVEAL_STEADY_FRAMES {
+                    names.revealed = Some(key);
+                    names.steady = 0;
+                }
+            }
+        }
+    }
+}
+
 // ── What an agent's operations need to know about the open files ─────────────
 
 /// What the operations (`file_edit`, `files_replace`) may ask of this module without a window: which files a
