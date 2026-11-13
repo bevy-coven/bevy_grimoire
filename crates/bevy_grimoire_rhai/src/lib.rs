@@ -66,7 +66,7 @@ use std::time::SystemTime;
 
 use bevy::prelude::*;
 use bevy_grimoire_core::problem::{Detail, Location, Problem};
-use rhai::{Dynamic, Engine, Map, Scope};
+use rhai::{Dynamic, Engine, Map, Scope, FLOAT};
 
 /// **The folder a game's scripts live in**, under the project root.
 pub const SCRIPTS_DIR: &str = "scripts";
@@ -683,7 +683,7 @@ fn run_hooks(world: &mut World) {
     for entity in entities {
         // **`on_start` first, always**: a script's frame code assumes what its setup did.
         run_one(world, entity, Hook::Start, vec![], &snapshot);
-        run_one(world, entity, Hook::Update, vec![Dynamic::from_float(f64::from(delta_s))], &snapshot);
+        run_one(world, entity, Hook::Update, vec![Dynamic::from_float(FLOAT::from(delta_s))], &snapshot);
     }
     run_events(world, &snapshot);
 }
@@ -1112,6 +1112,16 @@ fn f64_json(f: f64) -> serde_json::Value {
     serde_json::Number::from_f64(f).map(serde_json::Value::Number).unwrap_or(serde_json::Value::Null)
 }
 
+/// **A rhai float as JSON.** `rhai::FLOAT` is `f64` unless something in the build turns on rhai's `f32_float`
+/// feature, and cargo unifies features across the whole graph: `cargo build -p bevy_cauldron --features family_all`
+/// pulls in a crate that does, so on the macOS release build `FLOAT` was `f32` and 0.1.0 of this crate did not
+/// compile (the Linux gate never builds that graph). Nothing here may assume which width it is. The conversion is
+/// a no-op under the default feature set, which is why the lint is allowed on this one function.
+#[allow(clippy::useless_conversion)]
+fn float_json(f: FLOAT) -> serde_json::Value {
+    f64_json(f.into())
+}
+
 /// **A JSON value as a rhai value**, so a reflected component crosses into a script as data rather than as a
 /// string it would have to parse.
 fn json_to_dynamic(value: &serde_json::Value) -> Dynamic {
@@ -1122,7 +1132,7 @@ fn json_to_dynamic(value: &serde_json::Value) -> Dynamic {
         // make `-= 1` a type change on the way back through the type's own `Deserialize`.
         serde_json::Value::Number(n) => match n.as_i64() {
             Some(i) => Dynamic::from_int(i),
-            None => Dynamic::from_float(n.as_f64().unwrap_or(0.0)),
+            None => Dynamic::from_float(n.as_f64().unwrap_or(0.0) as FLOAT),
         },
         serde_json::Value::String(s) => Dynamic::from(s.clone()),
         serde_json::Value::Array(items) => Dynamic::from_array(items.iter().map(json_to_dynamic).collect()),
@@ -1166,7 +1176,7 @@ fn dynamic_to_json(value: &Dynamic) -> serde_json::Value {
         return serde_json::Value::from(i);
     }
     if let Ok(f) = value.as_float() {
-        return f64_json(f);
+        return float_json(f);
     }
     if let Some(f) = value.clone().try_cast::<f32>() {
         return f64_json(f64::from(f));
