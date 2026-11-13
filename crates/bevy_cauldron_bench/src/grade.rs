@@ -445,3 +445,49 @@ pub fn problem_of_kind(found: &Found, kind: ProblemKind) -> bool {
 pub fn grade_all(checks: &[Check], before: &Snapshot, after: &Snapshot) -> Vec<Verdict> {
     checks.iter().map(|c| grade(c, before, after)).collect()
 }
+
+/// **The folders the editor's operations write**, relative to a project root, read from the reload contract's
+/// file kinds (`bevy_grimoire_core::reload`) rather than guessed: the library and maps under
+/// `assets/grimoire/`, a game's style tree and every place's dream board under `design/` (`board_set`,
+/// `tree_set`), and the Rhai scripts, family, reference pictures and destructible bakes the reload contract
+/// lists at the project root. A file outside all of them is not one an operation wrote.
+pub const OPERATION_WRITE_ROOTS: &[&str] =
+    &[GRIMOIRE_DIR, "design", "scripts", "family", "references", "destructible"];
+
+/// **Single files at the project root an operation writes**, for the same reason.
+pub const OPERATION_WRITE_FILES: &[&str] = &["family.yaml", "destructible.yaml"];
+
+/// **Operations that write a file wherever it is**: `file_edit` and `files_replace` edit any project file, and
+/// `data_set` edits a registered data file, which a game keeps outside the grimoire folder
+/// (`../data/mob.yaml`). An applied line of one of these explains a change anywhere.
+pub const OPERATIONS_WRITING_ANYWHERE: &[&str] = &["file_edit", "files_replace", "data_set"];
+
+/// **The files an agent changed that no operation-log line wrote**: it went around the editor's tools,
+/// through its shell or a file tool, and the editor never heard of the change.
+///
+/// The log names an operation, not the files it wrote, so the answer is a bound and not a trace: a changed
+/// file is **explained** when the log holds a line the agent's operations appended after the setup *and*
+/// the file sits where the editor's operations write ([`OPERATION_WRITE_ROOTS`], [`OPERATION_WRITE_FILES`]),
+/// or that line is one of [`OPERATIONS_WRITING_ANYWHERE`]. Every other changed file is behind the editor's
+/// back, whichever way it got there:
+///
+/// - **no applied line after the setup** explains nothing: a map that changed in a run that applied no
+///   operation was written by something else;
+/// - **a file outside the named folders** is never an operation's output.
+///
+/// What this cannot see is an agent that applied an operation *and also* hand-edited a second file inside
+/// those folders; that is counted as the operation's. The bound errs toward the agent.
+pub fn edits_behind_the_back(before: &Snapshot, after: &Snapshot) -> Vec<String> {
+    let applied: Vec<&LogLine> =
+        after.oplog.iter().skip(before.oplog.len()).filter(|line| line.applied()).collect();
+    let anywhere = applied.iter().any(|line| OPERATIONS_WRITING_ANYWHERE.contains(&line.op.as_str()));
+    let written_by_an_operation = |file: &str| {
+        OPERATION_WRITE_ROOTS.iter().any(|root| file.starts_with(&format!("{root}/")))
+            || OPERATION_WRITE_FILES.contains(&file)
+    };
+    before
+        .differences(after)
+        .into_iter()
+        .filter(|file| !(!applied.is_empty() && (anywhere || written_by_an_operation(file))))
+        .collect()
+}
