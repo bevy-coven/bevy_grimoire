@@ -731,6 +731,7 @@ dependencies = [
  "base64 0.22.1",
  "bevy",
  "bevy_carnage",
+ "bevy_cauldron_bench",
  "bevy_devshot",
  "bevy_elements",
  "bevy_fairy",
@@ -760,6 +761,16 @@ dependencies = [
  "sha2",
  "ttf-parser",
  "ureq",
+]
+
+[[package]]
+name = "bevy_cauldron_bench"
+version = "0.1.0"
+dependencies = [
+ "bevy_grimoire_core",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

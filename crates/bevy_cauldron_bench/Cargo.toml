@@ -1,0 +1,25 @@
+[package]
+name = "bevy_cauldron_bench"
+version = "0.1.0"
+edition = "2024"
+description = "A benchmark task for the Cauldron: its prompt, its fixture, its checks, and the grader that measures a run from the files it left."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/bevy-coven/bevy_grimoire"
+keywords = ["bevy", "gamedev", "level-design", "benchmark"]
+categories = ["game-development"]
+rust-version = "1.88"
+# **Not on crates.io**, the same call `bevy_cauldron` makes: this is a harness that runs a benchmark against
+# this repository's own editor and fixture, and nothing outside the workspace has a use for it.
+publish = false
+
+# **Engine-free, on purpose.** A task's checks are measured from the files a run left — the map, the
+# library, the operation log — so the grader holds no `bevy` type and needs no window, no device and
+# no editor process to answer. That is what lets the same grader score a headless proof in the push
+# gate (`every_task_is_valid`) and a real agent's trial, and it is the rule the checks exist for: a
+# check that called the operation which made the change could not catch that operation's bug.
+[dependencies]
+bevy_grimoire_core = { path = "../bevy_grimoire_core" }
+serde.workspace = true
+serde_json.workspace = true
+# The digest a file's bytes are compared by (`unchanged` checks), the workspace's one digest.
+sha2.workspace = true

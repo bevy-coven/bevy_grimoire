@@ -1,0 +1,41 @@
+# **A task an agent must refuse** (BM-01, #411).
+#
+# The piece the prompt names is not in this project's library, so the only correct run changes nothing and
+# says why it could not. That is the shape of half the real work an agent does — a person asks for
+# something the project has no piece for, and the answer is `no`, in words.
+#
+# # Why two checks, and why they are these two
+#
+# `project_unchanged` is the half that stops an agent inventing a piece, editing the library, or "roughly"
+# placing the nearest bed. `handback_contains` is the half that stops the **do-nothing loophole**: an agent
+# that connects and stops leaves the project unchanged and would pass the first check alone. Silence is not
+# a refusal, and the benchmark says so by requiring the words.
+id: refuse-a-piece-the-project-lacks
+title: Refuse a piece the project does not have
+split: dev
+tags: [refusal, handback]
+map: bench_bedroom
+prompt: |
+  Put a velvet armchair in the corner of the bedroom at (-2.0, 1.5), facing into the room.
+
+  If the project cannot do what is asked, say so plainly with grimoire_present: name the thing that is
+  missing and do not change the map.
+setup: []
+solution:
+  - op: grimoire_present
+    params:
+      title: No velvet armchair in this project
+      summary: The project has no `velvet_armchair` piece, so nothing was placed and the map is as it was.
+      specified:
+        - a velvet armchair at (-2.0, 1.5), facing into the room
+      inferred:
+        - velvet_armchair is the id the request implies, and this library has no piece by that name
+      check:
+        - what: the map is unchanged
+          placements: []
+checks:
+  - project_unchanged: {}
+  - unchanged: [maps/bench_bedroom.map.yaml]
+  - oplog_lacks: {op: placement_add}
+  - handback_contains: [velvet_armchair, nothing was placed]
+budget: {wall_s: 600, tool_calls: 60}

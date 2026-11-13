@@ -286,6 +286,7 @@ mod every_list_follows_its_selection;
 mod every_panel_is_in_its_workspace;
 mod every_refusal_is_in_a_problem;
 mod every_resource_says_what_a_door_does_to_it;
+mod every_task_is_valid;
 mod every_toolbar_command_has_an_icon;
 mod family_carnage_settings;
 mod dialogue_preview;

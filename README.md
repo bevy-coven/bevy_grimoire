@@ -89,6 +89,7 @@ The Cauldron is the editor of the [Bevy Coven](https://github.com/bevy-coven): i
 |---|---|
 | `bevy_cauldron` | The editor. Opens a project directory and writes the files a game loads. Not on crates.io: run it from a clone. |
 | `bevy_cauldron_mcp` | The MCP server that gives an agent the editor's operations over stdio. |
+| `bevy_cauldron_bench` | The benchmark: a task states a prompt, a fixture, a known answer and the checks a run must satisfy, and the grader measures them from the saved files with no model in the loop. |
 | [`bevy_grimoire`](https://crates.io/crates/bevy_grimoire) | The runtime half: loads a library and a map into a Bevy world (`GrimoirePlugin`, `GrimoireLivePlugin`). |
 | [`bevy_grimoire_core`](https://crates.io/crates/bevy_grimoire_core) | The engine-free core: the constraint representation, solvers, WFC and the grammar learner. |
 | [`bevy_grimoire_solver`](https://crates.io/crates/bevy_grimoire_solver), [`_rng`](https://crates.io/crates/bevy_grimoire_rng), [`_anim`](https://crates.io/crates/bevy_grimoire_anim), [`_snip`](https://crates.io/crates/bevy_grimoire_snip) | A deterministic SAT back-end, one ChaCha8 random stream, clip-weight blending, and cutting a rectangle out of a picture of the editor. |

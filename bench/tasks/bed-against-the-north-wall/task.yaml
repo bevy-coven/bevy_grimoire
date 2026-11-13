@@ -1,0 +1,43 @@
+# **Place one piece against a named wall, centred on it** (BM-01, #411).
+#
+# The simplest task a benchmark can have, and the one that has to be exactly right: the piece's own
+# footprint decides where "against the wall" is, so an agent that puts the bed's centre on the wall has
+# put half of it through the wall and fails.
+#
+# North is -Z, so the north wall is the `z = -2.5` plane of a 6 x 3 x 5 m room. `bed_double` is
+# 1.72 x 2.22 m, so its centre is 1.11 m from its own edge along z and a flush bed stands at
+# `z = -2.5 + 1.11 = -1.39`.
+id: bed-against-the-north-wall
+title: The bed against the north wall
+split: dev
+tags: [place, relations]
+map: bench_bedroom
+prompt: |
+  Put a double bed flat against the north wall of the bedroom, centred on that wall.
+
+  The room is 6 m wide (x) and 5 m deep (z), with north at -z. Use grimoire_apply_operation with the
+  placement_add operation. When the bed is in place, hand the result back with grimoire_present.
+setup: []
+solution:
+  - op: placement_add
+    params:
+      piece: bed_double
+      at: [0.0, -1.39]
+      yaw: 0.0
+  - op: grimoire_present
+    params:
+      title: The bed against the north wall
+      summary: A double bed stands flush against the north wall, centred on it, with 1.72 m of floor left on either side.
+      specified:
+        - the bed is flat against the north wall
+        - the bed is centred on that wall
+      inferred:
+        - the bed's head is at the wall, which is where a bed's head goes
+checks:
+  - placement_exists: {piece: bed_double, count: 1}
+  - placement_near_wall: {piece: bed_double, wall: north, max_gap_m: 0.05, centre_within_m: 0.2}
+  - placement_at: {piece: bed_double, yaw_deg: 0.0, yaw_tolerance_deg: 1.0}
+  - no_problem: [overlap]
+  - oplog_has: {op: placement_add, min: 1}
+  - handback_contains: [north wall, centred]
+budget: {wall_s: 600, tool_calls: 60}
