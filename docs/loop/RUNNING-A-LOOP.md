@@ -208,6 +208,24 @@ Measured 2026-10-28 with both Ollama accounts at their weekly limit: omp tried t
   the loops' to free. `MemoryHigh`/`MemoryMax` stay: the rule is to bound swap, never to remove the memory
   cap. Check a unit's real position with `cat .../memory.swap.current` against `memory.swap.max`, not with
   `MemoryPeak` alone: society sat at 95 % of its swap cap while its peak looked unremarkable.
+- **A CI runner and a gate are two builds on one host, and oomd does not care which one it kills.**
+  Measured on big, 2026-11-12: the fleet's push gate was killed **10 times** in four hours
+  (`systemd-oomd killed 20 process(es) in this unit`, peaks 3.4–5.2 GB, swap peaks 2.2–4.1 GB) while
+  every one of the host's other numbers looked quiet. The cause was not the gate: `ps` showed **two
+  GitHub Actions containers for `foundation_vs_slop`**, each with `CARGO_BUILD_JOBS=8`, plus
+  `hs-distill-serv` holding 5.3 GB, and `/tmp` — a 16 GB tmpfs whose pages live in swap — at 84 % full.
+  Three things made the gate finish in 393 s after that:
+  - **run one gate, in the foreground of one ssh**, not a retrying unit beside a retrying unit. Two
+    `gate-retry.sh` loops had started and their attempt counters raced (`attempt 3` then `attempt 10`);
+    each kill they saw restarted a build that the other's kill had not caused.
+  - **`CARGO_BUILD_JOBS=2 NEXTEST_TEST_THREADS=4`** on the gate while a worker is also compiling. The
+    suite takes longer and completes; at 4/8 it never did.
+  - **check `ps -eo pid,rss,comm --sort=-rss` before believing the gate is the memory hog.** The
+    biggest process was a service, and the second biggest was a CI build.
+  One test flaked under that load (`compose_cursor_is_an_operation::a_held_arrow_writes_one_line_and_
+  still_walks_every_repeat`, "the hold walked the cursor more than the press alone: it reached 1",
+  5/5 pass alone in 0.54 s). A docs-and-media commit cannot have caused it; it is logged on #322 with
+  the others of its family.
 - **A `target/` for a Bevy workspace is tens of GB, so disk is a real eligibility check.** `mac_air` has
   10 cores and 7.6 GB of disk, which makes it useless for a compile however idle it is;
   `--min-disk-gb 40` on the picker is the honest default. Reclaiming `~/target/sanctuary/release`
