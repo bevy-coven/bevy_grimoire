@@ -9,19 +9,20 @@
 //! the change, so a bug in an operation cannot also hide in the check that was supposed to catch it.
 //!
 //! ```yaml
-//! id: dresser-against-the-back-wall
-//! title: The dresser against the back wall
-//! split: dev
+//! id: bed-against-the-north-wall          # the directory's own name
+//! title: The bed against the north wall
+//! split: dev                              # dev | held_out
 //! tags: [place, relations]
 //! map: bench_bedroom
 //! prompt: |
-//!   Stand a dresser flat against the back (north) wall of the bedroom, near its middle.
-//! setup: []
-//! solution:
-//!   - {op: placement_add, params: {piece: dresser_tall, at: [0.0, -2.24]}}
-//! checks:
-//!   - placement_near_wall: {piece: dresser_tall, wall: north, max_gap_m: 0.05}
-//!   - project_keeps: {map: bench_bedroom}
+//!   Put a double bed flat against the north wall of the bedroom, centred on that wall.
+//! setup: []                               # operations applied before the agent starts
+//! solution:                               # a known answer, proved in the gate
+//!   - {op: placement_add, params: {piece: bed_double, at: [0.0, -1.39], yaw: 0.0}}
+//!   - {op: grimoire_present, params: {title: …, summary: …}}
+//! checks:                                 # every one must hold on what the run left
+//!   - placement_near_wall: {piece: bed_double, wall: north, max_gap_m: 0.05, centre_within_m: 0.2}
+//!   - no_problem: [overlap]
 //! budget: {wall_s: 600, tool_calls: 60}
 //! ```
 //!
@@ -31,7 +32,7 @@
 //! nothing  -  and both failures look exactly like an agent that failed. The Agentic Benchmark Checklist
 //! (`10.48550/arXiv.2507.02825`) names the second as the do-nothing loophole: a task whose checks hold
 //! on the untouched scene is passed by an agent that connects and stops. So a task in this suite is
-//! proved in the push gate (`crates/bevy_cauldron/tests/every_task_is_valid.rs`), on a copy of the
+//! proved in the push gate (`crates/bevy_cauldron_bench/tests/every_task_is_valid.rs`), on a copy of the
 //! fixture and with no model in the loop: the **do-nothing run must fail at least one check**, and the
 //! task's own `solution`, applied through the editor's dispatch, must pass every one of them.
 //!
@@ -42,10 +43,17 @@
 //! starting position, and nothing under `assets/grimoire/maps/` changes for the tests that count those
 //! files.
 //!
-//! # Engine-free
+//! # Engine-free, and the runner beside it
 //!
-//! Nothing here imports `bevy`. The grader is a walk over files and the core crate's own arithmetic,
-//! which is what lets the same code score a headless proof in the gate and a real agent's trial.
+//! Nothing in `check`, `grade`, `suite`, `task` or `fixture` imports `bevy`: the grader is a walk over files
+//! and the core crate's own arithmetic, which is what lets the same code score a headless proof in the gate
+//! and a real agent's trial. `run` is the harness around it (BM-02, #412) — it starts an editor and an
+//! agent, and it is the only module here that owns a process or a socket.
+//!
+//! **The proof that a task is valid lives in this crate's own `tests/`**
+//! (`tests/every_task_is_valid.rs`), and the editor is a dev-dependency for it: a test filed under another
+//! crate's name is a proof nothing asks for, because `cargo nextest run -p bevy_cauldron_bench` is what a
+//! reviewer runs to ask this crate what it does.
 
 pub mod check;
 pub mod fixture;
