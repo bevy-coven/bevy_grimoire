@@ -90,6 +90,32 @@ pub const DISPLAY_TRIES: u32 = 40;
 /// demo recorder's `:96`.
 pub const DISPLAY_BASE: u32 = 120;
 
+/// **How long a new `Xvfb` is given to take its display**, seconds: its socket exists and its lock file names
+/// it. A live server on the number refuses by exiting inside this, so it bounds only a server that hangs.
+pub const DISPLAY_START_S: u64 = 5;
+
+/// **How long a display is given to stop after `SIGTERM`**, seconds, before it is killed.
+pub const DISPLAY_STOP_S: u64 = 5;
+
+/// **How often a wait looks at the process it waits for**, milliseconds.
+pub const POLL_INTERVAL_MS: u64 = 50;
+
+/// **How often a running agent's editor is looked at**, milliseconds: the editor's death is a harness error
+/// found while the agent runs, not minutes later when the budget ends.
+pub const AGENT_POLL_INTERVAL_MS: u64 = 250;
+
+/// **The harness's own tools**, which an agent is offered beside the editor's and which are not a leak.
+///
+/// Measured on this host (omp 18.18.9, 2026-11-13) from the registry of an isolated trial: twenty names.
+/// The rest are names the model has been seen to call. **Any other name is a tool the Dark Factory did not
+/// hand out**, so a trial that offers one is a harness error naming it, and a new omp that adds a built-in
+/// is a refusal that says which, not a silently wider agent.
+pub const BUILTIN_TOOLS: &[&str] = &[
+    "ast_edit", "bash", "debug", "edit", "eval", "find", "glob", "goal", "grep", "init_experiment",
+    "log_experiment", "lsp", "read", "run_experiment", "task", "todo", "update_notes", "wait", "web_search",
+    "write", "learn", "manage_skill", "ask", "browser", "archive",
+];
+
 /// **How much a trial is run with.**
 #[derive(Clone, Debug)]
 pub struct Options {
@@ -257,21 +283,23 @@ impl Display {
                 .stderr(Stdio::null())
                 .spawn()
                 .map_err(|e| format!("Xvfb could not be started: {e}"))?;
-            // **The server is up when its socket is**, and a child that exited means the number was taken
-            // after all: the next one is tried rather than the trial failing on a race.
+            // **The display is ours when its lock file names our child**, and not before. A socket file proves
+            // only that *some* server made one: a live Xvfb of another run, or of another agent, has its
+            // socket at once, and a harness that returned on seeing it shared that screen and lost it when the
+            // owner stopped. `Xvfb` writes its own pid into `/tmp/.X<n>-lock`, so the pid is the proof; a
+            // server that holds the number refuses ours by exiting, and the next number is tried.
             let socket = format!("/tmp/.X11-unix/X{number}");
-            let deadline = Instant::now() + Duration::from_secs(5);
+            let lock = format!("/tmp/.X{number}-lock");
+            let deadline = Instant::now() + Duration::from_secs(DISPLAY_START_S);
             let mut running = child;
             while Instant::now() < deadline {
-                if Path::new(&socket).exists() {
+                if Path::new(&socket).exists() && lock_pid(&lock) == Some(running.id()) {
                     return Ok(Display { child: running, number });
                 }
-                // **A number a live server holds** is refused by that server, and the child says so by
-                // exiting: this one is not the trial's display, so the next number is tried.
                 if let Ok(Some(_)) = running.try_wait() {
                     break;
                 }
-                std::thread::sleep(Duration::from_millis(50));
+                std::thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
             }
             let _ = running.kill();
             let _ = running.wait();
@@ -283,6 +311,11 @@ impl Display {
     }
 }
 
+/// **The pid an X server's lock file names**, or `None` when there is no file or it holds no number.
+fn lock_pid(path: &str) -> Option<u32> {
+    std::fs::read_to_string(path).ok()?.trim().parse().ok()
+}
+
 impl Drop for Display {
     fn drop(&mut self) {
         // **Asked, then made to**: `SIGTERM` is what lets `Xvfb` remove its own socket and lock file, and
@@ -290,12 +323,12 @@ impl Drop for Display {
         // is for a server that ignored the request, and `-nolisten tcp` has nothing to flush.
         let pid = self.child.id().to_string();
         let _ = Command::new("kill").args(["-TERM", &pid]).status();
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + Duration::from_secs(DISPLAY_STOP_S);
         while Instant::now() < deadline {
             if matches!(self.child.try_wait(), Ok(Some(_))) {
                 return;
             }
-            std::thread::sleep(Duration::from_millis(50));
+            std::thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
         }
         let _ = self.child.kill();
         let _ = self.child.wait();
@@ -318,6 +351,23 @@ impl Drop for Editor {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+    }
+}
+
+/// **Why the editor is gone, when it is**: its exit, and the end of its own log.
+///
+/// The editor is a child this harness started, and it can die at any time: the start-up wait sees only its
+/// first seconds. A trial asks again while the agent runs and once more before it grades, because an agent
+/// that ran on a dead editor measured nothing about the editor, and a grade of the files it left would
+/// score the harness's loss as the agent's work.
+pub fn editor_exit(editor: &mut Editor) -> Option<String> {
+    match editor.child.try_wait() {
+        Ok(Some(status)) => Some(format!(
+            "the editor exited with {status} during the trial. {}",
+            tail(&editor.log)
+        )),
+        Ok(None) => None,
+        Err(e) => Some(format!("the editor could not be waited on: {e}")),
     }
 }
 
@@ -771,7 +821,7 @@ fn one_trial(options: &Options, task: &Task, trial: u32, variant: Option<&Varian
             }
         }
     }
-    let editor = match start_editor(&options.editor, &project, &task.map, &dir) {
+    let mut editor = match start_editor(&options.editor, &project, &task.map, &dir) {
         Ok(editor) => editor,
         Err(e) => return harness(e),
     };
@@ -812,9 +862,15 @@ fn one_trial(options: &Options, task: &Task, trial: u32, variant: Option<&Varian
     let run = match options.agent {
         Agent::Nothing => run_nothing(&config),
         Agent::Oracle => run_oracle(task, &config),
-        Agent::Omp => run_omp(options, task, &config, &project, editor.port, &dir),
+        Agent::Omp => run_omp(options, task, &config, &project, &mut editor, &dir),
     };
     let wall_s = started.elapsed().as_secs_f64();
+    // **The editor's death outranks whatever the agent said about it.** An agent whose editor was killed
+    // reports a refused call or a dropped connection, and that is the symptom: the reason is the exit.
+    if let Some(reason) = editor_exit(&mut editor) {
+        drop(editor);
+        return harness(reason);
+    }
     let run = match run {
         Ok(run) => run,
         Err(e) => {
@@ -918,7 +974,7 @@ fn run_omp(
     task: &Task,
     config: &Value,
     project: &Path,
-    port: u16,
+    editor: &mut Editor,
     dir: &Path,
 ) -> Result<AgentRun, String> {
     let extension = dir.join("mcp");
@@ -947,10 +1003,10 @@ fn run_omp(
              import {{ appendFileSync }} from \"node:fs\";\n\
              export default function (pi: any) {{\n\
              \x20 const record = (why: string) => {{\n\
-             \x20   let names: string[] = [];\n\
-             \x20   try {{ names = (pi.getAllTools?.() ?? []).map((t: any) => t.name); }} catch {{}}\n\
-             \x20   if (names.length === 0) return;\n\
-             \x20   appendFileSync({offered:?}, JSON.stringify({{ why, tools: names }}) + \"\\n\");\n\
+             \x20   let line: any;\n\
+             \x20   try {{ line = {{ why, tools: (pi.getAllTools?.() ?? []).map((t: any) => t.name) }}; }}\n\
+             \x20   catch (e) {{ line = {{ why, error: String(e) }}; }}\n\
+             \x20   appendFileSync({offered:?}, JSON.stringify(line) + \"\\n\");\n\
              \x20 }};\n\
              \x20 pi.on(\"before_agent_start\", async () => record(\"before_agent_start\"));\n\
              }}\n",
@@ -990,7 +1046,7 @@ fn run_omp(
             &project.to_string_lossy(),
             &task.prompt,
         ])
-        .env("BEVY_BRP_PORT", port.to_string())
+        .env("BEVY_BRP_PORT", editor.port.to_string())
         // **The trial's own HOME**, so the harness reads no user `mcp.json`, no memory and no session
         // store: see this function's own note.
         .env("HOME", dir.join("home"))
@@ -1006,13 +1062,26 @@ fn run_omp(
     while Instant::now() < deadline {
         match child.try_wait() {
             Ok(Some(_)) => break,
-            Ok(None) => std::thread::sleep(Duration::from_millis(250)),
+            Ok(None) => {
+                // **A dead editor ends the trial now**, not at the budget: the agent is talking to nothing.
+                if let Some(reason) = editor_exit(editor) {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(reason);
+                }
+                std::thread::sleep(Duration::from_millis(AGENT_POLL_INTERVAL_MS));
+            }
             Err(e) => return Err(format!("omp could not be waited on: {e}")),
         }
     }
     let _ = child.kill();
     let _ = child.wait();
-    read_transcript(&transcript, dir)
+    let server = config
+        .get("mcpServers")
+        .and_then(Value::as_object)
+        .and_then(|servers| servers.keys().next().cloned())
+        .ok_or("the editor's MCP config names no server")?;
+    read_transcript(&transcript, dir, &server)
 }
 
 /// **Where a trial's harness records the tool list it was offered**, beside the transcript.
@@ -1024,21 +1093,65 @@ pub fn tools_offered_path(dir: &Path) -> PathBuf {
     dir.join("tools-offered.jsonl")
 }
 
-/// **The tools the agent was offered**, read from the sidecar the extension wrote.
+/// **The tools the agent was offered**, from the sidecar the extension wrote, in the names the scripted
+/// agents' server uses, or the reason the trial cannot be judged.
 ///
-/// The last line wins: each is the registry at the start of a turn, and a server that connected late adds
-/// its tools to the later ones. A sidecar with no line is a harness that never started a turn, which
-/// [`read_transcript`] is the one to report - not this.
-fn read_tools_offered(dir: &Path) -> Vec<String> {
-    let Ok(text) = std::fs::read_to_string(tools_offered_path(dir)) else {
-        return Vec::new();
+/// - **Names are normalised.** omp spells the editor's tool `mcp__<server>_grimoire_frame_view`; the server's
+///   own `tools/list` says `grimoire_frame_view`. A check of the second against the first is vacuously
+///   "absent" with no `hide_tools` at all, so the prefix is stripped here, the way `mcpToolName` is for a call.
+/// - **An empty answer is an error, never `[]`.** A missing file, a registry that threw, a list with no
+///   editor tool (the MCP server never connected) and a name from outside the Dark Factory's set are each a
+///   harness error naming what was seen. `tools_offered: []` would read as "offered nothing" and pass a
+///   `hide_tools` arm that hid nothing.
+/// - The last line wins: each is the registry at the start of a turn.
+pub fn parse_tools_offered(text: &str, server: &str) -> Result<Vec<String>, String> {
+    let prefix = format!("mcp__{server}_");
+    let mut last: Option<Vec<String>> = None;
+    for line in text.lines().filter(|l| !l.trim().is_empty()) {
+        let event: Value = serde_json::from_str(line)
+            .map_err(|e| format!("a line of the tool list the harness recorded is not JSON ({e}): {line}"))?;
+        if let Some(error) = event.get("error").and_then(Value::as_str) {
+            return Err(format!("the harness could not list its own tools: {error}"));
+        }
+        if let Some(tools) = event.get("tools").and_then(Value::as_array) {
+            last = Some(tools.iter().filter_map(|t| t.as_str().map(str::to_owned)).collect());
+        }
+    }
+    let Some(raw) = last else {
+        return Err(
+            "the harness recorded no tool list, so what the agent was offered is unknown: its first turn \
+             never started, or the extension that records it did not load"
+                .to_owned(),
+        );
     };
-    text.lines()
-        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
-        .filter_map(|event| event.get("tools").and_then(Value::as_array).cloned())
-        .next_back()
-        .map(|tools| tools.iter().filter_map(|t| t.as_str().map(str::to_owned)).collect())
-        .unwrap_or_default()
+    let mut names = Vec::with_capacity(raw.len());
+    let mut editor_tools = 0usize;
+    let mut outside: Vec<String> = Vec::new();
+    for tool in raw {
+        if let Some(own) = tool.strip_prefix(&prefix) {
+            editor_tools += 1;
+            names.push(own.to_owned());
+        } else if BUILTIN_TOOLS.contains(&tool.as_str()) {
+            names.push(tool);
+        } else {
+            outside.push(tool);
+        }
+    }
+    if !outside.is_empty() {
+        return Err(format!(
+            "the agent was offered {} that the Dark Factory did not hand out, so the profile was not \
+             isolated",
+            outside.join(", ")
+        ));
+    }
+    if editor_tools == 0 {
+        return Err(format!(
+            "the agent was offered none of the editor's tools (`{prefix}*`): the MCP server never connected. \
+             It was offered: {}",
+            names.join(", ")
+        ));
+    }
+    Ok(names)
 }
 
 /// **Give a trial's isolated `HOME` the credentials the user's own holds**, and nothing else.
@@ -1103,7 +1216,7 @@ fn seed_credentials(home: &Path) -> Result<(), String> {
 /// says so: omp writes "No API key found" or "No such model" to its stderr, and a run whose transcript
 /// holds no assistant message at all is a run of nothing. Scoring that as an agent failure would be a
 /// result about the harness with the wrong name on it  -  measured on this host, 2026-11-13.
-fn read_transcript(path: &Path, dir: &Path) -> Result<AgentRun, String> {
+pub fn read_transcript(path: &Path, dir: &Path, server: &str) -> Result<AgentRun, String> {
     let text = std::fs::read_to_string(path)
         .map_err(|e| format!("the transcript at {} could not be read: {e}", path.display()))?;
     let mut run = AgentRun::default();
@@ -1164,13 +1277,7 @@ fn read_transcript(path: &Path, dir: &Path) -> Result<AgentRun, String> {
                 .and_then(|a| a.get("path"))
                 .and_then(Value::as_str)
                 .is_some_and(|p| p.starts_with("xd://mcp__"));
-            let known_builtin = matches!(
-                name,
-                "bash" | "read" | "write" | "edit" | "glob" | "grep" | "find" | "todo" | "task" | "eval"
-                    | "learn" | "manage_skill" | "ast_edit" | "debug" | "lsp" | "ask" | "wait"
-                    | "web_search" | "browser" | "archive"
-            );
-            if !is_device && !known_builtin {
+            if !is_device && !BUILTIN_TOOLS.contains(&name) {
                 return Err(format!(
                     "the transcript shows a tool `{name}` that is neither the editor's nor the harness's \
                      own set, so the profile was not isolated"
@@ -1182,6 +1289,23 @@ fn read_transcript(path: &Path, dir: &Path) -> Result<AgentRun, String> {
             && let Some(message) = event.get("message")
             && message.get("role").and_then(Value::as_str) == Some("assistant")
         {
+            // **A turn the provider refused is not the agent's failure.** An assistant message whose
+            // `stopReason` is `error` (an HTTP 429 for a spent usage limit, a dropped connection) holds no
+            // content and no tokens, and the agent that follows is graded on a project it never touched:
+            // measured on this host, 2026-11-13, a spent weekly limit scored a trial `fail` with 0 calls and
+            // 0 tokens. That is the provider's answer with the agent's name on it, so it is a harness error
+            // quoting the provider's own words.
+            if message.get("stopReason").and_then(Value::as_str) == Some("error") {
+                let why = message
+                    .get("errorMessage")
+                    .and_then(Value::as_str)
+                    .unwrap_or("it gave no reason");
+                return Err(format!(
+                    "the model provider refused a turn, so this trial measures the provider and not the \
+                     agent: {}",
+                    why.lines().collect::<Vec<_>>().join(" ")
+                ));
+            }
             spoke = true;
             if let Some(total) = message
                 .get("usage")
@@ -1192,10 +1316,6 @@ fn read_transcript(path: &Path, dir: &Path) -> Result<AgentRun, String> {
             }
         }
     }
-    // **What the agent was offered, not what it called.** The list is the sidecar the trial's extension
-    // writes (`tools_offered_path`), because a `hide_tools` arm is a fact about the list and calling
-    // nothing would otherwise read as offering nothing.
-    run.tools_offered = read_tools_offered(dir);
     if !spoke {
         let stderr = std::fs::read_to_string(dir.join("agent.err")).unwrap_or_default();
         let lines: Vec<&str> = stderr.lines().filter(|l| !l.trim().is_empty()).collect();
@@ -1205,6 +1325,14 @@ fn read_transcript(path: &Path, dir: &Path) -> Result<AgentRun, String> {
             lines[from..].join(" | ")
         ));
     }
+    // **What the agent was offered, not what it called.** The list is the sidecar the trial's extension
+    // writes (`tools_offered_path`), because a `hide_tools` arm is a fact about the list and calling
+    // nothing would otherwise read as offering nothing. It is read after the check above: a harness that
+    // never reached the model has no turn to record, and that is the better reason to give.
+    let sidecar = tools_offered_path(dir);
+    let text = std::fs::read_to_string(&sidecar)
+        .map_err(|e| format!("the tool list the harness records could not be read at {}: {e}", sidecar.display()))?;
+    run.tools_offered = parse_tools_offered(&text, server)?;
     Ok(run)
 }
 

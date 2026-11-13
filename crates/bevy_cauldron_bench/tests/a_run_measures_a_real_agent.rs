@@ -17,12 +17,15 @@
 //!
 //! # The three things a harness can get wrong, and what a test of each looks like
 //!
-//! - **an outcome that is not the agent's**: an editor that was killed mid-trial must give `harness_error`
-//!   with its reason, never `pass` and never `fail`;
+//! - **an outcome that is not the agent's**: an editor that is gone  -  at start-up, or killed while an agent
+//!   runs  -  must give `harness_error` with its reason, never `pass` and never `fail`;
+//! - **a screen that is not the trial's**: a display held by a live server of another run is never handed
+//!   to this one;
 //! - **a variant that hides nothing**: `--variant` with `hide_tools: [grimoire_frame_view]` must show the
 //!   agent's `tools/list` without that tool, read from the trial's own transcript;
-//! - **a transcript that claims more than it has**: every tool call a trial records must be one the editor
-//!   or the harness's own fixed set serves.
+//! - **a tool list that claims more than it has**: what the agent is offered is read from the server, and the
+//!   omp spelling and the empty-list cases are proved without a model in
+//!   `the_agents_tool_list_is_read_whole.rs`.
 //!
 //! # Why they are `#[ignore]`d, and how to run them
 //!
@@ -32,8 +35,7 @@
 //! by, run on demand:
 //!
 //! ```sh
-//! cargo nextest run -p bevy_cauldron_bench -- --ignored --test-threads 1
-//! cargo nextest run -p bevy_cauldron_bench -E 'test(a_run_measures_a_real_agent)' -- --ignored
+//! cargo nextest run -p bevy_cauldron_bench --run-ignored all -E 'binary(a_run_measures_a_real_agent)'
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -351,18 +353,19 @@ fn the_oracle_passes_every_task_and_nothing_passes_none() {
     }
 }
 
-/// **Killing the editor mid-trial gives `harness_error` with its reason**  -  #412's fourth acceptance item.
+/// **An editor that exits before it answers `grimoire/state` is a `harness_error` with its reason.**
 ///
-/// The editor under test is a **stand-in**: a shell that writes what it was asked, exits non-zero, and
+/// This is the start-up half of #412's fourth acceptance item; the mid-trial kill is
+/// `a_real_editor_killed_while_an_agent_runs_is_a_harness_error`. The editor under test is a **stand-in**: a shell that writes what it was asked, exits non-zero, and
 /// names itself in its log. That is the honest shape of this case: what has to hold is that a trial whose
 /// editor never answered `grimoire/state` is a harness error carrying the log's own last line, and a
 /// stand-in that dies on purpose is the only way to make that happen at a chosen moment instead of a
 /// race against a real editor.
 #[test]
 #[ignore = "starts a Bevy editor per trial; run on demand, not in the gate"]
-fn an_editor_killed_before_it_answers_is_a_harness_error() {
+fn an_editor_that_exits_at_start_up_is_a_harness_error() {
     let (_, server) = binaries();
-    let scratch = scratch("an-editor-killed-before-it-answers");
+    let scratch = scratch("an-editor-that-exits-at-start-up");
     std::fs::create_dir_all(&scratch).unwrap_or_else(|e| panic!("{}: {e}", scratch.display()));
     let dying = scratch.join("dying-editor");
     // **It answers `--print-operations`, because that is not the editor starting**: a run asks the binary
@@ -436,16 +439,16 @@ fn an_editor_killed_before_it_answers_is_a_harness_error() {
     );
 }
 
-/// **The agent is offered the editor's tools and the harness's own, and nothing from outside**  -  #412's
-/// rule that the agent knows only what the Dark Factory gives it, read from the trial's own record.
+/// **The MCP server serves the agent only the editor's tools.**
 ///
-/// The two scripted agents reach the server the way an agent does, so their offered list **is** the
-/// server's `tools/list`. Every name must be one of the editor's (`grimoire_*`), because a name from
-/// anywhere else is a tool the benchmark did not hand out  -  the failure that made an isolated `HOME`
-/// necessary (`docs`: a developer's own `home-still` server was loaded into every trial before it).
+/// A scripted agent reaches the server the way a harness does, so its offered list **is** the server's
+/// `tools/list`, and every name must be one of the editor's (`grimoire_*`). **This does not test omp's
+/// isolated `HOME`**  -  no model runs here  -  which is enforced where the omp list is read:
+/// `parse_tools_offered` refuses a name outside the editor's and the harness's own set, proved in
+/// `the_agents_tool_list_is_read_whole.rs`.
 #[test]
 #[ignore = "starts a Bevy editor per trial; run on demand, not in the gate"]
-fn the_agent_is_offered_the_editors_tools_and_nothing_else() {
+fn the_server_serves_the_agent_only_the_editors_tools() {
     let (ran, dir) = run("oracle", "the-tools-it-is-offered", &["--task", EXAMPLES[0]]);
     let written = records(&dir);
     assert_eq!(
@@ -529,4 +532,215 @@ fn a_variant_that_hides_a_tool_removes_it_from_the_tool_list() {
         "the arm's list is the bare list less `{HIDDEN}` and nothing else: `--hide-tools` removes one \
          tool, so any other difference is a second change wearing the arm's name"
     );
+}
+
+/// **A display a live server holds is never handed to a second trial**  -  the screen of a concurrent run,
+/// or of another agent's `Xvfb` inside the ladder.
+///
+/// The ladder used to return on seeing the socket file, and a live server's socket exists at once: two runs
+/// took one screen, and the first to stop took it from the other. Here one display is held, a foreign `Xvfb`
+/// (not started by this crate) holds the next free number, and a third display must be neither, with both
+/// still alive afterwards.
+#[test]
+#[ignore = "starts Xvfb servers; run on demand, not in the gate"]
+fn a_display_a_live_server_holds_is_never_handed_to_another_trial() {
+    use bevy_cauldron_bench::run::{Display, DISPLAY_BASE, DISPLAY_TRIES};
+    let first = Display::start().unwrap_or_else(|e| panic!("a first display: {e}"));
+    let alive = |number: u32| {
+        std::fs::read_to_string(format!("/tmp/.X{number}-lock"))
+            .ok()
+            .and_then(|t| t.trim().parse::<u32>().ok())
+            .is_some_and(|pid| Path::new(&format!("/proc/{pid}")).exists())
+    };
+    assert!(alive(first.number), "the first display's server is running");
+
+    // **The foreign server**: a plain `Xvfb`, on the first number above ours that it can take.
+    let mut foreign = None;
+    for number in (first.number + 1)..(DISPLAY_BASE + DISPLAY_TRIES) {
+        let mut child = Command::new("Xvfb")
+            .arg(format!(":{number}"))
+            .args(["-screen", "0", "800x600x24", "-nolisten", "tcp"])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap_or_else(|e| panic!("Xvfb could not be started: {e}"));
+        // Held when its lock file names it, which is the proof the ladder uses.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut held = false;
+        while std::time::Instant::now() < deadline {
+            let lock = std::fs::read_to_string(format!("/tmp/.X{number}-lock")).ok();
+            if lock.and_then(|t| t.trim().parse::<u32>().ok()) == Some(child.id())
+                && Path::new(&format!("/tmp/.X11-unix/X{number}")).exists()
+            {
+                held = true;
+                break;
+            }
+            if matches!(child.try_wait(), Ok(Some(_))) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        if held {
+            foreign = Some((number, child));
+            break;
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    let (foreign_number, mut foreign_child) =
+        foreign.unwrap_or_else(|| panic!("no number above :{} could be taken by a foreign Xvfb", first.number));
+
+    let third = Display::start().unwrap_or_else(|e| panic!("a third display: {e}"));
+    assert_ne!(
+        third.number, first.number,
+        "the second trial was handed :{}, which a live server of the first holds",
+        first.number
+    );
+    assert_ne!(
+        third.number, foreign_number,
+        "the second trial was handed :{foreign_number}, which a foreign live Xvfb holds"
+    );
+    assert!(alive(first.number), "the first display's server still runs");
+    assert!(alive(foreign_number), "the foreign server still runs");
+    assert!(alive(third.number), "the third display's server runs");
+    let _ = foreign_child.kill();
+    let _ = foreign_child.wait();
+}
+
+/// **The pid of the process whose argv starts `program project`**, found by reading `/proc`, so a test
+/// kills exactly the editor of one trial and never a process whose arguments merely mention its path.
+fn editor_pid(program: &Path, project: &Path) -> Option<u32> {
+    for entry in std::fs::read_dir("/proc").ok()?.flatten() {
+        let Some(pid) = entry.file_name().to_str().and_then(|n| n.parse::<u32>().ok()) else {
+            continue;
+        };
+        let Ok(raw) = std::fs::read(entry.path().join("cmdline")) else {
+            continue;
+        };
+        let mut argv = raw.split(|b| *b == 0).map(|a| String::from_utf8_lossy(a).into_owned());
+        if argv.next().as_deref() == Some(&program.to_string_lossy())
+            && argv.next().as_deref() == Some(&project.to_string_lossy())
+        {
+            return Some(pid);
+        }
+    }
+    None
+}
+
+/// **How long the run is given to report a killed editor**, seconds. The task's budget is 600 s, so a run
+/// that waited for the budget would take ten times this.
+const REPORT_KILLED_EDITOR_S: u64 = 30;
+
+/// **How long the editor is given to start and the stand-in agent to be launched**, seconds.
+const AGENT_LAUNCH_S: u64 = 300;
+
+/// **A REAL editor killed after its state answered, while an agent runs, is a `harness_error` with the
+/// reason**  -  #412's fourth acceptance item.
+///
+/// The agent is a stand-in `omp` on `PATH` that answers the harness's questions (`models find`, `auth
+/// export`, `auth import`), drops a marker when it is launched  -  which is after the editor's
+/// `grimoire/state` answered and `grimoire/agent_setup` was served  -  and then waits. The test kills the
+/// real editor `SIGKILL` once the marker is there. The run must say so within [`REPORT_KILLED_EDITOR_S`]
+/// seconds rather than at the task's 600 s budget, and must not grade the files the dead editor left.
+#[test]
+#[ignore = "starts a Bevy editor; run on demand, not in the gate"]
+fn a_real_editor_killed_while_an_agent_runs_is_a_harness_error() {
+    let (editor, server) = binaries();
+    let scratch = scratch("a-real-editor-killed-while-an-agent-runs");
+    let bin = scratch.join("bin");
+    std::fs::create_dir_all(&bin).unwrap_or_else(|e| panic!("{}: {e}", bin.display()));
+    let marker = scratch.join("agent-launched");
+    let omp = bin.join("omp");
+    let script = format!(
+        "#!/bin/sh\n\
+         case \"$1\" in\n\
+         models) echo \"$3\"; exit 0;;\n\
+         auth)\n\
+         \x20 case \"$2\" in\n\
+         \x20 export) echo '{{\"version\":1,\"credentials\":[{{\"provider\":\"stand-in\"}}]}}'; exit 0;;\n\
+         \x20 import) exit 0;;\n\
+         \x20 esac;;\n\
+         esac\n\
+         # The agent run: launched once the editor answered, so the editor is up. It waits for the test.\n\
+         : > '{}'\n\
+         sleep 600\n",
+        marker.display()
+    );
+    std::fs::write(&omp, script).unwrap_or_else(|e| panic!("{}: {e}", omp.display()));
+    let made = Command::new("chmod").arg("+x").arg(&omp).status().unwrap_or_else(|e| panic!("chmod: {e}"));
+    assert!(made.success(), "the stand-in agent is made executable");
+
+    let out = scratch.join("home");
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
+    let mut child = Command::new(bench_bin())
+        .args(["run", "--agent", "omp", "--run", "the-killed-editor", "--trials", "1", "--task", EXAMPLES[0]])
+        .arg("--editor")
+        .arg(&editor)
+        .arg("--server")
+        .arg(&server)
+        .current_dir(repo())
+        .env("HOME", &out)
+        .env("PATH", path)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap_or_else(|e| panic!("cauldron-bench did not start: {e}"));
+
+    let launched = std::time::Instant::now();
+    while !marker.exists() {
+        assert!(
+            launched.elapsed() < std::time::Duration::from_secs(AGENT_LAUNCH_S),
+            "the stand-in agent was not launched within {AGENT_LAUNCH_S} s, so the editor never answered"
+        );
+        if let Ok(Some(status)) = child.try_wait() {
+            let ended = child.wait_with_output().unwrap_or_else(|e| panic!("its output: {e}"));
+            panic!(
+                "cauldron-bench ended ({status}) before the agent was launched:\n{}{}",
+                String::from_utf8_lossy(&ended.stdout),
+                String::from_utf8_lossy(&ended.stderr)
+            );
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+    let project = out
+        .join(".local/state/cauldron-bench/the-killed-editor")
+        .join(EXAMPLES[0])
+        .join("trial-1/project");
+    let pid = editor_pid(&editor, &project).unwrap_or_else(|| {
+        panic!("no running editor was found for {}: is `bevy_cauldron` at {}?", project.display(), editor.display())
+    });
+    let killed = Command::new("kill").args(["-KILL", &pid.to_string()]).status().unwrap_or_else(|e| panic!("kill: {e}"));
+    assert!(killed.success(), "the real editor (pid {pid}) is killed");
+    let killed_at = std::time::Instant::now();
+
+    let finished = loop {
+        if let Ok(Some(status)) = child.try_wait() {
+            break status;
+        }
+        assert!(
+            killed_at.elapsed() < std::time::Duration::from_secs(REPORT_KILLED_EDITOR_S),
+            "the run did not report the killed editor within {REPORT_KILLED_EDITOR_S} s: it waits for the \
+             agent's budget while the editor is dead"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    };
+    assert_ne!(finished.code(), Some(0), "a run whose editor was killed exits non-zero");
+    let written = records(&out.join(".local/state/cauldron-bench/the-killed-editor"));
+    assert_eq!(written.len(), 1, "the killed trial still wrote its record");
+    let record = &written[0];
+    assert_eq!(
+        outcome(record),
+        "harness_error",
+        "an editor killed while the agent ran is a HARNESS ERROR, never pass and never fail. The record says:\n{}",
+        serde_json::to_string_pretty(record).unwrap_or_default()
+    );
+    let reason = field(record, "reason").as_str().unwrap_or_default();
+    assert!(
+        reason.contains("the editor exited with") && reason.contains("during the trial"),
+        "the reason names the editor's exit: {reason}"
+    );
+    assert!(reason.contains("Its log ends"), "the reason quotes the editor's own log: {reason}");
+    let checks = field(record, "checks").as_array().cloned().unwrap_or_default();
+    assert!(checks.is_empty(), "a trial with no editor is not graded, but it records {} check(s)", checks.len());
 }

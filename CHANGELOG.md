@@ -5,7 +5,6 @@ What each change added, newest first. A visible change has a clip: click the sti
 ## 2026-11-13
 
 - **bm-02-cauldron-bench-run** `ab26869b` cauldron-bench run measures a real agent against a real editor: oracle passes every task and nothing passes none, the tool list is read from the agent, and a --variant hides exactly its tool (#412) *No clip: a command-line runner; proved by the four ignored tests in bevy_cauldron_bench/tests/a_run_measures_a_real_agent.rs (4 passed, 47.3 s) and the six measured omp trials*
-- **bm-02-cauldron-bench-run** cauldron-bench run: a real agent against a real editor, on a fresh copy, n times, with oracle and nothing proving the pipe and omp measuring a model (#412) *No clip: a command-line runner; proved by the four ignored tests in bevy_cauldron_bench/tests/a_run_measures_a_real_agent.rs and the measured runs in the commit body*
 
 ## 2026-11-12
 
