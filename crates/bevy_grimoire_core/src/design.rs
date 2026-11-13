@@ -50,11 +50,16 @@
 //!
 //! # The Markdown reader
 //!
-//! Pictures and links are read with `pulldown-cmark` (MIT), the parser `bevy_gooey`'s Markdown view draws
-//! with, and with the same extensions (tables, strikethrough, task lists), so the editor and this reader
-//! list the same pictures for the same page. A second parser written by hand would be a larger and less
-//! correct path, and the two disagreeing is how a picture is missing on screen and present in an agent's
-//! answer.
+//! Pictures and links are read with `pulldown-cmark` (MIT), with the extensions a page of this kind uses:
+//! tables, strikethrough and task lists.
+//!
+//! **It is the one parser, not a duplicate of another.** The editor has no Markdown renderer to share it
+//! with: GD-11's Markdown support is a *tokenizer* that colours syntax and recognises neither an image nor a
+//! link, and `bevy_gooey` at the pinned revision ships no Markdown module (measured 2026-11-12). A second
+//! implementation written by hand would be a CommonMark parser with tables — and a picture the text cites is
+//! exactly the construct a regex gets wrong, which is the check this module exists for. When a view lands
+//! (SG-05, #404), the test that the two list the same pictures for every fixture page is what keeps them
+//! one answer.
 //!
 //! **Owner exception (2026-11-12):** this adds `pulldown-cmark` to `bevy_grimoire_core`, where GD-11's
 //! "no new dependency" note governed the editor's *syntax colours* only; those stay on their tokenizer.
@@ -79,17 +84,11 @@ pub const LEVELS_DIR: &str = "levels";
 /// The folder of a level's areas.
 pub const AREAS_DIR: &str = "areas";
 
-/// **A place's overall feel**, and the one topic every place may have.
-pub const STYLE_FILE: &str = "style.md";
-
 /// The topic `style.md` states, without its extension.
 pub const STYLE_TOPIC: &str = "style";
 
 /// **An area's own file**: its rectangle on its level's map.
 pub const AREA_FILE: &str = "area.yaml";
-
-/// A region's own file. Nothing is read from it but a title, and it is not required.
-pub const REGION_FILE: &str = "region.yaml";
 
 /// The extension a topic file has.
 pub const MARKDOWN_EXT: &str = "md";
@@ -108,7 +107,10 @@ pub const STYLE_CHAIN_MAX_BYTES: usize = 65_536;
 pub const AREA_VERSION: u32 = 1;
 
 /// Where the grimoire's data lives under a project root, for the maps an area is measured against.
-pub const GRIMOIRE_DIR: &str = "assets/grimoire";
+///
+/// **The one definition in this crate**: [`crate::reload_check::GRIMOIRE_DIR`] states it for the reload
+/// checks, and a second literal here would be a second thing to keep in step with the folder the editor writes.
+pub const GRIMOIRE_DIR: &str = crate::reload_check::GRIMOIRE_DIR;
 
 /// **An area's rectangle on its level's map**: `[x0, z0, x1, z1]` in map metres, the box
 /// [`crate::map::Map::floor_rect`] is in, which is the same box the editor's `Shown::Map` names.
@@ -192,6 +194,10 @@ impl Place {
     }
 }
 
+/// **One chain that is over its limit**: its size, the topic it was measured for, and its files with the
+/// bytes each one adds.
+type Overrun = (usize, String, Vec<(String, usize)>);
+
 /// **One picture a style text cites**: the destination as written, the line it is written on, and the path
 /// it resolves to relative to the project root.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -202,8 +208,13 @@ pub struct Picture {
     pub line: usize,
     /// The path relative to the project root, `/`-separated, when it is a path inside the project.
     pub file: Option<String>,
-    /// The caption, when the Markdown gives one (its alt text).
+    /// **The caption: the alt text when the picture has one, and its title otherwise.** Never both glued
+    /// together — they say different things, and `The fog fog` says neither.
     pub caption: String,
+    /// The alt text as written, before the caption chose between it and the title.
+    alt: String,
+    /// The title as written, `""` when the picture gives none.
+    title: String,
 }
 
 /// **The tree of places, and what is wrong with it.**
@@ -233,7 +244,7 @@ impl Tree {
     pub fn read(root: &Path) -> Tree {
         let mut problems = Vec::new();
         let mut texts = BTreeMap::new();
-        let maps = maps_of(root);
+        let maps = maps_of(root, &mut problems);
         let design = root.join(DESIGN_DIR);
         let mut places = vec![Place {
             kind: PlaceKind::Game,
@@ -370,30 +381,119 @@ impl Tree {
         }
     }
 
-    /// **The longest chain one topic can reach is within [`STYLE_CHAIN_MAX_BYTES`]**, counted over the
-    /// place's file for that topic where a place has it.
+    /// **Every chain the tree can serve is within [`STYLE_CHAIN_MAX_BYTES`].**
+    ///
+    /// **A chain is the files one point is read with** — the game's, its region's, its level's and its
+    /// area's — so the limit is measured over each chain this tree can actually hand out, **not** over a
+    /// topic's total across the whole tree. Twelve regions of 6,144 bytes are 73,728 bytes all told and
+    /// every one of their chains is two files of 12,288; refusing that tree would be refusing a project
+    /// every one of whose answers fits, which is a limit that punishes a project for having regions.
+    ///
+    /// **The chains are enumerated, not sampled through [`Self::chain_to`].** A chain holds at most one
+    /// area, and [`Self::chain_to`] takes the smallest that holds a point — so sampling points would measure
+    /// whichever area won each one, and an area it never picked would go unmeasured. (Two areas of one level
+    /// that overlap are a problem of their own, so a legitimate tree has no nested areas to sample: the
+    /// enumeration is what removes the dependence on that rule either way.) The shapes are: the game alone,
+    /// and for each level the game with its region and that level — and, for each area of it, that same chain
+    /// with the area's own file. Each is measured once per topic the chain carries, because a chain is served
+    /// for the topic asked for, and two topics over the same files are one problem: a person fixes files.
     fn check_chains(&mut self) {
-        let mut by_topic: BTreeMap<&str, Vec<(&str, usize)>> = BTreeMap::new();
-        for place in &self.places {
-            for topic in &place.topics {
-                by_topic.entry(topic.name.as_str()).or_default().push((topic.file.as_str(), topic.bytes));
+        let topics: BTreeSet<String> =
+            self.places.iter().flat_map(|p| p.topics.iter().map(|t| t.name.clone())).collect();
+        // **The chain of one level**: the game, its region when it has one, and the level itself.
+        let mut level_chains: Vec<Vec<&Place>> = Vec::new();
+        for level in self.places.iter().filter(|p| p.kind == PlaceKind::Level) {
+            let game: Vec<&Place> = self.places.iter().filter(|p| p.kind == PlaceKind::Game).collect();
+            let region = self.region_of(level);
+            let mut chain = game;
+            chain.extend(region);
+            chain.push(level);
+            level_chains.push(chain);
+        }
+        // **Every chain, by the files it adds up for a topic.** An area's chain is its level's plus the area.
+        let mut chains: BTreeMap<Vec<String>, String> = BTreeMap::new();
+        for topic in &topics {
+            let game: Vec<String> = self
+                .places
+                .iter()
+                .filter(|p| p.kind == PlaceKind::Game)
+                .filter_map(|p| p.topic(topic))
+                .map(|t| t.file.clone())
+                .collect();
+            if !game.is_empty() {
+                chains.entry(game.clone()).or_insert_with(|| topic.clone());
+            }
+            for chain in &level_chains {
+                let files: Vec<String> = chain.iter().filter_map(|p| p.topic(topic)).map(|t| t.file.clone()).collect();
+                chains.entry(files.clone()).or_insert_with(|| topic.clone());
+                let level = chain.last().copied();
+                let Some(level) = level else { continue };
+                for area in self.areas_of(level) {
+                    let mut with_area = files.clone();
+                    if let Some(row) = area.topic(topic) {
+                        with_area.push(row.file.clone());
+                    }
+                    chains.entry(with_area).or_insert_with(|| topic.clone());
+                }
             }
         }
-        for (topic, files) in by_topic {
-            let total: usize = files.iter().map(|(_, bytes)| bytes).sum();
+        // **Each chain's bytes, off the places' own rows**, so a refusal and the tree cannot disagree.
+        let bytes_of: BTreeMap<&str, usize> =
+            self.places.iter().flat_map(|p| p.topics.iter()).map(|t| (t.file.as_str(), t.bytes)).collect();
+        let mut over: Vec<Overrun> = Vec::new();
+        for (files, topic) in chains {
+            let total: usize = files.iter().map(|f| bytes_of.get(f.as_str()).copied().unwrap_or(0)).sum();
             if total <= STYLE_CHAIN_MAX_BYTES {
                 continue;
             }
+            let mut files: Vec<(String, usize)> = files
+                .into_iter()
+                .map(|f| {
+                    let n = bytes_of.get(f.as_str()).copied().unwrap_or(0);
+                    (f, n)
+                })
+                .collect();
+            // **The largest file first**: it is the one a person has to cut.
+            files.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+            over.push((total, topic, files));
+        }
+        over.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+        for (total, topic, files) in over {
             let named: Vec<String> = files.iter().map(|(file, bytes)| format!("{file} ({bytes} bytes)")).collect();
-            let file = files.first().map(|(f, _)| *f).unwrap_or(DESIGN_DIR).to_owned();
+            let first = files.first().map(|(f, _)| f.clone()).unwrap_or_else(|| DESIGN_DIR.to_owned());
             self.problems.push(Problem::with(
                 format!("the `{topic}` chain is {total} bytes, over the {STYLE_CHAIN_MAX_BYTES} an agent is served"),
                 Detail::default()
-                    .at(Location::file(file))
-                    .because(format!("the files it adds up are {}", named.join(", ")))
-                    .fix("shorten the longest file of the chain, or move part of it into a topic of its own"),
+                    .at(Location::file(first))
+                    .because(format!("the chain adds up {}", named.join(", ")))
+                    .fix("shorten the largest file of the chain, or move part of it into a topic of its own"),
             ));
         }
+    }
+
+    /// **The region a level is in**, when it is in one.
+    fn region_of(&self, level: &Place) -> Option<&Place> {
+        // **The folder two above the level**, which is the region's own path: a level is
+        // `design/regions/<region>/levels/<map>`, so the region is `design/regions/<region>`. Splitting once
+        // gives `design/regions/<region>/levels`, which is the folder the levels live in and no region at all.
+        let (levels, _map) = level.path.rsplit_once('/')?;
+        let (region, folder) = levels.rsplit_once('/')?;
+        if folder != LEVELS_DIR {
+            return None;
+        }
+        self.places.iter().find(|p| p.kind == PlaceKind::Region && p.path == region)
+    }
+
+    /// **The areas of a level**, in path order.
+    fn areas_of(&self, level: &Place) -> Vec<&Place> {
+        let prefix = format!("{}/{AREAS_DIR}/", level.path);
+        let mut areas: Vec<&Place> = self
+            .places
+            .iter()
+            .filter(|p| p.kind == PlaceKind::Area && p.path.starts_with(&prefix))
+            .collect();
+        areas.sort_by(|a, b| a.path.cmp(&b.path));
+        areas
     }
 
     /// **A picture the text cites is there.** A picture is a plain Markdown path relative to its own file.
@@ -463,19 +563,50 @@ pub fn inside(rect: [f32; 4], (x, z): (f32, f32)) -> bool {
 }
 
 /// **The maps a project has**, by name, with the floor rectangle an area is measured against.
-fn maps_of(root: &Path) -> BTreeMap<String, (f32, f32, f32, f32)> {
+///
+/// **A map file that does not read is reported, not skipped.** Skipping it would say "there is no such map"
+/// about a map that is right there — a wrong reason, and a person would go looking for a missing file — and
+/// the areas of its level would never be bounds-checked. So an unreadable map is a problem of its own, and
+/// it is still a name the tree knows: its level is a level, and only the bounds check is skipped for it.
+fn maps_of(root: &Path, problems: &mut Vec<Problem>) -> BTreeMap<String, Option<(f32, f32, f32, f32)>> {
     let dir = root.join(GRIMOIRE_DIR).join(crate::project_data::MAPS_DIR);
-    let mut out = BTreeMap::new();
+    let mut out: BTreeMap<String, Option<(f32, f32, f32, f32)>> = BTreeMap::new();
     let Ok(entries) = std::fs::read_dir(&dir) else { return out };
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
         let Some(stem) = name.strip_suffix(crate::map::MAP_SUFFIX) else { continue };
-        let Ok(text) = std::fs::read_to_string(entry.path()) else { continue };
-        let Ok(map) = crate::map::Map::parse(&text) else { continue };
+        let file = format!("{GRIMOIRE_DIR}/{}/{name}", crate::project_data::MAPS_DIR);
+        let map = match std::fs::read_to_string(entry.path()) {
+            Ok(text) => match crate::map::Map::parse(&text) {
+                Ok(map) => map,
+                Err(why) => {
+                    problems.push(Problem::with(
+                        format!("the map `{stem}` does not read, so its level's areas cannot be measured"),
+                        Detail::default()
+                            .at(Location::file(file.clone()))
+                            .because(why)
+                            .fix("fix the map file; until it reads, its level is listed and its areas are not measured against it"),
+                    ));
+                    out.insert(stem.to_owned(), None);
+                    continue;
+                }
+            },
+            Err(e) => {
+                problems.push(Problem::with(
+                    format!("the map `{stem}` cannot be read, so its level's areas cannot be measured"),
+                    Detail::default()
+                        .at(Location::file(file.clone()))
+                        .because(e.to_string())
+                        .fix("make the file readable; until it is, its level is listed and its areas are not measured against it"),
+                ));
+                out.insert(stem.to_owned(), None);
+                continue;
+            }
+        };
         // **The map's own name wins over its file's**, because the editor writes them together and a file
         // renamed by hand would otherwise be two maps with one name.
-        out.insert(map.name.clone(), map.floor_rect());
-        out.entry(stem.to_owned()).or_insert_with(|| map.floor_rect());
+        out.insert(map.name.clone(), Some(map.floor_rect()));
+        out.entry(stem.to_owned()).or_insert_with(|| Some(map.floor_rect()));
     }
     out
 }
@@ -484,7 +615,7 @@ fn maps_of(root: &Path) -> BTreeMap<String, (f32, f32, f32, f32)> {
 fn read_regions(
     root: &Path,
     design: &Path,
-    maps: &BTreeMap<String, (f32, f32, f32, f32)>,
+    maps: &BTreeMap<String, Option<(f32, f32, f32, f32)>>,
     places: &mut Vec<Place>,
     problems: &mut Vec<Problem>,
     texts: &mut BTreeMap<String, String>,
@@ -503,7 +634,7 @@ fn read_regions(
 fn read_levels_in_no_region(
     root: &Path,
     design: &Path,
-    maps: &BTreeMap<String, (f32, f32, f32, f32)>,
+    maps: &BTreeMap<String, Option<(f32, f32, f32, f32)>>,
     places: &mut Vec<Place>,
     problems: &mut Vec<Problem>,
     texts: &mut BTreeMap<String, String>,
@@ -518,7 +649,7 @@ fn read_levels(
     _root: &Path,
     dir: &Path,
     levels_path: &str,
-    maps: &BTreeMap<String, (f32, f32, f32, f32)>,
+    maps: &BTreeMap<String, Option<(f32, f32, f32, f32)>>,
     places: &mut Vec<Place>,
     problems: &mut Vec<Problem>,
     texts: &mut BTreeMap<String, String>,
@@ -530,7 +661,10 @@ fn read_levels(
         // **A level's folder is named after its map, so no file binds them.** A folder whose map does not
         // exist is a level nothing will ever open, and the problem names both paths.
         let bounds = match maps.get(&map) {
-            Some(bounds) => Some(*bounds),
+            // **A map that is there but does not read has its own problem already**; the level is a level and
+            // only its areas go unmeasured, so nothing is said about it twice.
+            Some(None) => None,
+            Some(Some(bounds)) => Some(*bounds),
             None => {
                 let map_file = format!("{GRIMOIRE_DIR}/{}/{map}{}", crate::project_data::MAPS_DIR, crate::map::MAP_SUFFIX);
                 problems.push(Problem::with(
@@ -752,8 +886,12 @@ fn read_topic(path: &Path, file: &str, problems: &mut Vec<Problem>) -> Option<Re
         problems.push(refused(file, format!("it cannot be read: {e}")));
         return None;
     }
-    let size = bytes.len();
-    if size > STYLE_FILE_MAX_BYTES {
+    // **The file's real size, from its own metadata.** `bytes.len()` is capped at
+    // `STYLE_FILE_MAX_BYTES + 1` by the `take` above, so a 100 KB file would report itself as 32,769 bytes
+    // while its topic row carried the true size — two numbers for one file, and the one a person reads in
+    // the refusal would be the wrong one.
+    let size = usize::try_from(meta.len()).unwrap_or(usize::MAX);
+    if bytes.len() > STYLE_FILE_MAX_BYTES {
         // **The size, not the head.** A file that said "32 KB" and then stopped would be a truncation.
         problems.push(Problem::with(
             format!("`{file}` is {size} bytes, and a style file is at most {STYLE_FILE_MAX_BYTES}"),
@@ -764,8 +902,11 @@ fn read_topic(path: &Path, file: &str, problems: &mut Vec<Problem>) -> Option<Re
         ));
         return None;
     }
+    let text_len = bytes.len();
     match String::from_utf8(bytes) {
-        Ok(text) => Some(Read { text, bytes: size }),
+        // **A served file's size is the bytes read**, which is its whole content because it is at or under
+        // the limit; `size` above is the same number for one, and is only larger for a refused one.
+        Ok(text) => Some(Read { text, bytes: text_len }),
         Err(_) => {
             problems.push(refused(file, "it is not UTF-8".to_owned()));
             None
@@ -780,8 +921,8 @@ fn refused(file: &str, why: String) -> Problem {
     )
 }
 
-/// **The CommonMark extensions the editor's own page is drawn with** (G-79): tables, strikethrough and task
-/// lists. One set, so the two readers of a page see the same page.
+/// **The CommonMark extensions a style page uses**: tables, strikethrough and task lists. One set, so the
+/// reader here and the view SG-05 (#404) draws cannot disagree about what a page contains.
 pub fn options() -> pulldown_cmark::Options {
     use pulldown_cmark::Options;
     Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS
@@ -802,21 +943,41 @@ pub fn pictures(text: &str, file: &str) -> Vec<Picture> {
                 inside += 1;
                 let cited = dest_url.to_string();
                 let line = text[..range.start.min(text.len())].matches('\n').count() + 1;
-                out.push(Picture { file: resolve(file, &cited), cited, line, caption: title.to_string() });
+                // **The alt text is the caption; a title is only where there is none.** They arrive as
+                // separate events, so appending the alt text onto the title spelled `The fog fog` for
+                // `![fog](f.png "The fog")` — two captions glued into one that says neither.
+                out.push(Picture {
+                    file: resolve(file, &cited),
+                    cited,
+                    line,
+                    caption: String::new(),
+                    alt: String::new(),
+                    title: title.to_string(),
+                });
             }
             Event::End(TagEnd::Image) => inside = inside.saturating_sub(1),
-            // **The alt text is the caption a person who cannot see the picture is given**, which is what a
-            // board's caption says, so it is gathered where a Markdown reader puts it.
+            // **The alt text is what a person who cannot see the picture is given in its place**, so it is
+            // gathered where a Markdown reader puts it: between the image's start and its end.
             Event::Text(chunk) if inside > 0 => {
                 if let Some(picture) = out.last_mut() {
-                    if !picture.caption.is_empty() {
-                        picture.caption.push(' ');
+                    if !picture.alt.is_empty() {
+                        picture.alt.push(' ');
                     }
-                    picture.caption.push_str(&chunk);
+                    picture.alt.push_str(&chunk);
                 }
             }
             _ => {}
         }
+    }
+    // **The alt text is the caption when it has one**, and the title otherwise. An alt text of nothing but
+    // space (`![ ](f.png "The fog")`) is no alt text: a picture that names itself only by its title would
+    // otherwise be captioned `" "`, which says less than the title does.
+    for picture in &mut out {
+        picture.caption = if picture.alt.trim().is_empty() {
+            std::mem::take(&mut picture.title)
+        } else {
+            std::mem::take(&mut picture.alt)
+        };
     }
     out
 }

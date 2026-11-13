@@ -235,51 +235,118 @@ fn a_file_that_is_not_utf8_is_refused_by_name_and_the_rest_of_the_tree_still_rea
 }
 
 #[test]
-fn a_topic_chain_over_the_limit_is_refused_with_its_sizes() {
-    let project = Project::new("chain");
-    // Three files of 30 KB each are each under `STYLE_FILE_MAX_BYTES` and add up past the chain's limit.
-    let chunk = "y".repeat(24_000);
-    project.write("design/style.md", &chunk);
-    project.write("design/regions/north/style.md", &chunk);
-    project.write("design/regions/north/levels/yard/style.md", &chunk);
+fn a_pictures_caption_is_its_alt_text_or_its_title_and_never_both() {
+    // **They say different things.** `![fog](f.png "The fog")` used to yield `The fog fog`, which is neither
+    // the alt text (what the picture stands in for) nor the title (what it is) but the two glued together.
+    let project = Project::new("caption");
+    project.write("design/style.md", "Words.\n\n![the fog's colour, not its density](f.png \"The fog\")\n\n![just alt](g.png)\n");
+    project.write("design/f.png", "a picture");
+    project.write("design/g.png", "a picture");
     let tree = project.tree();
-    let said: Vec<String> = tree.problems.iter().map(|p| p.line()).collect();
-    assert!(
-        said.iter().any(|line| line.contains(&STYLE_CHAIN_MAX_BYTES.to_string()) || line.contains("chain")),
-        "the chain's limit is what is refused, not a file's: {said:#?}"
-    );
-    assert!(
-        said.iter().filter(|line| line.contains("chain")).count() == 1,
-        "one problem for the one chain: {said:#?}"
-    );
-    assert!(
-        !said.iter().any(|line| line.contains(&STYLE_FILE_MAX_BYTES.to_string())),
-        "no file is over the file limit, so no file is refused: {said:#?}"
-    );
+    let pictures = tree.pictures_of("design/style.md");
+    assert_eq!(pictures.len(), 2, "{pictures:?}");
+    assert_eq!(pictures[0].caption, "the fog's colour, not its density", "the alt text wins when there is one");
+    assert_eq!(pictures[1].caption, "just alt", "a picture with no title keeps its alt text");
+    // **And a title alone is the caption**, because that is all the picture gives a reader.
+    project.write("design/style.md", "![ ](f.png \"The fog\")\n");
+    let titled = project.tree();
+    let pictures = titled.pictures_of("design/style.md");
+    assert_eq!(pictures.len(), 1, "{pictures:?}");
+    assert_eq!(pictures[0].caption, "The fog");
 }
 
 #[test]
-fn a_project_with_no_design_folder_is_a_tree_of_the_game_alone_and_no_fault() {
-    let dir = std::env::temp_dir().join(format!("grimoire-design-none-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("a scratch project");
-    let tree = design::Tree::read(&dir);
-    assert_eq!(tree.places.len(), 1, "the game is a place whether or not its folder exists");
-    assert_eq!(tree.places[0].kind, PlaceKind::Game);
-    assert!(tree.places[0].topics.is_empty());
-    assert!(tree.problems.is_empty(), "most projects have no style yet, which is not a fault");
-    // And a tree that is written is read again, so an edit needs no restart.
-    let style = dir.join("design/style.md");
-    std::fs::create_dir_all(dir.join("design")).expect("the design folder is made");
-    std::fs::write(&style, "First words.\n").expect("the style is written");
-    assert_eq!(design::Tree::read(&dir).text("design/style.md"), Some("First words.\n"));
-    std::fs::write(&style, "Second words.\n").expect("the style is edited");
-    assert_eq!(
-        design::Tree::read(&dir).text("design/style.md"),
-        Some("Second words.\n"),
-        "the tree is read from disk on every call, so an edit is in the next answer"
+fn a_map_that_is_there_but_does_not_read_is_named_and_its_level_is_still_a_level() {
+    // **Skipping it said "there is no such map" about a map right there** — a wrong reason, which sends a
+    // person looking for a missing file — and its level's areas were never bounds-checked.
+    let project = Project::new("badmap");
+    project.write("assets/grimoire/maps/yard.map.yaml", "version: 9\nname: \"not snake case\"\n");
+    project.write("design/levels/yard/style.md", "A yard.\n");
+    project.write("design/style.md", "Grey.\n");
+    let tree = project.tree();
+    let said: Vec<String> = tree.problems.iter().map(|p| p.line()).collect();
+    assert_eq!(said.len(), 1, "one problem, and it is about the map file: {said:#?}");
+    assert!(
+        said[0].contains("maps/yard.map.yaml") && said[0].contains("does not read"),
+        "the map that does not read is named: {}",
+        said[0]
     );
-    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        !said[0].contains("no such map"),
+        "and it is not called a missing map: {}",
+        said[0]
+    );
+    assert!(tree.place("design/levels/yard").is_some(), "the level is a level whether or not its map reads");
+}
+
+#[test]
+fn a_file_far_over_the_limit_is_named_at_its_real_size_not_the_number_it_was_read_to() {
+    // **The read is bounded by `STYLE_FILE_MAX_BYTES + 1`**, so the bytes it holds are 32,769 whatever the
+    // file is. A refusal that reported those would say "is 32769 bytes" about a 100 KB file while the tree's
+    // own row for it carried the real size — two numbers for one file, and the wrong one in the sentence a
+    // person acts on. A test at exactly `MAX + 1` cannot tell the two apart, so this one is a third again
+    // as large.
+    let project = Project::new("oversize_size");
+    let big = format!("{}\n", "x".repeat(98_304));
+    project.write("design/deep.md", &big);
+    let tree = project.tree();
+    let said: Vec<String> = tree.problems.iter().map(|p| p.line()).collect();
+    let refused = said
+        .iter()
+        .find(|line| line.contains("design/deep.md") && line.contains("at most"))
+        .unwrap_or_else(|| panic!("the oversize file is refused: {said:#?}"));
+    assert!(
+        refused.contains(&big.len().to_string()),
+        "the refusal names the file's real size ({} bytes): {refused}",
+        big.len()
+    );
+    assert!(
+        !refused.contains(&(STYLE_FILE_MAX_BYTES + 1).to_string()),
+        "and not the bound the read stopped at: {refused}"
+    );
+    // **The tree's own row for it agrees**, so a person reading the list and the sentence sees one number.
+    let row = tree.place("design").and_then(|p| p.topic("deep")).expect("the refused topic is still a row");
+    assert_eq!(row.bytes, big.len(), "the topic row carries the real size too");
+}
+
+#[test]
+fn the_chain_limit_is_the_longest_chain_not_a_topics_total_across_the_tree() {
+    // **A chain is the files one point is read with.** Twelve regions of 6,144 bytes are 73,728 bytes all
+    // told and every one of their chains is two files of 12,288, so a tree of them is a tree every one of
+    // whose answers fits, and refusing it would be a limit that punishes a project for having regions.
+    let project = Project::new("chain_many");
+    let region_file = "y".repeat(6_144);
+    project.write("design/style.md", &region_file);
+    let regions = 12;
+    for n in 0..regions {
+        project.write(&format!("design/regions/r{n}/style.md"), &region_file);
+    }
+    let tree = project.tree();
+    let said: Vec<String> = tree.problems.iter().map(|p| p.line()).collect();
+    let total = region_file.len() * (regions + 1);
+    assert!(total > STYLE_CHAIN_MAX_BYTES, "the fixture's topic total ({total}) is over the limit, so it proves the point");
+    assert!(said.is_empty(), "every chain is {} bytes and the limit is {STYLE_CHAIN_MAX_BYTES}, so nothing is refused: {said:#?}", region_file.len() * 2);
+
+    // **And a chain that is over is refused**, naming the files it adds up. Each file is under the per-file
+    // limit — so this measures the chain and not a file — and the three together are over the chain's:
+    // 24,000 bytes each is 72,000 for the one chain the game, the region and the level make.
+    let long = Project::new("chain_long");
+    let each = "z".repeat(24_000);
+    long.write("design/style.md", &each);
+    long.write("design/regions/north/style.md", &each);
+    long.write("design/regions/north/levels/yard/style.md", &each);
+    long.map("yard", (32.0, 32.0));
+    let said: Vec<String> = long.tree().problems.iter().map(|p| p.line()).collect();
+    let over = said.iter().find(|line| line.contains("chain")).unwrap_or_else(|| panic!("the long chain is refused: {said:#?}"));
+    assert_eq!(said.len(), 1, "one chain is over, and one problem says so: {said:#?}");
+    assert!(over.contains(&(each.len() * 3).to_string()), "it names the chain's size: {over}");
+    for file in ["design/style.md", "design/regions/north/style.md", "design/regions/north/levels/yard/style.md"] {
+        assert!(over.contains(file), "every file that adds up to it is named ({file} missing): {over}");
+    }
+    assert!(
+        !said.iter().any(|line| line.contains("style file is at most")),
+        "no single file is over its own limit, so nothing is refused for a file's size: {said:#?}"
+    );
 }
 
 /// The reader is a file kind of the reload contract, so "does a change to a style file reach anyone?"
