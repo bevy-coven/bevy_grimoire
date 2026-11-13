@@ -1,0 +1,37 @@
+# **Turn one piece in place** (BM-04, #414).
+#
+# The wardrobe (`dresser_tall`, whose front is its west face) stands against the north wall with its doors
+# to the wall: yaw 270 plus the front's 270 is a world facing of 180, which is north. Facing into the room is
+# south, a world facing of 0, so the yaw it needs is 90. The piece must not move: "turn" is not "move".
+id: turn-the-wardrobe-into-the-room
+title: Turn the wardrobe to face into the room
+split: dev
+tags: [turn]
+map: bench_wardrobe
+prompt: |
+  The wardrobe (the tall dresser against the north wall) stands with its doors to the wall. Turn it to face
+  into the room, and leave it where it is.
+
+  When it is done, hand the result back with grimoire_present.
+setup: []
+solution:
+  - op: placement_set_yaw
+    params:
+      id: wardrobe
+      yaw: 90.0
+  - op: grimoire_present
+    params:
+      title: The wardrobe faces into the room
+      summary: The wardrobe is turned a quarter turn so its doors face south into the room, and it has not moved.
+      specified:
+        - the wardrobe faces into the room
+        - the wardrobe stays where it is
+      inferred:
+        - into the room is south for a piece against the north wall
+checks:
+  - placement_at: {id: wardrobe, yaw_deg: 90.0, yaw_tolerance_deg: 10.0, at: [0.0, -2.2], tolerance_m: 0.05}
+  - placement_total: {count: 3}
+  - no_problem: [overlap]
+  - oplog_has: {op: placement_set_yaw, min: 1}
+  - handback_contains: [wardrobe]
+budget: {wall_s: 600, tool_calls: 60}

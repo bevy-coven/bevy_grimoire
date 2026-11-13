@@ -200,6 +200,9 @@ pub struct Snapshot {
     /// **Why the map did not read**, when it did not: a task whose agent left an unreadable map has failed
     /// it, and the reason is the interesting part. Every map-derived check reads this first.
     pub map_problem: Option<String>,
+    /// **The project's root**, so a check that reads a file the snapshot does not digest into a value (a
+    /// number in a data file, the ground's heights) reads it from where the run left it.
+    pub root: PathBuf,
 }
 
 impl Snapshot {
@@ -217,22 +220,28 @@ impl Snapshot {
             let digest = digest_of(&root.join(&rel));
             files.insert(rel, digest);
         }
+        let library = read_library(root);
         let map_path = map_path(root, map_name);
         let (map, map_problem) = match std::fs::read_to_string(&map_path) {
             Ok(text) => match Map::parse(&text) {
-                Ok(map) => (map, None),
+                Ok(map) => (with_runs_laid(map, &library), None),
                 Err(why) => (Map::default(), Some(why)),
             },
             Err(e) => (Map::default(), Some(format!("{}: {e}", map_path.display()))),
         };
-        let library = read_library(root);
         let oplog = read_oplog(root);
         let found = if map_problem.is_none() {
             problems_of(&map, &library, root)
         } else {
             Found::default()
         };
-        Snapshot { files, map, library, oplog, handbacks, decisions, found, map_problem }
+        Snapshot { files, map, library, oplog, handbacks, decisions, found, map_problem, root: root.to_path_buf() }
+    }
+
+    /// **A project file's text, as the run left it**, by its path under `assets/grimoire/`; `None` when the
+    /// project does not hold it or it cannot be read.
+    pub fn text(&self, rel: &str) -> Option<String> {
+        std::fs::read_to_string(self.root.join(GRIMOIRE_DIR).join(rel)).ok()
     }
 
     /// **One file's digest**, or `None` when the project does not hold it.
@@ -361,6 +370,20 @@ pub fn digest_of(path: &Path) -> String {
         // **A file that cannot be read is a digest no other file has**, so it always reads as changed.
         Err(e) => format!("unreadable: {e}"),
     }
+}
+
+/// **A map with its runs laid as the placements they stand for**, which is what a person sees and what a
+/// check about a hedge of six has to count.
+///
+/// `run_add` writes a run (a piece, a pitch and two ends), never the posts: they are laid when the map is
+/// read, by the core's own `Map::expanded`, as the editor draws them. A map with stamps is left as written,
+/// because expanding those needs the project's compositions and no task here asks about one; a run that
+/// does not lay is left as written too, so the check says what is on the map rather than nothing.
+fn with_runs_laid(map: Map, library: &bevy_grimoire_core::library::Library) -> Map {
+    if map.runs.is_empty() || !map.stamps.is_empty() {
+        return map;
+    }
+    map.expanded(&[], library).unwrap_or(map)
 }
 
 /// **The project's library**, read through the core's own loader: every bound kit, layered and merged,

@@ -1,0 +1,51 @@
+# **Work a note a person left on the map** (BM-04, #414).
+#
+# A person leaves a note on a piece and presses Send; any connected agent may claim it, work inside its
+# fence and resolve it with a summary. The setup is the person's half (`note_add`, `note_send`); the agent's
+# half is the loop in the guide: read the note from `grimoire_state`, claim it, make the change, resolve it.
+#
+# The note asks for the desk to be turned. The desk's front is its west face, so facing west is a yaw of 0 (it
+# stands at 90, facing south, until it is worked). The checks measure the change, and that the note was
+# resolved at all: a desk turned with no `note_resolve` leaves the person's note standing.
+id: work-the-open-note
+title: Work the open note
+split: dev
+tags: [notes]
+map: bench_notes
+prompt: |
+  There is an open note on the study map. Work it: read what it asks, make the change, and resolve the note
+  with a one-line summary.
+
+  When the note is resolved, hand the result back with grimoire_present.
+setup:
+  - op: note_add
+    params:
+      pieces: [desk]
+      text: The desk is facing the wrong way. Turn it so its front faces west, and leave it where it is.
+  - op: note_send
+    params: {}
+solution:
+  - op: note_claim
+    params: {id: n1, agent: bench}
+  - op: placement_set_yaw
+    params: {id: desk, yaw: 0.0}
+  - op: note_resolve
+    params:
+      id: n1
+      agent: bench
+      summary: Turned the desk to face west.
+      captures: [before.png, after.png]
+  - op: grimoire_present
+    params:
+      title: The desk faces west
+      summary: The note on the desk is worked. The desk is turned a quarter turn so its front faces west, and it has not moved.
+      specified:
+        - the desk faces west
+        - the desk stays where it is
+checks:
+  - placement_at: {id: desk, yaw_deg: 0.0, yaw_tolerance_deg: 10.0, at: [0.0, -1.2], tolerance_m: 0.05}
+  - placement_total: {count: 2}
+  - oplog_has: {op: note_claim, min: 1}
+  - oplog_has: {op: note_resolve, min: 1}
+  - handback_contains: [desk]
+budget: {wall_s: 600, tool_calls: 60}

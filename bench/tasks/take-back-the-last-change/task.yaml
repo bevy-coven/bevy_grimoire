@@ -1,0 +1,40 @@
+# **Take back a change that was a mistake** (BM-04, #414).
+#
+# The setup is the mistake: a crate put in the middle of the bedroom, through the dispatcher, so it is the
+# newest line of the operation log and `grimoire_undo_operation` can take it back. How the agent takes it back
+# is its own choice (the undo tool, or removing the crate); what is measured is the room it leaves: the crate
+# gone and every other piece still there.
+id: take-back-the-last-change
+title: The last change was a mistake; take it back
+split: dev
+tags: [undo]
+map: bench_mistake
+prompt: |
+  The last change made to this project was a mistake: a crate was put in the middle of the bedroom. Take it
+  back, and leave everything else as it is.
+
+  When it is done, hand the result back with grimoire_present.
+setup:
+  - op: placement_add
+    params:
+      piece: crate
+      at: [-1.5, 1.0]
+solution:
+  - op: placement_remove
+    params: {id: crate@1}
+  - op: grimoire_present
+    params:
+      title: The crate is taken back
+      summary: The crate that was put in the middle of the bedroom is removed. The bed, the bedside table and the desk are untouched.
+      specified:
+        - the last change is taken back
+      inferred:
+        - the last change was the crate
+checks:
+  - placement_exists: {piece: crate, count: 0}
+  - placement_exists: {piece: bed_double, count: 1}
+  - placement_exists: {piece: bedside_table, count: 1}
+  - placement_exists: {piece: desk, count: 1}
+  - placement_total: {count: 3}
+  - handback_contains: [crate]
+budget: {wall_s: 600, tool_calls: 60}

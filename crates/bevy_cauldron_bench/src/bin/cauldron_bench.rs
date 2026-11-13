@@ -48,6 +48,9 @@ usage: cauldron-bench run [options]
   --model <name>      the model the harness runs (omp default: ollama-cloud/deepseek-v4.1-flash:1017; claude-code: sonnet)
   --variant <name>    an arm from <suite>/variants.yaml
   --task <id>         only this task; repeatable
+  --held-out <dir>    also run the held-out tasks in <dir>, which must be outside every repository (the share
+                      keeps them at /mnt/codex_fs/bench/dark_factory/held_out). A model is run on them only
+                      after `nothing` fails and `oracle` passes each one; they are reported as a total only
   --editor <path>     the editor binary under test (default: the one beside this binary)
   --server <path>     the MCP server binary beside it (default: beside this binary)
   --run <name>        the name of this run's directory under ~/.local/state/cauldron-bench
@@ -162,6 +165,7 @@ fn parse(argv: &[String]) -> Result<Options, String> {
         repo,
         label: String::new(),
         publish: None,
+        held_out: None,
     };
     let mut run_name: Option<String> = None;
     let mut label: Option<String> = None;
@@ -186,6 +190,7 @@ fn parse(argv: &[String]) -> Result<Options, String> {
             "--server" => options.server = PathBuf::from(value()?),
             "--run" => run_name = Some(value()?),
             "--label" => label = Some(value()?),
+            "--held-out" => options.held_out = Some(PathBuf::from(value()?)),
             other => return Err(format!("`{other}` is not an argument this command takes")),
         }
     }

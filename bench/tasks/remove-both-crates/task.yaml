@@ -1,0 +1,35 @@
+# **Remove two things and nothing else** (BM-04, #414).
+#
+# "Nothing else" is the half a benchmark forgets: an agent that clears the crates and a drawer with them
+# has done what was asked and more. The count of what is left, and each remaining piece by name, measure it.
+id: remove-both-crates
+title: Remove both crates and nothing else
+split: dev
+tags: [remove]
+map: bench_storeroom
+prompt: |
+  Remove both crates from the store room, and nothing else.
+
+  When it is done, hand the result back with grimoire_present.
+setup: []
+solution:
+  - op: placement_remove
+    params: {id: crate_a}
+  - op: placement_remove
+    params: {id: crate_b}
+  - op: grimoire_present
+    params:
+      title: Both crates are gone
+      summary: The two crates are removed from the store room. The shelf, the drawer and the plant are where they were.
+      specified:
+        - both crates are removed
+        - nothing else is removed
+checks:
+  - placement_exists: {piece: crate, count: 0}
+  - placement_exists: {piece: shelf, count: 1}
+  - placement_exists: {piece: drawer, count: 1}
+  - placement_exists: {piece: plant_a, count: 1}
+  - placement_total: {count: 3}
+  - oplog_has: {op: placement_remove, min: 2}
+  - handback_contains: [crate]
+budget: {wall_s: 600, tool_calls: 60}

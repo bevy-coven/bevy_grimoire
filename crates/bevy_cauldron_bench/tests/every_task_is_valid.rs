@@ -289,7 +289,17 @@ fn every_task_is_valid() {
         suite.tasks.len(),
         failures.join("\n\n")
     );
-    assert_eq!(suite.tasks.len(), EXAMPLES.len(), "the suite is exactly the three example shapes");
+    // **Owner exception (2026-11-13), #414: the suite grows past the three examples.** It was
+    // `assert_eq!(suite.tasks.len(), EXAMPLES.len(), "the suite is exactly the three example shapes")`.
+    // The three examples stay, and are checked by id.
+    for id in EXAMPLES {
+        assert!(suite.tasks.iter().any(|t| t.id == *id), "the suite still holds the example `{id}`");
+    }
+    assert!(
+        suite.tasks.len() >= EXAMPLES.len(),
+        "the suite holds at least the three example shapes, and it holds {}",
+        suite.tasks.len()
+    );
 }
 
 /// **The example tasks are the suite's own three shapes**, so a suite that lost one is visible by name

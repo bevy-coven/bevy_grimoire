@@ -1,0 +1,38 @@
+# **Find the fault, then fix only it** (BM-04, #414).
+#
+# The setup lifts the lamp 0.3 m above the table it stands on, so it floats. The prompt does not say
+# which piece: finding it is the task (`grimoire_state`, the piece list, a picture). The fix is to put the
+# lift back to zero, and the checks hold the table and the desk where they were, because an agent that
+# "fixes" a floating lamp by removing the lamp has not fixed it.
+id: fix-the-floating-lamp
+title: Something in the bedroom is floating
+split: dev
+tags: [fix]
+map: bench_floating
+prompt: |
+  Something in this room is floating above where it should stand. Find it and put it right, and change
+  nothing else.
+
+  When it is done, hand the result back with grimoire_present.
+setup:
+  - op: placement_set_lift
+    params: {id: lamp, lift: 0.3}
+solution:
+  - op: placement_set_lift
+    params: {id: lamp, lift: 0.0}
+  - op: grimoire_present
+    params:
+      title: The lamp stands on its table again
+      summary: The lamp was lifted 0.3 m off the table. Its lift is back to zero and it rests on the table.
+      specified:
+        - the floating piece is back on what it stands on
+      inferred:
+        - the lamp was the floating piece
+checks:
+  - placement_at: {id: lamp, lift_m: 0.0, lift_tolerance_m: 0.02}
+  - placement_rests_on: {id: lamp, host: table}
+  - placement_at: {id: table, at: [1.8, -2.1], tolerance_m: 0.01}
+  - placement_at: {id: desk, at: [-0.5, -1.5], tolerance_m: 0.01}
+  - placement_total: {count: 4}
+  - handback_contains: [lamp]
+budget: {wall_s: 600, tool_calls: 60}

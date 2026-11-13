@@ -1,0 +1,6 @@
+# **The game's tuning files the benchmark's tasks may edit** (BM-04, #414), by registry id.
+version: 1
+files:
+- id: tuning/game
+  path: data/game.yaml
+  note: The gate and the walls of the benchmark's game.

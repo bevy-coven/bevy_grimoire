@@ -1,0 +1,26 @@
+# **A map the first benchmark suite opens** (BM-04, #414). See bench/fixture/README.md.
+version: 9
+name: bench_loft
+note: "A loft with an empty north-west corner."
+origin:
+- 0.0
+- 0.0
+- 0.0
+bounds:
+- 8.0
+- 3.0
+- 6.0
+bash: null
+placements:
+- id: shelf
+  descriptor: shelf
+  at:
+  - 2.5
+  - -2.6
+  yaw: 0.0
+- id: sofa
+  descriptor: sofa
+  at:
+  - 1.5
+  - 1.6
+  yaw: 0.0

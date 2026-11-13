@@ -1,0 +1,7 @@
+# The numbers a designer tunes; `data_set` edits one leaf and nothing else.
+gate:
+  health: 100
+  armour: 3
+wall:
+  health: 250
+  armour: 5

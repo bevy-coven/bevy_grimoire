@@ -1,0 +1,34 @@
+# **Tile a floor** (BM-04, #414).
+#
+# The hallway is 6 x 2 m. `floor` is a 1 x 1 m tile, so a floor covered edge to edge is twelve of them, and
+# the `fill` operation floods them across the open floor from one point. An agent that places twelve tiles by
+# hand ends in the same map, which is what is measured; the tile count is exact so that a run that tiled
+# half the hallway fails, and so that one that tiled it twice over (the editor replaces an occupied cell, but
+# a second row off the grid would not) fails too.
+id: cover-the-hallway-floor
+title: Paint the hallway floor with the grey tile
+split: dev
+tags: [tiles]
+map: bench_hallway
+prompt: |
+  Cover the whole floor of the hallway with the plain grey floor tile (the piece called floor), edge to edge.
+
+  When the floor is covered, hand the result back with grimoire_present.
+setup: []
+solution:
+  - op: fill
+    params:
+      piece: floor
+      at: [0.0, 0.0]
+  - op: grimoire_present
+    params:
+      title: The hallway floor is tiled
+      summary: The hallway's floor is covered edge to edge with the grey floor tile, twelve tiles in two rows of six.
+      specified:
+        - the whole hallway floor
+        - the grey floor tile
+checks:
+  - placement_exists: {piece: floor, count: 12}
+  - no_problem: [overlap, edge_fault]
+  - handback_contains: [floor]
+budget: {wall_s: 600, tool_calls: 60}

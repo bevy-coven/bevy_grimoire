@@ -1,0 +1,32 @@
+# **A map the first benchmark suite opens** (BM-04, #414). See bench/fixture/README.md.
+version: 9
+name: bench_lamp_check
+note: "A bedroom with a lamp somewhere near the table."
+origin:
+- 0.0
+- 0.0
+- 0.0
+bounds:
+- 6.0
+- 3.0
+- 5.0
+bash: null
+placements:
+- id: table
+  descriptor: coffee_table
+  at:
+  - 1.5
+  - -2.1
+  yaw: 0.0
+- id: lamp
+  descriptor: lamp
+  at:
+  - 0.6
+  - -2.1
+  yaw: 0.0
+- id: bed
+  descriptor: bed_double
+  at:
+  - -1.5
+  - -1.39
+  yaw: 0.0

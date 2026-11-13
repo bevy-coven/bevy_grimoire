@@ -20,6 +20,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::task::{Split, Task};
 
+/// **The folder of a suite where task drafts wait** (BM-07, #417): `<suite>/drafts/<id>/task.yaml`. The loader skips it,
+/// so a draft is never a task of the suite until a person moves it up a level.
+pub const DRAFTS_DIR_NAME: &str = "drafts";
+
 /// **The file a suite's arms are stated in**, beside its tasks: `bench/variants.yaml` (BM-02).
 pub const VARIANTS_FILE: &str = "variants.yaml";
 
@@ -83,7 +87,9 @@ impl Suite {
         let mut task_dirs: Vec<PathBuf> = entries
             .flatten()
             .map(|e| e.path())
-            .filter(|p| p.is_dir())
+            // **`drafts/` holds tasks waiting to be read, which are never run** (BM-07, #417): a person moves one into
+            // the suite, and until then it is not a task of it.
+            .filter(|p| p.is_dir() && p.file_name().and_then(|n| n.to_str()) != Some(DRAFTS_DIR_NAME))
             .collect();
         task_dirs.sort();
         let mut tasks = Vec::with_capacity(task_dirs.len());
@@ -113,6 +119,37 @@ impl Suite {
             ));
         }
         Ok(Suite { tasks, dir: dir.to_path_buf() })
+    }
+
+    /// **Read the held-out tasks in `dir`**, which is outside every repository (BM-04, #414).
+    ///
+    /// The held-out tasks are the half of a benchmark a change is scored on and never tuned against, so they
+    /// must be where no loop pass, agent or commit can read them: not in a repository, not in an issue, not in
+    /// a log. This refuses a directory that is inside a checkout (any parent holding a `.git`), and refuses a
+    /// task there that does not say `split: held_out`, so a dev task dropped into the directory by mistake is
+    /// not scored as if it had never been seen.
+    #[allow(clippy::result_large_err)]
+    pub fn load_held_out(root: &Path, dir: &Path, known: &[&str]) -> Result<Suite, Problem> {
+        if let Some(repository) = inside_a_repository(dir) {
+            return Err(Problem::with(
+                format!("{} is inside the repository at {}", dir.display(), repository.display()),
+                Detail::default()
+                    .at(Location::file(dir.display().to_string()))
+                    .because("held-out tasks inside a checkout can be read, committed and tuned against, which is what the held-out half exists to prevent")
+                    .fix(format!("keep them outside every repository, at {HELD_OUT_DIR}")),
+            ));
+        }
+        let suite = Suite::load(root, dir, known)?;
+        if let Some(task) = suite.tasks.iter().find(|t| t.split != Split::HeldOut) {
+            return Err(Problem::with(
+                format!("`{}` in the held-out directory says `split: {}`", task.id, task.split.name()),
+                Detail::default()
+                    .at(Location::file(task.dir.display().to_string()).field(Some("split".to_owned())))
+                    .because("a held-out directory holds held-out tasks only, so this one would be scored as one without being one")
+                    .fix("say `split: held_out`, or move the task to the suite"),
+            ));
+        }
+        Ok(suite)
     }
 
     /// **The tasks of one half of the suite**, in id order.
@@ -192,4 +229,14 @@ impl Suite {
 /// **Where a project's arms are stated**: `bench/variants.yaml` beside the tasks.
 pub fn variants_path(root: &Path) -> PathBuf {
     root.join(crate::TASKS_DIR).join(VARIANTS_FILE)
+}
+
+/// **Where the held-out tasks live**, on a host that mounts the share: outside every repository, so no loop
+/// pass or agent developing the editor reads them.
+pub const HELD_OUT_DIR: &str = "/mnt/codex_fs/bench/dark_factory/held_out";
+
+/// **The repository a directory is inside**, or `None`: the nearest parent that holds a `.git`.
+pub fn inside_a_repository(dir: &Path) -> Option<PathBuf> {
+    let start = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+    start.ancestors().find(|parent| parent.join(".git").exists()).map(Path::to_path_buf)
 }

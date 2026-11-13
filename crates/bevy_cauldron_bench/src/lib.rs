@@ -80,9 +80,9 @@ pub mod suite;
 pub mod task;
 
 pub use check::{
-    Axis, Check, Direction, HandbackContains, HandbackFact, NoProblem, PlacementAt, PlacementExists,
-    PlacementNearWall, PlacementRef, PlacementRefField, PlacementRelative, PlacementRestsOn, ProblemKind,
-    Unchanged, Verdict, Wall, CHECK_NAMES,
+    Axis, Check, Direction, FileValue, HandbackContains, HandbackFact, NoProblem, PlacementAt, PlacementExists,
+    PlacementNearWall, PlacementRef, PlacementRefField, PlacementRelative, PlacementRestsOn, PlacementTotal,
+    PlacementsWithin, ProblemKind, TerrainHeight, Unchanged, Verdict, Wall, WaterLake, CHECK_NAMES,
 };
 pub use grade::{Grading, Handback, Left, Outcome, Snapshot, EDITOR_SCRATCH};
 pub use suite::{Suite, Variant, Variants};

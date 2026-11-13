@@ -360,8 +360,107 @@ pub struct PlacementRestsOn {
     /// The descriptor this placement is an instance of.
     #[serde(default)]
     pub piece: Option<String>,
-    /// The id of the piece it must name as its host.
+    /// **The id of the piece it must name as its host.** Right for a host the task's own map names; a
+    /// host an agent placed has an id the editor minted, which a task cannot know, and it says
+    /// [`Self::host_piece`] instead.
+    #[serde(default)]
     pub host: String,
+    /// **The piece its host must be an instance of**, whichever id it has.
+    #[serde(default)]
+    pub host_piece: Option<String>,
+}
+
+/// **The map holds exactly this many placements**, of any piece.
+///
+/// What a task "remove both crates and nothing else" needs beside the crates' absence: a run that removed
+/// the crates *and* a drawer has the same crates and a smaller map.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlacementTotal {
+    /// How many placements the map holds.
+    pub count: usize,
+}
+
+/// **Exactly `count` placements of a piece stand on the map, and every one of them is in a region.**
+///
+/// The region is a rectangle of the map's `x` and `z`, centres only: a hedge along the south edge, a nook
+/// in a corner. A piece of this kind across the room fails it even when the count is right, so five plants
+/// in the band and a sixth elsewhere is not a hedge.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlacementsWithin {
+    /// The descriptor the placements are instances of.
+    pub piece: String,
+    /// How many of that piece the map holds, all in the region.
+    pub count: usize,
+    /// The region's `x` extent, `[low, high]`, metres.
+    pub x: (f32, f32),
+    /// The region's `z` extent, `[low, high]`, metres.
+    pub z: (f32, f32),
+}
+
+/// **A scalar in a project file is what the task wants**, read by a path through the file's YAML.
+///
+/// For what leaves no placement: a number in the game's data, a new map's size. `file` is relative to
+/// `assets/grimoire/`; `path` is dotted with list indices (`gate.health`, `bounds[0]`, `lakes[1].level_m`).
+/// At least one of `equals`, `min` and `max` is required, because a check that asks nothing passes on any
+/// file.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FileValue {
+    /// The file, relative to `assets/grimoire/`.
+    pub file: String,
+    /// The leaf's path inside it.
+    pub path: String,
+    /// The value it must equal: a number, a string or a boolean.
+    #[serde(default)]
+    pub equals: Option<serde_json::Value>,
+    /// The least a number may be.
+    #[serde(default)]
+    pub min: Option<f64>,
+    /// The most a number may be.
+    #[serde(default)]
+    pub max: Option<f64>,
+}
+
+/// **The ground is within a height at a point**, from the map's terrain file.
+///
+/// Sampled with the core's own bilinear `Heightfield::height_at`, so a hill "2 m high at the corner" is
+/// measured where the ground actually is rather than where a brush was told to go. At least one of
+/// `min_m` and `max_m` is required.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TerrainHeight {
+    /// The map whose terrain is read: `terrain/<map>.yaml`.
+    pub map: String,
+    /// The point, `[x, z]` in world metres.
+    pub at: (f32, f32),
+    /// The least the ground may be there.
+    #[serde(default)]
+    pub min_m: Option<f32>,
+    /// The most the ground may be there.
+    #[serde(default)]
+    pub max_m: Option<f32>,
+}
+
+/// **The map has exactly `count` lakes, every one centred in a region and at least a radius wide.**
+///
+/// Read from the map's water plan, `water/<map>.yaml`, which is where `water_place` writes.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WaterLake {
+    /// The map whose water plan is read.
+    pub map: String,
+    /// The region's `x` extent, `[low, high]`, metres.
+    pub x: (f32, f32),
+    /// The region's `z` extent, `[low, high]`, metres.
+    pub z: (f32, f32),
+    /// The least a lake's radius may be, metres.
+    #[serde(default)]
+    pub min_radius_m: Option<f32>,
+    /// How many lakes the plan holds. One.
+    #[serde(default = "one")]
+    pub count: usize,
 }
 
 /// **The named files are byte-identical to what the setup left.** Written as a list of paths relative to
@@ -474,6 +573,16 @@ pub enum Check {
     HandbackContains(HandbackContains),
     /// A calibrated decision answers as the task wants.
     Decide(Decide),
+    /// The map holds exactly this many placements.
+    PlacementTotal(PlacementTotal),
+    /// Exactly this many of a piece stand in a region.
+    PlacementsWithin(PlacementsWithin),
+    /// A scalar in a project file is what the task wants.
+    FileValue(FileValue),
+    /// The ground is within a height at a point.
+    TerrainHeight(TerrainHeight),
+    /// The map's water plan holds the stated lakes.
+    WaterLake(WaterLake),
 }
 
 /// **Every check name this build has**, in the order a refusal lists them.
@@ -490,6 +599,11 @@ pub const CHECK_NAMES: &[&str] = &[
     "oplog_lacks",
     "handback_contains",
     "decide",
+    "placement_total",
+    "placements_within",
+    "file_value",
+    "terrain_height",
+    "water_lake",
 ];
 
 impl<'de> Deserialize<'de> for Check {
@@ -569,6 +683,21 @@ impl Check {
             "decide" => built(serde_json::from_value::<Decide>(args.clone())
                 .map(Check::Decide)
                 .map_err(|e| e.to_string())),
+            "placement_total" => built(serde_json::from_value::<PlacementTotal>(args.clone())
+                .map(Check::PlacementTotal)
+                .map_err(|e| e.to_string())),
+            "placements_within" => built(serde_json::from_value::<PlacementsWithin>(args.clone())
+                .map(Check::PlacementsWithin)
+                .map_err(|e| e.to_string())),
+            "file_value" => built(serde_json::from_value::<FileValue>(args.clone())
+                .map(Check::FileValue)
+                .map_err(|e| e.to_string())),
+            "terrain_height" => built(serde_json::from_value::<TerrainHeight>(args.clone())
+                .map(Check::TerrainHeight)
+                .map_err(|e| e.to_string())),
+            "water_lake" => built(serde_json::from_value::<WaterLake>(args.clone())
+                .map(Check::WaterLake)
+                .map_err(|e| e.to_string())),
             other => Err(format!(
                 "`{other}` is not a check this build has. The checks are: {}.",
                 CHECK_NAMES.join(", ")
@@ -605,6 +734,11 @@ impl Check {
             Check::OplogLacks(_) => "oplog_lacks",
             Check::HandbackContains(_) => "handback_contains",
             Check::Decide(_) => "decide",
+            Check::PlacementTotal(_) => "placement_total",
+            Check::PlacementsWithin(_) => "placements_within",
+            Check::FileValue(_) => "file_value",
+            Check::TerrainHeight(_) => "terrain_height",
+            Check::WaterLake(_) => "water_lake",
         }
     }
 
@@ -626,7 +760,8 @@ impl Check {
         !matches!(
             self,
             Check::Unchanged(_) | Check::ProjectUnchanged(_) | Check::OplogHas(_) | Check::OplogLacks(_)
-                | Check::HandbackContains(_) | Check::Decide(_)
+                | Check::HandbackContains(_) | Check::Decide(_) | Check::FileValue(_)
+                | Check::TerrainHeight(_) | Check::WaterLake(_)
         )
     }
 
@@ -689,8 +824,57 @@ impl Check {
                 r.max_gap_m
             ),
             Check::PlacementRestsOn(r) => {
-                format!("{} resting on `{}`", subject(&r.id, &r.piece).shown(), r.host)
+                let host = match (&r.host_piece, r.host.is_empty()) {
+                    (Some(piece), true) => format!("a `{piece}`"),
+                    (Some(piece), false) => format!("`{}` (a `{piece}`)", r.host),
+                    (None, _) => format!("`{}`", r.host),
+                };
+                format!("{} resting on {host}", subject(&r.id, &r.piece).shown())
             }
+            Check::PlacementTotal(t) => format!("{} placement(s) on the map in all", t.count),
+            Check::PlacementsWithin(w) => format!(
+                "{} × a `{}`, all inside x {:.2}..{:.2}, z {:.2}..{:.2}",
+                w.count, w.piece, w.x.0, w.x.1, w.z.0, w.z.1
+            ),
+            Check::FileValue(f) => {
+                let mut wants = Vec::new();
+                if let Some(v) = &f.equals {
+                    wants.push(format!("= {v}"));
+                }
+                if let Some(m) = f.min {
+                    wants.push(format!("≥ {m}"));
+                }
+                if let Some(m) = f.max {
+                    wants.push(format!("≤ {m}"));
+                }
+                format!("`{}` in `{}` {}", f.path, f.file, wants.join(" and "))
+            }
+            Check::TerrainHeight(t) => {
+                let mut wants = Vec::new();
+                if let Some(m) = t.min_m {
+                    wants.push(format!("at least {m:.2} m"));
+                }
+                if let Some(m) = t.max_m {
+                    wants.push(format!("at most {m:.2} m"));
+                }
+                format!(
+                    "the ground of `{}` at ({:.2}, {:.2}) {}",
+                    t.map,
+                    t.at.0,
+                    t.at.1,
+                    wants.join(" and ")
+                )
+            }
+            Check::WaterLake(w) => format!(
+                "{} lake(s) on `{}`, centred inside x {:.2}..{:.2}, z {:.2}..{:.2}{}",
+                w.count,
+                w.map,
+                w.x.0,
+                w.x.1,
+                w.z.0,
+                w.z.1,
+                w.min_radius_m.map(|r| format!(", each at least {r:.2} m wide")).unwrap_or_default()
+            ),
             Check::Unchanged(u) => format!("{} unchanged", u.files.join(", ")),
             Check::ProjectUnchanged(_) => "the whole project unchanged".to_owned(),
             Check::NoProblem(p) => format!(
@@ -816,19 +1000,33 @@ pub fn grade(check: &Check, baseline: &Snapshot, left: &Snapshot) -> Verdict {
         Check::PlacementRelative(r) => grade_relative(r, &left.map, &left.library, &verdict),
         Check::PlacementRestsOn(r) => {
             let subject = subject(&r.id, &r.piece);
+            if r.host.is_empty() && r.host_piece.is_none() {
+                return verdict(false, "the check names neither a `host` nor a `host_piece`".to_owned());
+            }
             let found = subject.matches(&left.map);
             let Some(p) = found.first() else {
                 return verdict(false, format!("no {} is on the map", subject.shown()));
             };
+            let wanted = match (&r.host_piece, r.host.is_empty()) {
+                (Some(piece), true) => format!("a `{piece}`"),
+                (Some(piece), false) => format!("`{}` (a `{piece}`)", r.host),
+                (None, _) => format!("`{}`", r.host),
+            };
+            let is_wanted = |host: &str| {
+                (r.host.is_empty() || host == r.host)
+                    && r.host_piece.as_ref().is_none_or(|piece| {
+                        left.map.placements.iter().any(|q| q.id == host && &q.descriptor == piece)
+                    })
+            };
             match &p.on {
-                Some(host) if *host == r.host => verdict(true, format!("`{}` rests on `{host}`", p.id)),
+                Some(host) if is_wanted(host) => verdict(true, format!("`{}` rests on `{host}`", p.id)),
                 Some(host) => verdict(
                     false,
-                    format!("`{}` rests on `{host}`, and the task wants `{}`", p.id, r.host),
+                    format!("`{}` rests on `{host}`, and the task wants {wanted}", p.id),
                 ),
                 None => verdict(
                     false,
-                    format!("`{}` rests on the floor, and the task wants it on `{}`", p.id, r.host),
+                    format!("`{}` rests on the floor, and the task wants it on {wanted}", p.id),
                 ),
             }
         }
@@ -918,6 +1116,39 @@ pub fn grade(check: &Check, baseline: &Snapshot, left: &Snapshot) -> Verdict {
                 },
             )
         }
+        Check::PlacementTotal(t) => {
+            let n = left.map.placements.len();
+            verdict(n == t.count, format!("{n} placement(s) on the map, and the task wants {}", t.count))
+        }
+        Check::PlacementsWithin(w) => {
+            let of: Vec<&Placed> =
+                left.map.placements.iter().filter(|p| p.descriptor == w.piece).collect();
+            let outside: Vec<String> = of
+                .iter()
+                .filter(|p| {
+                    !((w.x.0..=w.x.1).contains(&p.at.0) && (w.z.0..=w.z.1).contains(&p.at.1))
+                })
+                .map(|p| format!("`{}` at ({:.2}, {:.2})", p.id, p.at.0, p.at.1))
+                .collect();
+            let mut says = format!(
+                "{} × a `{}` on the map, {} of them inside x {:.2}..{:.2}, z {:.2}..{:.2}, and the task wants {} all inside",
+                of.len(),
+                w.piece,
+                of.len() - outside.len(),
+                w.x.0,
+                w.x.1,
+                w.z.0,
+                w.z.1,
+                w.count
+            );
+            if !outside.is_empty() {
+                says.push_str(&format!("; outside: {}", outside.join(", ")));
+            }
+            verdict(of.len() == w.count && outside.is_empty(), says)
+        }
+        Check::FileValue(f) => grade_file_value(f, left, &verdict),
+        Check::TerrainHeight(t) => grade_terrain_height(t, left, &verdict),
+        Check::WaterLake(w) => grade_water_lake(w, left, &verdict),
         Check::Decide(d) => {
             if !(0.0..=1.0).contains(&d.min_confidence) {
                 return verdict(
@@ -1068,6 +1299,200 @@ fn grade_relative(
             r.max_gap_m
         ),
     )
+}
+
+/// **One step along a path**: a key, or a list index.
+enum Step<'a> {
+    Key(&'a str),
+    Index(usize),
+}
+
+/// **A path like `gate.health`, `bounds[0]` or `lakes[1].level_m`, as its steps**, or why it does not read.
+fn path_steps(path: &str) -> Result<Vec<Step<'_>>, String> {
+    let mut steps = Vec::new();
+    for part in path.split('.') {
+        let (key, mut rest) = match part.find('[') {
+            Some(open) => (&part[..open], &part[open..]),
+            None => (part, ""),
+        };
+        if key.is_empty() && rest.is_empty() {
+            return Err(format!("`{path}` has an empty step"));
+        }
+        if !key.is_empty() {
+            steps.push(Step::Key(key));
+        }
+        while let Some(after) = rest.strip_prefix('[') {
+            let Some(close) = after.find(']') else {
+                return Err(format!("`{path}` opens a `[` and never closes it"));
+            };
+            let index = after[..close]
+                .parse::<usize>()
+                .map_err(|_| format!("`{path}`: `{}` is not a list index", &after[..close]))?;
+            steps.push(Step::Index(index));
+            rest = &after[close + 1..];
+        }
+        if !rest.is_empty() {
+            return Err(format!("`{path}` has `{rest}` after a step it cannot read"));
+        }
+    }
+    Ok(steps)
+}
+
+/// **Whether two scalars are the same value**: numbers by value (so `40` and `40.0` agree), everything
+/// else as written.
+fn same_scalar(a: &Value, b: &Value) -> bool {
+    match (a.as_f64(), b.as_f64()) {
+        (Some(x), Some(y)) => (x - y).abs() < 1e-9,
+        _ => a == b,
+    }
+}
+
+/// The leaf-of-a-file arithmetic: read the file as data, walk the path, compare.
+fn grade_file_value(
+    f: &FileValue,
+    left: &Snapshot,
+    verdict: &impl Fn(bool, String) -> Verdict,
+) -> Verdict {
+    if f.equals.is_none() && f.min.is_none() && f.max.is_none() {
+        return verdict(
+            false,
+            "the check states no value, `min` or `max`, so it would pass on any file".to_owned(),
+        );
+    }
+    let Some(text) = left.text(&f.file) else {
+        return verdict(false, format!("`{}` is not in the project, so nothing could be read from it", f.file));
+    };
+    let data: Value = match bevy_grimoire_core::yaml::from_str(&text, &f.file) {
+        Ok(data) => data,
+        Err(p) => return verdict(false, format!("`{}` did not read: {}", f.file, p.line())),
+    };
+    let steps = match path_steps(&f.path) {
+        Ok(steps) => steps,
+        Err(why) => return verdict(false, format!("the check's path does not read: {why}")),
+    };
+    let mut at = &data;
+    for step in &steps {
+        let next = match step {
+            Step::Key(key) => at.get(*key),
+            Step::Index(i) => at.get(*i),
+        };
+        match next {
+            Some(next) => at = next,
+            None => {
+                return verdict(false, format!("`{}` holds nothing at `{}`", f.file, f.path));
+            }
+        }
+    }
+    let mut fails: Vec<String> = Vec::new();
+    if let Some(want) = &f.equals
+        && !same_scalar(at, want)
+    {
+        fails.push(format!("it should be {want}"));
+    }
+    if f.min.is_some() || f.max.is_some() {
+        match at.as_f64() {
+            Some(n) => {
+                if let Some(min) = f.min
+                    && n < min
+                {
+                    fails.push(format!("it should be at least {min}"));
+                }
+                if let Some(max) = f.max
+                    && n > max
+                {
+                    fails.push(format!("it should be at most {max}"));
+                }
+            }
+            None => fails.push("it is not a number".to_owned()),
+        }
+    }
+    let says = format!("`{}` in `{}` is {at}", f.path, f.file);
+    if fails.is_empty() {
+        verdict(true, says)
+    } else {
+        verdict(false, format!("{says}, and {}", fails.join(" and ")))
+    }
+}
+
+/// The ground arithmetic: the core's own sampling of the saved heightfield.
+fn grade_terrain_height(
+    t: &TerrainHeight,
+    left: &Snapshot,
+    verdict: &impl Fn(bool, String) -> Verdict,
+) -> Verdict {
+    if t.min_m.is_none() && t.max_m.is_none() {
+        return verdict(false, "the check states no bound, so it would pass on any ground".to_owned());
+    }
+    let file = format!("terrain/{}.yaml", t.map);
+    let Some(text) = left.text(&file) else {
+        return verdict(
+            false,
+            format!("`{file}` is not in the project, so the ground of `{}` is not shaped", t.map),
+        );
+    };
+    let field = match bevy_grimoire_core::heightfield::Heightfield::parse(&text) {
+        Ok(field) => field,
+        Err(why) => return verdict(false, format!("`{file}` did not read: {why}")),
+    };
+    let height = field.height_at(t.at.0, t.at.1);
+    let says = format!("the ground of `{}` at ({:.2}, {:.2}) is {height:.3} m", t.map, t.at.0, t.at.1);
+    let mut fails: Vec<String> = Vec::new();
+    if let Some(min) = t.min_m
+        && height < min
+    {
+        fails.push(format!("the task wants at least {min:.3} m"));
+    }
+    if let Some(max) = t.max_m
+        && height > max
+    {
+        fails.push(format!("the task wants at most {max:.3} m"));
+    }
+    if fails.is_empty() {
+        verdict(true, says)
+    } else {
+        verdict(false, format!("{says}, and {}", fails.join(" and ")))
+    }
+}
+
+/// The lake arithmetic: the saved water plan's lakes, by centre and radius.
+fn grade_water_lake(
+    w: &WaterLake,
+    left: &Snapshot,
+    verdict: &impl Fn(bool, String) -> Verdict,
+) -> Verdict {
+    let file = format!("water/{}.yaml", w.map);
+    let Some(text) = left.text(&file) else {
+        return verdict(false, format!("`{file}` is not in the project, so `{}` has no water", w.map));
+    };
+    let plan = match bevy_grimoire_core::water::WaterPlan::parse(&text) {
+        Ok(plan) => plan,
+        Err(why) => return verdict(false, format!("`{file}` did not read: {why}")),
+    };
+    let mut fails: Vec<String> = Vec::new();
+    let mut says: Vec<String> = Vec::new();
+    for (i, lake) in plan.lakes.iter().enumerate() {
+        says.push(format!(
+            "lake {i} at ({:.3}, {:.3}), radius {:.3} m, level {:.3} m",
+            lake.x, lake.z, lake.radius_m, lake.level_m
+        ));
+        if !((w.x.0..=w.x.1).contains(&lake.x) && (w.z.0..=w.z.1).contains(&lake.z)) {
+            fails.push(format!("lake {i} is outside x {:.2}..{:.2}, z {:.2}..{:.2}", w.x.0, w.x.1, w.z.0, w.z.1));
+        }
+        if let Some(min) = w.min_radius_m
+            && lake.radius_m < min
+        {
+            fails.push(format!("lake {i} is under {min:.3} m wide"));
+        }
+    }
+    if plan.lakes.len() != w.count {
+        fails.push(format!("the task wants {} lake(s)", w.count));
+    }
+    let says = if says.is_empty() { format!("`{file}` holds no lake") } else { says.join("; ") };
+    if fails.is_empty() {
+        verdict(true, says)
+    } else {
+        verdict(false, format!("{says}, and {}", fails.join(" and ")))
+    }
 }
 
 /// **A placement's extent along the map's `x` and `z` axes, in metres from its centre** — its footprint

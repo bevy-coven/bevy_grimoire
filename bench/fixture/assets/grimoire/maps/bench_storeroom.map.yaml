@@ -1,0 +1,44 @@
+# **A map the first benchmark suite opens** (BM-04, #414). See bench/fixture/README.md.
+version: 9
+name: bench_storeroom
+note: "A store room with two crates, a shelf, a drawer and a plant."
+origin:
+- 0.0
+- 0.0
+- 0.0
+bounds:
+- 6.0
+- 3.0
+- 5.0
+bash: null
+placements:
+- id: crate_a
+  descriptor: crate
+  at:
+  - -2.0
+  - -1.5
+  yaw: 0.0
+- id: crate_b
+  descriptor: crate
+  at:
+  - -0.6
+  - -1.5
+  yaw: 0.0
+- id: shelf
+  descriptor: shelf
+  at:
+  - 1.8
+  - -2.2
+  yaw: 0.0
+- id: drawer
+  descriptor: drawer
+  at:
+  - -1.0
+  - 1.8
+  yaw: 0.0
+- id: plant
+  descriptor: plant_a
+  at:
+  - 2.3
+  - 1.5
+  yaw: 0.0

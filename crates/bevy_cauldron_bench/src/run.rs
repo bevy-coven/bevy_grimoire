@@ -173,6 +173,8 @@ pub struct Options {
     pub publish: Option<PathBuf>,
     /// Only these tasks, by id.
     pub only: Vec<String>,
+    /// **Where the held-out tasks are**, outside every repository (`--held-out <dir>`). None: a dev-only run.
+    pub held_out: Option<PathBuf>,
 }
 
 /// **What a harness reported a model's turns used**, summed over the trial.
@@ -290,6 +292,8 @@ pub struct TrialRecord {
     pub wishes: Vec<Value>,
     /// The directory this trial's project and transcript are under.
     pub dir: PathBuf,
+    /// **Whether the task is held out**, so nothing that prints the trial names it (see [`summary_line`]).
+    pub held_out: bool,
 }
 
 impl TrialRecord {
@@ -359,7 +363,18 @@ pub fn state_dir(run: &str) -> Result<PathBuf, String> {
 }
 
 /// **A trial's one line in a report**, as a person reads it.
+///
+/// **A held-out trial is one line that names no task**: its id and the checks it failed are held-out
+/// content, and the run's console output is a log.
 pub fn summary_line(record: &TrialRecord) -> String {
+    if record.held_out {
+        return format!(
+            "(a held-out task) trial {}: {}",
+            record.trial,
+            record.outcome.name().to_uppercase()
+        );
+    }
+
     let (passed, total) = (
         record.checks.iter().filter(|c| c.passed).count(),
         record.checks.len(),
@@ -847,7 +862,35 @@ pub fn run(options: &Options) -> Result<Vec<TrialRecord>, String> {
     let known_refs: Vec<&str> = known.iter().map(String::as_str).collect();
     let suite = Suite::load(&options.root, &options.tasks, &known_refs)
         .map_err(|p| format!("the suite was refused: {}", p.line()))?;
-    let selected: Vec<Task> = suite.select(&options.only)?.into_iter().cloned().collect();
+    // **The held-out tasks, when a directory names them**: read from outside the repository, refused when
+    // the directory is inside one, and selected by id like any other (an id none of the two holds is
+    // refused, naming only the dev ids, since a held-out id is not to reach a log).
+    let held: Vec<Task> = match &options.held_out {
+        Some(dir) => {
+            Suite::load_held_out(&options.root, dir, &known_refs)
+                .map_err(|p| format!("the held-out tasks were refused: {}", p.line()))?
+                .tasks
+        }
+        None => Vec::new(),
+    };
+    let selected: Vec<Task> = if options.only.is_empty() {
+        suite.tasks.iter().chain(held.iter()).cloned().collect()
+    } else {
+        let mut chosen = Vec::with_capacity(options.only.len());
+        for id in &options.only {
+            match suite.tasks.iter().chain(held.iter()).find(|t| &t.id == id) {
+                Some(task) => chosen.push(task.clone()),
+                None => {
+                    return Err(format!(
+                        "`{id}` is not a task in {} — it holds {}",
+                        suite.dir.display(),
+                        suite.tasks.iter().map(|t| t.id.as_str()).collect::<Vec<_>>().join(", ")
+                    ));
+                }
+            }
+        }
+        chosen
+    };
     let variants = Suite::variants(&options.root).map_err(|p| p.line())?;
     let variant = match &options.variant {
         Some(name) => Some(
@@ -883,6 +926,13 @@ pub fn run(options: &Options) -> Result<Vec<TrialRecord>, String> {
     }
     std::fs::create_dir_all(&options.out)
         .map_err(|e| format!("{}: {e}", options.out.display()))?;
+    // **A model is only scored on held-out tasks that are valid** (BM-04): the scripted agents are the proof
+    // themselves, so they skip it.
+    let held_selected: Vec<&Task> = selected.iter().filter(|t| t.split == crate::task::Split::HeldOut).collect();
+    if !held_selected.is_empty() && !matches!(options.agent, Agent::Oracle | Agent::Nothing) {
+        let owned: Vec<Task> = held_selected.into_iter().cloned().collect();
+        validate_held_out(options, &owned)?;
+    }
     // **The header, before any trial**, so a run killed halfway still says how it was made.
     let header = crate::probe::header(options, &options.label);
     let header_text = serde_json::to_string_pretty(&header).map_err(|e| format!("{e}"))? + "\n";
@@ -930,6 +980,45 @@ pub fn run(options: &Options) -> Result<Vec<TrialRecord>, String> {
         .map_err(|_| "a trial's records were poisoned".to_owned())?;
     records.sort_by(|a, b| a.task.cmp(&b.task).then(a.trial.cmp(&b.trial)));
     Ok(records)
+}
+
+/// **Prove the held-out tasks valid before any trial scores one** (BM-04, #414).
+///
+/// BM-01's two runs, applied to the running editor: an agent that connects and stops (`nothing`) must fail
+/// the task, and the task's own `solution` replayed through the real MCP server (`oracle`) must pass it. A
+/// held-out task that fails either way is a number about the task and not about the agent, and it would sit in
+/// the held-out total for as long as nobody looked. They are not in the repository, so the push gate cannot
+/// prove them (`every_task_is_valid` does that for the dev tasks); this is the same proof, made where they are.
+///
+/// **A failure names the task's place in the directory, never its id or its checks**, because a held-out
+/// task's content is not to reach a log. The trial's own `trial.json`, under the state directory, says more.
+pub fn validate_held_out(options: &Options, tasks: &[Task]) -> Result<(), String> {
+    let mut problems: Vec<String> = Vec::new();
+    for (n, task) in tasks.iter().enumerate() {
+        for agent in [Agent::Nothing, Agent::Oracle] {
+            let mut proof = options.clone();
+            proof.agent = agent;
+            proof.out = options.out.join("validity").join(agent.name());
+            let record = one_trial(&proof, task, 1, None);
+            let wanted = if agent == Agent::Nothing { Outcome::Fail } else { Outcome::Pass };
+            if record.outcome != wanted {
+                problems.push(format!(
+                    "held-out task {} of {} under `{}` ended `{}` and should end `{}` (see {})",
+                    n + 1,
+                    tasks.len(),
+                    agent.name(),
+                    record.outcome.name(),
+                    wanted.name(),
+                    record.dir.join("trial.json").display()
+                ));
+            }
+        }
+    }
+    if problems.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("the held-out tasks are not all valid:\n  {}", problems.join("\n  ")))
+    }
 }
 
 /// **Build a finished run's report, write it beside its trials, and publish it** when the run was named.
@@ -1076,6 +1165,7 @@ fn one_trial(options: &Options, task: &Task, trial: u32, variant: Option<&Varian
         tools_offered: Vec::new(),
         wishes: Vec::new(),
         dir: dir.clone(),
+        held_out: task.split == crate::task::Split::HeldOut,
     };
     let harness = |reason: String| {
         let record = record(Outcome::HarnessError, reason.clone());
@@ -1086,7 +1176,7 @@ fn one_trial(options: &Options, task: &Task, trial: u32, variant: Option<&Varian
         return harness(format!("{}: {e}", dir.display()));
     }
     let project = dir.join("project");
-    if let Err(e) = fixture::lay_out(&options.root, &project) {
+    if let Err(e) = fixture::lay_out_task(&options.root, &task.dir, &project) {
         return harness(format!("the fixture was not laid out: {e}"));
     }
     // **The arm's overlay**, laid over the copy after the fixture: a different `AGENTS.md` is the example.
