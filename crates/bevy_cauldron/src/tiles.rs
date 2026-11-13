@@ -8968,23 +8968,20 @@ fn draw_ink(
                     // The severity mark first, so a list of 300 can be skimmed for the ones that
                     // need attention rather than read. The tint comes from the one severity map,
                     // so the mark here and the rail in the detail pane cannot disagree.
-                    row.spawn((
-                        Node {
-                            width: Val::Px(crate::chrome::COL_TIGHT),
-                            flex_shrink: 0.0,
-                            ..default()
-                        },
-                        Text::new(match mark {
+                    crate::chrome::text_cell(
+                        row,
+                        crate::chrome::COL_TIGHT,
+                        match mark {
                             Some(Severity::Blocking) => "x",
                             Some(Severity::Warn) => "!",
                             _ => "",
-                        }),
-                        TextColor(match mark {
+                        },
+                        match mark {
                             Some(s) => crate::chrome::severity_style(*s).0,
                             None => crate::chrome::ink().label,
-                        }),
-                        crate::chrome::typed(crate::chrome::text::BODY),
-                    ));
+                        },
+                        crate::chrome::text::BODY,
+                    );
                     // The file's own name, not the full path — the pack heading already said where it came from, and
                     // repeating it on 145 rows is the same word 145 times. A long mesh name wraps inside its own column
                     // rather than widening the row (see [`count_cell`]).
@@ -9132,16 +9129,7 @@ fn draw_pack_band(
         BackgroundColor(crate::chrome::ink().header_bg),
     ))
     .with_children(|row| {
-        row.spawn((
-            Node {
-                width: Val::Px(crate::chrome::COL_TIGHT),
-                flex_shrink: 0.0,
-                ..default()
-            },
-            Text::new(if folded { ">" } else { "v" }),
-            TextColor(crate::chrome::ink().label),
-            crate::chrome::typed(crate::chrome::text::LABEL),
-        ));
+        crate::chrome::text_cell(row, crate::chrome::COL_TIGHT, if folded { ">" } else { "v" }, crate::chrome::ink().label, crate::chrome::text::LABEL);
         // **The pack's name, and — when it is excluded — the way back.**
         //
         // An excluded pack keeps its words because it names a state the chevron does NOT show,
@@ -9192,16 +9180,7 @@ fn draw_excluded_band(p: &mut ChildSpawnerCommands, packs: usize, meshes: usize,
         BackgroundColor(crate::chrome::ink().header_bg),
     ))
     .with_children(|row| {
-        row.spawn((
-            Node {
-                width: Val::Px(crate::chrome::COL_TIGHT),
-                flex_shrink: 0.0,
-                ..default()
-            },
-            Text::new(if open { "v" } else { ">" }),
-            TextColor(crate::chrome::ink().muted),
-            crate::chrome::typed(crate::chrome::text::LABEL),
-        ));
+        crate::chrome::text_cell(row, crate::chrome::COL_TIGHT, if open { "v" } else { ">" }, crate::chrome::ink().muted, crate::chrome::text::LABEL);
         // **The name column wraps within itself; the tally does not.** The state and the way
         // out of it both stay on the band (`docs/ui.md` §1.4) — what changed is that they now
         // share the *growing* column, so the count can hold a column of its own rather than
@@ -10175,11 +10154,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 );
                 // The second pair, spaced off the first by a group gap so the line reads as two
                 // label/value pairs rather than four words.
-                row.spawn(Node {
-                    width: Val::Px(crate::chrome::GAP_GROUP),
-                    flex_shrink: 0.0,
-                    ..default()
-                });
+                crate::chrome::gap_cell(row, crate::chrome::GAP_GROUP);
                 crate::chrome::row_label(row, crate::chrome::COL_LABEL, "front");
                 crate::chrome::row_value(row, front_text, front_ink, ());
             });

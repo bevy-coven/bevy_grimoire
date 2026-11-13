@@ -31,7 +31,9 @@ use crate::fixtures;
 // 42 -> 10: #245 moved the margin rows, the fill texts, the wrapping chip rows, the batch progress and the thumbnail slot onto
 // gooey's `row`, `column`, `progress` and `image_box` through the `chrome` helpers (`spaced`, `spaced_row`, `gapped_row`,
 // `wrapping_row`, `fill_text`). Owner exception (2026-11-12): a ratchet tightened to the real count.
-const TILES_NODES_LEFT: usize = 10;
+// 10 -> 6: #245 moved the severity mark, the two fold chevrons and the detail line's group gap onto gooey's `cell` through `chrome::text_cell` and
+// `chrome::gap_cell`. Owner exception (2026-11-13): a ratchet tightened to the real count.
+const TILES_NODES_LEFT: usize = 6;
 /// The number `compose.rs` may carry: a world-space slot label, the flex item the 2026-08-17
 /// measurement sized, and one `Node::default()` that is a bundle's own direction.
 const COMPOSE_NODES_LEFT: usize = 3;
