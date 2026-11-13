@@ -35,6 +35,8 @@ const USAGE: &str = "\
 cauldron-bench: run the Cauldron's benchmark suite against a real editor and a real agent.
 
 usage: cauldron-bench run [options]
+       cauldron-bench report <run directory> [--label <name>] [--publish <docs/bench>]
+       cauldron-bench compare <a> <b> [--across]
 
   --suite <dir>       the task directory (default: bench/tasks). A game's own is .dark_factory/bench
   --project <root>    the project the tasks run against (default: this repository's root)
@@ -47,11 +49,19 @@ usage: cauldron-bench run [options]
   --editor <path>     the editor binary under test (default: the one beside this binary)
   --server <path>     the MCP server binary beside it (default: beside this binary)
   --run <name>        the name of this run's directory under ~/.local/state/cauldron-bench
+  --label <name>      publish the run's report as docs/bench/runs/<date>-<name>.md and .json, and list it in
+                      docs/bench/README.md (without it the report stays beside the trials)
   -h, --help          print this and exit
 
 Every trial copies the fixture project, starts the editor on its own port and display, hands an agent the
 MCP config the editor itself gives a person's agent, and writes trial.json — the outcome, each check with
-what it measured, the tool calls, tokens and wall time.";
+what it measured, the tool calls, tokens and wall time. The run ends with a report (success, pass^k, wall
+time, tool calls, refusals, undos, edits behind the editor's back, tokens and cost, per task, tag and suite).
+
+`report` builds the same report from a run directory. `compare` takes two reports (the .json files a run
+published, or run directories) and says `better`, `worse` or `no measurable change` with a paired 95%
+bootstrap interval; it refuses a run with more than 10% harness errors, and two runs of different suites,
+agents or trial counts unless --across is given.";
 
 fn main() -> std::process::ExitCode {
     let argv: Vec<String> = std::env::args().skip(1).collect();
@@ -65,8 +75,10 @@ fn main() -> std::process::ExitCode {
     }
     let rest: Vec<String> = match argv.first().map(String::as_str) {
         Some("run") => argv[1..].to_vec(),
+        Some("report") => return report_command(&argv[1..]),
+        Some("compare") => return compare_command(&argv[1..]),
         Some(other) => {
-            eprintln!("cauldron-bench: `{other}` is not a command. The commands are: run.");
+            eprintln!("cauldron-bench: `{other}` is not a command. The commands are: run, report, compare.");
             eprintln!("Try `cauldron-bench --help`.");
             return std::process::ExitCode::FAILURE;
         }
@@ -103,6 +115,19 @@ fn main() -> std::process::ExitCode {
         records.len() - failed - harness,
         options.out.display()
     );
+    // **The report the run ends with.** A report that cannot be written is said and fails the run, but
+    // the trials above have already been shown: their files are the record.
+    match run::write_reports(&options) {
+        Ok((_, written)) => {
+            for path in written {
+                println!("report: {}", path.display());
+            }
+        }
+        Err(e) => {
+            eprintln!("cauldron-bench: the trials ran, and their report could not be written: {e}");
+            return std::process::ExitCode::FAILURE;
+        }
+    }
     // **A harness error is a failed run**, whatever the checks said: the numbers are not about the agent.
     if failed == 0 && harness == 0 {
         std::process::ExitCode::SUCCESS
@@ -117,7 +142,8 @@ fn parse(argv: &[String]) -> Result<Options, String> {
         .ok()
         .and_then(|exe| exe.parent().map(PathBuf::from))
         .ok_or("this binary's own directory could not be found")?;
-    let root = repository_root().unwrap_or_else(|| PathBuf::from("."));
+    let repo = repository_root().unwrap_or_else(|| PathBuf::from("."));
+    let root = repo.clone();
     let mut options = Options {
         tasks: root.join(bevy_cauldron_bench::TASKS_DIR),
         root,
@@ -130,8 +156,12 @@ fn parse(argv: &[String]) -> Result<Options, String> {
         editor: here.join("bevy_cauldron"),
         server: here.join("bevy_cauldron_mcp"),
         only: Vec::new(),
+        repo,
+        label: String::new(),
+        publish: None,
     };
     let mut run_name: Option<String> = None;
+    let mut label: Option<String> = None;
     let mut it = argv.iter();
     while let Some(arg) = it.next() {
         let mut value = || {
@@ -151,6 +181,7 @@ fn parse(argv: &[String]) -> Result<Options, String> {
             "--editor" => options.editor = PathBuf::from(value()?),
             "--server" => options.server = PathBuf::from(value()?),
             "--run" => run_name = Some(value()?),
+            "--label" => label = Some(value()?),
             other => return Err(format!("`{other}` is not an argument this command takes")),
         }
     }
@@ -164,7 +195,95 @@ fn parse(argv: &[String]) -> Result<Options, String> {
         format!("{now}")
     });
     options.out = run::state_dir(&name)?;
+    // **A named run is published**: it is the one a person means to commit and compare. An unnamed run's
+    // report stays beside its trials, so a dozen oracle runs leave the working tree alone.
+    options.publish = label
+        .as_ref()
+        .map(|_| options.root.join(bevy_cauldron_bench::index::BENCH_DOCS_DIR));
+    options.label = label.unwrap_or(name);
     Ok(options)
+}
+
+/// **`cauldron-bench report <run directory>`**: the report of a run that has already finished.
+fn report_command(argv: &[String]) -> std::process::ExitCode {
+    let mut dir: Option<PathBuf> = None;
+    let mut label: Option<String> = None;
+    let mut publish: Option<PathBuf> = None;
+    let mut it = argv.iter();
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "--label" => label = it.next().cloned(),
+            "--publish" => publish = it.next().map(PathBuf::from),
+            other if !other.starts_with("--") && dir.is_none() => dir = Some(PathBuf::from(other)),
+            other => {
+                eprintln!("cauldron-bench: `{other}` is not an argument `report` takes. Try `--help`.");
+                return std::process::ExitCode::FAILURE;
+            }
+        }
+    }
+    let Some(dir) = dir else {
+        eprintln!("cauldron-bench: `report` needs the run directory to report");
+        return std::process::ExitCode::FAILURE;
+    };
+    let mut data = match bevy_cauldron_bench::report::RunData::read(&dir) {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!("cauldron-bench: {e}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    if let Some(label) = &label {
+        data.header.label = label.clone();
+    }
+    let report = bevy_cauldron_bench::report::Report::build(&data);
+    println!("{}", report.markdown());
+    if label.is_some() || publish.is_some() {
+        let bench = publish.unwrap_or_else(|| {
+            repository_root().unwrap_or_else(|| PathBuf::from(".")).join(bevy_cauldron_bench::index::BENCH_DOCS_DIR)
+        });
+        match bevy_cauldron_bench::index::publish(&bench, &report) {
+            Ok((md, json)) => println!("published: {} and {}", md.display(), json.display()),
+            Err(e) => {
+                eprintln!("cauldron-bench: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        }
+    }
+    std::process::ExitCode::SUCCESS
+}
+
+/// **`cauldron-bench compare <a> <b>`**: what changed between two runs.
+fn compare_command(argv: &[String]) -> std::process::ExitCode {
+    let mut paths: Vec<PathBuf> = Vec::new();
+    let mut across = false;
+    for arg in argv {
+        match arg.as_str() {
+            "--across" => across = true,
+            other if !other.starts_with("--") => paths.push(PathBuf::from(other)),
+            other => {
+                eprintln!("cauldron-bench: `{other}` is not an argument `compare` takes. Try `--help`.");
+                return std::process::ExitCode::FAILURE;
+            }
+        }
+    }
+    let [a, b] = paths.as_slice() else {
+        eprintln!("cauldron-bench: `compare` takes two reports or run directories, `a` and then `b`");
+        return std::process::ExitCode::FAILURE;
+    };
+    let result = bevy_cauldron_bench::report::Report::load(a).and_then(|a| {
+        let b = bevy_cauldron_bench::report::Report::load(b)?;
+        bevy_cauldron_bench::compare::compare(&a, &b, across)
+    });
+    match result {
+        Ok(comparison) => {
+            println!("{}", comparison.markdown());
+            std::process::ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("cauldron-bench: {e}");
+            std::process::ExitCode::FAILURE
+        }
+    }
 }
 
 /// **A count**, refused rather than defaulted on anything that is not one.

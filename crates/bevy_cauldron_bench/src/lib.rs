@@ -56,12 +56,22 @@
 //! reviewer runs to ask this crate what it does.
 
 pub mod check;
+// **What changed between two runs** (BM-03, #413): a paired bootstrap and one verdict.
+pub mod compare;
 pub mod fixture;
 pub mod grade;
+// **Where a committed report goes and the README that lists them** (BM-03, #413).
+pub mod index;
+// **What a run's header says about the machine and the build** (BM-03, #413).
+pub mod probe;
+// **The report a run ends with** (BM-03, #413): built from `trial.json` files, with no model.
+pub mod report;
 // **The runner** (BM-02, #412): a real agent against a real editor, on a fresh copy, n times. It holds the
 // HTTP client and the process handling that a trial needs; the grader above it holds none of that, which is
 // why the gate can prove a task with no editor and this can prove the editor with no model.
 pub mod run;
+// **The arithmetic a report states**: `pass^k`, percentiles and a seeded bootstrap (BM-03, #413).
+pub mod stats;
 pub mod suite;
 pub mod task;
 

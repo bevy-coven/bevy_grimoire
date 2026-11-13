@@ -41,6 +41,42 @@ An editor that did not start, a port that did not open, a transcript that could 
 name this build has no tool for: those are facts about the harness, with the reason in the record, and the
 run exits non-zero so a script notices.
 
+## The report, and what changed between two runs (BM-03)
+
+Every run ends with a report, `report.md` and `report.json` beside its trials. **Name a run with `--label`**
+and it is also published as `docs/bench/runs/<date>-<label>.md` and `.json` and listed in
+`docs/bench/README.md`, newest first; the raw trial directories are never committed.
+
+```sh
+cauldron-bench run --trials 5 --label baseline         # trials, then the report
+cauldron-bench report <run directory> --label baseline # the same report, from trials already run
+cauldron-bench compare docs/bench/runs/<a>.json docs/bench/runs/<b>.json
+cauldron-bench compare <a> <b> --across                # a different suite, agent or trial count
+```
+
+- **The header** names the editor and MCP server commit (`+dirty` when the tree had changes), the SHA-256 of
+  the shipped guide, the agent and its version, the model and its listed price, the variant, the trials per
+  task, the host and the date, so a reader can reproduce the run.
+- **Per task**: trials `n`, successes `c`, `c/n`, **`pass^k`** for `k = 1..n` (`C(c,k)/C(n,k)`, τ-bench,
+  `10.48550/arXiv.2406.12045`), median and p90 wall time, mean tool calls, refusals, undos, **edits behind the
+  editor's back** (files changed that no operation-log line explains: the agent went around the tools),
+  tokens, cost and wishes; and for each failed trial the **first failing check** with what it wanted and
+  measured, and the agent's **last five tool calls**.
+- **Per suite and per tag** (dev tasks): mean success with a 95% bootstrap interval (tasks, then trials within
+  tasks, resampled `BOOTSTRAP_RESAMPLES = 10_000` times from a fixed seed), mean `pass^k`, cost, cost per
+  success and the harness-error count.
+- **Held-out tasks are a total and nothing else**: never named, never with a prompt, never by tag.
+- **Cost is the model's listed price times the tokens the harness reported** (`omp models find --json`).
+  A model with no fixed price costs `unknown`, never `0`; a harness that reports its own cost (Claude Code)
+  is used only when no price is listed.
+- **A run is unfit for comparison** when more than `HARNESS_ERROR_MAX_FRACTION = 0.10` of its trials are
+  harness errors. The report says so at the top and `compare` refuses it.
+- **`compare <a> <b>`** pairs the tasks both runs scored and answers `better`, `worse` or `no measurable
+  change` with a paired 95% bootstrap interval of the difference; the interval including zero is no
+  measurable change. It lists every task whose success moved with both counts, each marked as a single task
+  that is not significant alone. Runs with different suites, agents or trial counts are refused unless
+  `--across`, which says which differ.
+
 ## Variants
 
 `<suite>/variants.yaml` names arms to compare:

@@ -139,9 +139,91 @@ pub struct Options {
     pub editor: PathBuf,
     /// The MCP server binary beside it.
     pub server: PathBuf,
+    /// **The repository this binary was built in**, whose commit and shipped guide a run's report names so a
+    /// reader can reproduce it. It is not `root`: a game's own suite runs against a game, and the editor and
+    /// the guide under test are this repository's.
+    pub repo: PathBuf,
+    /// **What the run is called in its report's file name**: `docs/bench/runs/<date>-<label>.md`.
+    pub label: String,
+    /// **Where to publish the report**, when the person named a `--label`: the project's `docs/bench`.
+    /// A run that was not named is not committed, so a dozen oracle runs leave the working tree alone.
+    pub publish: Option<PathBuf>,
     /// Only these tasks, by id.
     pub only: Vec<String>,
 }
+
+/// **What a harness reported a model's turns used**, summed over the trial.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Tokens {
+    /// Fresh input tokens.
+    pub input: u64,
+    /// Output tokens, reasoning included as the harness counts it.
+    pub output: u64,
+    /// Input tokens served from the provider's cache, which a model prices apart from fresh input.
+    pub cache_read: u64,
+    /// Input tokens written to the provider's cache, which a model prices apart again (often dearest).
+    pub cache_write: u64,
+    /// The harness's own total.
+    pub total: u64,
+}
+
+impl Tokens {
+    /// **Add one turn's usage.**
+    pub fn add(&mut self, other: Tokens) {
+        self.input += other.input;
+        self.output += other.output;
+        self.cache_read += other.cache_read;
+        self.cache_write += other.cache_write;
+        self.total += other.total;
+    }
+}
+
+/// **How many characters of a call's arguments a trial's log keeps**: enough to read what the agent asked
+/// for, short enough that the log of a long trial stays a page.
+pub const CALL_ARGS_SHOWN_CHARS: usize = 160;
+
+/// **One tool call an agent made**, as a trial's log keeps it.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CallLog {
+    /// The tool's own name (`grimoire_apply_operation`), whichever harness spelled it otherwise.
+    pub tool: String,
+    /// Its arguments as compact JSON, cut at [`CALL_ARGS_SHOWN_CHARS`].
+    pub args: String,
+    /// **Whether the editor refused it**: the tool answered an error, or its payload says `refused`.
+    pub refused: bool,
+}
+
+impl CallLog {
+    /// **A call, with its arguments shortened.**
+    pub fn new(tool: &str, args: &Value, refused: bool) -> CallLog {
+        let text = args.to_string();
+        let args = if text.chars().count() > CALL_ARGS_SHOWN_CHARS {
+            let cut: String = text.chars().take(CALL_ARGS_SHOWN_CHARS).collect();
+            format!("{cut}…")
+        } else {
+            text
+        };
+        CallLog { tool: tool.to_owned(), args, refused }
+    }
+}
+
+/// **Whether a tool's answer is the editor refusing.**
+///
+/// An MCP tool reports a refusal two ways: the envelope's own `isError`, or a payload that says so in
+/// its own object (`{"refused": …}`, or an operation's `"outcome": "refused"`). A reader that took only the
+/// first would count a refused change as a success, which is how the oracle's placement was once dropped.
+pub fn is_refusal(is_error: bool, text: &str) -> bool {
+    if is_error {
+        return true;
+    }
+    let Ok(value) = serde_json::from_str::<Value>(text.trim()) else {
+        return false;
+    };
+    value.get("refused").is_some() || value.get("outcome").and_then(Value::as_str) == Some("refused")
+}
+
+/// **The tool an `undo` is**, as the editor's MCP server names it.
+pub const UNDO_TOOL: &str = "grimoire_undo_operation";
 
 /// **What one trial left**, which is what `trial.json` holds.
 #[derive(Clone, Debug)]
@@ -164,8 +246,14 @@ pub struct TrialRecord {
     pub checks: Vec<Verdict>,
     /// The agent's tool calls, by name, in the order it made them.
     pub tool_calls: Vec<String>,
+    /// **Every one of them with its arguments and whether it was refused**, so a report can show the last
+    /// five an agent made before it stopped, and count the refusals it received.
+    pub tool_log: Vec<CallLog>,
     /// What the agent's harness reported for tokens, when it reported any.
-    pub tokens: Option<u64>,
+    pub tokens: Option<Tokens>,
+    /// **Files the agent changed that no operation-log line wrote**: it went around the tools, through its
+    /// shell. See [`crate::grade::edits_behind_the_back`].
+    pub edits_behind: Vec<String>,
     /// How long the agent ran, seconds.
     pub wall_s: f64,
     /// **The tools the agent was offered**, which is what a `hide_tools` arm is judged by: the server's own
@@ -179,8 +267,24 @@ pub struct TrialRecord {
 }
 
 impl TrialRecord {
+    /// **How many tool calls the editor refused.**
+    pub fn refusals(&self) -> usize {
+        self.tool_log.iter().filter(|c| c.refused).count()
+    }
+
+    /// **How many times the agent undid a change**: an `undo` it called and the editor did not refuse.
+    pub fn undos(&self) -> usize {
+        self.tool_log.iter().filter(|c| c.tool == UNDO_TOOL && !c.refused).count()
+    }
+
     /// **The JSON a `trial.json` holds.**
     pub fn to_json(&self) -> Value {
+        let mut refused_by_tool = std::collections::BTreeMap::<&str, u32>::new();
+        for call in self.tool_log.iter().filter(|c| c.refused) {
+            *refused_by_tool.entry(call.tool.as_str()).or_default() += 1;
+        }
+        let tokens = self.tokens.unwrap_or_default();
+        let reported = self.tokens.is_some();
         json!({
             "task": self.task,
             "trial": self.trial,
@@ -196,7 +300,16 @@ impl TrialRecord {
             },
             "tool_calls": self.tool_calls,
             "tool_call_count": self.tool_calls.len(),
-            "tokens": self.tokens,
+            "tool_log": self.tool_log,
+            "refusals": self.refusals(),
+            "refusals_by_tool": refused_by_tool,
+            "undos": self.undos(),
+            "edits_behind": self.edits_behind,
+            "tokens": reported.then_some(tokens.total),
+            "tokens_in": reported.then_some(tokens.input),
+            "tokens_out": reported.then_some(tokens.output),
+            "tokens_cache_read": reported.then_some(tokens.cache_read),
+            "tokens_cache_write": reported.then_some(tokens.cache_write),
             "wall_s": self.wall_s,
             "tools_offered": self.tools_offered,
             "wishes": self.wishes,
@@ -741,6 +854,11 @@ pub fn run(options: &Options) -> Result<Vec<TrialRecord>, String> {
     }
     std::fs::create_dir_all(&options.out)
         .map_err(|e| format!("{}: {e}", options.out.display()))?;
+    // **The header, before any trial**, so a run killed halfway still says how it was made.
+    let header = crate::probe::header(options, &options.label);
+    let header_text = serde_json::to_string_pretty(&header).map_err(|e| format!("{e}"))? + "\n";
+    bevy_grimoire_core::atomic_file::write(&options.out.join(crate::report::RUN_FILE), header_text)
+        .map_err(|e| format!("{}: {e}", options.out.display()))?;
 
     // **One work list, one worker per `jobs`**, so a `--jobs` of 1 is the same code as a `--jobs` of 4.
     let mut work: Vec<(Task, u32)> = Vec::new();
@@ -783,6 +901,26 @@ pub fn run(options: &Options) -> Result<Vec<TrialRecord>, String> {
         .map_err(|_| "a trial's records were poisoned".to_owned())?;
     records.sort_by(|a, b| a.task.cmp(&b.task).then(a.trial.cmp(&b.trial)));
     Ok(records)
+}
+
+/// **Build a finished run's report, write it beside its trials, and publish it** when the run was named.
+///
+/// Answers the report and the paths written. A run whose `trial.json` files do not read is an error naming
+/// the file: a report of fewer trials than the run made would be a worse number with a better look.
+pub fn write_reports(options: &Options) -> Result<(crate::report::Report, Vec<PathBuf>), String> {
+    let data = crate::report::RunData::read(&options.out)?;
+    let report = crate::report::Report::build(&data);
+    let md = options.out.join("report.md");
+    let json = options.out.join("report.json");
+    bevy_grimoire_core::atomic_file::write(&md, report.markdown()).map_err(|e| format!("{}: {e}", md.display()))?;
+    bevy_grimoire_core::atomic_file::write(&json, report.json()).map_err(|e| format!("{}: {e}", json.display()))?;
+    let mut written = vec![md, json];
+    if let Some(bench) = &options.publish {
+        let (md, json) = crate::index::publish(bench, &report)?;
+        written.push(md);
+        written.push(json);
+    }
+    Ok((report, written))
 }
 
 /// **The operations the editor under test has**, asked of the editor itself.
@@ -851,7 +989,9 @@ fn one_trial(options: &Options, task: &Task, trial: u32, variant: Option<&Varian
         reason,
         checks: Vec::new(),
         tool_calls: Vec::new(),
+        tool_log: Vec::new(),
         tokens: None,
+        edits_behind: Vec::new(),
         wall_s: 0.0,
         tools_offered: Vec::new(),
         wishes: Vec::new(),
@@ -949,7 +1089,9 @@ fn one_trial(options: &Options, task: &Task, trial: u32, variant: Option<&Varian
     let mut record = record(graded.outcome, String::new());
     record.checks = graded.verdicts.clone();
     record.tool_calls = run.tool_calls.clone();
-    record.tokens = run.tokens;
+    record.tool_log = run.tool_log.clone();
+    record.tokens = run.usage;
+    record.edits_behind = crate::grade::edits_behind_the_back(&before, &left);
     record.wall_s = wall_s;
     record.tools_offered = run.tools_offered.clone();
     record.wishes = run.wishes.clone();
@@ -963,12 +1105,16 @@ fn one_trial(options: &Options, task: &Task, trial: u32, variant: Option<&Varian
 pub struct AgentRun {
     /// The tools it called, by name, in order.
     pub tool_calls: Vec<String>,
+    /// **The same calls with their arguments and whether each was refused.**
+    pub tool_log: Vec<CallLog>,
     /// The hand-backs it made, oldest first.
     pub handbacks: Vec<Handback>,
     /// The wishes it made.
     pub wishes: Vec<Value>,
-    /// What its harness reported for tokens.
+    /// What its harness reported for tokens, in total.
     pub tokens: Option<u64>,
+    /// **The same, by kind** (fresh input, output, cached read and written), which is what a price is applied to.
+    pub usage: Option<Tokens>,
     /// The tools its `tools/list` held.
     pub tools_offered: Vec<String>,
     /// The decisions the harness made, by the name a `decide` check asks for.
@@ -994,6 +1140,7 @@ fn run_oracle(task: &Task, config: &Value) -> Result<AgentRun, String> {
     for step in &task.solution {
         if step.op == crate::PRESENT_STEP {
             run.tool_calls.push("grimoire_present".to_owned());
+            run.tool_log.push(CallLog::new("grimoire_present", &step.params, false));
             client.call("grimoire_present", step.params.clone())?;
             run.handbacks.push(handback_of(&step.params));
             continue;
@@ -1002,14 +1149,13 @@ fn run_oracle(task: &Task, config: &Value) -> Result<AgentRun, String> {
         // **The parameters are the tool's own**, which is `operation`, `parameters`, `dry_run` and an
         // optional `agent`: the tool derives who did it from the launch it was started by, so a token
         // here is a field it does not read.
-        client.call(
-            "grimoire_apply_operation",
-            json!({
-                "operation": step.op,
-                "parameters": step.params,
-                "dry_run": false,
-            }),
-        )?;
+        let params = json!({
+            "operation": step.op,
+            "parameters": step.params,
+            "dry_run": false,
+        });
+        run.tool_log.push(CallLog::new("grimoire_apply_operation", &params, false));
+        client.call("grimoire_apply_operation", params)?;
     }
     Ok(run)
 }
@@ -1317,7 +1463,21 @@ pub fn read_transcript(path: &Path, dir: &Path, server: &str) -> Result<AgentRun
             };
             let name = name.as_str();
             let args = xdev.get("args").cloned().unwrap_or(Value::Null);
+            // **Refused**, by the envelope's `isError` or by the payload's own word for it.
+            let inner = xdev.get("inner");
+            let answer: String = inner
+                .and_then(|i| i.get("rawContent"))
+                .and_then(Value::as_array)
+                .map(|blocks| {
+                    blocks.iter().filter_map(|b| b.get("text").and_then(Value::as_str)).collect::<Vec<_>>().join(" ")
+                })
+                .unwrap_or_default();
+            let refused = is_refusal(
+                inner.and_then(|i| i.get("isError")).and_then(Value::as_bool).unwrap_or(false),
+                &answer,
+            );
             run.tool_calls.push(name.to_owned());
+            run.tool_log.push(CallLog::new(name, &args, refused));
             if name == "grimoire_present" {
                 run.handbacks.push(handback_of(&args));
             }
@@ -1371,12 +1531,22 @@ pub fn read_transcript(path: &Path, dir: &Path, server: &str) -> Result<AgentRun
                 ));
             }
             spoke = true;
-            if let Some(total) = message
-                .get("usage")
-                .and_then(|u| u.get("totalTokens"))
-                .and_then(Value::as_u64)
-            {
-                run.tokens = Some(run.tokens.unwrap_or(0) + total);
+            if let Some(usage) = message.get("usage") {
+                let count = |key: &str| usage.get(key).and_then(Value::as_u64).unwrap_or(0);
+                let mut tokens = run.usage.unwrap_or_default();
+                let turn = Tokens {
+                    input: count("input"),
+                    output: count("output"),
+                    cache_read: count("cacheRead"),
+                    cache_write: count("cacheWrite"),
+                    total: count("totalTokens"),
+                };
+                tokens.add(turn);
+                run.usage = Some(tokens);
+                // **`tokens` is the harness's own total, as it always was**: a turn that reports none adds none.
+                if usage.get("totalTokens").and_then(Value::as_u64).is_some() {
+                    run.tokens = Some(run.tokens.unwrap_or(0) + turn.total);
+                }
             }
         }
     }
@@ -1433,6 +1603,11 @@ fn write_record(record: &TrialRecord, task: &Task, sentence: &str) {
     if let Some(object) = value.as_object_mut() {
         object.insert("prompt".to_owned(), json!(task.prompt));
         object.insert("sentence".to_owned(), json!(sentence));
+        // **What a report groups by**, so a report is built from the trials alone and not from a suite
+        // that may have moved since.
+        object.insert("title".to_owned(), json!(task.title));
+        object.insert("split".to_owned(), json!(task.split.name()));
+        object.insert("tags".to_owned(), json!(task.tags));
     }
     let text = match serde_json::to_string_pretty(&value) {
         Ok(text) => text + "\n",
