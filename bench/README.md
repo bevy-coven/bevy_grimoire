@@ -58,6 +58,28 @@ rather than refused when called — an arm asking "what does it do without this 
 tool that is listed and refuses. **Comparing two editor versions needs no variant**: that is two runs at two
 commits.
 
+**The tool list is read from the agent, not from the server.** `omp --mode json`'s stream carries no `tools`
+key at all (measured: a whole 810-event transcript, 2026-11-13), so the extension omp already loads to find
+`.mcp.json` records what `pi.getAllTools()` answers at the start of the agent's first turn, into
+`tools-offered.jsonl` beside the transcript. That is why a `hide_tools` arm is judged by what the *agent* was
+offered: measured 45 tools with the editor's server connected, and `grimoire_frame_view` absent under
+`--hide-tools grimoire_frame_view`.
+
+## What the agent is allowed to know
+
+The benchmarked agent is given the task's prompt and what the project states, and nothing else:
+
+- `--no-context-files --no-skills --no-rules --no-extensions -e <the trial's mcp folder>`, so no `AGENTS.md`,
+  no skill, no rule and no extension beyond the one that carries the editor's `.mcp.json`;
+- **`HOME` set to the trial's own**, so the harness reads no user `~/.omp/agent/mcp.json`, no memory and no
+  session store. Without it the developer's own MCP servers load into every trial and the agent spends its
+  turn on `bash` — measured, 2026-11-13;
+- **the credential carried into that `HOME`** by `omp auth export` and `omp auth import`, because an isolated
+  `HOME` has no login either. It carries credentials only, never an MCP server, and a host with none is a
+  harness error naming what to do (`omp` once).
+
+A transcript showing a tool from outside that set is a harness error rather than a result about the agent.
+
 ## Another project's suite
 
 `--project <root> --suite <dir>` runs a game's own suite (its `.dark_factory/bench/`) against that game's
