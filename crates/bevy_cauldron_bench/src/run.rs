@@ -265,6 +265,11 @@ pub struct Display {
 impl Display {
     /// **Start an `Xvfb` on the first free display from [`DISPLAY_BASE`] up.**
     ///
+    /// **A display that was already running is never adopted.** The number is the trial's only when the
+    /// lock file names the child this call started; a number a live server holds (another run's, another
+    /// agent's) is skipped, and no number is ever shared. The child is detached ([`detach`]) so it holds no
+    /// descriptor of the caller's, and `Drop` stops it on every exit that unwinds, an early `?` included.
+    ///
     /// **Linux only.** A macOS run uses the desktop's own display, which is what a person's editor is on.
     pub fn start() -> Result<Display, String> {
         // **A socket file is not evidence of a server.** `Xvfb` killed with the signal this harness sends
@@ -275,12 +280,13 @@ impl Display {
         // exits inside the wait below and the next number is taken.
         for offset in 0..DISPLAY_TRIES {
             let number = DISPLAY_BASE + offset;
-            let child = Command::new("Xvfb")
-                .arg(format!(":{number}"))
+            let mut xvfb = Command::new("Xvfb");
+            xvfb.arg(format!(":{number}"))
                 .args(["-screen", "0", "1600x1000x24", "-nolisten", "tcp"])
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
-                .stderr(Stdio::null())
+                .stderr(Stdio::null());
+            let child = detach(&mut xvfb)
                 .spawn()
                 .map_err(|e| format!("Xvfb could not be started: {e}"))?;
             // **The display is ours when its lock file names our child**, and not before. A socket file proves
@@ -309,6 +315,61 @@ impl Display {
             DISPLAY_BASE + DISPLAY_TRIES
         ))
     }
+}
+
+/// **`CLOSE_RANGE_CLOEXEC`** (`close_range(2)`, Linux 5.11): mark the range close-on-exec instead of closing it.
+/// Closing in the child would also close the pipe `std` reports a failed `exec` through, and a binary that
+/// is not there would then read as a child that started.
+#[cfg(target_os = "linux")]
+const CLOSE_RANGE_CLOEXEC: libc::c_uint = 1 << 2;
+
+/// **The first descriptor a child must not inherit**: 0, 1 and 2 are its stdio and everything above is the
+/// caller's.
+#[cfg(target_os = "linux")]
+const FIRST_INHERITED_FD: libc::c_uint = 3;
+
+/// **Start a child that holds nothing of its parent's, and does not outlive it.**
+///
+/// - **No descriptor above stderr is inherited.** Measured on big, 2026-11-13: a test ran under
+///   `flock -s /tmp/fleet/big-heavy.lock cargo nextest ...`, left an `Xvfb` running, and that `Xvfb`
+///   **inherited the lock's descriptor and held the host lock for 13 minutes** with no trial alive, blocking
+///   the push gate and every other agent's build. A child of this harness is a long-lived process that can
+///   outlive its parent (a display, an editor, a harness), and a descriptor it inherits is held until it
+///   exits.
+/// - **Its own process group**, so a signal to the harness's group (a terminal's `Ctrl-C`) is not delivered
+///   to a child the harness is stopping itself.
+/// - **`SIGTERM` when the parent dies** (`PR_SET_PDEATHSIG`), so a harness that is killed outright leaves no
+///   `Xvfb` or editor running: [`Display`]'s `Drop` covers every exit that unwinds, and this covers the one
+///   that does not. The parent is the thread that spawned the child, which a trial keeps until it is done.
+///
+/// **Linux only for the last two.** Elsewhere the child is only given its own process group, and there is no
+/// host lock to hold.
+pub fn detach(command: &mut Command) -> &mut Command {
+    use std::os::unix::process::CommandExt;
+    command.process_group(0);
+    #[cfg(target_os = "linux")]
+    {
+        // SAFETY: the closure runs between `fork` and `exec` and calls only `close_range` and `prctl`,
+        // both async-signal-safe system calls; it allocates nothing and takes no lock.
+        unsafe {
+            command.pre_exec(|| {
+                let marked = libc::syscall(
+                    libc::SYS_close_range,
+                    FIRST_INHERITED_FD,
+                    libc::c_uint::MAX,
+                    CLOSE_RANGE_CLOEXEC,
+                );
+                if marked != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM as libc::c_ulong, 0, 0, 0) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
+    command
 }
 
 /// **The pid an X server's lock file names**, or `None` when there is no file or it holds no number.
@@ -408,7 +469,7 @@ pub fn start_editor(editor: &Path, project: &Path, map: &str, dir: &Path) -> Res
     if let Some(display) = &display {
         command.env("DISPLAY", format!(":{}", display.number));
     }
-    let child = command
+    let child = detach(&mut command)
         .spawn()
         .map_err(|e| format!("the editor at {} did not start: {e}", editor.display()))?;
     let mut running = Editor { child, port, display, log: log.clone() };
@@ -498,7 +559,8 @@ impl McpClient {
             .and_then(Value::as_array)
             .map(|a| a.iter().filter_map(Value::as_str).map(str::to_owned).collect())
             .unwrap_or_default();
-        let mut child = Command::new(command)
+        let mut server_command = Command::new(command);
+        server_command
             .args(&args)
             .envs(
                 server
@@ -513,7 +575,8 @@ impl McpClient {
             )
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::null());
+        let mut child = detach(&mut server_command)
             .spawn()
             .map_err(|e| format!("the MCP server at {command} did not start: {e}"))?;
         let stdin = child.stdin.take().ok_or("the MCP server has no stdin")?;
@@ -1024,8 +1087,8 @@ fn run_omp(
     // middle of one: `--max-time` is omp's own stop, and a trial that kills a write leaves a project no agent
     // wrote. The wait below is the outer bound for a harness that ignores it.
     let wall = format!("{}s", task.budget.wall_s);
-    let mut child = Command::new("omp")
-        .args([
+    let mut omp = Command::new("omp");
+    omp.args([
             "-p",
             "--mode",
             "json",
@@ -1052,7 +1115,8 @@ fn run_omp(
         .env("HOME", dir.join("home"))
         .stdin(Stdio::null())
         .stdout(stdout)
-        .stderr(stderr)
+        .stderr(stderr);
+    let mut child = detach(&mut omp)
         .spawn()
         .map_err(|e| format!("omp did not start: {e}"))?;
     // **Stopped at the budget**: the wall clock is the one bound a model's turns cannot be argued with.

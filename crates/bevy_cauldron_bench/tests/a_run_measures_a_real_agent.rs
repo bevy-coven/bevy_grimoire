@@ -57,13 +57,48 @@ const HIDDEN: &str = "grimoire_frame_view";
 
 /// **A scratch directory this test owns**, named with the test's name and the process id so a rerun and a
 /// parallel test never share one.
+///
+/// **Under cargo's `CARGO_TARGET_TMPDIR`, on disk, and never `/tmp`.** Each trial copies a ~200 MB fixture
+/// project, and on the hosts that run this `/tmp` is a RAM-backed 16 GB tmpfs shared with every agent:
+/// measured on big, 2026-11-13, this suite's own leftovers (22 directories, 3 GB) filled it, and every
+/// later trial was a harness error "No space left on device".
 fn scratch(test: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
         "grimoire-fixture-{}-benchrun-{test}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&dir);
     dir
+}
+
+/// **The environment variable that marks every process of one run**, set on `cauldron-bench` and inherited
+/// by the `Xvfb`, the editor, the MCP server and the agent it starts, so what is left of a run can be found
+/// by what it carries rather than by a name another test's process may share.
+const MARK_VAR: &str = "CAULDRON_BENCH_TEST_MARK";
+
+/// **The processes still alive that carry `mark`**, as `pid comm`.
+///
+/// Read from `/proc/<pid>/environ`, which this user may read for its own processes. A zombie has no
+/// environment and is not counted: it is a child nobody has waited for yet, not one still running.
+fn lingering(mark: &str) -> Vec<String> {
+    let needle = format!("{MARK_VAR}={mark}");
+    let mut found = Vec::new();
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return found;
+    };
+    for entry in entries.flatten() {
+        let Some(pid) = entry.file_name().to_str().and_then(|n| n.parse::<u32>().ok()) else {
+            continue;
+        };
+        let Ok(environ) = std::fs::read(entry.path().join("environ")) else {
+            continue;
+        };
+        if environ.split(|b| *b == 0).any(|var| var == needle.as_bytes()) {
+            let comm = std::fs::read_to_string(entry.path().join("comm")).unwrap_or_default();
+            found.push(format!("{pid} {}", comm.trim()));
+        }
+    }
+    found
 }
 
 /// **The repository root**, which is what a run measures by default.
@@ -145,7 +180,17 @@ fn run(agent: &str, run: &str, extra: &[&str]) -> (Ran, PathBuf) {
     // **The run writes under the state directory this test's own output is under**, so a person reading a
     // failure finds the trials beside the scratch directory rather than in their real state.
     command.env("HOME", &out);
+    // **Everything this run starts carries the mark**, so the check below finds an `Xvfb`, an editor, a
+    // server or an agent that outlived its trial, and finds nothing of any other test's.
+    let mark = format!("{run}-{}", std::process::id());
+    command.env(MARK_VAR, &mark);
     let finished = command.output().unwrap_or_else(|e| panic!("cauldron-bench did not start: {e}"));
+    let left = lingering(&mark);
+    assert!(
+        left.is_empty(),
+        "`run` ended and left processes of its own running (an Xvfb here is what held the host lock for 13 \
+         minutes): {left:?}"
+    );
     let said = format!(
         "{}{}",
         String::from_utf8_lossy(&finished.stdout),
@@ -534,49 +579,67 @@ fn a_variant_that_hides_a_tool_removes_it_from_the_tool_list() {
     );
 }
 
+/// **A server this test starts and always stops**: a panic in the middle of the test unwinds through this and
+/// kills the `Xvfb`, which a bare `Child` does not. The first version of
+/// `a_display_a_live_server_holds_is_never_handed_to_another_trial` panicked on the old code with its foreign
+/// `Xvfb` still running, and that orphan held the host lock for 13 minutes.
+struct Foreign(std::process::Child);
+
+impl Drop for Foreign {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+/// **Whether a process is alive**, by `/proc`.
+fn alive_pid(pid: u32) -> bool {
+    Path::new(&format!("/proc/{pid}")).exists()
+}
+
+/// **The pid an X server's lock file names**, when there is one.
+fn lock_pid(number: u32) -> Option<u32> {
+    std::fs::read_to_string(format!("/tmp/.X{number}-lock")).ok()?.trim().parse().ok()
+}
+
 /// **A display a live server holds is never handed to a second trial**  -  the screen of a concurrent run,
-/// or of another agent's `Xvfb` inside the ladder.
+/// or of another agent's `Xvfb` inside the ladder  -  **and every display this test started is stopped.**
 ///
 /// The ladder used to return on seeing the socket file, and a live server's socket exists at once: two runs
 /// took one screen, and the first to stop took it from the other. Here one display is held, a foreign `Xvfb`
 /// (not started by this crate) holds the next free number, and a third display must be neither, with both
-/// still alive afterwards.
+/// still alive afterwards. When the displays are dropped their servers are gone, waited for, not left to
+/// hold what the caller holds.
 #[test]
 #[ignore = "starts Xvfb servers; run on demand, not in the gate"]
 fn a_display_a_live_server_holds_is_never_handed_to_another_trial() {
-    use bevy_cauldron_bench::run::{Display, DISPLAY_BASE, DISPLAY_TRIES};
+    use bevy_cauldron_bench::run::{detach, Display, DISPLAY_BASE, DISPLAY_TRIES};
     let first = Display::start().unwrap_or_else(|e| panic!("a first display: {e}"));
-    let alive = |number: u32| {
-        std::fs::read_to_string(format!("/tmp/.X{number}-lock"))
-            .ok()
-            .and_then(|t| t.trim().parse::<u32>().ok())
-            .is_some_and(|pid| Path::new(&format!("/proc/{pid}")).exists())
-    };
-    assert!(alive(first.number), "the first display's server is running");
+    let first_number = first.number;
+    let first_pid = lock_pid(first_number).unwrap_or_else(|| panic!("the first display :{first_number} has no lock"));
+    assert!(alive_pid(first_pid), "the first display's server is running");
 
-    // **The foreign server**: a plain `Xvfb`, on the first number above ours that it can take.
-    let mut foreign = None;
-    for number in (first.number + 1)..(DISPLAY_BASE + DISPLAY_TRIES) {
-        let mut child = Command::new("Xvfb")
-            .arg(format!(":{number}"))
+    // **The foreign server**: a plain `Xvfb`, on the first number above ours that it can take. It is held in
+    // a guard, so a failure below cannot leave it running.
+    let mut foreign: Option<(u32, Foreign)> = None;
+    for number in (first_number + 1)..(DISPLAY_BASE + DISPLAY_TRIES) {
+        let mut xvfb = Command::new("Xvfb");
+        xvfb.arg(format!(":{number}"))
             .args(["-screen", "0", "800x600x24", "-nolisten", "tcp"])
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .unwrap_or_else(|e| panic!("Xvfb could not be started: {e}"));
+            .stderr(std::process::Stdio::null());
+        let mut child =
+            Foreign(detach(&mut xvfb).spawn().unwrap_or_else(|e| panic!("Xvfb could not be started: {e}")));
         // Held when its lock file names it, which is the proof the ladder uses.
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         let mut held = false;
         while std::time::Instant::now() < deadline {
-            let lock = std::fs::read_to_string(format!("/tmp/.X{number}-lock")).ok();
-            if lock.and_then(|t| t.trim().parse::<u32>().ok()) == Some(child.id())
-                && Path::new(&format!("/tmp/.X11-unix/X{number}")).exists()
-            {
+            if lock_pid(number) == Some(child.0.id()) && Path::new(&format!("/tmp/.X11-unix/X{number}")).exists() {
                 held = true;
                 break;
             }
-            if matches!(child.try_wait(), Ok(Some(_))) {
+            if matches!(child.0.try_wait(), Ok(Some(_))) {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
@@ -585,27 +648,35 @@ fn a_display_a_live_server_holds_is_never_handed_to_another_trial() {
             foreign = Some((number, child));
             break;
         }
-        let _ = child.kill();
-        let _ = child.wait();
     }
-    let (foreign_number, mut foreign_child) =
-        foreign.unwrap_or_else(|| panic!("no number above :{} could be taken by a foreign Xvfb", first.number));
+    let (foreign_number, foreign_server) =
+        foreign.unwrap_or_else(|| panic!("no number above :{first_number} could be taken by a foreign Xvfb"));
+    let foreign_pid = foreign_server.0.id();
 
     let third = Display::start().unwrap_or_else(|e| panic!("a third display: {e}"));
+    let third_number = third.number;
+    let third_pid = lock_pid(third_number).unwrap_or_else(|| panic!("the third display :{third_number} has no lock"));
     assert_ne!(
-        third.number, first.number,
-        "the second trial was handed :{}, which a live server of the first holds",
-        first.number
+        third_number, first_number,
+        "the second trial was handed :{first_number}, which a live server of the first holds"
     );
     assert_ne!(
-        third.number, foreign_number,
+        third_number, foreign_number,
         "the second trial was handed :{foreign_number}, which a foreign live Xvfb holds"
     );
-    assert!(alive(first.number), "the first display's server still runs");
-    assert!(alive(foreign_number), "the foreign server still runs");
-    assert!(alive(third.number), "the third display's server runs");
-    let _ = foreign_child.kill();
-    let _ = foreign_child.wait();
+    assert!(alive_pid(first_pid), "the first display's server still runs");
+    assert!(alive_pid(foreign_pid), "the foreign server still runs");
+    assert!(alive_pid(third_pid), "the third display's server runs");
+
+    // **Stopped on drop**: both servers this crate started are gone and waited for, and the foreign one,
+    // which this crate did not start, is untouched.
+    drop(first);
+    drop(third);
+    assert!(!alive_pid(first_pid), "the first display's Xvfb (pid {first_pid}) outlived its Display");
+    assert!(!alive_pid(third_pid), "the third display's Xvfb (pid {third_pid}) outlived its Display");
+    assert!(alive_pid(foreign_pid), "a display this crate did not start is left alone");
+    drop(foreign_server);
+    assert!(!alive_pid(foreign_pid), "the test's own foreign server is stopped");
 }
 
 /// **The pid of the process whose argv starts `program project`**, found by reading `/proc`, so a test
@@ -635,19 +706,61 @@ const REPORT_KILLED_EDITOR_S: u64 = 30;
 /// **How long the editor is given to start and the stand-in agent to be launched**, seconds.
 const AGENT_LAUNCH_S: u64 = 300;
 
-/// **A REAL editor killed after its state answered, while an agent runs, is a `harness_error` with the
-/// reason**  -  #412's fourth acceptance item.
+/// **How long a harness's children are given to go once the harness is killed outright**, seconds.
+const ORPHANS_GO_S: u64 = 20;
+
+/// **A `cauldron-bench run` on a REAL editor whose agent is a stand-in `omp` that waits for the test**, and
+/// the means to act on it once the editor has answered.
+struct Standing {
+    child: std::process::Child,
+    home: PathBuf,
+    editor: PathBuf,
+    mark: String,
+    run_name: String,
+}
+
+impl Standing {
+    /// The trial's project, which an editor's argv names.
+    fn project(&self) -> PathBuf {
+        self.home
+            .join(".local/state/cauldron-bench")
+            .join(&self.run_name)
+            .join(EXAMPLES[0])
+            .join("trial-1/project")
+    }
+
+    /// **The real editor of the trial**, by `/proc`.
+    fn editor_pid(&self) -> u32 {
+        let project = self.project();
+        editor_pid(&self.editor, &project).unwrap_or_else(|| {
+            panic!("no running editor was found for {}: is `bevy_cauldron` at {}?", project.display(), self.editor.display())
+        })
+    }
+}
+
+impl Drop for Standing {
+    /// **A test that fails still stops the run it started**, and everything of its own that it left.
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        for entry in lingering(&self.mark) {
+            if let Some(pid) = entry.split_whitespace().next() {
+                let _ = Command::new("kill").args(["-KILL", pid]).status();
+            }
+        }
+    }
+}
+
+/// **Start the run and wait until the stand-in agent is launched**  -  which is after the real editor's
+/// `grimoire/state` answered and its `grimoire/agent_setup` was served, so the editor is up and the trial is
+/// in the middle of the agent's turn.
 ///
-/// The agent is a stand-in `omp` on `PATH` that answers the harness's questions (`models find`, `auth
-/// export`, `auth import`), drops a marker when it is launched  -  which is after the editor's
-/// `grimoire/state` answered and `grimoire/agent_setup` was served  -  and then waits. The test kills the
-/// real editor `SIGKILL` once the marker is there. The run must say so within [`REPORT_KILLED_EDITOR_S`]
-/// seconds rather than at the task's 600 s budget, and must not grade the files the dead editor left.
-#[test]
-#[ignore = "starts a Bevy editor; run on demand, not in the gate"]
-fn a_real_editor_killed_while_an_agent_runs_is_a_harness_error() {
+/// The stand-in `omp` answers the harness's questions (`models find`, `auth export`, `auth import`), drops
+/// a marker when it is launched and then **becomes** `sleep` (`exec`), so the one process the harness
+/// started is the one that waits, and nothing is left behind if it is stopped.
+fn run_with_stand_in_agent(test: &str, run_name: &str) -> Standing {
     let (editor, server) = binaries();
-    let scratch = scratch("a-real-editor-killed-while-an-agent-runs");
+    let scratch = scratch(test);
     let bin = scratch.join("bin");
     std::fs::create_dir_all(&bin).unwrap_or_else(|e| panic!("{}: {e}", bin.display()));
     let marker = scratch.join("agent-launched");
@@ -664,28 +777,31 @@ fn a_real_editor_killed_while_an_agent_runs_is_a_harness_error() {
          esac\n\
          # The agent run: launched once the editor answered, so the editor is up. It waits for the test.\n\
          : > '{}'\n\
-         sleep 600\n",
+         exec sleep 600\n",
         marker.display()
     );
     std::fs::write(&omp, script).unwrap_or_else(|e| panic!("{}: {e}", omp.display()));
     let made = Command::new("chmod").arg("+x").arg(&omp).status().unwrap_or_else(|e| panic!("chmod: {e}"));
     assert!(made.success(), "the stand-in agent is made executable");
 
-    let out = scratch.join("home");
+    let home = scratch.join("home");
+    let mark = format!("{test}-{}", std::process::id());
     let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
-    let mut child = Command::new(bench_bin())
-        .args(["run", "--agent", "omp", "--run", "the-killed-editor", "--trials", "1", "--task", EXAMPLES[0]])
+    let child = Command::new(bench_bin())
+        .args(["run", "--agent", "omp", "--run", run_name, "--trials", "1", "--task", EXAMPLES[0]])
         .arg("--editor")
         .arg(&editor)
         .arg("--server")
         .arg(&server)
         .current_dir(repo())
-        .env("HOME", &out)
+        .env("HOME", &home)
         .env("PATH", path)
+        .env(MARK_VAR, &mark)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap_or_else(|e| panic!("cauldron-bench did not start: {e}"));
+    let mut standing = Standing { child, home, editor, mark, run_name: run_name.to_owned() };
 
     let launched = std::time::Instant::now();
     while !marker.exists() {
@@ -693,29 +809,43 @@ fn a_real_editor_killed_while_an_agent_runs_is_a_harness_error() {
             launched.elapsed() < std::time::Duration::from_secs(AGENT_LAUNCH_S),
             "the stand-in agent was not launched within {AGENT_LAUNCH_S} s, so the editor never answered"
         );
-        if let Ok(Some(status)) = child.try_wait() {
-            let ended = child.wait_with_output().unwrap_or_else(|e| panic!("its output: {e}"));
-            panic!(
-                "cauldron-bench ended ({status}) before the agent was launched:\n{}{}",
-                String::from_utf8_lossy(&ended.stdout),
-                String::from_utf8_lossy(&ended.stderr)
-            );
+        if let Ok(Some(status)) = standing.child.try_wait() {
+            let mut said = String::new();
+            for stream in [
+                standing.child.stdout.take().map(|s| Box::new(s) as Box<dyn std::io::Read>),
+                standing.child.stderr.take().map(|s| Box::new(s) as Box<dyn std::io::Read>),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                let mut stream = stream;
+                let _ = std::io::Read::read_to_string(&mut stream, &mut said);
+            }
+            panic!("cauldron-bench ended ({status}) before the agent was launched:\n{said}");
         }
         std::thread::sleep(std::time::Duration::from_millis(250));
     }
-    let project = out
-        .join(".local/state/cauldron-bench/the-killed-editor")
-        .join(EXAMPLES[0])
-        .join("trial-1/project");
-    let pid = editor_pid(&editor, &project).unwrap_or_else(|| {
-        panic!("no running editor was found for {}: is `bevy_cauldron` at {}?", project.display(), editor.display())
-    });
+    standing
+}
+
+/// **A REAL editor killed after its state answered, while an agent runs, is a `harness_error` with the
+/// reason, and nothing of the run is left running**  -  #412's fourth acceptance item, and the lifecycle
+/// rule that the display is stopped on this exit path too.
+///
+/// The test kills the real editor with `SIGKILL` once the stand-in agent is launched. The run must say so
+/// within [`REPORT_KILLED_EDITOR_S`] seconds rather than at the task's 600 s budget, must not grade the
+/// files the dead editor left, and must leave no `Xvfb`, editor, server or agent running.
+#[test]
+#[ignore = "starts a Bevy editor; run on demand, not in the gate"]
+fn a_real_editor_killed_while_an_agent_runs_is_a_harness_error() {
+    let mut run = run_with_stand_in_agent("a-real-editor-killed-while-an-agent-runs", "the-killed-editor");
+    let pid = run.editor_pid();
     let killed = Command::new("kill").args(["-KILL", &pid.to_string()]).status().unwrap_or_else(|e| panic!("kill: {e}"));
     assert!(killed.success(), "the real editor (pid {pid}) is killed");
     let killed_at = std::time::Instant::now();
 
     let finished = loop {
-        if let Ok(Some(status)) = child.try_wait() {
+        if let Ok(Some(status)) = run.child.try_wait() {
             break status;
         }
         assert!(
@@ -726,7 +856,7 @@ fn a_real_editor_killed_while_an_agent_runs_is_a_harness_error() {
         std::thread::sleep(std::time::Duration::from_millis(250));
     };
     assert_ne!(finished.code(), Some(0), "a run whose editor was killed exits non-zero");
-    let written = records(&out.join(".local/state/cauldron-bench/the-killed-editor"));
+    let written = records(&run.home.join(".local/state/cauldron-bench/the-killed-editor"));
     assert_eq!(written.len(), 1, "the killed trial still wrote its record");
     let record = &written[0];
     assert_eq!(
@@ -743,4 +873,44 @@ fn a_real_editor_killed_while_an_agent_runs_is_a_harness_error() {
     assert!(reason.contains("Its log ends"), "the reason quotes the editor's own log: {reason}");
     let checks = field(record, "checks").as_array().cloned().unwrap_or_default();
     assert!(checks.is_empty(), "a trial with no editor is not graded, but it records {} check(s)", checks.len());
+    let left = lingering(&run.mark);
+    assert!(
+        left.is_empty(),
+        "the run reported the dead editor and left processes of its own running (the Xvfb here held the \
+         host lock for 13 minutes): {left:?}"
+    );
+}
+
+/// **A harness killed outright leaves no child running**  -  the exit `Drop` cannot cover.
+///
+/// `cauldron-bench` is `SIGKILL`ed in the middle of a trial, with a real editor, its `Xvfb` and the agent
+/// up. Nothing it owns may outlive it: each child asked the kernel for `SIGTERM` when its parent dies
+/// (`detach`), so none is left holding the host lock or a display.
+#[test]
+#[ignore = "starts a Bevy editor; run on demand, not in the gate"]
+fn a_harness_killed_outright_leaves_no_child_running() {
+    let mut run = run_with_stand_in_agent("a-harness-killed-outright", "the-killed-harness");
+    let before = lingering(&run.mark);
+    assert!(
+        before.iter().any(|p| p.ends_with("Xvfb")) && before.iter().any(|p| p.ends_with("bevy_cauldron")),
+        "the trial is up: an Xvfb and an editor carry the run's mark (found {before:?})"
+    );
+    let harness = run.child.id().to_string();
+    let killed = Command::new("kill").args(["-KILL", &harness]).status().unwrap_or_else(|e| panic!("kill: {e}"));
+    assert!(killed.success(), "the harness (pid {harness}) is killed");
+    let _ = run.child.wait();
+
+    let waited = std::time::Instant::now();
+    let left = loop {
+        let left = lingering(&run.mark);
+        if left.is_empty() || waited.elapsed() >= std::time::Duration::from_secs(ORPHANS_GO_S) {
+            break left;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    };
+    assert!(
+        left.is_empty(),
+        "{ORPHANS_GO_S} s after its harness was killed, these of the run were still running (an Xvfb here \
+         holds a host lock it inherited): {left:?}"
+    );
 }
