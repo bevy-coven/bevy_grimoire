@@ -179,10 +179,17 @@ const STILL_UNCHECKED: &[&str] = &[
     // A Rhai script (#368) is read by `bevy_grimoire_rhai`, which compiles it and names the file and
     // line of a syntax error, but core cannot name a field of it and this layer does not open one.
     "scripts_rhai",
+    // **The design tree** (SG-01, #400) is a folder rather than a file: `design::Tree::read` reads it and
+    // names a missing picture with its line and path, an oversize file with its size, a non-UTF-8 file, a
+    // level folder with no map and two areas that overlap. What this layer's `cases()` would need is a
+    // *field* of one file to damage and name, and a style page has none — it is prose, and the shapes in
+    // the tree are `area.yaml`'s and they are refused by the reader that owns them. Joined with the owner's
+    // exception recorded in the fleet `design` cluster report.
+    "design",
 ];
 
 /// **A literal, not `STILL_UNCHECKED.len()`**: a number that is its own measure can never fail.
-const STILL_UNCHECKED_MAX: usize = 2;
+const STILL_UNCHECKED_MAX: usize = 3;
 
 #[test]
 fn the_kinds_nothing_reads_with_a_named_refusal_only_shrink() {
