@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-12
 
+- **sg-01-design-tree** `a3e07c06` bevy_grimoire_core::design reads design/ into a tree of places (the game, its regions, levels and areas) with their topics, and grimoire_state.design lists it with everything wrong: a level with no map, two areas that overlap, a chain over 64 KiB, a file over 32 KiB refused whole, a picture that is not there *No clip: a reader; proved by the_design_tree_lists_places_and_their_problems (8 tests) and the_design_tree_is_in_the_editors_state (3 tests)*
 - **gd-03-refusal-offers-the-migration** `201764bb` A project refused for still holding RON offers the migration on the screen that refused it *For you: A project from before the cutover now shows a Migrate button where it says why it will not open, so you do not have to leave the window* *No clip: no clip yet: the button and its conversion are proved by bevy_cauldron/tests/a_refused_project_offers_to_migrate_itself.rs (5 tests); the editor's own screen is owed a recording*
 - **gd-10-sample-game** `81f82273f` A sample game made of YAML and Rhai in games/sample, played by a test from the YAML and from the bake *No clip: visible, not yet recorded: fleet worker*
 - **gd-08-bake-for-release** `c19954bdb` cauldron bake turns every YAML file a game loads into binaries, proved against the YAML; a baked release refuses stale data naming the file *No clip: a build step; proved by a_bake_is_proved_against_the_yaml and the sample game's baked playthrough*
