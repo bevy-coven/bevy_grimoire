@@ -2,6 +2,11 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-13
+
+- **bm-02-cauldron-bench-run** `ab26869b` cauldron-bench run measures a real agent against a real editor: oracle passes every task and nothing passes none, the tool list is read from the agent, and a --variant hides exactly its tool (#412) *No clip: a command-line runner; proved by the four ignored tests in bevy_cauldron_bench/tests/a_run_measures_a_real_agent.rs (4 passed, 47.3 s) and the six measured omp trials*
+- **bm-02-cauldron-bench-run** cauldron-bench run: a real agent against a real editor, on a fresh copy, n times, with oracle and nothing proving the pipe and omp measuring a model (#412) *No clip: a command-line runner; proved by the four ignored tests in bevy_cauldron_bench/tests/a_run_measures_a_real_agent.rs and the measured runs in the commit body*
+
 ## 2026-11-12
 
 - **bm-01-a-benchmark-task** `0f71b7b2` A benchmark task: a prompt, a fixture, a known answer and graded checks a run must satisfy, proved valid with no model *For you: Tasks the editor's agent is measured on are now files: what to do, what it looks like when done, and a check for each part, so a run can be scored without a person watching it.* *No clip: a task format and grader; proved by every_task_is_valid, a_task_whose_solution_does_not_satisfy_it_is_refused, a_task_already_solved_by_its_setup_is_refused and the two at-load refusals*
