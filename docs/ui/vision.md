@@ -96,8 +96,8 @@ layouts are per workspace rather than one shared one:
 |---|---|---|
 | Project | the page, whole | the project page (NV-08, not yet moved into the workbench) |
 | Map | inspector 22%, viewport, library | viewport, outliner, inspector, place, notes, checks |
-| World | viewport over the inspector | terrain, and the environment, lights and light map in a build that has those crates (NV-08, #385). Water and forest are written through the terrain line and have no panel of their own |
-| Kit | inspector 30%, viewport, library | Meshes, Tiles, Compose |
+| World | viewport over the inspector | terrain, and the environment, lights and light map in a build that has those crates (NV-08, #385). `WATER` and `FOREST` list what the map's plan and forest files hold; they are placed on the terrain line (NV-11, #393, #394) |
+| Kit | inspector 30%, viewport, library | Meshes, Tiles, Compose, and the library browser (UI-52), asked for by View ▸ Show library, which is offered only in Kit and no longer toggles a section of the Map's inspector (NV-08, #385) |
 | Animation | inspector 28%, viewport, library | the rig bench |
 | Sound | inspector and viewport | the audio panel (`bevy_siren`; a build without it says so, NV-08, #385) |
 | Files | inspector and viewport | the file tree (GD-11) |
