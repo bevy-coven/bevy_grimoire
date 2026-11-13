@@ -58,6 +58,37 @@ rather than refused when called — an arm asking "what does it do without this 
 tool that is listed and refuses. **Comparing two editor versions needs no variant**: that is two runs at two
 commits.
 
+**The tool list is read from the agent, not from the server.** `omp --mode json`'s stream carries no `tools`
+key at all (measured: a whole 810-event transcript, 2026-11-13), so the extension omp already loads to find
+`.mcp.json` records what `pi.getAllTools()` answers at the start of the agent's first turn, into
+`tools-offered.jsonl` beside the transcript. omp spells the editor's tools `mcp__cauldron_grimoire_state`;
+the record spells them as the server does (`grimoire_state`), so a `hide_tools` name is looked up in one
+spelling. A list that cannot be read (no line, a registry that threw, an empty one, none of the editor's
+tools) is a harness error, never `tools_offered: []`.
+
+Measured on this host, 2026-11-13, one trial per arm on `count-what-the-bedroom-holds` with
+`anthropic/claude-haiku-4-5`: the bare run was offered **46** tools (26 of the editor's, 20 of omp's own)
+with `grimoire_frame_view` among them; the `no-frame-view` run was offered **45**, the same list less exactly
+`grimoire_frame_view`. Neither agent called it.
+
+## What the agent is allowed to know
+
+The benchmarked agent is given the task's prompt and what the project states, and nothing else:
+
+- `--no-context-files --no-skills --no-rules --no-extensions -e <the trial's mcp folder>`, so no `AGENTS.md`,
+  no skill, no rule and no extension beyond the one that carries the editor's `.mcp.json`;
+- **`HOME` set to the trial's own**, so the harness reads no user `~/.omp/agent/mcp.json`, no memory and no
+  session store. Without it the developer's own MCP servers load into every trial and the agent spends its
+  turn on `bash` — measured, 2026-11-13;
+- **the credential carried into that `HOME`** by `omp auth export` and `omp auth import`, because an isolated
+  `HOME` has no login either. It carries credentials only, never an MCP server, and a host with none is a
+  harness error naming what to do (`omp` once).
+
+A trial whose agent was **offered** a tool outside that set (the editor's `grimoire_*` and omp's own,
+`run::BUILTIN_TOOLS`) is a harness error naming the tool, as is one that was offered none of the
+editor's, and so is one whose model provider refused a turn (an HTTP 429 or 402): the provider's answer is
+not a result about the agent.
+
 ## Another project's suite
 
 `--project <root> --suite <dir>` runs a game's own suite (its `.dark_factory/bench/`) against that game's

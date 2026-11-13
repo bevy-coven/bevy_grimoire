@@ -90,6 +90,32 @@ pub const DISPLAY_TRIES: u32 = 40;
 /// demo recorder's `:96`.
 pub const DISPLAY_BASE: u32 = 120;
 
+/// **How long a new `Xvfb` is given to take its display**, seconds: its socket exists and its lock file names
+/// it. A live server on the number refuses by exiting inside this, so it bounds only a server that hangs.
+pub const DISPLAY_START_S: u64 = 5;
+
+/// **How long a display is given to stop after `SIGTERM`**, seconds, before it is killed.
+pub const DISPLAY_STOP_S: u64 = 5;
+
+/// **How often a wait looks at the process it waits for**, milliseconds.
+pub const POLL_INTERVAL_MS: u64 = 50;
+
+/// **How often a running agent's editor is looked at**, milliseconds: the editor's death is a harness error
+/// found while the agent runs, not minutes later when the budget ends.
+pub const AGENT_POLL_INTERVAL_MS: u64 = 250;
+
+/// **The harness's own tools**, which an agent is offered beside the editor's and which are not a leak.
+///
+/// Measured on this host (omp 18.18.9, 2026-11-13) from the registry of an isolated trial: twenty names.
+/// The rest are names the model has been seen to call. **Any other name is a tool the Dark Factory did not
+/// hand out**, so a trial that offers one is a harness error naming it, and a new omp that adds a built-in
+/// is a refusal that says which, not a silently wider agent.
+pub const BUILTIN_TOOLS: &[&str] = &[
+    "ast_edit", "bash", "debug", "edit", "eval", "find", "glob", "goal", "grep", "init_experiment",
+    "log_experiment", "lsp", "read", "run_experiment", "task", "todo", "update_notes", "wait", "web_search",
+    "write", "learn", "manage_skill", "ask", "browser", "archive",
+];
+
 /// **How much a trial is run with.**
 #[derive(Clone, Debug)]
 pub struct Options {
@@ -142,7 +168,9 @@ pub struct TrialRecord {
     pub tokens: Option<u64>,
     /// How long the agent ran, seconds.
     pub wall_s: f64,
-    /// **The tools the agent's `tools/list` held**, which is what a `hide_tools` arm is judged by.
+    /// **The tools the agent was offered**, which is what a `hide_tools` arm is judged by: the server's own
+    /// `tools/list` for the scripted agents, and the harness's registry for `omp`, whose transcript carries no
+    /// tool list at all ([`tools_offered_path`]).
     pub tools_offered: Vec<String>,
     /// The wishes the agent made, as `{tool, task}`.
     pub wishes: Vec<Value>,
@@ -237,33 +265,50 @@ pub struct Display {
 impl Display {
     /// **Start an `Xvfb` on the first free display from [`DISPLAY_BASE`] up.**
     ///
+    /// **A display that was already running is never adopted.** The number is the trial's only when the
+    /// lock file names the child this call started; a number a live server holds (another run's, another
+    /// agent's) is skipped, and no number is ever shared. The child is detached ([`detach`]) so it holds no
+    /// descriptor of the caller's, and `Drop` stops it on every exit that unwinds, an early `?` included.
+    ///
     /// **Linux only.** A macOS run uses the desktop's own display, which is what a person's editor is on.
     pub fn start() -> Result<Display, String> {
-        // **The socket and the lock file both count as taken**: `Xvfb` refuses a number whose socket
-        // exists, and a crashed server can leave one.
+        // **A socket file is not evidence of a server.** `Xvfb` killed with the signal this harness sends
+        // leaves `/tmp/.X11-unix/X<n>` behind, and a ladder that skipped every existing socket therefore
+        // ran out of displays on a host where nobody was drawing at all: measured on big, 2026-11-13, 42
+        // stale sockets from killed servers and three live ones left the whole `:120..160` range refused.
+        // So every number is **tried**, and a server that is really there answers by refusing: its child
+        // exits inside the wait below and the next number is taken.
         for offset in 0..DISPLAY_TRIES {
             let number = DISPLAY_BASE + offset;
-            if Path::new(&format!("/tmp/.X11-unix/X{number}")).exists() {
-                continue;
-            }
-            let child = Command::new("Xvfb")
-                .arg(format!(":{number}"))
+            let mut xvfb = Command::new("Xvfb");
+            xvfb.arg(format!(":{number}"))
                 .args(["-screen", "0", "1600x1000x24", "-nolisten", "tcp"])
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
-                .stderr(Stdio::null())
+                .stderr(Stdio::null());
+            let child = detach(&mut xvfb)
                 .spawn()
                 .map_err(|e| format!("Xvfb could not be started: {e}"))?;
-            // **The server is up when its socket is**, and a child that exited means the number was taken
-            // after all: the next one is tried rather than the trial failing on a race.
+            // **The display is ours when its lock file names our child**, and not before. A socket file proves
+            // only that *some* server made one: a live Xvfb of another run, or of another agent, has its
+            // socket at once, and a harness that returned on seeing it shared that screen and lost it when the
+            // owner stopped. `Xvfb` writes its own pid into `/tmp/.X<n>-lock`, so the pid is the proof; a
+            // server that holds the number refuses ours by exiting, and the next number is tried.
             let socket = format!("/tmp/.X11-unix/X{number}");
-            let deadline = Instant::now() + Duration::from_secs(5);
+            let lock = format!("/tmp/.X{number}-lock");
+            let deadline = Instant::now() + Duration::from_secs(DISPLAY_START_S);
+            let mut running = child;
             while Instant::now() < deadline {
-                if Path::new(&socket).exists() {
-                    return Ok(Display { child, number });
+                if Path::new(&socket).exists() && lock_pid(&lock) == Some(running.id()) {
+                    return Ok(Display { child: running, number });
                 }
-                std::thread::sleep(Duration::from_millis(50));
+                if let Ok(Some(_)) = running.try_wait() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
             }
+            let _ = running.kill();
+            let _ = running.wait();
         }
         Err(format!(
             "no free display in :{DISPLAY_BASE}..{}, so this trial has no screen to draw on",
@@ -272,8 +317,80 @@ impl Display {
     }
 }
 
+/// **`CLOSE_RANGE_CLOEXEC`** (`close_range(2)`, Linux 5.11): mark the range close-on-exec instead of closing it.
+/// Closing in the child would also close the pipe `std` reports a failed `exec` through, and a binary that
+/// is not there would then read as a child that started.
+#[cfg(target_os = "linux")]
+const CLOSE_RANGE_CLOEXEC: libc::c_uint = 1 << 2;
+
+/// **The first descriptor a child must not inherit**: 0, 1 and 2 are its stdio and everything above is the
+/// caller's.
+#[cfg(target_os = "linux")]
+const FIRST_INHERITED_FD: libc::c_uint = 3;
+
+/// **Start a child that holds nothing of its parent's, and does not outlive it.**
+///
+/// - **No descriptor above stderr is inherited.** Measured on big, 2026-11-13: a test ran under
+///   `flock -s /tmp/fleet/big-heavy.lock cargo nextest ...`, left an `Xvfb` running, and that `Xvfb`
+///   **inherited the lock's descriptor and held the host lock for 13 minutes** with no trial alive, blocking
+///   the push gate and every other agent's build. A child of this harness is a long-lived process that can
+///   outlive its parent (a display, an editor, a harness), and a descriptor it inherits is held until it
+///   exits.
+/// - **Its own process group**, so a signal to the harness's group (a terminal's `Ctrl-C`) is not delivered
+///   to a child the harness is stopping itself.
+/// - **`SIGTERM` when the parent dies** (`PR_SET_PDEATHSIG`), so a harness that is killed outright leaves no
+///   `Xvfb` or editor running: [`Display`]'s `Drop` covers every exit that unwinds, and this covers the one
+///   that does not. The parent is the thread that spawned the child, which a trial keeps until it is done.
+///
+/// **Linux only for the last two.** Elsewhere the child is only given its own process group, and there is no
+/// host lock to hold.
+pub fn detach(command: &mut Command) -> &mut Command {
+    use std::os::unix::process::CommandExt;
+    command.process_group(0);
+    #[cfg(target_os = "linux")]
+    {
+        // SAFETY: the closure runs between `fork` and `exec` and calls only `close_range` and `prctl`,
+        // both async-signal-safe system calls; it allocates nothing and takes no lock.
+        unsafe {
+            command.pre_exec(|| {
+                let marked = libc::syscall(
+                    libc::SYS_close_range,
+                    FIRST_INHERITED_FD,
+                    libc::c_uint::MAX,
+                    CLOSE_RANGE_CLOEXEC,
+                );
+                if marked != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM as libc::c_ulong, 0, 0, 0) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
+    command
+}
+
+/// **The pid an X server's lock file names**, or `None` when there is no file or it holds no number.
+fn lock_pid(path: &str) -> Option<u32> {
+    std::fs::read_to_string(path).ok()?.trim().parse().ok()
+}
+
 impl Drop for Display {
     fn drop(&mut self) {
+        // **Asked, then made to**: `SIGTERM` is what lets `Xvfb` remove its own socket and lock file, and
+        // `SIGKILL` (what `Child::kill` sends) is what left 42 dead sockets behind on big. The kill below
+        // is for a server that ignored the request, and `-nolisten tcp` has nothing to flush.
+        let pid = self.child.id().to_string();
+        let _ = Command::new("kill").args(["-TERM", &pid]).status();
+        let deadline = Instant::now() + Duration::from_secs(DISPLAY_STOP_S);
+        while Instant::now() < deadline {
+            if matches!(self.child.try_wait(), Ok(Some(_))) {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
+        }
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -295,6 +412,23 @@ impl Drop for Editor {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+    }
+}
+
+/// **Why the editor is gone, when it is**: its exit, and the end of its own log.
+///
+/// The editor is a child this harness started, and it can die at any time: the start-up wait sees only its
+/// first seconds. A trial asks again while the agent runs and once more before it grades, because an agent
+/// that ran on a dead editor measured nothing about the editor, and a grade of the files it left would
+/// score the harness's loss as the agent's work.
+pub fn editor_exit(editor: &mut Editor) -> Option<String> {
+    match editor.child.try_wait() {
+        Ok(Some(status)) => Some(format!(
+            "the editor exited with {status} during the trial. {}",
+            tail(&editor.log)
+        )),
+        Ok(None) => None,
+        Err(e) => Some(format!("the editor could not be waited on: {e}")),
     }
 }
 
@@ -335,7 +469,7 @@ pub fn start_editor(editor: &Path, project: &Path, map: &str, dir: &Path) -> Res
     if let Some(display) = &display {
         command.env("DISPLAY", format!(":{}", display.number));
     }
-    let child = command
+    let child = detach(&mut command)
         .spawn()
         .map_err(|e| format!("the editor at {} did not start: {e}", editor.display()))?;
     let mut running = Editor { child, port, display, log: log.clone() };
@@ -425,7 +559,8 @@ impl McpClient {
             .and_then(Value::as_array)
             .map(|a| a.iter().filter_map(Value::as_str).map(str::to_owned).collect())
             .unwrap_or_default();
-        let mut child = Command::new(command)
+        let mut server_command = Command::new(command);
+        server_command
             .args(&args)
             .envs(
                 server
@@ -440,7 +575,8 @@ impl McpClient {
             )
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::null());
+        let mut child = detach(&mut server_command)
             .spawn()
             .map_err(|e| format!("the MCP server at {command} did not start: {e}"))?;
         let stdin = child.stdin.take().ok_or("the MCP server has no stdin")?;
@@ -748,7 +884,7 @@ fn one_trial(options: &Options, task: &Task, trial: u32, variant: Option<&Varian
             }
         }
     }
-    let editor = match start_editor(&options.editor, &project, &task.map, &dir) {
+    let mut editor = match start_editor(&options.editor, &project, &task.map, &dir) {
         Ok(editor) => editor,
         Err(e) => return harness(e),
     };
@@ -789,9 +925,15 @@ fn one_trial(options: &Options, task: &Task, trial: u32, variant: Option<&Varian
     let run = match options.agent {
         Agent::Nothing => run_nothing(&config),
         Agent::Oracle => run_oracle(task, &config),
-        Agent::Omp => run_omp(options, task, &config, &project, editor.port, &dir),
+        Agent::Omp => run_omp(options, task, &config, &project, &mut editor, &dir),
     };
     let wall_s = started.elapsed().as_secs_f64();
+    // **The editor's death outranks whatever the agent said about it.** An agent whose editor was killed
+    // reports a refused call or a dropped connection, and that is the symptom: the reason is the exit.
+    if let Some(reason) = editor_exit(&mut editor) {
+        drop(editor);
+        return harness(reason);
+    }
     let run = match run {
         Ok(run) => run,
         Err(e) => {
@@ -895,7 +1037,7 @@ fn run_omp(
     task: &Task,
     config: &Value,
     project: &Path,
-    port: u16,
+    editor: &mut Editor,
     dir: &Path,
 ) -> Result<AgentRun, String> {
     let extension = dir.join("mcp");
@@ -905,14 +1047,34 @@ fn run_omp(
     let text = serde_json::to_string_pretty(config).map_err(|e| format!("{e}"))? + "\n";
     bevy_grimoire_core::atomic_file::write(&extension.join(".mcp.json"), text)
         .map_err(|e| format!("{}: {e}", extension.display()))?;
+    // **The tool list, from the harness's own registry.** A `hide_tools` arm is only proved if the list the
+    // *agent* was offered is read back, and `omp --mode json`'s stream does not carry one: measured on this
+    // host, 2026-11-13, a whole 810-event transcript holds no `tools` key at all. So the extension omp
+    // already loads to find `.mcp.json` writes what `pi.getAllTools()` answers at the start of the first
+    // agent turn, into a sidecar the record reads. Measured the same day: 45 tools with the editor's server
+    // connected, and `grimoire_frame_view` absent under `--hide-tools grimoire_frame_view`.
+    //
     // **A valid omp extension, because omp refuses one that does not export a factory** and then does not
-    // read the `.mcp.json` beside it. This one exports the factory and does nothing: the benchmark reads
-    // the agent's transcript, not the editor's session record, so it has nothing to report back.
+    // read the `.mcp.json` beside it.
+    let offered = tools_offered_path(dir);
     bevy_grimoire_core::atomic_file::write(
         &extension.join("index.ts"),
-        "// Written by cauldron-bench. An omp extension folder whose .mcp.json beside it names the\n\
-         // editor's MCP server exactly as the terminal's agent tab does.\n\
-         export default function (_pi: any) {}\n",
+        format!(
+            "// Written by cauldron-bench. An omp extension folder whose .mcp.json beside it names the\n\
+             // editor's MCP server exactly as the terminal's agent tab does, and which records the tool\n\
+             // list the agent was offered so a `hide_tools` arm is judged by what the agent saw.\n\
+             import {{ appendFileSync }} from \"node:fs\";\n\
+             export default function (pi: any) {{\n\
+             \x20 const record = (why: string) => {{\n\
+             \x20   let line: any;\n\
+             \x20   try {{ line = {{ why, tools: (pi.getAllTools?.() ?? []).map((t: any) => t.name) }}; }}\n\
+             \x20   catch (e) {{ line = {{ why, error: String(e) }}; }}\n\
+             \x20   appendFileSync({offered:?}, JSON.stringify(line) + \"\\n\");\n\
+             \x20 }};\n\
+             \x20 pi.on(\"before_agent_start\", async () => record(\"before_agent_start\"));\n\
+             }}\n",
+            offered = offered.to_string_lossy()
+        ),
     )
     .map_err(|e| format!("{}: {e}", extension.display()))?;
     // **The credential the trial's HOME needs**, carried from the user's own and nothing else: `omp auth
@@ -921,8 +1083,12 @@ fn run_omp(
     let transcript = dir.join("transcript.jsonl");
     let stdout = std::fs::File::create(&transcript).map_err(|e| format!("{}: {e}", transcript.display()))?;
     let stderr = std::fs::File::create(dir.join("agent.err")).map_err(|e| format!("{e}"))?;
-    let mut child = Command::new("omp")
-        .args([
+    // **The budget in the harness's own words**, so it ends its turn itself rather than being killed in the
+    // middle of one: `--max-time` is omp's own stop, and a trial that kills a write leaves a project no agent
+    // wrote. The wait below is the outer bound for a harness that ignores it.
+    let wall = format!("{}s", task.budget.wall_s);
+    let mut omp = Command::new("omp");
+    omp.args([
             "-p",
             "--mode",
             "json",
@@ -935,34 +1101,121 @@ fn run_omp(
             // **No session file**, so a trial leaves a transcript and its project and nothing a later trial
             // could resume by accident.
             "--no-session",
+            "--max-time",
+            &wall,
             "-e",
             &extension.to_string_lossy(),
             "--cwd",
             &project.to_string_lossy(),
             &task.prompt,
         ])
-        .env("BEVY_BRP_PORT", port.to_string())
+        .env("BEVY_BRP_PORT", editor.port.to_string())
         // **The trial's own HOME**, so the harness reads no user `mcp.json`, no memory and no session
         // store: see this function's own note.
         .env("HOME", dir.join("home"))
         .stdin(Stdio::null())
         .stdout(stdout)
-        .stderr(stderr)
+        .stderr(stderr);
+    let mut child = detach(&mut omp)
         .spawn()
         .map_err(|e| format!("omp did not start: {e}"))?;
-    // **Stopped at the budget**: the wall clock is the one bound a model turns cannot be argued with, and a
-    // `--max-time` in the arguments makes omp end its own turn rather than being killed mid-write.
+    // **Stopped at the budget**: the wall clock is the one bound a model's turns cannot be argued with.
+    // `--max-time` is what ends the agent's own turn; this deadline is the outer bound for a harness that
+    // ignores its own flag, and it is the same number so a trial is one budget and not two.
     let deadline = Instant::now() + Duration::from_secs(u64::from(task.budget.wall_s));
     while Instant::now() < deadline {
         match child.try_wait() {
             Ok(Some(_)) => break,
-            Ok(None) => std::thread::sleep(Duration::from_millis(250)),
+            Ok(None) => {
+                // **A dead editor ends the trial now**, not at the budget: the agent is talking to nothing.
+                if let Some(reason) = editor_exit(editor) {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(reason);
+                }
+                std::thread::sleep(Duration::from_millis(AGENT_POLL_INTERVAL_MS));
+            }
             Err(e) => return Err(format!("omp could not be waited on: {e}")),
         }
     }
     let _ = child.kill();
     let _ = child.wait();
-    read_transcript(&transcript, dir)
+    let server = config
+        .get("mcpServers")
+        .and_then(Value::as_object)
+        .and_then(|servers| servers.keys().next().cloned())
+        .ok_or("the editor's MCP config names no server")?;
+    read_transcript(&transcript, dir, &server)
+}
+
+/// **Where a trial's harness records the tool list it was offered**, beside the transcript.
+///
+/// `omp --mode json`'s stream carries no `tools` key (measured, 2026-11-13), so the extension the trial
+/// already loads writes one line here per agent turn: `{why, tools}`. It is a separate file because it is
+/// a fact about the harness that the harness's own stream does not state.
+pub fn tools_offered_path(dir: &Path) -> PathBuf {
+    dir.join("tools-offered.jsonl")
+}
+
+/// **The tools the agent was offered**, from the sidecar the extension wrote, in the names the scripted
+/// agents' server uses, or the reason the trial cannot be judged.
+///
+/// - **Names are normalised.** omp spells the editor's tool `mcp__<server>_grimoire_frame_view`; the server's
+///   own `tools/list` says `grimoire_frame_view`. A check of the second against the first is vacuously
+///   "absent" with no `hide_tools` at all, so the prefix is stripped here, the way `mcpToolName` is for a call.
+/// - **An empty answer is an error, never `[]`.** A missing file, a registry that threw, a list with no
+///   editor tool (the MCP server never connected) and a name from outside the Dark Factory's set are each a
+///   harness error naming what was seen. `tools_offered: []` would read as "offered nothing" and pass a
+///   `hide_tools` arm that hid nothing.
+/// - The last line wins: each is the registry at the start of a turn.
+pub fn parse_tools_offered(text: &str, server: &str) -> Result<Vec<String>, String> {
+    let prefix = format!("mcp__{server}_");
+    let mut last: Option<Vec<String>> = None;
+    for line in text.lines().filter(|l| !l.trim().is_empty()) {
+        let event: Value = serde_json::from_str(line)
+            .map_err(|e| format!("a line of the tool list the harness recorded is not JSON ({e}): {line}"))?;
+        if let Some(error) = event.get("error").and_then(Value::as_str) {
+            return Err(format!("the harness could not list its own tools: {error}"));
+        }
+        if let Some(tools) = event.get("tools").and_then(Value::as_array) {
+            last = Some(tools.iter().filter_map(|t| t.as_str().map(str::to_owned)).collect());
+        }
+    }
+    let Some(raw) = last else {
+        return Err(
+            "the harness recorded no tool list, so what the agent was offered is unknown: its first turn \
+             never started, or the extension that records it did not load"
+                .to_owned(),
+        );
+    };
+    let mut names = Vec::with_capacity(raw.len());
+    let mut editor_tools = 0usize;
+    let mut outside: Vec<String> = Vec::new();
+    for tool in raw {
+        if let Some(own) = tool.strip_prefix(&prefix) {
+            editor_tools += 1;
+            names.push(own.to_owned());
+        } else if BUILTIN_TOOLS.contains(&tool.as_str()) {
+            names.push(tool);
+        } else {
+            outside.push(tool);
+        }
+    }
+    if !outside.is_empty() {
+        return Err(format!(
+            "the agent was offered {} that the Dark Factory did not hand out, so the profile was not \
+             isolated",
+            outside.join(", ")
+        ));
+    }
+    if editor_tools == 0 {
+        return Err(format!(
+            "the agent was offered none of the editor's tools (`{prefix}*`): the MCP server never connected. \
+             It was offered: {}",
+            names.join(", ")
+        ));
+    }
+    Ok(names)
 }
 
 /// **Give a trial's isolated `HOME` the credentials the user's own holds**, and nothing else.
@@ -1027,11 +1280,10 @@ fn seed_credentials(home: &Path) -> Result<(), String> {
 /// says so: omp writes "No API key found" or "No such model" to its stderr, and a run whose transcript
 /// holds no assistant message at all is a run of nothing. Scoring that as an agent failure would be a
 /// result about the harness with the wrong name on it  -  measured on this host, 2026-11-13.
-fn read_transcript(path: &Path, dir: &Path) -> Result<AgentRun, String> {
+pub fn read_transcript(path: &Path, dir: &Path, server: &str) -> Result<AgentRun, String> {
     let text = std::fs::read_to_string(path)
         .map_err(|e| format!("the transcript at {} could not be read: {e}", path.display()))?;
     let mut run = AgentRun::default();
-    let mut tools: Vec<String> = Vec::new();
     let mut spoke = false;
     for line in text.lines() {
         let Ok(event) = serde_json::from_str::<Value>(line) else {
@@ -1044,24 +1296,32 @@ fn read_transcript(path: &Path, dir: &Path) -> Result<AgentRun, String> {
         // **This harness reaches an MCP tool through omp's device namespace**, not as a bare call: the
         // transcript shows `write xd://mcp__cauldron_grimoire_present {"content": "{…}"}`, and the answer
         // carries `details.xdev = {tool: "mcp__cauldron_grimoire_present", mode: "execute", args: {…}}`.
-        // Measured on this host, 2026-11-13. So the tool's name is `details.xdev.tool`, its arguments are
-        // `details.xdev.args`, and its result is the text content — and a reader that looked only for
-        // `toolcall_end`'s `name` saw `write` and counted nothing.
+        // Measured on this host, 2026-11-13. So the tool's own name is `details.xdev.inner.mcpToolName`
+        // (the plain `grimoire_guide`, where `details.xdev.tool` carries the `mcp__cauldron_` prefix), its
+        // arguments are `details.xdev.args`, and its result is the text content — and a reader that looked
+        // only for `toolcall_end`'s `name` saw `write` and counted nothing.
         if kind == "tool_execution_end"
             && let Some(details) = event.get("result").and_then(|r| r.get("details"))
             && let Some(xdev) = details.get("xdev")
-            && let Some(tool) = xdev.get("tool").and_then(Value::as_str)
         {
-            let Some(name) = tool.split("__").nth(1) else {
+            // **The tool's own name**, which is `inner.mcpToolName` (`grimoire_guide`): the
+            // `mcp__<server>_` prefix names the server the tool came from, and a record that kept it
+            // would spell one call two ways depending on which agent made it.
+            let Some(name) = xdev
+                .get("inner")
+                .and_then(|inner| inner.get("mcpToolName"))
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+            else {
                 continue;
             };
+            let name = name.as_str();
             let args = xdev.get("args").cloned().unwrap_or(Value::Null);
             run.tool_calls.push(name.to_owned());
-            tools.push(name.to_owned());
-            if name.ends_with("grimoire_present") {
+            if name == "grimoire_present" {
                 run.handbacks.push(handback_of(&args));
             }
-            if name.ends_with("grimoire_wish") {
+            if name == "grimoire_wish" {
                 run.wishes.push(args);
             }
         }
@@ -1081,13 +1341,7 @@ fn read_transcript(path: &Path, dir: &Path) -> Result<AgentRun, String> {
                 .and_then(|a| a.get("path"))
                 .and_then(Value::as_str)
                 .is_some_and(|p| p.starts_with("xd://mcp__"));
-            let known_builtin = matches!(
-                name,
-                "bash" | "read" | "write" | "edit" | "glob" | "grep" | "find" | "todo" | "task" | "eval"
-                    | "learn" | "manage_skill" | "ast_edit" | "debug" | "lsp" | "ask" | "wait"
-                    | "web_search" | "browser" | "archive"
-            );
-            if !is_device && !known_builtin {
+            if !is_device && !BUILTIN_TOOLS.contains(&name) {
                 return Err(format!(
                     "the transcript shows a tool `{name}` that is neither the editor's nor the harness's \
                      own set, so the profile was not isolated"
@@ -1099,6 +1353,23 @@ fn read_transcript(path: &Path, dir: &Path) -> Result<AgentRun, String> {
             && let Some(message) = event.get("message")
             && message.get("role").and_then(Value::as_str) == Some("assistant")
         {
+            // **A turn the provider refused is not the agent's failure.** An assistant message whose
+            // `stopReason` is `error` (an HTTP 429 for a spent usage limit, a dropped connection) holds no
+            // content and no tokens, and the agent that follows is graded on a project it never touched:
+            // measured on this host, 2026-11-13, a spent weekly limit scored a trial `fail` with 0 calls and
+            // 0 tokens. That is the provider's answer with the agent's name on it, so it is a harness error
+            // quoting the provider's own words.
+            if message.get("stopReason").and_then(Value::as_str) == Some("error") {
+                let why = message
+                    .get("errorMessage")
+                    .and_then(Value::as_str)
+                    .unwrap_or("it gave no reason");
+                return Err(format!(
+                    "the model provider refused a turn, so this trial measures the provider and not the \
+                     agent: {}",
+                    why.lines().collect::<Vec<_>>().join(" ")
+                ));
+            }
             spoke = true;
             if let Some(total) = message
                 .get("usage")
@@ -1109,7 +1380,6 @@ fn read_transcript(path: &Path, dir: &Path) -> Result<AgentRun, String> {
             }
         }
     }
-    run.tools_offered = tools;
     if !spoke {
         let stderr = std::fs::read_to_string(dir.join("agent.err")).unwrap_or_default();
         let lines: Vec<&str> = stderr.lines().filter(|l| !l.trim().is_empty()).collect();
@@ -1119,6 +1389,14 @@ fn read_transcript(path: &Path, dir: &Path) -> Result<AgentRun, String> {
             lines[from..].join(" | ")
         ));
     }
+    // **What the agent was offered, not what it called.** The list is the sidecar the trial's extension
+    // writes (`tools_offered_path`), because a `hide_tools` arm is a fact about the list and calling
+    // nothing would otherwise read as offering nothing. It is read after the check above: a harness that
+    // never reached the model has no turn to record, and that is the better reason to give.
+    let sidecar = tools_offered_path(dir);
+    let text = std::fs::read_to_string(&sidecar)
+        .map_err(|e| format!("the tool list the harness records could not be read at {}: {e}", sidecar.display()))?;
+    run.tools_offered = parse_tools_offered(&text, server)?;
     Ok(run)
 }
 
