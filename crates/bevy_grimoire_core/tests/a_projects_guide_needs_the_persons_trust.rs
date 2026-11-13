@@ -13,7 +13,7 @@
 //! the file through its shell has not been allowed; the person is asked again.
 
 use bevy_grimoire_core::trust::{
-    self, COMMAND_FILES, Decision, GuideGrant, Scope, TrustStore, TRUST_VERSION,
+    self, COMMAND_FILES, Decision, Scope, TextGrant, TrustStore, TRUST_VERSION,
 };
 use std::path::{Path, PathBuf};
 
@@ -139,7 +139,7 @@ fn a_store_written_before_guides_grants_existed_still_reads() {
         Decision::Trusted(Scope::Project),
         "the projects it trusted are still trusted"
     );
-    assert_eq!(TRUST_VERSION, 2, "the file's version moved with its shape");
+    assert_eq!(TRUST_VERSION, 3, "the file's version moved with its shape");
 }
 
 /// **`.dark_factory/AGENTS.md` may not be a data file**: `data_set` edits a registered file's values, and a
@@ -171,7 +171,7 @@ fn the_sentence_for_a_withheld_guide_says_what_it_is_and_who_can_allow_it() {
 /// **The grant type is public and says what it is**: a project and the SHA-256 of the content allowed.
 #[test]
 fn a_guide_grant_is_the_project_and_the_digest_of_what_was_read() {
-    let grant = GuideGrant { project: PathBuf::from("/p"), sha256: trust::sha256_hex(b"hello") };
+    let grant = TextGrant { project: PathBuf::from("/p"), path: ".dark_factory/AGENTS.md".to_owned(), sha256: trust::sha256_hex(b"hello") };
     assert_eq!(grant.sha256, "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
     assert_eq!(grant.sha256.len(), 64, "a SHA-256 is 64 hex characters");
 }

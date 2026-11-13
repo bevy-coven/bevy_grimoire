@@ -51,6 +51,7 @@ from disk, so it answers when the editor does not, and `grimoire_capture_still` 
 | `grimoire_preview_operation` | what an operation would change; nothing changes |
 | `grimoire_apply_operation` | run one, and record it in the operation log |
 | `grimoire_read_oplog` | the log, newest last |
+| `grimoire_style` | the style of one place, game to area, behind the person's trust, with the pictures it cites |
 
 **The operation tools are four, and not one per operation**, because the always-loaded toolset is a
 prompt an agent pays for on every turn. The apply tool dispatches by name, and the list tool says what

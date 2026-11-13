@@ -186,7 +186,7 @@ fn every_fault_is_reported_once_with_its_path_and_nothing_is_truncated() {
     assert_eq!(ui.bytes, STYLE_FILE_MAX_BYTES + 1);
 
     // 6. A picture that is not there: the file, the line and the path.
-    let picture = about("board/fog.jpg");
+    let picture = about("cites a picture that is not there");
     assert_eq!(picture.len(), 1, "one problem for the missing picture: {said:#?}");
     assert!(picture[0].contains("design/levels/yard/style.md"), "it names the file: {}", picture[0]);
     assert!(picture[0].contains("line 3"), "it names the line: {}", picture[0]);

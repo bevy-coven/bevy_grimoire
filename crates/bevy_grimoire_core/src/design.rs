@@ -227,6 +227,9 @@ pub struct Tree {
     pub places: Vec<Place>,
     /// What is wrong, each once, with the path it is about.
     pub problems: Vec<Problem>,
+    /// **The maps the project has, by name**, each with its floor rectangle `(x0, z0, x1, z1)` in map metres, or `None`
+    /// when its file does not read (which `problems` says). What `grimoire_style` checks a map and a point against.
+    pub maps: BTreeMap<String, Option<(f32, f32, f32, f32)>>,
     /// **The text of every topic file that read**, by its path relative to the project root. A file that was
     /// refused (too large, not UTF-8, not a regular file) is absent, and its problem says why.
     texts: BTreeMap<String, String>,
@@ -258,7 +261,7 @@ impl Tree {
             read_regions(root, &design, &maps, &mut places, &mut problems, &mut texts);
             read_levels_in_no_region(root, &design, &maps, &mut places, &mut problems, &mut texts);
         }
-        let mut tree = Tree { root: root.to_path_buf(), places, problems, texts };
+        let mut tree = Tree { root: root.to_path_buf(), places, problems, maps, texts };
         tree.check_a_map_has_one_folder();
         tree.check_topics_are_the_games();
         tree.check_chains();
@@ -512,17 +515,18 @@ impl Tree {
             }
         }
         for (file, picture) in missing {
-            let rel = picture.file.clone().unwrap_or_default();
-            let caption =
-                if picture.caption.is_empty() { String::new() } else { format!(", whose caption says '{}'", picture.caption) };
             self.problems.push(Problem::with(
                 format!("`{file}` cites a picture that is not there, on line {}", picture.line),
                 Detail::default()
                     // **The line is carried as a number as well as said**, so a caller that jumps to it reads
                     // it here instead of scraping it out of the sentence.
                     .at(Location::file(file.clone()).line(picture.line))
-                    .because(format!("line {} cites `{}`{caption}, and {rel} is not there", picture.line, picture.cited))
-                    .fix(format!("put the picture at {rel}, or change the line to name one that is there")),
+                    // **Nothing the file said**: not the caption, the title, the alt text, nor the destination, which in
+                    // CommonMark may be any prose in angle brackets. This sentence reaches an agent through
+                    // `grimoire_state.design.problems` with no check of the person's trust, and the person finds the path
+                    // in the file at that line.
+                    .because(format!("line {} cites a picture that is not in the project", picture.line))
+                    .fix(format!("put the picture where line {} cites it, or change the line to name one that is there", picture.line)),
             ));
         }
     }

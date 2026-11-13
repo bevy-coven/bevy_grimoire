@@ -94,6 +94,7 @@ pub mod session;
 pub mod smart;
 pub mod stack;
 pub mod standards;
+pub mod style;
 pub mod trust;
 pub mod user_dirs;
 pub mod vocab;

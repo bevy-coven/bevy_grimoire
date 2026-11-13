@@ -14,7 +14,7 @@
 //!
 //! A project cloned from somewhere else can carry a `.dark_factory/AGENTS.md` that tells an agent with a
 //! shell to do anything, and an agent follows a guide it is given. So the project's layer is served only
-//! when the person has allowed **that exact content** (`trust::GuideGrant`, the SHA-256 of the bytes) or
+//! when the person has allowed **that exact content** (`trust::TextGrant`, the SHA-256 of the bytes) or
 //! **the whole project** (`Scope::Project`). The person's own layer needs no trust: it is theirs.
 //!
 //! **Withheld, the layer becomes one line** saying the project has a guide nobody has allowed — never the
@@ -161,10 +161,14 @@ impl GuideState {
     }
 }
 
-/// **A guide waiting for a person's answer.**
+/// **A text waiting for a person's answer**: the project's guide, or one of its style files (#401). They share
+/// one question, `Asked::TrustGuide`, and one store, as they share one grant type.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GuideRequest {
     pub root: PathBuf,
+    /// The file the text is, relative to the project root: [`PROJECT_PATH_SHOWN`] for the guide, `design/style.md`
+    /// for a style file. The grant is for this path and this content.
+    pub path: String,
     pub text: String,
     /// **Whether the question offered "Allow this guide".** A guide too long to show is raised as a *note*,
     /// which has no affirmative at all — not the text (unread) and not `Scope::Project`, whose list is the
@@ -177,8 +181,9 @@ pub struct GuideRequest {
 /// system rather than in the call that raised it.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct GuideTrust {
-    /// Raised by a `grimoire/agent_guide` call whose project layer was withheld; the next frame asks it.
-    pub pending: Option<GuideRequest>,
+    /// **Raised by a `grimoire/agent_guide` or `grimoire/style` call that withheld a text; the frames after it ask
+    /// them one at a time**, in the order they were raised. A style chain can withhold a file for each place.
+    pub pending: Vec<GuideRequest>,
     /// Asked, not answered.
     pub awaiting: Option<GuideRequest>,
     /// **What this person said "not now" to**, as `(project root, digest)`, for the rest of the session.
@@ -246,16 +251,22 @@ pub fn fully_shown(text: &str) -> bool {
         && bevy_grimoire_core::agent_guide::visual_rows(trimmed, SHOWN_COLUMNS) <= SHOWN_LINES
 }
 
-/// Raises the guide question a withheld layer left, once no other question is up.
+/// **What the question calls the text**: the project's guide, or a style file by its path.
+fn what_it_is(request: &GuideRequest) -> String {
+    if request.path == PROJECT_PATH_SHOWN { "guide".to_owned() } else { format!("style file `{}`", request.path) }
+}
+
+/// Raises the question a withheld text left, once no other question is up.
 fn ask_the_person(state: Option<ResMut<EditorState>>, mut confirm: ResMut<Confirm>) {
     let Some(mut state) = state else { return };
-    if state.guide.awaiting.is_some() || confirm.is_open() {
+    if state.guide.awaiting.is_some() || confirm.is_open() || state.guide.pending.is_empty() {
         return;
     }
-    let Some(request) = state.guide.pending.take() else { return };
+    let request = state.guide.pending.remove(0);
+    let what = what_it_is(&request);
     // **The text is shown, because the text is what is being allowed.** A question that asked "allow this
     // project's guide?" over a filename would be asking a person to trust a file they have not read.
-    let body = format!("{}\n\n---\n{}", project_file(&request.root).display(), text_preview(&request.text));
+    let body = format!("{}\n\n---\n{}", request.root.join(&request.path).display(), text_preview(&request.text));
     // **A guide too long to show is a note, with no grant at all.**
     //
     // The grants a question could offer are the text's (which the person has not been shown) and
@@ -268,12 +279,12 @@ fn ask_the_person(state: Option<ResMut<EditorState>>, mut confirm: ResMut<Confir
         request.offer_allow = false;
         confirm.note(
             Asked::TrustGuide,
-            "This project's guide is too long to show here".to_owned(),
+            format!("This project's {what} is too long to show here"),
             format!(
                 "{}\n\nIt is {} lines and {} characters, and this question can show {SHOWN_LINES} lines and \
                  {SHOWN_CHARS} characters. Read it in your own editor, at the path above, and shorten it to \
-                 fit: a guide too long to show cannot be allowed from here, and nothing has been granted.",
-                project_file(&request.root).display(),
+                 fit: a text too long to show cannot be allowed from here, and nothing has been granted.",
+                request.root.join(&request.path).display(),
                 bevy_grimoire_core::agent_guide::visual_rows(&request.text, SHOWN_COLUMNS),
                 request.text.chars().count()
             ),
@@ -286,7 +297,7 @@ fn ask_the_person(state: Option<ResMut<EditorState>>, mut confirm: ResMut<Confir
     request.offer_allow = true;
     confirm.ask_three(
         Asked::TrustGuide,
-        "Give this project's guide to your agent?".to_owned(),
+        format!("Give this project's {what} to your agent?"),
         body,
         "Allow this guide",
         "Trust this project",
@@ -310,10 +321,9 @@ fn take_the_answer(
     // same as Not now: there is no affirmative on a note at all, and nothing here reads one.
     if choice == Choice::No || !request.offer_allow {
         state.guide.denied.insert((request.root.clone(), digest(&request.text)));
-        state.status.note(
-            "Not allowed, so this project's guide was not given to your agent. You can allow it on the project page."
-                .to_owned(),
-        );
+        let what = what_it_is(&request);
+        let again = if request.path == PROJECT_PATH_SHOWN { "You can allow it on the project page." } else { "Ask your agent again to be asked again." };
+        state.status.note(format!("Not allowed, so this project's {what} was not given to your agent. {again}"));
         return;
     }
     // **The middle answer is Trust this project**; only a question that offered Allow can be answered with
@@ -326,14 +336,19 @@ fn take_the_answer(
             let mut store = TrustStore::load(&path)?;
             match scope {
                 Scope::Project => store.trust_project(&request.root),
-                _ => store.trust_guide(&request.root, &request.text),
+                _ => store.trust_text(&request.root, &request.path, &request.text),
             }
             .and_then(|()| store.save(&path))
         });
     match written {
         Ok(()) => {
-            let what = if scope == Scope::Project { "this project's guides" } else { "that guide" };
+            let what = if scope == Scope::Project { "this project's guides and style".to_owned() } else { format!("that {}", what_it_is(&request)) };
             state.status.note(format!("Allowed {what}. Ask your agent again and it will be given."));
+            // **Trusting the project answers every question about it**, so a style chain that withheld a file for
+            // each place does not ask about the rest.
+            if scope == Scope::Project {
+                state.guide.pending.retain(|other| other.root != request.root);
+            }
         }
         Err(e) => state.status.problem(e),
     }
@@ -357,11 +372,46 @@ pub fn serve(
             .is_some_and(|a| a.root == project.root && a.text == *text);
         // **Not now is an answer**, so the same text is never asked for twice in one session. A changed
         // file is a different digest and is asked about again.
-        if !already_asked && !state.guide.denied_at(&project.root, text) {
-            state.guide.pending = Some(GuideRequest { root: project.root.clone(), text: text.clone(), offer_allow: true });
+        if !already_asked {
+            raise(state, &project.root, PROJECT_PATH_SHOWN, text);
         }
     }
     composed
+}
+
+/// **Raise the question about one withheld text**, unless it is already raised, being asked, or answered "not now" in
+/// this session. `path` is the file relative to the project root.
+pub fn raise(state: &mut EditorState, root: &Path, path: &str, text: &str) {
+    let same = |r: &GuideRequest| r.root == root && r.path == path && r.text == text;
+    if state.guide.denied_at(root, text) || state.guide.awaiting.as_ref().is_some_and(same) || state.guide.pending.iter().any(same) {
+        return;
+    }
+    state.guide.pending.push(GuideRequest { root: root.to_path_buf(), path: path.to_owned(), text: text.to_owned(), offer_allow: true });
+}
+
+/// **The style of a place, as `grimoire/style` serves it** (SG-02, #401): the chain of the design tree's files with
+/// every file the person has not allowed withheld, and the question raised for each.
+///
+/// The same store as the guide's (`trusted::load_at`), the same grants (`TextGrant`) and the same question
+/// (`Asked::TrustGuide`). **A store that will not read withholds every file** and is reported in `trouble`, never
+/// read as "nothing is trusted" or as "everything is".
+pub fn serve_style(
+    state: &mut EditorState,
+    project: &Project,
+    store_root: Option<&crate::trusted::StoreRoot>,
+    request: &bevy_grimoire_core::style::Request,
+) -> Result<bevy_grimoire_core::style::Answer, String> {
+    let tree = bevy_grimoire_core::design::Tree::read(&project.root);
+    let store = crate::trusted::load_at(store_root, state.trust.file.as_deref());
+    let root = project.root.clone();
+    let answer = bevy_grimoire_core::style::compose(&tree, request, &mut |path, text| match &store {
+        Ok(store) => store.text_decision(&root, path, text),
+        Err(e) => Err(e.clone()),
+    })?;
+    for withheld in &answer.withheld {
+        raise(state, &project.root, &withheld.path, &withheld.text);
+    }
+    Ok(answer)
 }
 
 /// **The guide's `layers`, `withheld`, `problems` and `trouble`, as `grimoire/agent_guide` answers.**

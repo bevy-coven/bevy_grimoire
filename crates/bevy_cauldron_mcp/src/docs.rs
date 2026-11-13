@@ -398,6 +398,25 @@ pub const TOOLS: &[ToolDoc] = &[
         idempotent: true,
     },
     ToolDoc {
+        name: "grimoire_style",
+        description: "The style of one place, as an agent should read it before shaping that place: the \
+                      game's style files first, then the region's, the level's and the area's that holds \
+                      `at`, so the most specific place comes last. Each place gives its style.md and, \
+                      when `topic` is asked for, its file for that topic; each file arrives under a \
+                      heading naming its path. With no `map` you get the game's files alone. A style \
+                      file is served only once the person has allowed that exact content (or trusted \
+                      the project): one that has not been allowed is withheld and arrives as one line \
+                      saying it is waiting for them, never as its text. The pictures the served text \
+                      cites come back as images, each after a line with its path and its caption, at \
+                      most 8 of at most 1 MiB each; one left out is named with its path, its caption \
+                      and the reason. `map` must be a map of the project, `at` ([x, z] in map metres) \
+                      must be inside it, and `topic` must be one the game has: anything else is refused \
+                      with the reason. It changes nothing.",
+        read_only: true,
+        destructive: false,
+        idempotent: true,
+    },
+    ToolDoc {
         name: "grimoire_list_rules",
         description: "The block rules the project states for generating layouts, read from \
                       assets/grimoire/rules.yaml: for each block, the example map its grammar is learned from, the \
@@ -850,8 +869,22 @@ pub fn schemas() -> Value {
     // `every_tool_has_a_schema` reads the map, not the expression it came from.
     if let Some(map) = document.as_object_mut() {
         map.insert("grimoire_lesson".to_owned(), lesson_schema());
+        map.insert("grimoire_style".to_owned(), style_schema());
     }
     document
+}
+
+/// **The parameters of `grimoire_style`** (SG-02, #401), which the literal above cannot hold.
+fn style_schema() -> Value {
+    serde_json::json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "map": {"type": ["string", "null"], "default": null, "description": "A map of the project, by name. With none, the answer is the game's files alone."},
+            "at": {"type": ["array", "null"], "items": {"type": "number"}, "minItems": 2, "maxItems": 2, "default": null, "description": "A point on that map, [x, z] in map metres; the area that holds it closes the chain. It must be inside the map, and it needs map."},
+            "topic": {"type": ["string", "null"], "default": null, "description": "A topic the game states, such as dialogue: each place that has a file for it adds that file."},
+        },
+    })
 }
 
 /// **The parameters of `grimoire_lesson`**, which the literal above cannot hold.

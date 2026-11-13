@@ -162,6 +162,14 @@ A snip that is confirmed but not yet written is pending. The editor clears pendi
 
 `grimoire_snip` is a different tool. The agent gives it a `label` and a `rect` in window pixels, and it writes one crop of the editor's picture. The crop is not logged and not undoable.
 
+## The game's style
+
+Goal: have the agent read what a place should feel like before it shapes that place.
+
+A game's style is written in Markdown under `design/`, one folder per place: the whole game, a region, a level (named after its map) and an area of a level. `grimoire_style` returns the chain an agent reads for one place: the game's files first, then the region's, the level's and the area's that holds the point `at`, so the most specific place comes last. Each place gives its `style.md` and, when `topic` is asked for, its file for that topic; each file arrives under a heading naming its path. With no `map` you get the game's files alone. The pictures the served text cites come back as images with their captions, at most 8 of at most 1 MiB each; a picture left out is named with its path, its caption and the reason. A `map` that is not in the project, an `at` outside it, and a `topic` the game does not state are refused with the reason, and a chain over 64 KiB is refused with the size of each file rather than cut.
+
+**A style file is text an agent with a shell will follow, so it needs your trust.** A cloned project's style is withheld until you allow that exact content or trust the whole project, the way its guide is: the agent gets one line saying the file is waiting for you, never its text, and the editor asks. **Allow this guide** (it reads **Give this project's style file `design/style.md` to your agent?** for a style file), **Trust this project** and **Not now** are the three answers, and **Not now** holds for that content for the session. One changed byte is new content and asks again; **Trust this project** serves every later edit. A style file too long for the question to show cannot be allowed from it: shorten it, or trust the project.
+
 ## Reports the person files
 
 Goal: read what the person pointed at and said was wrong, without asking them to describe it again.
