@@ -1,6 +1,6 @@
 [package]
 name = "bevy_grimoire_rhai"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.97.1"
 description = "Rhai scripts on entities, reloaded live: the one Rhai host a bevy_grimoire game runs its scripts on."

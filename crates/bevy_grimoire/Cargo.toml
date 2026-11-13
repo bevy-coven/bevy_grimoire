@@ -1,6 +1,6 @@
 [package]
 name = "bevy_grimoire"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2024"
 rust-version = "1.97.1"
 description = "The runtime half of grimoire: load a library and a map, and put it in a Bevy world."
@@ -33,7 +33,7 @@ serde.workspace = true
 # **The script host a game made of data runs** (`game.rs`, GD-10, #372): `GamePlugin` adds it beside the behaviours.
 [dependencies.bevy_grimoire_rhai]
 path = "../bevy_grimoire_rhai"
-version = "0.1.0"
+version = "0.1.1"
 
 [features]
 # **A release that reads only its bake** (GD-08, #370): `GameDataPlugin` opens `<root>/baked` before it reads anything,
