@@ -1,0 +1,157 @@
+{
+  "name": "document_tabs",
+  "fps": 15,
+  "scale": 1,
+  "width": 960,
+  "crop": [
+    0,
+    0,
+    1088,
+    640
+  ],
+  "setup": [
+    {
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 7.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.0,
+      "cursor": [
+        420,
+        24
+      ],
+      "caption": "a document tab per open map"
+    },
+    {
+      "at": 0.3,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "pouffe",
+          "at": [
+            -6.0,
+            -5.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 0.7,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "map_set_settings",
+        "parameters": {
+          "bounds": [
+            24.0,
+            3.0,
+            20.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 1.5,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "chair",
+          "at": [
+            -3.0,
+            4.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 1.6,
+      "caption": "the map is open in its tab"
+    },
+    {
+      "at": 2.4,
+      "mcp": "grimoire_run_command",
+      "args": {
+        "id": "workspace.world"
+      },
+      "caption": "person: Cmd+3 to another workspace"
+    },
+    {
+      "at": 2.7,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "desk",
+          "at": [
+            4.0,
+            -4.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 3.9,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "bin",
+          "at": [
+            6.0,
+            5.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 4.0,
+      "mcp": "grimoire_run_command",
+      "args": {
+        "id": "workspace.map"
+      },
+      "caption": "person: and back to the Map"
+    },
+    {
+      "at": 5.1,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "barrel_metal",
+          "at": [
+            -7.0,
+            2.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 5.6,
+      "caption": "the tab kept the map where it was"
+    },
+    {
+      "at": 6.3,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "sofa",
+          "at": [
+            2.0,
+            -6.0
+          ]
+        }
+      }
+    }
+  ]
+}

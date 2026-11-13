@@ -1,0 +1,158 @@
+{
+  "name": "file_editor_navigation",
+  "fps": 15,
+  "scale": 1,
+  "width": 960,
+  "crop": [
+    0,
+    0,
+    1088,
+    640
+  ],
+  "setup": [
+    {
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 9.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.0,
+      "mcp": "grimoire_run_command",
+      "args": {
+        "id": "workspace.files"
+      },
+      "caption": "person: Cmd+7 opens the Files workspace"
+    },
+    {
+      "at": 0.3,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "pouffe",
+          "at": [
+            -6.0,
+            -5.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 1.15,
+      "caption": "the file tree on the left, the editor on the right, the minimap down the edge"
+    },
+    {
+      "at": 1.5,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "chair",
+          "at": [
+            -3.0,
+            4.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 2.15,
+      "click_label": "bedroom",
+      "caption": "person: open the map's YAML"
+    },
+    {
+      "at": 2.7,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "desk",
+          "at": [
+            4.0,
+            -4.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 3.58,
+      "caption": "a mapping folds, and the lines below move up by its height"
+    },
+    {
+      "at": 3.9,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "bin",
+          "at": [
+            6.0,
+            5.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 4.73,
+      "caption": "indent and bracket guides, a fold marker in the gutter"
+    },
+    {
+      "at": 5.1,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "barrel_metal",
+          "at": [
+            -7.0,
+            2.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 6.3,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "sofa",
+          "at": [
+            2.0,
+            -6.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 6.74,
+      "type": "bounds"
+    },
+    {
+      "at": 7.5,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "table",
+          "at": [
+            5.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 7.6,
+      "caption": "the minimap marks where the match sits"
+    }
+  ]
+}

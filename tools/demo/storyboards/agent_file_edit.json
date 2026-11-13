@@ -1,0 +1,194 @@
+{
+  "name": "agent_file_edit",
+  "fps": 15,
+  "scale": 1,
+  "width": 960,
+  "crop": [
+    0,
+    0,
+    1088,
+    640
+  ],
+  "setup": [
+    {
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 9.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.0,
+      "mcp": "grimoire_run_command",
+      "args": {
+        "id": "workspace.files"
+      },
+      "caption": "person: the Files workspace, on the map's YAML"
+    },
+    {
+      "at": 0.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "pouffe",
+          "at": [
+            -6.0,
+            -5.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 1.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "chair",
+          "at": [
+            -3.0,
+            4.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 1.6,
+      "caption": "the person's caret is on a line they are editing"
+    },
+    {
+      "at": 2.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "desk",
+          "at": [
+            4.0,
+            -4.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 2.6,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "file_edit",
+        "parameters": {
+          "path": "assets/grimoire/maps/bedroom.map.yaml",
+          "edits": [
+            {
+              "at": "bounds[0]",
+              "value": 24.0
+            }
+          ]
+        }
+      },
+      "caption": "agent: file_edit sets one field"
+    },
+    {
+      "at": 3.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "shelf",
+          "at": [
+            6.0,
+            5.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 4.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "barrel_metal",
+          "at": [
+            -7.0,
+            2.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 4.6,
+      "caption": "the changed lines arrive tinted, the caret has not moved"
+    },
+    {
+      "at": 5.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "sofa",
+          "at": [
+            2.0,
+            -6.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 6.2,
+      "mcp": "grimoire_run_command",
+      "args": {
+        "id": "edit.undo"
+      },
+      "caption": "person: Cmd+Z restores the file byte for byte"
+    },
+    {
+      "at": 6.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "table",
+          "at": [
+            5.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 7.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "shelf",
+          "at": [
+            -2.0,
+            -7.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 8.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "barrel_metal",
+          "at": [
+            7.0,
+            -2.0
+          ]
+        }
+      }
+    }
+  ]
+}

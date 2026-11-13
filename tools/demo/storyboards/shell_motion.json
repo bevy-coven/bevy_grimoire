@@ -1,0 +1,78 @@
+{
+  "name": "shell_motion",
+  "fps": 15,
+  "scale": 1,
+  "width": 960,
+  "crop": [
+    0,
+    0,
+    1088,
+    640
+  ],
+  "setup": [],
+  "chunks": [
+    {
+      "seconds": 8.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.0,
+      "cursor": [
+        700,
+        560
+      ],
+      "caption": "the shell: workbench above, dock below"
+    },
+    {
+      "at": 0.5,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "pouffe",
+          "at": [
+            -4.0,
+            -3.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 2.0,
+      "mcp": "grimoire_run_command",
+      "args": {
+        "id": "view.frame"
+      },
+      "caption": "the workbench takes the room"
+    },
+    {
+      "at": 3.5,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "chair",
+          "at": [
+            3.0,
+            4.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 5.0,
+      "mcp": "grimoire_run_command",
+      "args": {
+        "id": "workspace.kit"
+      }
+    },
+    {
+      "at": 6.5,
+      "mcp": "grimoire_run_command",
+      "args": {
+        "id": "workspace.map"
+      }
+    }
+  ]
+}

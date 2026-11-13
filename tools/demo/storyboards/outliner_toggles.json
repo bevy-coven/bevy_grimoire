@@ -1,0 +1,145 @@
+{
+  "name": "outliner_toggles",
+  "fps": 15,
+  "scale": 1,
+  "width": 960,
+  "crop": [
+    0,
+    0,
+    1088,
+    640
+  ],
+  "setup": [
+    {
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 9.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.3,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "pouffe",
+          "at": [
+            -6.0,
+            -5.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 1.0,
+      "caption": "a stool placed, and its row in the outliner"
+    },
+    {
+      "at": 1.5,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "chair",
+          "at": [
+            -3.0,
+            4.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 2.0,
+      "caption": "person: hide it"
+    },
+    {
+      "at": 2.7,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "desk",
+          "at": [
+            4.0,
+            -4.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 3.4,
+      "caption": "the piece leaves the map, the row stays"
+    },
+    {
+      "at": 3.9,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "shelf",
+          "at": [
+            6.0,
+            5.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 4.4,
+      "caption": "person: show it again"
+    },
+    {
+      "at": 5.1,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "barrel_metal",
+          "at": [
+            -7.0,
+            2.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 5.8,
+      "caption": "person: lock it, so a click leaves it alone"
+    },
+    {
+      "at": 6.3,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "sofa",
+          "at": [
+            2.0,
+            -6.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 7.5,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "table",
+          "at": [
+            5.0,
+            1.0
+          ]
+        }
+      }
+    }
+  ]
+}

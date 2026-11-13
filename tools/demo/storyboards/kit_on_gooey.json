@@ -1,0 +1,158 @@
+{
+  "name": "kit_on_gooey",
+  "fps": 15,
+  "scale": 1,
+  "width": 960,
+  "crop": [
+    0,
+    0,
+    1088,
+    640
+  ],
+  "setup": [
+    {
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 9.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.0,
+      "mcp": "grimoire_run_command",
+      "args": {
+        "id": "workspace.kit"
+      },
+      "caption": "person: Cmd+4 opens the Kit workspace"
+    },
+    {
+      "at": 0.3,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "pouffe",
+          "at": [
+            -6.0,
+            -5.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 1.5,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "chair",
+          "at": [
+            -3.0,
+            4.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 1.6,
+      "caption": "the pieces, the pack band and the tab strip, all gooey rows"
+    },
+    {
+      "at": 2.7,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "desk",
+          "at": [
+            4.0,
+            -4.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 3.0,
+      "wheel": {
+        "y": 1,
+        "n": 3,
+        "at": [
+          420,
+          300
+        ]
+      },
+      "caption": "person: wheel down the library"
+    },
+    {
+      "at": 3.9,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "shelf",
+          "at": [
+            6.0,
+            5.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 4.6,
+      "caption": "a row's thumbnail slot draws nothing over its fill until its portrait exists"
+    },
+    {
+      "at": 5.1,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "barrel_metal",
+          "at": [
+            -7.0,
+            2.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 6.0,
+      "click_label": "chair",
+      "caption": "person: pick a piece"
+    },
+    {
+      "at": 6.3,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "sofa",
+          "at": [
+            2.0,
+            -6.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 7.5,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "table",
+          "at": [
+            5.0,
+            1.0
+          ]
+        }
+      }
+    }
+  ]
+}

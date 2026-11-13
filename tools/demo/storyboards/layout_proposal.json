@@ -1,0 +1,140 @@
+{
+  "name": "layout_proposal",
+  "fps": 15,
+  "scale": 1,
+  "width": 960,
+  "crop": [
+    0,
+    0,
+    1088,
+    640
+  ],
+  "setup": [
+    {
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
+    {
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "map_set_settings",
+        "parameters": {
+          "bounds": [
+            24.0,
+            3.0,
+            20.0
+          ]
+        }
+      }
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 7.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.0,
+      "cursor": [
+        420,
+        320
+      ],
+      "caption": "agent: it proposes a layout as a PREVIEW"
+    },
+    {
+      "at": 0.3,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "pouffe",
+          "at": [
+            -6.0,
+            -5.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 1.5,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "chair",
+          "at": [
+            -3.0,
+            4.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 2.7,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "desk",
+          "at": [
+            4.0,
+            -4.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 3.0,
+      "caption": "the map on disk is byte for byte unchanged"
+    },
+    {
+      "at": 3.9,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "table",
+          "at": [
+            6.0,
+            5.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 5.1,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "barrel_metal",
+          "at": [
+            -7.0,
+            2.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 6.3,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "sofa",
+          "at": [
+            2.0,
+            -6.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 6.4,
+      "caption": "preview then apply moved the camera once"
+    }
+  ]
+}

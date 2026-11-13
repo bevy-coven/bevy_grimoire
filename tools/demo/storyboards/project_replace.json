@@ -1,0 +1,182 @@
+{
+  "name": "project_replace",
+  "fps": 15,
+  "scale": 1,
+  "width": 960,
+  "crop": [
+    0,
+    0,
+    1088,
+    640
+  ],
+  "setup": [
+    {
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 9.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.0,
+      "mcp": "grimoire_run_command",
+      "args": {
+        "id": "workspace.files"
+      },
+      "caption": "person: Cmd+7, the Files workspace"
+    },
+    {
+      "at": 0.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "pouffe",
+          "at": [
+            -6.0,
+            -5.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 1.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "chair",
+          "at": [
+            -3.0,
+            4.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 2.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "desk",
+          "at": [
+            4.0,
+            -4.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 2.47,
+      "type": "stool",
+      "caption": "every file that names a stool, streaming in"
+    },
+    {
+      "at": 3.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "table",
+          "at": [
+            6.0,
+            5.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 4.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "barrel_metal",
+          "at": [
+            -7.0,
+            2.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 4.37,
+      "caption": "person: Preview shows the diff before anything is written"
+    },
+    {
+      "at": 5.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "sofa",
+          "at": [
+            2.0,
+            -6.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 6.08,
+      "caption": "Replace all is ONE operation: one log line, one undo"
+    },
+    {
+      "at": 6.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "table",
+          "at": [
+            5.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 7.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "shelf",
+          "at": [
+            -2.0,
+            -7.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 7.6,
+      "mcp": "grimoire_run_command",
+      "args": {
+        "id": "edit.undo"
+      },
+      "caption": "person: Cmd+Z puts every file back byte for byte"
+    },
+    {
+      "at": 8.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "barrel_metal",
+          "at": [
+            7.0,
+            -2.0
+          ]
+        }
+      }
+    }
+  ]
+}

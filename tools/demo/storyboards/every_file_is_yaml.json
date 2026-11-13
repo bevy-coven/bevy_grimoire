@@ -1,0 +1,185 @@
+{
+  "name": "every_file_is_yaml",
+  "fps": 15,
+  "scale": 1,
+  "width": 960,
+  "crop": [
+    0,
+    0,
+    1088,
+    640
+  ],
+  "setup": [
+    {
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 8.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.0,
+      "mcp": "grimoire_run_command",
+      "args": {
+        "id": "workspace.files"
+      },
+      "caption": "every project file is YAML now"
+    },
+    {
+      "at": 0.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "pouffe",
+          "at": [
+            -6.0,
+            -5.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 0.8,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "bin",
+          "at": [
+            3.0,
+            -3.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 1.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "chair",
+          "at": [
+            -3.0,
+            4.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 1.6,
+      "caption": "comments, anchors and the shape a person wrote are kept"
+    },
+    {
+      "at": 2.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "desk",
+          "at": [
+            4.0,
+            -4.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 3.0,
+      "write": {
+        "path": "assets/grimoire/maps/bedroom.map.yaml",
+        "text": ""
+      },
+      "caption": "person: save the file"
+    },
+    {
+      "at": 3.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "shelf",
+          "at": [
+            6.0,
+            5.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 4.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "barrel_metal",
+          "at": [
+            -7.0,
+            2.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 4.6,
+      "caption": "the map reloads beside it, with no restart"
+    },
+    {
+      "at": 5.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "sofa",
+          "at": [
+            2.0,
+            -6.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 6.0,
+      "mcp": "grimoire_run_command",
+      "args": {
+        "id": "workspace.files"
+      },
+      "caption": "person: Cmd+1, and the map shows the saved value"
+    },
+    {
+      "at": 6.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "table",
+          "at": [
+            5.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 7.25,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "shelf",
+          "at": [
+            -2.0,
+            -7.0
+          ]
+        }
+      }
+    }
+  ]
+}
