@@ -96,6 +96,19 @@ pub fn write_cache(path: &Path, contents: impl AsRef<[u8]>) -> io::Result<()> {
     put(path, contents.as_ref(), Flush::None, Land::Replace)
 }
 
+/// **Move a folder, with everything in it, to a path that is not there yet**, making the parents. It writes no bytes, so a
+/// reader sees the folder whole at one place or the other, and it refuses with `ErrorKind::AlreadyExists` rather than put one
+/// folder inside another. Use it where an editor sets a folder aside instead of deleting it (an area with a page, SG-06).
+pub fn move_folder(from: &Path, to: &Path) -> io::Result<()> {
+    if to.exists() {
+        return Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("{} is already there", to.display())));
+    }
+    if let Some(parent) = to.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::rename(from, to)
+}
+
 /// The temp name a write of `target` uses for `serial`: beside the target, hidden, and not `.yaml`.
 pub fn temp_path(target: &Path, serial: u64) -> PathBuf {
     let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();

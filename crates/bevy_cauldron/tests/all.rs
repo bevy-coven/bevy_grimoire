@@ -78,6 +78,7 @@ mod a_destructible_file_of_another_version_is_refused;
 mod a_destructible_file_that_does_not_read_is_named;
 mod a_door_answer_says_whether_it_waits;
 mod a_dream_board_for_every_place;
+mod areas_drawn_on_the_map;
 mod a_dropped_image_becomes_a_reference;
 mod a_dressed_camera_leaves_the_world_on_the_surface;
 mod a_family_panel_is_the_crates_own_settings;

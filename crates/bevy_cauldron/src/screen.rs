@@ -429,6 +429,8 @@ door_state![
     // The inspector's pose view (UI-50, #236): which entity gooey's reflect inspector edits, which is
     // this door's selection, so a door change starts afresh.
     crate::inspector_view::PoseInspector,
+    // The style areas of this door's map, whether they are drawn, and where the cursor last was on it (SG-06, #405).
+    crate::design_areas::StyleAreas,
     // The audio panel's buses, cues and selection (S-01): a view of this door's project's sound.
     #[cfg(feature = "bevy_siren")]
     crate::audio_panel::AudioPanel,
@@ -717,6 +719,9 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // **`Door`, like the selection it mirrors**: the entity the inspector edits belongs to the open
     // project's map, and another door's map is another selection.
     ("bevy_cauldron::inspector_view::PoseInspector", Ownership::Workspace),
+    // **`Door`, like the light map beside it**: the areas are those of the open map's level and the outline is a view of that map, so a door
+    // change starts afresh (SG-06, #405).
+    ("bevy_cauldron::design_areas::StyleAreas", Ownership::Workspace),
     // **`Session`**: where the person is looking, not this door's state. A door change keeps it, and the
     // pieces that are not on the new map are dropped the next frame.
     // **`Session`**: whether the agent may write is the person's call about the whole sitting, not a door's.
