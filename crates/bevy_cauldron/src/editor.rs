@@ -2647,6 +2647,8 @@ impl Plugin for EditorPlugin {
         // **The Files workspace** (GD-11, #373): the file tree and the code editor.
         app.add_plugins(crate::files::FilesPlugin);
         app.add_plugins(crate::files_panel::FilesPanelPlugin);
+        // **The open page's outline** (SG-04, #403): View ▸ Show outline, and `grimoire_state.file_outline`.
+        app.add_plugins(crate::file_outline::FileOutlinePlugin);
         app.add_plugins(crate::app_verbs::AppVerbsPlugin);
         // **Each panel header's "?"** (UI-91, #257): the guide page that covers what the panel holds.
         app.add_plugins(crate::help::HelpPlugin);

@@ -916,6 +916,19 @@ fn keep_the_editor(
     }
 }
 
+/// **Put the caret on a heading's line in the open file** (SG-04, #403): `index` is the heading's place in the page's outline. The editor takes
+/// it the way it takes a search result's place ([`OpenFile::reveal`]), so the line comes into view.
+pub fn reveal_heading(world: &mut World, index: u64) {
+    let Ok(index) = usize::try_from(index) else { return };
+    let Some(line) = world.query::<&FileOutline>().iter(world).next().and_then(|o| o.headings.get(index)).map(|h| h.line) else { return };
+    let Some(rel) = world.get_resource::<Session>().and_then(active_file) else { return };
+    if let Some(mut files) = world.get_resource_mut::<Files>()
+        && let Some(file) = files.open.get_mut(&rel)
+    {
+        file.reveal = Some((line, 0, 0));
+    }
+}
+
 /// How many lines of context stay above a line brought into view by a search result.
 pub const REVEAL_LINES_ABOVE: usize = 3;
 

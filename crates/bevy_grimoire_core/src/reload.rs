@@ -164,7 +164,7 @@ pub const KINDS: &[FileKind] = &[
     kind("oplog", Grimoire, "oplog.jsonl", "JSON lines", Live, Global,
         "the dispatcher appends a line for every operation",
         "Appended by the dispatcher and read by the log tools, the undo walk and the steps feed; nothing holds it. The editor looks at it when its size or modification time moves and says in `grimoire_state.reloads` whether every line reads: a line that does not is named (`line 3.seq`), the readers skip it and an undo refuses until it is repaired."),
-    kind("reference_images", Root, "references/<file>", "image bytes", Live, Global, "`board_set`, when a picture dropped from outside the project is copied into a board",
+    kind("reference_images", Root, "references/<file>", "image bytes", Live, Global, "",
         "**A picture on a board** (SG-03, #402): a file already in the project is referenced where it stands, wherever it is; one dropped from outside is copied into its place's `board/` by `board_set`, and `kind_of` classifies a picture in any place's `board/` (`design/<place>/board/<file>`) as this kind, which a row's path cannot say because it is matched one segment at a time; the pattern here is the folder earlier editors copied into. Nothing holds it. The editor looks at each picture of every board when its size or modification time moves and says in `grimoire_state.reloads` whether it is still the picture its name says: `refused` with the file and the header field (`signature`, `format`, `header`, `width` or `height`) when it is not, `applied` once it is again. A picture that is not there is not decided here: `grimoire_state.board` says `missing: true` for it."),
     // ---- a map's own files ----
     kind("map", Grimoire, "maps/<name>.map.yaml", "Map", Respawn, PerMap,
@@ -293,12 +293,12 @@ pub fn kind_of(base: Base, path: &str) -> Option<&'static FileKind> {
 /// A row's path is matched one segment at a time and a place is as deep as a region's level's area, so no row can say
 /// `design/**/board/<file>`; the shape of a place is [`crate::board::is_place`]'s, and this is the one place that asks it.
 fn place_board_kind(path: &str) -> Option<&'static str> {
-    let parts: Vec<&str> = path.split('/').collect();
-    let [place @ .., folder, file] = parts.as_slice() else { return None };
-    if *folder != crate::board::BOARD_DIR || !crate::board::is_place(&place.join("/")) {
+    let (inside, file) = path.rsplit_once('/')?;
+    let (place, folder) = inside.rsplit_once('/')?;
+    if folder != crate::board::BOARD_DIR || !crate::board::is_place(place) {
         return None;
     }
-    if *file == crate::board::BOARD_FILE {
+    if file == crate::board::BOARD_FILE {
         return Some("board");
     }
     let ext = file.rsplit_once('.')?.1.to_ascii_lowercase();

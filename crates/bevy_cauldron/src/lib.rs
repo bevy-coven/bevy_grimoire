@@ -72,6 +72,7 @@ pub mod crowd_preview;
 pub mod decide_labels;
 pub mod devshot;
 pub mod editor;
+pub mod file_outline;
 pub mod files;
 pub mod files_lang;
 pub mod files_panel;

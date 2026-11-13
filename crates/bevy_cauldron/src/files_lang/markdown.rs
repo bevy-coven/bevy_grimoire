@@ -276,37 +276,24 @@ fn markdown_highlights(text: &str) -> Vec<(Range<usize>, SyntaxRole)> {
 
 fn markdown_folds(text: &str) -> Vec<Range<usize>> {
     let lines = Lines::new(text);
-    let mut out = Vec::new();
-    let mut headings: Vec<(usize, usize)> = Vec::new();
-    let mut fence_start: Option<usize> = None;
     let count = lines.count();
     let last_content = (0..count).rev().find(|&n| !lines.text(n).trim().is_empty()).map_or(0, |n| n + 1);
+    let mut out = Vec::new();
+    // **A section runs to the next heading as shallow as its own** (or to the last line with anything on it), and the headings are
+    // the outline's: one reader, so a setext heading folds as it lists.
+    let headings = design::headings(text);
+    for (at, heading) in headings.iter().enumerate() {
+        let end = headings[at + 1..].iter().find(|next| next.level <= heading.level).map_or(last_content, |next| next.line);
+        out.push(heading.line..end.max(heading.line + 1));
+    }
+    let mut fence_start: Option<usize> = None;
     for n in 0..count {
-        let line = lines.text(n);
-        if fence_of(line).is_some() {
+        if fence_of(lines.text(n)).is_some() {
             match fence_start.take() {
                 Some(start) => out.push(start..n),
                 None => fence_start = Some(n),
             }
-            continue;
         }
-        if fence_start.is_some() {
-            continue;
-        }
-        if let Some(level) = heading_level(line) {
-            while let Some(&(start, open_level)) = headings.last() {
-                if open_level >= level {
-                    out.push(start..n);
-                    headings.pop();
-                } else {
-                    break;
-                }
-            }
-            headings.push((n, level));
-        }
-    }
-    for (start, _) in headings {
-        out.push(start..last_content.max(start + 1));
     }
     out.sort_by_key(|r| (r.start, std::cmp::Reverse(r.end)));
     out

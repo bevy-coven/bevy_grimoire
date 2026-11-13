@@ -148,6 +148,7 @@ fn ask_for_completions(app: &mut App, offset: usize) -> CodeCompletions {
 /// before; a board picture taken from the completion mends it.
 #[test]
 fn a_picture_path_that_does_not_exist_is_an_error_on_its_line_and_the_boards_completion_mends_it() {
+    assert_eq!(DIAGNOSE_IDLE_S, 0.15, "the issue's 150 ms of idle");
     let root = project("fix");
     let mut app = files_editor(&root, PAGE);
     assert_eq!(text(&mut app), PAGE_TEXT);
@@ -249,6 +250,21 @@ fn a_link_to_a_page_that_is_not_there_is_an_error_and_a_url_an_anchor_and_a_mail
     assert_eq!(said, ["missing.md"], "only the page that is not there: {found:?}");
     assert!(found[0].message.contains("page"), "{}", found[0].message);
     assert!(files_lang::diagnose(PAGE, text).is_empty(), "with no project around the page nothing is looked for");
+
+    // A path that climbs out of the project names no file of it: no finding, and nothing to say on hover.
+    let outside = "[x](../../../../etc/passwd)\n";
+    assert!(files_lang::diagnose_in(&env, PAGE, outside).is_empty(), "{:?}", files_lang::diagnose_in(&env, PAGE, outside));
+    assert!(files_lang::hover(PAGE, outside, 6, None, &env).is_none());
+}
+
+/// A section folds from its heading, whichever way the heading is written.
+#[test]
+fn a_setext_heading_folds_as_it_is_listed() {
+    let text = "Title\n=====\nbody\n\nNext\n-----\nmore\n";
+    assert_eq!(files_lang::folds(Lang::Markdown, text), vec![0..7, 4..7]);
+    let outline = files_lang::outline(Lang::Markdown, text);
+    let said: Vec<(usize, &str, usize)> = outline.iter().map(|h| (h.level, h.title.as_str(), h.line)).collect();
+    assert_eq!(said, [(1, "Title", 0), (2, "Next", 4)], "the outline lists the same headings the folds start from");
 }
 
 /// **The registry**: an extension is one language, and every language answers through the one trait.
