@@ -164,9 +164,8 @@ pub const KINDS: &[FileKind] = &[
     kind("oplog", Grimoire, "oplog.jsonl", "JSON lines", Live, Global,
         "the dispatcher appends a line for every operation",
         "Appended by the dispatcher and read by the log tools, the undo walk and the steps feed; nothing holds it. The editor looks at it when its size or modification time moves and says in `grimoire_state.reloads` whether every line reads: a line that does not is named (`line 3.seq`), the readers skip it and an undo refuses until it is repaired."),
-    kind("reference_images", Root, "references/<file>", "image bytes", Live, Global,
-        "the editor, when a person drops an image on a map",
-        "Copied into the project, where `reference_set` lists it and `grimoire_state.references` says whether it is there; nothing holds it. The editor looks at each picture the open map lists when its size or modification time moves and says in `grimoire_state.reloads` whether it is still the picture its name says: `refused` with the file and the header field (`signature`, `format`, `header`, `width` or `height`) when it is not, `applied` once it is again."),
+    kind("reference_images", Root, "references/<file>", "image bytes", Live, Global, "",
+        "**A picture on a board** (SG-03, #402): a file already in the project is referenced where it stands, wherever it is; one dropped from outside is copied into its place's `board/` by `board_set`, and `kind_of` classifies a picture in any place's `board/` (`design/<place>/board/<file>`) as this kind, which a row's path cannot say because it is matched one segment at a time; the pattern here is the folder earlier editors copied into. Nothing holds it. The editor looks at each picture of every board when its size or modification time moves and says in `grimoire_state.reloads` whether it is still the picture its name says: `refused` with the file and the header field (`signature`, `format`, `header`, `width` or `height`) when it is not, `applied` once it is again. A picture that is not there is not decided here: `grimoire_state.board` says `missing: true` for it."),
     // ---- a map's own files ----
     kind("map", Grimoire, "maps/<name>.map.yaml", "Map", Respawn, PerMap,
         "the project chooser (create, settings, rename)",
@@ -175,8 +174,6 @@ pub const KINDS: &[FileKind] = &[
         "The editor rereads it when its modification time moves; the game has no reader."),
     kind("plan", Grimoire, "maps/<name>.plan.yaml", "Plan", Live, PerMap, "",
         "Read on demand by `plan_set` and the plan view."),
-    kind("references", Grimoire, "maps/<name>.references.yaml", "References", Live, PerMap, "",
-        "Read on demand by `reference_set` and the notes."),
     kind("relations", Grimoire, "maps/<name>.relations.yaml", "Relations", Live, PerMap,
         "by hand",
         "Read on demand by `relations_solve`."),
@@ -215,6 +212,8 @@ pub const KINDS: &[FileKind] = &[
         "**The project's layer of the agent's guide** (#347): read again on each `grimoire/agent_guide` call, so an edit reaches the next agent that asks, and nothing holds it. A file the guide refuses (not UTF-8, over `GUIDE_MAX_BYTES`, not a regular file) is left out whole and is `refused` in `grimoire_state.reloads`, naming the file and why. The project page saves it atomically; no operation writes it."),
     kind("design", Root, "design/<file>", "the game's style tree", Live, Global, "by hand",
         "**The game's style** (SG-01, #400): `design/` is a tree of places — the whole game, each region, each level (its folder is named after its map) and each area of a level — and each place's files are its topics. **Nothing holds it**: `design::Tree::read` walks the whole folder — its regions, levels and areas included — on every `grimoire_state` and every `grimoire_style` call, so an edit is in the next answer with no restart, which is why this row is `Live`. **This row names the game's own files** (`design/style.md`, `design/dialogue.md`); a nested place's files are the same kind of file and are read by the same walk, and a row cannot say `design/**` because a pattern is matched one segment at a time and `matches_pattern` has no tail wildcard. A file over `STYLE_FILE_MAX_BYTES`, a chain over `STYLE_CHAIN_MAX_BYTES`, a topic below the game with no game-level file, a level folder whose map does not exist, a map with a folder in two places, two areas that overlap, an area outside its map and a picture that is not there are each reported by that one reader, with the path they are about."),
+    kind("board", Root, "design/board/board.yaml", "Board", Live, Global, "",
+        "**A place's dream board** (SG-03, #402): the pictures that show how the place should feel, each with a caption saying what to take from it. This row names the game's own board; a region's, a level's and an area's are the same kind of file in their own folder (`design/levels/<map>/board/board.yaml`), and a row cannot say `design/**` because a pattern is matched one segment at a time. `kind_of` classifies every place's `board/board.yaml` as this kind. The level's board is the open map's: it replaced `maps/<name>.references.yaml`. Read on demand by `board_set`, `grimoire_state.board` and the header check; nothing holds it, so an edit is in the next answer."),
     kind("play", Root, "play.yaml", "PlayConfig", Live, Global, "by hand",
         "How the editor launches the game, read each time `play` runs; nothing holds it."),
     kind("destructible_marks", Root, "destructible.yaml", "Marks", Live, Global,
@@ -281,7 +280,29 @@ impl FileKind {
 /// **The kind a changed file is**, given its path relative to `base`, or `None` for a file that is not
 /// one of ours. Patterns are unambiguous (a test proves it), so at most one kind answers.
 pub fn kind_of(base: Base, path: &str) -> Option<&'static FileKind> {
+    if base == Base::Root
+        && let Some(id) = place_board_kind(path)
+    {
+        return kind_by_id(id);
+    }
     KINDS.iter().find(|k| k.base == base && k.matches(path))
+}
+
+/// **The kind of a file in a place's `board/`** (SG-03, #402): `board` for its `board.yaml`, `reference_images` for a picture.
+///
+/// A row's path is matched one segment at a time and a place is as deep as a region's level's area, so no row can say
+/// `design/**/board/<file>`; the shape of a place is [`crate::board::is_place`]'s, and this is the one place that asks it.
+fn place_board_kind(path: &str) -> Option<&'static str> {
+    let (inside, file) = path.rsplit_once('/')?;
+    let (place, folder) = inside.rsplit_once('/')?;
+    if folder != crate::board::BOARD_DIR || !crate::board::is_place(place) {
+        return None;
+    }
+    if file == crate::board::BOARD_FILE {
+        return Some("board");
+    }
+    let ext = file.rsplit_once('.')?.1.to_ascii_lowercase();
+    crate::board::IMAGE_EXTS.contains(&ext.as_str()).then_some("reference_images")
 }
 
 /// **What a running program does about a change to a kind.**

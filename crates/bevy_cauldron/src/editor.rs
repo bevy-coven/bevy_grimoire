@@ -2647,6 +2647,8 @@ impl Plugin for EditorPlugin {
         // **The Files workspace** (GD-11, #373): the file tree and the code editor.
         app.add_plugins(crate::files::FilesPlugin);
         app.add_plugins(crate::files_panel::FilesPanelPlugin);
+        // **The open page's outline** (SG-04, #403): View ▸ Show outline, and `grimoire_state.file_outline`.
+        app.add_plugins(crate::file_outline::FileOutlinePlugin);
         app.add_plugins(crate::app_verbs::AppVerbsPlugin);
         // **Each panel header's "?"** (UI-91, #257): the guide page that covers what the panel holds.
         app.add_plugins(crate::help::HelpPlugin);
@@ -2877,7 +2879,7 @@ impl Plugin for EditorPlugin {
                         // goes down, rather than one where it is invisible and still eating keys.
                         leaving_a_tab_puts_the_name_prompt_down.in_set(keys::Phase::Sense),
                     ),
-                    (size_edit_keys, family_edit_keys, data_edit_keys, crowd_edit_keys, drop_reference).in_set(keys::Phase::Text),
+                    (size_edit_keys, family_edit_keys, data_edit_keys, crowd_edit_keys, drop_to_board).in_set(keys::Phase::Text),
                     // No `not_typing`, no `in_map_mode`: `keys::just_pressed` now refuses on both
                     // counts, and a run condition repeating it would be a second census. Dropping
                     // `in_map_mode` also makes `Cmd+S` and `Cmd+Z` work from every tab, which is what
@@ -5720,7 +5722,7 @@ fn terrain_edit_keys(
                 } else if raw.trim_start().starts_with("trigger ") {
                     set_trigger(project.as_deref(), open.as_deref(), &mut state, &raw);
                 } else if raw.trim_start().starts_with("ref ") {
-                    set_reference(project.as_deref(), open.as_deref(), &mut state, &raw);
+                    set_board(project.as_deref(), open.as_deref(), &mut state, &raw);
                 } else if raw.trim_start().starts_with("person ") {
                     set_person(project.as_deref(), open.as_deref(), &mut state, &raw);
                 } else {
@@ -5786,25 +5788,28 @@ fn sculpt_terrain(project: Option<&Project>, open: Option<&OpenMap>, state: &mut
     }
 }
 
-/// **Author a person through the registry** as `person_set`, from the terrain line
-/// `person <name> remove`, or `person <name> [<x> <z>] [home=<id>] [work=<id>] [faction=<id>] [tie=<name>[:<affinity>[:<trust>]]]`.
-/// **Add or remove a reference image through the registry** as `reference_set`, from the terrain line
-/// `ref <path> [caption]` or `ref <id> remove`.
-fn set_reference(project: Option<&Project>, open: Option<&OpenMap>, state: &mut EditorState, raw: &str) {
+/// **Add a picture to the level's board, say again what to take from one, or remove one**, through the registry as `board_set`,
+/// from the terrain line `ref <path> <caption>` or `ref <path> remove` (SG-03, #402). A path the board already has is
+/// re-captioned; any other is added, and the caption is required.
+fn set_board(project: Option<&Project>, open: Option<&OpenMap>, state: &mut EditorState, raw: &str) {
     let words: Vec<&str> = raw.split_whitespace().collect();
-    let (Some(open), Some(first)) = (open, words.get(1)) else {
-        state.status.problem(format!("`{}` is not `ref <path> [caption]` or `ref <id> remove`, so nothing was changed", raw.trim()));
+    let (Some(project), Some(open), Some(path)) = (project, open, words.get(1)) else {
+        state.status.problem(format!("`{}` is not `ref <path> <caption>` or `ref <path> remove`, so nothing was changed", raw.trim()));
         return;
     };
     let params = if words.get(2) == Some(&"remove") && words.len() == 3 {
-        serde_json::json!({"remove": first})
+        serde_json::json!({"action": "remove", "path": path})
     } else {
-        serde_json::json!({"path": first, "caption": words[2..].join(" ")})
+        let level = bevy_grimoire_core::board::level_place(&project.root, &open.map.name);
+        let on_board = bevy_grimoire_core::board::Board::of_place(&project.root, &level).is_ok_and(|b| b.get(path).is_some());
+        let action = if on_board { "caption" } else { "add" };
+        serde_json::json!({"action": action, "path": path, "caption": words[2..].join(" ")})
     };
-    dispatch_reference(project, open, state, &params);
+    dispatch_board(Some(project), open, state, &params, None);
 }
 
-fn dispatch_reference(project: Option<&Project>, open: &OpenMap, state: &mut EditorState, params: &serde_json::Value) {
+/// One `board_set` as a person made it: a log line and an undo step, and what it said in the status line.
+fn dispatch_board(project: Option<&Project>, open: &OpenMap, state: &mut EditorState, params: &serde_json::Value, then: Option<&str>) {
     let mut ctx = crate::ops::Ctx {
         project: project.cloned(),
         open: Some(open.clone()),
@@ -5812,23 +5817,27 @@ fn dispatch_reference(project: Option<&Project>, open: &OpenMap, state: &mut Edi
         session: crate::ops::session_id(),
         ..crate::ops::Ctx::default()
     };
-    match crate::ops::dispatch(&mut ctx, "reference_set", params) {
+    match crate::ops::dispatch(&mut ctx, "board_set", params) {
         Ok(crate::ops::Applied::Done { outcome, operation_id, .. }) => {
-            state.status.note(outcome.summary.clone());
+            match then {
+                Some(then) => state.status.note(format!("{}: {then}", outcome.summary)),
+                None => state.status.note(outcome.summary.clone()),
+            }
             state.record(Undo::Logged { line: operation_id, phrase: outcome.summary, agent: false });
         }
         Ok(crate::ops::Applied::Refused(e)) | Err(e) => state.status.problem(e.0),
     }
 }
 
-/// **An image dropped on the window becomes a reference of the open map** (#124, E-075), through
-/// the same `reference_set` as the `ref` line and an agent's `apply`: one log line, one undo.
+/// **A picture dropped on the window goes on the open map's level board** (SG-03, #402), through the same `board_set` as the
+/// `ref` line and an agent's `apply`: one log line, one undo.
 ///
-/// A file already inside the project is referenced where it is. One from outside is copied into the
-/// project's `references/` first, because a reference is project data and must travel with it; a
-/// different file already holding that name is refused by name rather than overwritten. Undo takes
-/// the reference back and leaves the copied file, which is the person's file now.
-fn drop_reference(
+/// A file already inside the project is referenced where it is. One from outside is copied into the place's `board/` by the
+/// operation, because a board is project data and must travel with it; a different file already holding that name is refused
+/// by name rather than overwritten. **A drop has no caption**, and a board refuses an empty one, so the picture goes on with
+/// [`bevy_grimoire_core::board::PENDING_CAPTION`] and the status line says what to type next. Undo takes the picture off the
+/// board and leaves a copied file, which is the person's file now.
+fn drop_to_board(
     mut drops: MessageReader<bevy::window::FileDragAndDrop>,
     project: Option<Res<Project>>,
     open: Option<Res<OpenMap>>,
@@ -5838,50 +5847,25 @@ fn drop_reference(
         let bevy::window::FileDragAndDrop::DroppedFile { path_buf, .. } = drop else {
             continue;
         };
-        // A mesh is for the library (`add_meshes`), not a reference.
+        // A mesh is for the library (`add_meshes`), not a board.
         if crate::add_meshes::is_mesh_file(path_buf) {
             continue;
         }
         let (Some(project), Some(open)) = (project.as_deref(), open.as_deref()) else {
-            state.status.problem(format!("{} was dropped with no map open, so it is not a reference", path_buf.display()));
+            state.status.problem(format!("{} was dropped with no map open, so it is not on a board", path_buf.display()));
             continue;
         };
-        match reference_path_for_drop(&project.root, path_buf) {
-            Ok(rel) => dispatch_reference(Some(project), open, &mut state, &serde_json::json!({"path": rel})),
-            Err(e) => state.status.problem(e),
-        }
+        let Some(path) = path_buf.to_str() else {
+            state.status.problem(format!("{} is not a path the board can name, so it is not on a board", path_buf.display()));
+            continue;
+        };
+        let params = serde_json::json!({"action": "add", "path": path, "caption": bevy_grimoire_core::board::PENDING_CAPTION});
+        dispatch_board(Some(project), open, &mut state, &params, Some("say what to take from it with `ref <path> <caption>`"));
     }
 }
 
-/// **The project-relative path a dropped image is referenced by**, copying it into `references/`
-/// when it lies outside the project.
-fn reference_path_for_drop(root: &std::path::Path, dropped: &std::path::Path) -> Result<String, String> {
-    let shown = dropped.display();
-    let ext = dropped.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
-    if !matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif") {
-        return Err(format!("{shown} is not a png, jpg, jpeg, webp or gif image, so it is not a reference"));
-    }
-    let canon_root = root.canonicalize().map_err(|e| format!("the project folder {} cannot be read ({e}), so {shown} is not a reference", root.display()))?;
-    let canon = dropped.canonicalize().map_err(|e| format!("{shown} cannot be read ({e}), so it is not a reference"))?;
-    let relative = |p: &std::path::Path| p.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect::<Vec<_>>().join("/");
-    if let Ok(inside) = canon.strip_prefix(&canon_root) {
-        return Ok(relative(inside));
-    }
-    let name = canon.file_name().ok_or_else(|| format!("{shown} has no file name, so it is not a reference"))?;
-    let into = std::path::Path::new("references").join(name);
-    let dest = canon_root.join(&into);
-    let bytes = std::fs::read(&canon).map_err(|e| format!("{shown} cannot be read ({e}), so it is not a reference"))?;
-    match std::fs::read(&dest) {
-        Ok(there) if there == bytes => {}
-        Ok(_) => return Err(format!("{} already holds a different picture, so {shown} was not copied over it", into.display())),
-        Err(_) => {
-            std::fs::create_dir_all(canon_root.join("references")).map_err(|e| format!("references/ cannot be made ({e}), so {shown} is not a reference"))?;
-            bevy_grimoire_core::atomic_file::write(&dest, &bytes).map_err(|e| format!("{shown} cannot be copied into {} ({e}), so it is not a reference", into.display()))?;
-        }
-    }
-    Ok(relative(&into))
-}
-
+/// **Author a person through the registry** as `person_set`, from the terrain line
+/// `person <name> remove`, or `person <name> [<x> <z>] [home=<id>] [work=<id>] [faction=<id>] [tie=<name>[:<affinity>[:<trust>]]]`.
 fn set_person(project: Option<&Project>, open: Option<&OpenMap>, state: &mut EditorState, raw: &str) {
     let words: Vec<&str> = raw.split_whitespace().collect();
     let (Some(open), Some(name)) = (open, words.get(1)) else {

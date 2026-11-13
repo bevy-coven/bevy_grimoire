@@ -4,6 +4,8 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-13
 
+- **sg-04-markdown-in-the-file-editor** `07563a6c` The file editor reads Markdown: a link or picture whose path is not there is an error on the path, completion after ]( lists the place's board then the project's files, hover on a picture shows its caption and licence, and headings are an outline; language support is one module per language behind one trait *No clip: visible, not yet recorded: fleet worker*
+- **sg-03-dream-board** `7c20d383` Every place of the design tree has a dream board, design/<place>/board/board.yaml, changed only through board_set and listed in grimoire_state.board; it replaces maps/<map>.references.ron, which cauldron migrate moves to the level's board with the same captions *No clip: data and an operation; proved by a_dream_board_for_every_place (3 tests), references (3 tests) and a_dropped_image_becomes_a_reference; the board is drawn in SG-05*
 - **bm-02-cauldron-bench-run** `ab26869b` cauldron-bench run measures a real agent against a real editor: oracle passes every task and nothing passes none, the tool list is read from the agent, and a --variant hides exactly its tool (#412) *No clip: a command-line runner; proved by the four ignored tests in bevy_cauldron_bench/tests/a_run_measures_a_real_agent.rs (4 passed, 47.3 s) and the six measured omp trials*
 
 ## 2026-11-12

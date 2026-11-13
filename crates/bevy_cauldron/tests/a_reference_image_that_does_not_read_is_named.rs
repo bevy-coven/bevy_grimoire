@@ -1,11 +1,13 @@
-//! **A referenced picture that is no longer the picture its name says is refused naming the file and the
-//! header field, once per edit** (#200, H3, kind `reference_images`).
+//! **A picture on a board that is no longer the picture its name says is refused naming the file and the
+//! header field, once per edit** (#200, H3, kind `reference_images`; SG-03, #402).
 //!
-//! `reference_set` lists a project-relative picture an agent is told to look at, and nothing here decodes
+//! `board_set` lists a project-relative picture an agent is told to look at, and nothing here decodes
 //! it, so a file a full disk cut off, a text saved over or another format renamed cost the agent a picture
-//! it could not open and the author a word nobody said. One look at the open map's references and the
+//! it could not open and the author a word nobody said. One look at every board and the
 //! pictures they list now decides into `grimoire_state.reloads`, kind `reference_images`, per file:
 //! `refused` with the file and the header field, or `applied` once it is a picture again.
+//!
+//! Owner exception (2026-11-13): this file listed pictures through `reference_set` and read `references.yaml`; every check is kept, on the board.
 
 use std::time::{Duration, Instant};
 
@@ -53,9 +55,10 @@ fn path(ctx: &Ctx, file: &str) -> std::path::PathBuf {
     ctx.project.as_ref().unwrap().root.join(file)
 }
 
-/// The references file beside the open map.
+/// The board file of the open map's level.
 fn references_file(ctx: &Ctx) -> std::path::PathBuf {
-    bevy_grimoire_core::references::path_for_map(&ctx.open.as_ref().unwrap().map_path)
+    let root = &ctx.project.as_ref().unwrap().root;
+    root.join(bevy_grimoire_core::board::file_of(&bevy_grimoire_core::board::level_place(root, &ctx.open.as_ref().unwrap().map.name)))
 }
 
 fn write(ctx: &Ctx, file: &str, bytes: &[u8]) {
@@ -111,7 +114,7 @@ fn pump(app: &mut App, secs: f64) {
 fn project(tag: &str) -> (App, Ctx) {
     let (mut app, mut ctx) = editor(tag);
     write(&ctx, FILE, &png(8, 8));
-    ops::dispatch(&mut ctx, "reference_set", &json!({"path": FILE, "caption": "the court"})).unwrap_or_else(|e| panic!("{e:?}"));
+    ops::dispatch(&mut ctx, "board_set", &json!({"action": "add", "path": FILE, "caption": "the court"})).unwrap_or_else(|e| panic!("{e:?}"));
     pump(&mut app, 0.4);
     (app, ctx)
 }
@@ -151,7 +154,7 @@ fn a_picture_that_is_not_a_picture_is_named_once_per_edit_and_a_repair_is_applie
         assert_eq!(raised, 1, "{what}: the refusal is said once: {said:?}");
         assert!(said[0].contains(FILE) && said[0].contains(field), "{what}: the status line names the file and the field: {said:?}");
 
-        // The picture is the author's: the editor reads it and writes nothing, and the reference stays.
+        // The picture is the author's: the editor reads it and writes nothing, and the picture stays on the board.
         assert_eq!(std::fs::read(path(&ctx, FILE)).unwrap(), bytes, "{what}: the bytes stay");
 
         // Nothing was edited since, so nothing is decided again however many frames pass.
@@ -164,7 +167,7 @@ fn a_picture_that_is_not_a_picture_is_named_once_per_edit_and_a_repair_is_applie
         assert_eq!(seq(&mut app), refused_at + 1, "{what}: a repair is one decision");
         assert_eq!(reloads(&mut app)["ok"], json!(true), "{what}");
     }
-    assert_eq!(std::fs::read_to_string(references_file(&ctx)).unwrap(), references_before, "the reference list is untouched");
+    assert_eq!(std::fs::read_to_string(references_file(&ctx)).unwrap(), references_before, "the board is untouched");
 }
 
 /// A picture that is still a picture of other dimensions was edited, so it is one decision; the same
@@ -189,7 +192,7 @@ fn a_picture_that_still_reads_as_another_size_is_applied_and_the_same_size_is_no
 fn a_picture_that_is_already_refused_when_it_is_listed_is_named_and_mended() {
     let (mut app, mut ctx) = editor("reference_view_first");
     write(&ctx, "art/hall.jpg", b"hall picture");
-    ops::dispatch(&mut ctx, "reference_set", &json!({"path": "art/hall.jpg"})).unwrap_or_else(|e| panic!("{e:?}"));
+    ops::dispatch(&mut ctx, "board_set", &json!({"action": "add", "path": "art/hall.jpg", "caption": "the hall"})).unwrap_or_else(|e| panic!("{e:?}"));
     until(&mut app, "the listed text is refused", |a| verdict(a, "art/hall.jpg")["outcome"] == json!("refused"));
     let v = verdict(&mut app, "art/hall.jpg");
     assert_eq!(v["field"], json!("signature"), "{v}");
@@ -197,12 +200,12 @@ fn a_picture_that_is_already_refused_when_it_is_listed_is_named_and_mended() {
     until(&mut app, "a gif under a jpeg's name is refused again", |a| verdict(a, "art/hall.jpg")["field"] == json!("format"));
 }
 
-/// A picture that is gone, and one that was never there, are not refusals (`grimoire_state.references`
-/// says `missing`); a reference taken back is no longer looked at.
+/// A picture that is gone, and one that was never there, are not refusals (`grimoire_state.board`
+/// says `missing`); a picture taken off the board is no longer looked at.
 #[test]
 fn a_picture_that_is_gone_or_no_longer_listed_is_forgotten_and_a_missing_one_is_not_decided() {
     let (mut app, mut ctx) = project("reference_view_forgotten");
-    ops::dispatch(&mut ctx, "reference_set", &json!({"path": "references/later.png"})).unwrap_or_else(|e| panic!("{e:?}"));
+    ops::dispatch(&mut ctx, "board_set", &json!({"action": "add", "path": "references/later.png", "caption": "later"})).unwrap_or_else(|e| panic!("{e:?}"));
     pump(&mut app, 0.4);
     assert_eq!(verdict(&mut app, "references/later.png"), Value::Null, "a listed picture that is not there yet is not decided");
 
@@ -214,7 +217,7 @@ fn a_picture_that_is_gone_or_no_longer_listed_is_forgotten_and_a_missing_one_is_
 
     write(&ctx, FILE, b"court picture");
     until(&mut app, "the text is refused again", |a| verdict(a, FILE)["outcome"] == json!("refused"));
-    ops::dispatch(&mut ctx, "reference_set", &json!({"remove": "r1"})).unwrap_or_else(|e| panic!("{e:?}"));
-    until(&mut app, "the reference taken back is forgotten", |a| verdict(a, FILE) == Value::Null);
+    ops::dispatch(&mut ctx, "board_set", &json!({"action": "remove", "path": FILE})).unwrap_or_else(|e| panic!("{e:?}"));
+    until(&mut app, "the picture taken off the board is forgotten", |a| verdict(a, FILE) == Value::Null);
     assert_eq!(reloads(&mut app)["ok"], json!(true));
 }

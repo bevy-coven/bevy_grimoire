@@ -202,6 +202,8 @@ enum Slot {
     ActivityBar,
     /// View ▸ Show outliner (UI-51, #237).
     Outliner,
+    /// View ▸ Show outline (SG-04, #403): the open Markdown page's headings, in the Files panel.
+    FileOutline,
     /// View ▸ Show library (UI-52, #238): the same library as a grid of portraits.
     Library,
     /// View ▸ Game UI preview (UI-03, #211): the project's game skin, drawn only inside that panel.
@@ -312,6 +314,7 @@ fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slo
         slots.push(Slot::Verb(AppVerb::ShowProblems));
         slots.push(Slot::ReloadPanel);
         slots.push(Slot::Outliner);
+        slots.push(Slot::FileOutline);
         slots.push(Slot::Library);
         slots.push(Slot::GameUi);
         #[cfg(feature = "bevy_light_grid")]
@@ -444,6 +447,14 @@ fn spawn_slot(
                 crate::outliner::OutlinerItem,
                 bevy_gooey::check_item("Show outliner", false),
                 bevy_gooey::observe(crate::outliner::toggle_the_outliner),
+            ));
+        }
+        // **View ▸ Show outline** (SG-04, #403): spawned on demand, for the outliner's reason.
+        Slot::FileOutline => {
+            menu.spawn((
+                crate::file_outline::OutlineItem,
+                bevy_gooey::check_item("Show outline", false),
+                bevy_gooey::observe(crate::file_outline::toggle_the_outline),
             ));
         }
         // **View ▸ Show library** (UI-52, #238): the library as a grid of portraits, with its own search and

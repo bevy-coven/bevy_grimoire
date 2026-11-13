@@ -27,7 +27,6 @@ use bevy_grimoire_core::map::{MAP_VERSION, Map};
 use bevy_grimoire_core::notes::Notes;
 use bevy_grimoire_core::plan::Plan;
 use bevy_grimoire_core::repetition::RepetitionRules;
-use bevy_grimoire_core::references::References;
 use bevy_grimoire_core::relations::Relations;
 use bevy_grimoire_core::reload::{self, KINDS};
 use bevy_grimoire_core::reload_check::{self, Check};
@@ -98,7 +97,7 @@ fn versioned() -> Vec<(&'static str, &'static str, String)> {
         s("map", "maps/yard.map.yaml", Map { version: MAP_VERSION, name: "yard".to_owned(), bounds: (10.0, 4.0, 10.0), ..Map::default() }.to_yaml().unwrap()),
         s("notes", "maps/yard.notes.yaml", Notes::default().to_yaml().unwrap()),
         s("plan", "maps/yard.plan.yaml", Plan::default().to_yaml().unwrap()),
-        s("references", "maps/yard.references.yaml", References::default().to_yaml().unwrap()),
+        s("board", "design/board/board.yaml", bevy_grimoire_core::board::Board::default().to_yaml().unwrap()),
         s("relations", "maps/yard.relations.yaml", Relations::default().to_yaml().unwrap()),
         s("data_registry", "site/data.yaml", format!("version: {}\nfiles: []\n", bevy_grimoire_core::data_files::REGISTRY_VERSION)),
         s("family_list", "family.yaml", format!("version: {}\ncrates: []\n", bevy_grimoire_core::family::FAMILY_VERSION)),

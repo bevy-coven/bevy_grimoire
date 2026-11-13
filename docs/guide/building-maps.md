@@ -190,14 +190,14 @@ An agent can lay only part of the map: `layout_propose` takes an `area`, `[x0, z
 
 **What you see:** The snip is saved as a picture and a small file. Both go to `target/loop/captures/snips/`. The agent reads them through MCP.
 
-## Give an agent a reference picture
+## Put a picture on the dream board
 
-**Goal:** Keep a picture with the map, so you can say "like this" and an agent can name it back.
+**Goal:** Keep a picture on the level's dream board, so you can say "like this" and an agent can name it back.
 
-1. Drag a png, jpg, jpeg, webp or gif file onto the editor window. Or type `ref <path> [caption]` in the terrain field.
-2. Type `ref <id> remove` in the terrain field to take one off.
+1. Drag a png, jpg, jpeg, webp or gif file onto the editor window. Or type `ref <path> <caption>` in the terrain field. The caption says what to take from the picture ("the fog's colour, not its density"), not what it shows, and an empty one is refused.
+2. Say what to take from a dropped picture with `ref <path> <caption>` (a picture already on the board is re-captioned), and type `ref <path> remove` to take one off.
 
-**What you see:** The status line says `added reference r1 (references/court.png)`. A picture from outside the project is copied into the project's `references/` folder first; one already inside stays where it is. The list is kept beside the map as `<map>.references.yaml`, and an agent reads it in `grimoire_state` and cites a picture by its id. `Cmd+Z` takes the reference back and leaves the copied file. A file that is not an image, or a different picture under a name `references/` already holds, is refused and nothing changes.
+**What you see:** The status line says `added <path> to the board of design/levels/<map>`. A picture from outside the project is copied into that place's `board/` folder first; one already inside the project stays where it is. A dropped picture carries `(caption needed: ...)` until you say what to take from it. The pictures are kept in `design/levels/<map>/board/board.yaml`, and an agent reads them in `grimoire_state.board` and cites a picture by its path (`board picture <path>: <caption>`). `Cmd+Z` takes the change back and leaves the copied file. A file that is not an image, a different picture under a name `board/` already holds, or a restricted picture under `assets/` is refused and nothing changes.
 
 ## Move the camera
 

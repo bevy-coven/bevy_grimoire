@@ -6114,7 +6114,7 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(crate::ops_runs::RunRemove),
         Box::new(crate::ops_runs::PlacementsToRun),
         Box::new(crate::ops_notes::NoteAdd),
-        Box::new(crate::ops_references::ReferenceSet),
+        Box::new(crate::ops_board::BoardSet),
         Box::new(crate::ops_notes::NoteEdit),
         Box::new(crate::ops_notes::NoteRemove),
         Box::new(crate::ops_notes::NoteSend),
@@ -6479,9 +6479,9 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // through `add_note`; a click on a standing note opens it for `note_edit` (`edit_note`), and an
     // emptied note is `note_remove` (`remove_note`).
     ("note_add", "add_note("),
-    // **The reference line (#124)** — `ref <path> [caption]` and `ref <id> remove` in the terrain field dispatch
-    // `reference_set` through `set_reference`.
-    ("reference_set", "set_reference("),
+    // **The board line (SG-03, #402)** — `ref <path> <caption>` and `ref <path> remove` in the terrain field, and a picture
+    // dropped on the window, dispatch `board_set` through `set_board`.
+    ("board_set", "set_board("),
     // **The Run tool (#115)** — a drag in run mode dispatches `run_add` through `add_run`; a drag that
     // starts on an end of a standing run moves that end through `set_run` (`run_set`); a click on a
     // run with the removal tool takes it off whole through `remove_run` (`run_remove`).

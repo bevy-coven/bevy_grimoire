@@ -472,7 +472,7 @@ fn typed_check(kind: &str, rel: &str, text: &str, decoded: &Value) -> Result<(),
     use crate::{
         composition::Compositions, data_files::DataFiles, destructible::{Bake, Marks}, family::Family, heightfield::Heightfield,
         kits::Kits, library::Library, map::Map, note_agent::AgentSettings, notes::Notes, plan::Plan, play::PlayConfig,
-        policy::Policy, references::References, relations::Relations, repetition::RepetitionRules, rigs::Rigs, rules::Rules,
+        policy::Policy, relations::Relations, repetition::RepetitionRules, rigs::Rigs, rules::Rules,
         standards::Standards, vocab::Vocabularies, volume::Volume, water::{WaterField, WaterPlan},
     };
     match kind {
@@ -487,7 +487,7 @@ fn typed_check(kind: &str, rel: &str, text: &str, decoded: &Value) -> Result<(),
         "rigs" => same::<Rigs>(rel, text, decoded, Rigs::parse),
         "notes" => same::<Notes>(rel, text, decoded, Notes::parse),
         "plan" => same::<Plan>(rel, text, decoded, Plan::parse),
-        "references" => same::<References>(rel, text, decoded, References::parse),
+        "board" => same::<crate::board::Board>(rel, text, decoded, crate::board::Board::parse),
         "relations" => same::<Relations>(rel, text, decoded, Relations::parse),
         "map" => same::<Map>(rel, text, decoded, Map::parse),
         "terrain" => same::<Heightfield>(rel, text, decoded, Heightfield::parse),
