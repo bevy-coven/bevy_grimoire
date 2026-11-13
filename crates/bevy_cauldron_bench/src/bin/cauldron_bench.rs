@@ -272,8 +272,17 @@ fn report_command(argv: &[String]) -> std::process::ExitCode {
     let mut it = argv.iter();
     while let Some(arg) = it.next() {
         match arg.as_str() {
-            "--label" => label = it.next().cloned(),
-            "--publish" => publish = it.next().map(PathBuf::from),
+            "--label" | "--publish" => {
+                let Some(value) = it.next() else {
+                    eprintln!("cauldron-bench: `{arg}` needs a value");
+                    return std::process::ExitCode::FAILURE;
+                };
+                if arg == "--label" {
+                    label = Some(value.clone());
+                } else {
+                    publish = Some(PathBuf::from(value));
+                }
+            }
             other if !other.starts_with("--") && dir.is_none() => dir = Some(PathBuf::from(other)),
             other => {
                 eprintln!("cauldron-bench: `{other}` is not an argument `report` takes. Try `--help`.");

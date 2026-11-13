@@ -245,7 +245,7 @@ fn a_task_row_states_time_calls_refusals_undos_edits_tokens_wishes_and_cost() {
     assert_eq!(t.refusals, 5, "one refused call in each of five trials");
     assert_eq!(t.undos, 2, "undos");
     assert_eq!((t.edits_behind, t.trials_with_edits_behind), (2, 1), "two files behind the back, in one trial");
-    assert_eq!((t.tokens_in, t.tokens_out), (5_000_000, 2_500_000), "tokens, summed");
+    assert_eq!((t.tokens_in, t.tokens_out), (Some(5_000_000), Some(2_500_000)), "tokens, summed");
     assert_eq!(t.wishes, 1, "the wishes made");
     // Per trial: 1 M × $1 + 0.5 M × $2 + 2 M × $0.5 = 1 + 1 + 1 = $3; five trials = $15.
     assert!(near(t.cost_usd.expect("a cost"), 15.0), "cost is the listed price times the tokens");
@@ -388,7 +388,7 @@ fn held_out_tasks_are_reported_only_as_a_total() {
     let total = report.held_out.as_ref().expect("a held-out total is stated");
     assert_eq!((total.trials, total.successes), (5, 2));
     assert_eq!(report.tasks.len(), 1, "only the dev task is listed per task");
-    for (what, text) in [("the markdown", report.markdown()), ("the JSON", report.json())] {
+    for (what, text) in [("the markdown", report.markdown()), ("the JSON", report.json().expect("json"))] {
         for secret in ["a-secret-held-out-task", "SECRET-WANTED", "SECRET-MEASURED", "a-secret-tag", "PROMPT-OF-"] {
             assert!(!text.contains(secret), "{what} leaks `{secret}` from a held-out task:\n{text}");
         }
@@ -637,5 +637,41 @@ fn a_file_no_operation_wrote_is_an_edit_behind_the_editors_back() {
         edits_behind_the_back(&snapshot(&before), &snapshot(&stray)),
         vec!["notes.txt".to_owned()],
         "a stray file is behind the back even when operations ran"
+    );
+}
+
+/// **A file an operation wrote under `design/` is the editor's own** (review of #413, M1): `board_set` writes a
+/// board's `board.yaml` and copies its pictures into `design/<place>/board/`, and `tree_set` writes the style
+/// tree. A run that applied one is not "behind the editor's back" for it; a change under `design/` with no
+/// applied line is.
+#[test]
+fn a_board_an_operation_wrote_is_not_behind_the_editors_back_and_a_hand_written_one_is() {
+    let snapshot = |dir: &Path| Snapshot::read(dir, "m", Vec::new(), Default::default());
+    let board = |dir: &Path, yaml: &str, picture: &str| {
+        let place = dir.join("design/levels/m/board");
+        std::fs::create_dir_all(&place).expect("board dir");
+        std::fs::write(place.join("board.yaml"), yaml).expect("board.yaml");
+        std::fs::write(place.join("shot.png"), picture).expect("picture");
+    };
+
+    let before = scratch("design-before");
+    project(&before, "v1", "n1", 0);
+    board(&before, "pictures: []", "png-1");
+
+    let through_tools = scratch("design-tools");
+    project(&through_tools, "v1", "n1", 1);
+    board(&through_tools, "pictures: [shot.png]", "png-2");
+    assert!(
+        edits_behind_the_back(&snapshot(&before), &snapshot(&through_tools)).is_empty(),
+        "a board and a picture changed under an applied log line are the operation's"
+    );
+
+    let by_hand = scratch("design-hand");
+    project(&by_hand, "v1", "n1", 0);
+    board(&by_hand, "pictures: [shot.png]", "png-2");
+    assert_eq!(
+        edits_behind_the_back(&snapshot(&before), &snapshot(&by_hand)),
+        vec!["design/levels/m/board/board.yaml".to_owned(), "design/levels/m/board/shot.png".to_owned()],
+        "the same files with no applied line behind them went around the tools"
     );
 }

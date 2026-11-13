@@ -34,6 +34,7 @@
 //! | `grimoire_list_snips` | the snips the person took, newest first, with the newest picture |
 //! | `grimoire_feedback_list` | the reports the person filed about Cauldron itself, newest first |
 //! | `grimoire_project_feedback_list` | the reports the person filed about the open project, newest first |
+//! | `grimoire_style` | the style of one place, game to area, behind the person's trust, with the pictures it cites |
 //! | `grimoire_list_rules` | the block rules a layout is generated from, as the project states them |
 //! | `grimoire_run_command` | run a registered editor command by its id, as its shortcut would |
 //! | `grimoire_jobs_stop` | ask a background job, such as the palette's thumbnail bake, to stop |
@@ -41,7 +42,7 @@
 //! | `grimoire_open_project` | open a project folder in the running editor, from any screen including the Projects home |
 //! | `grimoire_self_test` | the power-on self test an agent runs when Cauldron's terminal starts it |
 //!
-//! **Twenty-six tools, and the set is small on purpose.** An agent's context is spent on the tools it
+//! **Twenty-seven tools, and the set is small on purpose.** An agent's context is spent on the tools it
 //! is offered, and a catalogue of ninety-six verbs is a catalogue of ninety-six things to choose
 //! badly from. **The operation tools are a discovery surface**: the first names what exists, and
 //! the others preview, run and take back what it names. Later iterations add one tool per
@@ -276,6 +277,22 @@ pub struct FeedbackListParams {
     pub limit: usize,
 }
 
+/// **The parameters of `grimoire_style`** (SG-02, #401).
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct StyleParams {
+    /// **A map of the project**, by name. With none, the answer is the game's files alone.
+    #[serde(default)]
+    pub map: Option<String>,
+    /// **A point on that map**, `[x, z]` in map metres: the area that holds it closes the chain. It must be
+    /// inside the map, and it needs `map`.
+    #[serde(default)]
+    pub at: Option<[f32; 2]>,
+    /// **A topic the game states**, such as `dialogue`: each place that has a file for it adds that file.
+    #[serde(default)]
+    pub topic: Option<String>,
+}
+
 /// **One report, as an agent reads it**: the record, both picture paths, and the log tail's path.
 ///
 /// **Both readers answer with the same shape** — the developers' channel and the project's differ in
@@ -339,6 +356,34 @@ fn list_reports(dir: &std::path::Path, limit: usize) -> CallToolResult {
     content.push(rmcp::model::ContentBlock::text(
         serde_json::to_string_pretty(&answer).unwrap_or_default(),
     ));
+    CallToolResult::success(content)
+}
+
+/// **The chain the editor composed, as content**: its text, then each picture it named as an image after a line holding
+/// the picture's path and its caption (SG-02, #401).
+///
+/// **The editor chose the pictures and resolved each to a file inside the project**; this reads those files and
+/// nothing else. A picture it cannot read is named in a last block with the reason, and the answer still arrives:
+/// the words of the style are worth more than the picture that failed.
+fn style_answer(answer: &Value) -> CallToolResult {
+    let text = answer.get("text").and_then(Value::as_str).unwrap_or_default();
+    let mut content = vec![rmcp::model::ContentBlock::text(text.to_owned())];
+    let mut unreadable: Vec<String> = Vec::new();
+    for picture in answer.get("pictures").and_then(Value::as_array).into_iter().flatten() {
+        let field = |name: &str| picture.get(name).and_then(Value::as_str).unwrap_or_default();
+        let (file, caption, path, mime) = (field("file"), field("caption"), field("path"), field("mime"));
+        let caption = if caption.is_empty() { "no caption" } else { caption };
+        match std::fs::read(path) {
+            Ok(bytes) => {
+                content.push(rmcp::model::ContentBlock::text(format!("Picture `{file}`: {caption}")));
+                content.push(rmcp::model::ContentBlock::image(base64_encode(&bytes), mime.to_owned()));
+            }
+            Err(e) => unreadable.push(format!("- `{file}`, \"{caption}\": the picture could not be read: {e}")),
+        }
+    }
+    if !unreadable.is_empty() {
+        content.push(rmcp::model::ContentBlock::text(format!("## Pictures not attached\n\n{}\n", unreadable.join("\n"))));
+    }
     CallToolResult::success(content)
 }
 
@@ -1737,6 +1782,72 @@ impl Grimoire {
         };
         let dir = project.join(bevy_grimoire_core::feedback::PROJECT_DIR);
         Ok(list_reports(&dir, p.limit))
+    }
+
+    /// **`grimoire_style` -- the style of one place, as an agent should read it** (SG-02, #401).
+    ///
+    /// **The editor composes the chain and holds the person's trust; this server forwards the request and
+    /// attaches the pictures.** A style file is prompt text fed to an agent that has a shell, so the server
+    /// reads none itself: it asks the editor (`grimoire/style`), which withholds every file the person has
+    /// not allowed. Without an editor the tool refuses and says why, rather than reading the files and
+    /// serving what the person never allowed.
+    ///
+    /// **The text comes first, then each picture the editor named, after a line holding its path and its
+    /// caption**, so an agent that cannot see still has the words. The editor chose the pictures (nearest
+    /// place first, at most `STYLE_IMAGES_MAX`, each at most `STYLE_IMAGE_MAX_BYTES`) and resolved each to a
+    /// file inside the project; this server only reads those files. One it cannot read is named in a last
+    /// block, and the answer still arrives.
+    #[tool(
+        name = "grimoire_style",
+        description = "The style of one place, as an agent should read it before shaping that place: the \
+                       game's style files first, then the region's, the level's and the area's that holds \
+                       `at`, so the most specific place comes last. Each place gives its style.md and, \
+                       when `topic` is asked for, its file for that topic; each file arrives under a \
+                       heading naming its path. With no `map` you get the game's files alone. A style \
+                       file is served only once the person has allowed that exact content (or trusted \
+                       the project): one that has not been allowed is withheld and arrives as one line \
+                       saying it is waiting for them, never as its text. The pictures the served text \
+                       cites come back as images, each after a line with its path and its caption, at \
+                       most 8 of at most 1 MiB each; one left out is named with its path, its caption \
+                       and the reason. `map` must be a map of the project, `at` ([x, z] in map metres) \
+                       must be inside it, and `topic` must be one the game has: anything else is refused \
+                       with the reason. It changes nothing.",
+        annotations(
+            title = "Read the style of a place",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn style(
+        &self,
+        Parameters(p): Parameters<StyleParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let answer = match self
+            .editor
+            .call(
+                "grimoire/style",
+                json!({
+                    "map": p.map,
+                    "at": p.at,
+                    "topic": p.topic,
+                }),
+            )
+            .await
+        {
+            Ok(answer) => answer,
+            // **The editor's own refusal says its reason and nothing is added to it**; every failure of the
+            // transport begins "the editor", and is no editor to answer: the tool says why it will not read the
+            // files itself.
+            Err(e) if !e.starts_with("the editor") => return Ok(refusal(&e)),
+            Err(e) => {
+                return Ok(refusal(&format!(
+                    "{e} A style file is prompt text that needs the person's trust, so only the editor, which holds what they have allowed, serves it: this server reads none itself."
+                )));
+            }
+        };
+        Ok(style_answer(&answer))
     }
 
     /// **`grimoire_list_rules` -- the rules a layout is generated from, as the project states them.**

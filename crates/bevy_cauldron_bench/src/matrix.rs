@@ -76,6 +76,17 @@ impl Pair {
             if out.contains(&pair) {
                 return Err(format!("`{text}` is named twice, and a row would be one run counted twice"));
             }
+            // **Two pairs may not share a directory**: `omp:a/b` and `omp:a-b` both slug to `omp-a-b`, and the
+            // second run would overwrite the first's trials under one name.
+            if let Some(other) = out.iter().find(|o| o.slug() == pair.slug()) {
+                return Err(format!(
+                    "`{text}` and `{}:{}` would both write their trials to `{}`: name the models so they differ \
+                     in more than punctuation",
+                    other.agent.name(),
+                    other.model,
+                    pair.slug()
+                ));
+            }
             out.push(pair);
         }
         if out.len() < 2 {
@@ -285,8 +296,10 @@ impl Matrix {
     }
 
     /// **The JSON a published matrix holds.**
-    pub fn json(&self) -> String {
-        serde_json::to_string_pretty(self).map_or_else(|_| "{}".to_owned(), |text| text + "\n")
+    pub fn json(&self) -> Result<String, String> {
+        serde_json::to_string_pretty(self)
+            .map(|text| text + "\n")
+            .map_err(|e| format!("the matrix could not be written as JSON: {e}"))
     }
 
     /// **The matrix a person reads**, as Markdown.
@@ -399,7 +412,7 @@ pub fn run(
     let md = options.out.join("matrix.md");
     let json = options.out.join("matrix.json");
     bevy_grimoire_core::atomic_file::write(&md, matrix.markdown()).map_err(|e| format!("{}: {e}", md.display()))?;
-    bevy_grimoire_core::atomic_file::write(&json, matrix.json()).map_err(|e| format!("{}: {e}", json.display()))?;
+    bevy_grimoire_core::atomic_file::write(&json, matrix.json()?).map_err(|e| format!("{}: {e}", json.display()))?;
     written.extend([md, json]);
     if let Some(bench) = &options.publish {
         let (md, json) = crate::index::publish_matrix(bench, &matrix)?;

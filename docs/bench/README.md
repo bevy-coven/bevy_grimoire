@@ -1,6 +1,6 @@
 # The benchmark's runs
 
-Each row is one committed run of `cauldron-bench` (BM-03, #413): a report beside the JSON `cauldron-bench compare` reads. The raw trial directories are not committed. This file is written by `cauldron-bench report`, newest first, so edit the reports and not this list.
+Each row is one committed run of `cauldron-bench` (BM-03, #413): a report beside the JSON `cauldron-bench compare` reads. The raw trial directories are not committed. This file is written by `cauldron-bench report --label`, `run --label` and `matrix --label`, newest first, so edit the reports and not this list.
 
 ```sh
 cauldron-bench report <run directory> --label baseline   # writes docs/bench/runs/<date>-baseline.md

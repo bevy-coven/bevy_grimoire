@@ -346,10 +346,10 @@ pub struct TaskReport {
     pub edits_behind: u32,
     /// Trials that changed at least one.
     pub trials_with_edits_behind: u32,
-    /// Input tokens, summed.
-    pub tokens_in: u64,
-    /// Output tokens, summed.
-    pub tokens_out: u64,
+    /// Input tokens, summed, or `None` when no scored trial reported any (never `0` for unknown).
+    pub tokens_in: Option<u64>,
+    /// Output tokens, summed, or `None` when no scored trial reported any.
+    pub tokens_out: Option<u64>,
     /// **Cost in dollars, or `None` for unknown** (a model with no listed price, or a trial that reported
     /// no tokens).
     pub cost_usd: Option<f64>,
@@ -417,6 +417,20 @@ pub struct Report {
     pub wishes_by_tool: BTreeMap<String, u32>,
 }
 
+/// **The sum of the counts that were reported**, or `None` when none was: a trial that reported no tokens
+/// has unknown tokens, not zero.
+fn sum_known(counts: impl Iterator<Item = Option<u64>>) -> Option<u64> {
+    counts.fold(None, |sum, count| match (sum, count) {
+        (Some(a), Some(b)) => Some(a + b),
+        (None, some) | (some, None) => some,
+    })
+}
+
+/// **A token count for a table**, or `unknown`.
+pub fn tokens_cell(count: Option<u64>) -> String {
+    count.map_or_else(|| "unknown".to_owned(), |n| n.to_string())
+}
+
 /// **The sum of costs, or `None` when any is unknown.**
 fn sum_costs(costs: impl Iterator<Item = Option<f64>>) -> Option<f64> {
     let mut total = 0.0;
@@ -463,8 +477,8 @@ impl TaskReport {
             undos: scored.iter().map(|t| t.undos).sum(),
             edits_behind: scored.iter().map(|t| t.edits_behind.len() as u32).sum(),
             trials_with_edits_behind: scored.iter().filter(|t| !t.edits_behind.is_empty()).count() as u32,
-            tokens_in: scored.iter().filter_map(|t| t.tokens_in).sum(),
-            tokens_out: scored.iter().filter_map(|t| t.tokens_out).sum(),
+            tokens_in: sum_known(scored.iter().map(|t| t.tokens_in)),
+            tokens_out: sum_known(scored.iter().map(|t| t.tokens_out)),
             cost_usd: if scored.is_empty() { None } else { sum_costs(scored.iter().map(|t| t.cost_usd(price))) },
             wishes: scored.iter().map(|t| t.wishes.len() as u32).sum(),
             failures,
@@ -619,10 +633,10 @@ impl Report {
     }
 
     /// **The JSON a committed report's `.json` holds**, and what [`crate::compare`] reads.
-    pub fn json(&self) -> String {
-        // `Report` is plain data, so serialising it cannot fail; the empty object would be visibly wrong
-        // and is a better answer than a panic in library code.
-        serde_json::to_string_pretty(self).map_or_else(|_| "{}".to_owned(), |text| text + "\n")
+    pub fn json(&self) -> Result<String, String> {
+        serde_json::to_string_pretty(self)
+            .map(|text| text + "\n")
+            .map_err(|e| format!("the report could not be written as JSON: {e}"))
     }
 
     /// **A report from a path**: a `.json` a run published, or a run directory the report is built from.
@@ -801,8 +815,8 @@ impl Report {
                 } else {
                     format!("{} file(s) in {} trial(s)", t.edits_behind, t.trials_with_edits_behind)
                 },
-                t.tokens_in,
-                t.tokens_out,
+                tokens_cell(t.tokens_in),
+                tokens_cell(t.tokens_out),
                 usd(t.cost_usd),
                 t.wishes,
                 t.harness_errors

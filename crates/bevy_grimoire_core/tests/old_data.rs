@@ -164,3 +164,45 @@ fn a_frozen_file_is_never_dropped() {
 fn reads_yaml(_kind: &str) -> bool {
     true
 }
+
+/// **A trust store an earlier release wrote** (#401): the person's own file, outside any project, so it is not a kind of
+/// the reload registry and `FROZEN` cannot hold it. Version 1 had no guide grants; version 2 had them, one per project and
+/// digest with no path, and version 3 replaced them with a `TextGrant` per file. Both still read, and what they allowed is
+/// still allowed. The projects are `/` and `/usr`, which exist on every machine, because a grant names a resolved path.
+const FROZEN_STORES: &[(&str, &str, &str)] = &[
+    ("trusted.yaml", "an early release (version 1)", include_str!("old_data/core-0.11.0/trusted_v1.yaml")),
+    ("trusted.yaml", "bevy_grimoire_core 0.11.0 (version 2)", include_str!("old_data/core-0.11.0/trusted_v2.yaml")),
+];
+
+/// A literal floor, as `FROZEN_MIN` is: a stored shape is never dropped to make the type pass.
+const FROZEN_STORES_MIN: usize = 2;
+
+#[test]
+fn a_trust_store_an_earlier_release_wrote_still_reads_and_still_allows_what_it_allowed() {
+    use bevy_grimoire_core::trust::{CommandKind, CommandSpec, Decision, Scope, TrustStore};
+    use std::path::Path;
+
+    assert!(FROZEN_STORES.len() >= FROZEN_STORES_MIN, "a frozen store is never removed");
+    for (n, (name, since, text)) in FROZEN_STORES.iter().enumerate() {
+        let file = std::env::temp_dir().join(format!("old_data_store_{n}_{}_{name}", std::process::id()));
+        std::fs::write(&file, text).expect("the frozen store is written to a scratch file");
+        let store = TrustStore::load(&file).unwrap_or_else(|e| panic!("the store {since} wrote no longer reads: {e}"));
+        let _ = std::fs::remove_file(&file);
+        let spec = CommandSpec { kind: CommandKind::Play, program: "cargo".into(), args: vec!["run".into(), "--".into(), "{map}".into()], cwd: None };
+        assert_eq!(
+            store.decision(Path::new("/usr"), &spec).unwrap_or_else(|e| panic!("{e}")),
+            Decision::Trusted(Scope::Project),
+            "the project {since} trusted is still trusted"
+        );
+        if text.contains("guides:") {
+            let guide = |text: &str| store.guide_decision(Path::new("/"), text).unwrap_or_else(|e| panic!("{e}"));
+            assert_eq!(guide("hello"), Decision::Trusted(Scope::Command), "the guide {since} allowed is still allowed");
+            assert_eq!(guide("hello!"), Decision::Untrusted, "and one changed byte still asks");
+            assert_eq!(
+                store.decision(Path::new("/"), &spec).unwrap_or_else(|e| panic!("{e}")),
+                Decision::Trusted(Scope::Command),
+                "the command {since} allowed is still allowed"
+            );
+        }
+    }
+}
