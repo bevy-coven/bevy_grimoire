@@ -343,7 +343,8 @@ impl Operation for BoardSet {
         Shown::File { path: board::file_of(&place), lines: None }
     }
     fn writes(&self) -> &'static [&'static str] {
-        &["board"]
+        // The board file, and the picture a drop copies in beside it.
+        &["board", "reference_images"]
     }
     fn undo(&self) -> Undo {
         Undo::Inverse

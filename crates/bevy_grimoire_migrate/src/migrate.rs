@@ -277,8 +277,6 @@ pub static LEGACY_REFERENCES: FileKind = FileKind {
 /// **One reference of the file this replaced**: the id and the counter are what the board does without.
 #[derive(serde::Deserialize)]
 struct LegacyReference {
-    #[allow(dead_code)]
-    id: String,
     path: String,
     caption: String,
 }
@@ -288,10 +286,10 @@ struct LegacyReference {
 struct LegacyReferences {
     version: u32,
     refs: Vec<LegacyReference>,
-    #[allow(dead_code)]
-    #[serde(default)]
-    issued: u32,
 }
+
+/// The version of a references file this build moves.
+const LEGACY_REFERENCES_VERSION: u32 = 1;
 
 /// **The map a legacy references file belongs to**: `maps/yard.references.ron` → `yard`.
 fn legacy_map_of(rel: &str) -> Option<&str> {
@@ -314,8 +312,8 @@ fn convert_references(text: &str, rel: &str, command: &str) -> Result<Converted,
     } else {
         yaml::from_str(text, rel).map_err(|p| Problem::with(format!("{rel} did not read, so nothing was migrated"), p.detail()))?
     };
-    if old.version != 1 {
-        return Err(refuse(format!("{rel} is version {}, so nothing was migrated", old.version), "this build moves version 1 of a references file".to_owned()));
+    if old.version != LEGACY_REFERENCES_VERSION {
+        return Err(refuse(format!("{rel} is version {}, so nothing was migrated", old.version), format!("this build moves version {LEGACY_REFERENCES_VERSION} of a references file")));
     }
     let mut board = Board::default();
     for r in &old.refs {

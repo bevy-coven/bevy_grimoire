@@ -60,7 +60,7 @@ pub const CITE_PREFIX: &str = "board picture ";
 pub const PENDING_CAPTION: &str = "(caption needed: what to take from this picture)";
 
 /// The extensions a board picture has: what [`crate::image_header`] reads.
-const IMAGE_EXTS: [&str; 5] = ["png", "jpg", "jpeg", "webp", "gif"];
+pub const IMAGE_EXTS: [&str; 5] = ["png", "jpg", "jpeg", "webp", "gif"];
 
 /// **The deepest the design folder is walked for boards**, in folders: `design/regions/<r>/levels/<m>/areas/<a>`
 /// is six below the root, and a board is one more. A walk with no bound would follow a symlink loop forever.
@@ -120,7 +120,7 @@ impl Default for Board {
 
 /// **Whether a project-relative path is under the folder a project ships.**
 pub fn ships(path: &str) -> bool {
-    path.split('/').next() == Some(SHIPPED_DIR) && path.contains('/')
+    path.split('/').next().is_some_and(|first| first.eq_ignore_ascii_case(SHIPPED_DIR)) && path.contains('/')
 }
 
 /// **A project-relative image path** with `.` removed; refuses an absolute path, `..` and a non-image.

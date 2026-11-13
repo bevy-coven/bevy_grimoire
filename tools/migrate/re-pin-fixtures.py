@@ -50,7 +50,7 @@ KIND_OF_TYPE = {
     "Map": "map",
     "Notes": "notes",
     "Plan": "plan",
-    "References": "references",
+    "References": "board",
     "Relations": "relations",
     "Heightfield": "terrain",
     "WaterPlan": "water_plan",
@@ -70,7 +70,7 @@ FILE_OF_KIND = {
     "kits": "kits.ron", "vocab": "vocab.ron", "library": "site/library.ron", "policy": "site/project.ron",
     "rules": "rules.ron", "compositions": "compositions.ron", "standards": "standards.ron",
     "repetition": "repetition.ron", "rigs": "rigs.ron", "map": "maps/yard.map.ron", "notes": "maps/yard.notes.ron",
-    "plan": "maps/yard.plan.ron", "references": "maps/yard.references.ron", "relations": "maps/yard.relations.ron",
+    "plan": "maps/yard.plan.ron", "board": "maps/yard.references.ron", "relations": "maps/yard.relations.ron",
     "terrain": "site/terrain/yard.ron", "water_plan": "site/water/yard.ron", "water_field": "site/water/yard.field.ron",
     "volume": "site/volume/yard.ron", "data_registry": "site/data.ron", "family_list": "family.ron",
     "agent": "agent.ron", "play": "play.ron", "destructible_marks": "destructible.ron",
@@ -83,7 +83,7 @@ FILE_OF_KIND = {
 KIND_OF_STEM = {
     "kits": "kits", "vocab": "vocab", "library": "library", "project": "policy", "rules": "rules",
     "compositions": "compositions", "standards": "standards", "repetition": "repetition", "rigs": "rigs",
-    "notes": "notes", "plan": "plan", "references": "references", "relations": "relations",
+    "notes": "notes", "plan": "plan", "references": "board", "relations": "relations",
     "data": "data_registry", "family": "family_list", "agent": "agent", "play": "play",
     "destructible": "destructible_marks", "editor": "editor_settings", "checks": "checks",
 }

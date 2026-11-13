@@ -132,3 +132,139 @@ fn a_references_file_becomes_the_levels_board_with_the_same_captions_in_the_same
     let captions: Vec<&str> = level["pictures"].as_array().unwrap().iter().map(|p| p["caption"].as_str().unwrap()).collect();
     assert_eq!(captions, ["how the roofs step down the hill", "the fog's colour, not its density"]);
 }
+
+// ── A board that does not read, the header check over every board, and what `board_set` declares ─────────────────
+
+#[test]
+fn a_board_that_does_not_read_is_refused_and_never_overwritten_and_the_state_names_it() {
+    let (mut app, mut ctx, root) = editor("board_unreadable");
+    let file = root.join(board::file_of("design/levels/m"));
+    std::fs::create_dir_all(file.parent().unwrap_or(&root)).unwrap();
+    for (what, bytes) in [("malformed YAML", "pictures: [\n  - path: art/a.png\n"), ("another version", "version: 2\npictures: []\n")] {
+        std::fs::write(&file, bytes).unwrap();
+        for call in [
+            json!({"action": "add", "path": "art/new.png", "caption": "the new one"}),
+            json!({"action": "remove", "path": "art/a.png"}),
+            json!({"action": "caption", "path": "art/a.png", "caption": "again"}),
+        ] {
+            let said = refusal(&mut ctx, call.clone());
+            assert!(said.contains("board"), "{what}: {call}: the refusal names the board: {said}");
+            assert_eq!(std::fs::read_to_string(&file).unwrap(), bytes, "{what}: {call}: a board that does not read is never overwritten");
+        }
+        let state = grimoire_state(&mut app);
+        let level = state["board"]["places"].as_array().unwrap().iter().find(|p| p["place"] == "design/levels/m").unwrap_or_else(|| panic!("{state}")).clone();
+        assert!(level["problem"].as_str().is_some_and(|p| !p.is_empty()), "{what}: grimoire_state.board names the problem: {level}");
+        assert!(level.get("pictures").is_none(), "{what}: and lists no pictures from it: {level}");
+    }
+}
+
+fn png(w: u32, h: u32) -> Vec<u8> {
+    let mut b = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13, b'I', b'H', b'D', b'R'];
+    b.extend(w.to_be_bytes());
+    b.extend(h.to_be_bytes());
+    b.extend([8, 6, 0, 0, 0]);
+    b
+}
+
+fn pump(app: &mut App, secs: f64) {
+    let start = std::time::Instant::now();
+    while start.elapsed().as_secs_f64() < secs {
+        app.update();
+        std::thread::sleep(std::time::Duration::from_millis(40));
+    }
+}
+
+fn verdict(app: &mut App, file: &str) -> Value {
+    grimoire_state(app)["reloads"]["kinds"]
+        .as_array()
+        .and_then(|k| k.iter().find(|v| v["kind"] == "reference_images" && v["file"] == file).cloned())
+        .unwrap_or(Value::Null)
+}
+
+/// **The header check runs over every board of the project** (#200, SG-03): a picture on a region's board, and on the game's, that
+/// is no picture is refused naming the file and the field, as one on the level's board is.
+#[test]
+fn a_picture_on_any_boards_that_is_no_picture_is_named_by_the_header_check() {
+    let (mut app, mut ctx, root) = editor("board_header_every");
+    let on = [("design/regions/north", "art/harbour.png"), ("design", "art/game.png")];
+    for (place, file) in on {
+        std::fs::create_dir_all(root.join(file).parent().unwrap_or(&root)).unwrap();
+        std::fs::write(root.join(file), png(8, 8)).unwrap();
+        ops::dispatch(&mut ctx, "board_set", &json!({"action": "add", "place": place, "path": file, "caption": "the fog's colour"})).unwrap_or_else(|e| panic!("{}", e.0));
+    }
+    pump(&mut app, 1.5);
+    for (_, file) in on {
+        assert_eq!(verdict(&mut app, file), Value::Null, "a picture seen reading for the first time is not news: {file}");
+    }
+    for (place, file) in on {
+        std::fs::write(root.join(file), b"a text where the picture was").unwrap();
+        let mut seen = Value::Null;
+        for _ in 0..60 {
+            pump(&mut app, 0.1);
+            seen = verdict(&mut app, file);
+            if seen != Value::Null {
+                break;
+            }
+        }
+        assert_eq!(seen["outcome"], "refused", "{place}: {file}: {seen}");
+        assert_eq!(seen["file"], file, "{seen}");
+        assert_eq!(seen["field"], "signature", "{place}: the verdict names the header field: {seen}");
+        assert_eq!(std::fs::read(root.join(file)).unwrap(), b"a text where the picture was", "the picture is the author's: nothing is written");
+    }
+}
+
+fn stat(dir: &std::path::Path) -> std::collections::BTreeMap<std::path::PathBuf, (u64, std::time::SystemTime)> {
+    let mut out = std::collections::BTreeMap::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&d) else { continue };
+        for e in entries.flatten() {
+            let Ok(meta) = e.metadata() else { continue };
+            if meta.is_dir() {
+                stack.push(e.path());
+            } else if let Ok(modified) = meta.modified() {
+                out.insert(e.path(), (meta.len(), modified));
+            }
+        }
+    }
+    out
+}
+
+/// **`board_set`'s declaration is true** (the reload contract's ratchet, for the one operation that copies a file in): a drop from outside the
+/// project writes the board and the picture, and each is a kind the operation declares, wherever the place is.
+#[test]
+fn a_dropped_picture_dispatched_through_board_set_changes_only_the_kinds_it_declares() {
+    use bevy_grimoire_core::reload::{self, Base};
+    let (_app, mut ctx, root) = editor("board_kinds");
+    let outside = std::env::temp_dir().join(format!("board_kinds_drop_{}", std::process::id()));
+    std::fs::create_dir_all(&outside).unwrap();
+    let dropped = outside.join("poster.png");
+    std::fs::write(&dropped, b"a poster").unwrap();
+
+    let declared = ops::find("board_set").expect("a registered operation").writes();
+    let mut kinds: Vec<&str> = Vec::new();
+    for (place, call) in [
+        (None, json!({"action": "add", "path": dropped.to_str().unwrap(), "caption": "the poster's blue"})),
+        (Some("design/regions/north"), json!({"action": "add", "place": "design/regions/north", "path": dropped.to_str().unwrap(), "caption": "its blue again"})),
+        (Some("design"), json!({"action": "add", "place": "design", "path": dropped.to_str().unwrap(), "caption": "and for the game"})),
+    ] {
+        let before = stat(&root);
+        ops::dispatch(&mut ctx, "board_set", &call).unwrap_or_else(|e| panic!("{}", e.0));
+        let after = stat(&root);
+        let mut changed: Vec<&std::path::PathBuf> = after.iter().filter(|(p, now)| before.get(*p) != Some(*now)).map(|(p, _)| p).collect();
+        changed.extend(before.keys().filter(|p| !after.contains_key(*p)));
+        assert!(changed.len() >= 2, "{place:?}: the board and the picture were written: {changed:?}");
+        for path in changed {
+            let rel = path.strip_prefix(&root).expect("under the project root").to_string_lossy().replace('\\', "/");
+            let kind = match rel.strip_prefix("assets/grimoire/") {
+                Some(under) => reload::kind_of(Base::Grimoire, under),
+                None => reload::kind_of(Base::Root, &rel),
+            }
+            .unwrap_or_else(|| panic!("board_set changed `{rel}`, which is no kind in bevy_grimoire_core::reload::KINDS"));
+            assert!(kind.id == "oplog" || declared.contains(&kind.id), "board_set changed `{rel}` (kind `{}`) and declares only {declared:?}", kind.id);
+            kinds.push(kind.id);
+        }
+    }
+    assert!(kinds.contains(&"board") && kinds.contains(&"reference_images"), "both kinds were exercised: {kinds:?}");
+    std::fs::remove_dir_all(&outside).unwrap();
+}

@@ -68,7 +68,7 @@ fn a_picture_is_refused_twice_outside_the_project_or_without_saying_what_to_take
     let add = |ctx: &mut Ctx, p: &str, caption: &str| ops::dispatch(ctx, "board_set", &json!({"action": "add", "path": p, "caption": caption}));
     let first = id_of(add(&mut ctx, "refs/court.png", "like this").unwrap());
     // The same picture twice, a path outside the project, a non-image and an empty caption are refused, nothing written.
-    for (bad, caption) in [("refs/court.png", "again"), ("../x.png", "x"), ("notes.txt", "x"), ("refs/empty.png", "  ")] {
+    for (bad, caption) in [("refs/court.png", "again"), ("/etc/x.png", "x"), ("../x.png", "x"), ("notes.txt", "x"), ("refs/empty.png", "  ")] {
         let refused = !matches!(add(&mut ctx, bad, caption), Ok(Applied::Done { .. }));
         assert!(refused, "{bad} ({caption:?}) was accepted");
     }
