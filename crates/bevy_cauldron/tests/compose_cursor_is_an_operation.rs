@@ -34,6 +34,9 @@ fn editor(tag: &str) -> App {
     app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());
     app.add_plugins(bevy_cauldron::ops_brp::OpsBridgePlugin);
     app.world_mut().spawn((Window::default(), PrimaryWindow));
+    // **A frame is 1/60 s of the clock, not of the host** (assumed owner exception, 2026-11-13: #322): the key repeat counts
+    // the app's clock, so on a quiet host 21 headless frames took under REPEAT_SECS of real time and the hold never repeated.
+    app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(std::time::Duration::from_secs_f32(1.0 / 60.0)));
     *app.world_mut().resource_mut::<Mode>() = Mode::Compose;
     for _ in 0..8 {
         app.update();
