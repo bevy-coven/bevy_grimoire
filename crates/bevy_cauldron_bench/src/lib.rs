@@ -56,12 +56,16 @@
 //! reviewer runs to ask this crate what it does.
 
 pub mod check;
+// **Claude Code as the benchmarked agent** (BM-06, #416): its stream-json transcript and its isolated profile.
+pub mod claude;
 // **What changed between two runs** (BM-03, #413): a paired bootstrap and one verdict.
 pub mod compare;
 pub mod fixture;
 pub mod grade;
 // **Where a committed report goes and the README that lists them** (BM-03, #413).
 pub mod index;
+// **One suite across several agent and model pairs** (BM-06, #416): success against cost, the frontier marked.
+pub mod matrix;
 // **What a run's header says about the machine and the build** (BM-03, #413).
 pub mod probe;
 // **The report a run ends with** (BM-03, #413): built from `trial.json` files, with no model.

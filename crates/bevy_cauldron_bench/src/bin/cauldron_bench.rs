@@ -28,7 +28,8 @@
 
 use std::path::PathBuf;
 
-use bevy_cauldron_bench::run::{self, Agent, Options, DEFAULT_MODEL};
+use bevy_cauldron_bench::matrix::{self, Pair};
+use bevy_cauldron_bench::run::{self, Agent, Options};
 
 /// **What `--help` prints.**
 const USAGE: &str = "\
@@ -37,13 +38,14 @@ cauldron-bench: run the Cauldron's benchmark suite against a real editor and a r
 usage: cauldron-bench run [options]
        cauldron-bench report <run directory> [--label <name>] [--publish <docs/bench>]
        cauldron-bench compare <a> <b> [--across]
+       cauldron-bench matrix --pairs <agent:model,agent:model,...> [run options]
 
   --suite <dir>       the task directory (default: bench/tasks). A game's own is .dark_factory/bench
   --project <root>    the project the tasks run against (default: this repository's root)
-  --agent <name>      omp | oracle | nothing (default: omp)
+  --agent <name>      omp | claude-code | oracle | nothing (default: omp)
   --trials <n>        how many trials of each task (default: 1)
   --jobs <n>          how many trials run at once (default: 1)
-  --model <name>      the model omp runs (default: ollama-cloud/deepseek-v4.1-flash:1017)
+  --model <name>      the model the harness runs (omp default: ollama-cloud/deepseek-v4.1-flash:1017; claude-code: sonnet)
   --variant <name>    an arm from <suite>/variants.yaml
   --task <id>         only this task; repeatable
   --editor <path>     the editor binary under test (default: the one beside this binary)
@@ -77,8 +79,9 @@ fn main() -> std::process::ExitCode {
         Some("run") => argv[1..].to_vec(),
         Some("report") => return report_command(&argv[1..]),
         Some("compare") => return compare_command(&argv[1..]),
+        Some("matrix") => return matrix_command(&argv[1..]),
         Some(other) => {
-            eprintln!("cauldron-bench: `{other}` is not a command. The commands are: run, report, compare.");
+            eprintln!("cauldron-bench: `{other}` is not a command. The commands are: run, report, compare, matrix.");
             eprintln!("Try `cauldron-bench --help`.");
             return std::process::ExitCode::FAILURE;
         }
@@ -150,7 +153,7 @@ fn parse(argv: &[String]) -> Result<Options, String> {
         agent: Agent::Omp,
         trials: 1,
         jobs: 1,
-        model: DEFAULT_MODEL.to_owned(),
+        model: String::new(),
         variant: None,
         out: PathBuf::new(),
         editor: here.join("bevy_cauldron"),
@@ -162,6 +165,7 @@ fn parse(argv: &[String]) -> Result<Options, String> {
     };
     let mut run_name: Option<String> = None;
     let mut label: Option<String> = None;
+    let mut model: Option<String> = None;
     let mut it = argv.iter();
     while let Some(arg) = it.next() {
         let mut value = || {
@@ -175,7 +179,7 @@ fn parse(argv: &[String]) -> Result<Options, String> {
             "--agent" => options.agent = Agent::parse(&value()?)?,
             "--trials" => options.trials = number(&value()?, "--trials")?,
             "--jobs" => options.jobs = number(&value()?, "--jobs")?,
-            "--model" => options.model = value()?,
+            "--model" => model = Some(value()?),
             "--variant" => options.variant = Some(value()?),
             "--task" => options.only.push(value()?),
             "--editor" => options.editor = PathBuf::from(value()?),
@@ -185,6 +189,7 @@ fn parse(argv: &[String]) -> Result<Options, String> {
             other => return Err(format!("`{other}` is not an argument this command takes")),
         }
     }
+    options.model = model.unwrap_or_else(|| options.agent.default_model().to_owned());
     if options.trials == 0 {
         return Err("--trials 0 is a run of nothing; say how many trials to make".to_owned());
     }
@@ -202,6 +207,56 @@ fn parse(argv: &[String]) -> Result<Options, String> {
         .map(|_| options.root.join(bevy_cauldron_bench::index::BENCH_DOCS_DIR));
     options.label = label.unwrap_or(name);
     Ok(options)
+}
+
+/// **`cauldron-bench matrix --pairs a,b,...`**: one suite across several agent and model pairs, success
+/// against cost, with the frontier marked (BM-06, #416).
+fn matrix_command(argv: &[String]) -> std::process::ExitCode {
+    let mut rest: Vec<String> = Vec::new();
+    let mut list: Option<String> = None;
+    let mut it = argv.iter();
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "--pairs" => list = it.next().cloned(),
+            // **The pair is the agent and the model**, so naming either beside it would be two answers.
+            "--agent" | "--model" => {
+                eprintln!("cauldron-bench: `{arg}` has no place in a matrix: name each pair in `--pairs agent:model,...`");
+                return std::process::ExitCode::FAILURE;
+            }
+            other => rest.push(other.to_owned()),
+        }
+    }
+    let Some(list) = list else {
+        eprintln!("cauldron-bench: `matrix` needs `--pairs`, like `--pairs omp:ollama-cloud/deepseek-v4.1-flash:1017,claude-code:sonnet`");
+        return std::process::ExitCode::FAILURE;
+    };
+    let pairs = match Pair::parse_all(&list) {
+        Ok(pairs) => pairs,
+        Err(e) => {
+            eprintln!("cauldron-bench: {e}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    let options = match parse(&rest) {
+        Ok(options) => options,
+        Err(e) => {
+            eprintln!("cauldron-bench: {e}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    match matrix::run(&options, &pairs) {
+        Ok((matrix, written)) => {
+            println!("{}", matrix.markdown());
+            for path in written {
+                println!("report: {}", path.display());
+            }
+            std::process::ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("cauldron-bench: {e}");
+            std::process::ExitCode::FAILURE
+        }
+    }
 }
 
 /// **`cauldron-bench report <run directory>`**: the report of a run that has already finished.

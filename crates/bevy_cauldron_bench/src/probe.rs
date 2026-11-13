@@ -29,6 +29,9 @@ pub fn header(options: &Options, label: &str) -> Header {
             output("omp", &["--version"]).unwrap_or_else(|| UNKNOWN.to_owned()),
             price_of(&options.model),
         ),
+        // **Claude Code's model is an alias** (`sonnet`) that no price list spells, so it has no listed price
+        // and its report uses the cost the harness itself reported.
+        Agent::ClaudeCode => (output("claude", &["--version"]).unwrap_or_else(|| UNKNOWN.to_owned()), None),
         Agent::Oracle | Agent::Nothing => ("scripted".to_owned(), None),
     };
     Header {

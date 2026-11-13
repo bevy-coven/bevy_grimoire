@@ -41,6 +41,8 @@ use serde_json::{json, Value};
 pub enum Agent {
     /// **A real model harness** (`omp`), which is what a benchmark is for.
     Omp,
+    /// **Claude Code** (`claude -p --output-format stream-json`), the second real harness (BM-06, #416).
+    ClaudeCode,
     /// **The task's own `solution`, called through the real MCP server**: no model, and it must pass every
     /// task. It proves the editor, the server, the config and the grader are one pipe.
     Oracle,
@@ -50,23 +52,44 @@ pub enum Agent {
 }
 
 impl Agent {
+    /// Every agent, in the order `--agent`'s refusal lists them.
+    pub const ALL: [Agent; 4] = [Agent::Omp, Agent::ClaudeCode, Agent::Oracle, Agent::Nothing];
+
     /// As `--agent` spells it.
     pub fn name(self) -> &'static str {
         match self {
             Agent::Omp => "omp",
+            Agent::ClaudeCode => "claude-code",
             Agent::Oracle => "oracle",
             Agent::Nothing => "nothing",
         }
     }
 
+    /// **Whether the harness runs a model**, which a report names and prices.
+    pub fn has_model(self) -> bool {
+        matches!(self, Agent::Omp | Agent::ClaudeCode)
+    }
+
+    /// **The model a harness runs when `--model` is not given**; empty for a scripted agent.
+    pub fn default_model(self) -> &'static str {
+        match self {
+            Agent::Omp => DEFAULT_MODEL,
+            Agent::ClaudeCode => crate::claude::DEFAULT_MODEL,
+            Agent::Oracle | Agent::Nothing => "",
+        }
+    }
+
     /// The agent a command line names.
     pub fn parse(name: &str) -> Result<Agent, String> {
-        for agent in [Agent::Omp, Agent::Oracle, Agent::Nothing] {
+        for agent in Agent::ALL {
             if agent.name() == name {
                 return Ok(agent);
             }
         }
-        Err(format!("`{name}` is not an agent. The agents are: omp, oracle, nothing."))
+        Err(format!(
+            "`{name}` is not an agent. The agents are: {}.",
+            Agent::ALL.iter().map(|a| a.name()).collect::<Vec<_>>().join(", ")
+        ))
     }
 }
 
@@ -251,6 +274,9 @@ pub struct TrialRecord {
     pub tool_log: Vec<CallLog>,
     /// What the agent's harness reported for tokens, when it reported any.
     pub tokens: Option<Tokens>,
+    /// **The cost the harness itself reported**, dollars, when it reports one (Claude Code's `total_cost_usd`).
+    /// A report prices a model from its listed price and uses this only when none is listed.
+    pub cost_reported_usd: Option<f64>,
     /// **Files the agent changed that no operation-log line wrote**: it went around the tools, through its
     /// shell. See [`crate::grade::edits_behind_the_back`].
     pub edits_behind: Vec<String>,
@@ -311,6 +337,7 @@ impl TrialRecord {
             "tokens_cache_read": reported.then_some(tokens.cache_read),
             "tokens_cache_write": reported.then_some(tokens.cache_write),
             "wall_s": self.wall_s,
+            "cost_reported_usd": self.cost_reported_usd,
             "tools_offered": self.tools_offered,
             "wishes": self.wishes,
         })
@@ -849,8 +876,10 @@ pub fn run(options: &Options) -> Result<Vec<TrialRecord>, String> {
     }
     // **The runner refuses a model this host does not have** (BM-02): a run whose harness could not start
     // would report every trial as a harness error and say nothing about the editor.
-    if options.agent == Agent::Omp {
-        check_model(&options.model)?;
+    match options.agent {
+        Agent::Omp => check_model(&options.model)?,
+        Agent::ClaudeCode => check_claude()?,
+        Agent::Oracle | Agent::Nothing => {}
     }
     std::fs::create_dir_all(&options.out)
         .map_err(|e| format!("{}: {e}", options.out.display()))?;
@@ -951,6 +980,56 @@ fn operations(editor: &Path) -> Result<Vec<String>, String> {
     Ok(names)
 }
 
+/// **Refuse a Claude Code this host does not have**, before any trial runs: a `claude` that cannot print its
+/// version would make every trial a harness error that says nothing about the editor.
+fn check_claude() -> Result<(), String> {
+    Command::new("claude")
+        .arg("--version")
+        .output()
+        .map_err(|e| format!("`claude --version` could not be run, so a claude-code trial could not start: {e}"))
+        .and_then(|out| {
+            if out.status.success() {
+                Ok(())
+            } else {
+                Err(format!("`claude --version` failed ({}), so a claude-code trial could not start", out.status))
+            }
+        })
+}
+
+/// **Wait for an agent to finish, or stop it at its wall budget** (`wall_s` seconds), and stop it for good.
+///
+/// A dead editor ends the trial now, not at the budget: the agent is talking to nothing, and the editor's own
+/// exit is the reason to report. **The whole process group is killed**, not only the child: a harness runs
+/// its tools as children of its own, and a `bash` left running after its parent was killed is a process
+/// holding the trial's project (the follow-up #412's review named). The agent leads its own group
+/// ([`detach`]), so the group is the agent's and nothing else's.
+pub fn wait_for_agent(mut child: Child, editor: &mut Editor, wall_s: u32, name: &str) -> Result<(), String> {
+    let deadline = Instant::now() + Duration::from_secs(u64::from(wall_s));
+    while Instant::now() < deadline {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) => {
+                if let Some(reason) = editor_exit(editor) {
+                    stop_group(&mut child);
+                    return Err(reason);
+                }
+                std::thread::sleep(Duration::from_millis(AGENT_POLL_INTERVAL_MS));
+            }
+            Err(e) => return Err(format!("{name} could not be waited on: {e}")),
+        }
+    }
+    stop_group(&mut child);
+    Ok(())
+}
+
+/// **Kill an agent's process group, then the agent itself, and wait for it.**
+fn stop_group(child: &mut Child) {
+    let group = format!("-{}", child.id());
+    let _ = Command::new("kill").args(["-KILL", "--", &group]).status();
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 /// **Refuse a model this host does not list**, before any trial runs.
 fn check_model(model: &str) -> Result<(), String> {
     let out = Command::new("omp")
@@ -983,7 +1062,7 @@ fn one_trial(options: &Options, task: &Task, trial: u32, variant: Option<&Varian
         task: task.id.clone(),
         trial,
         agent: options.agent.name().to_owned(),
-        model: (options.agent == Agent::Omp).then(|| options.model.clone()),
+        model: options.agent.has_model().then(|| options.model.clone()),
         variant: variant.map(|v| v.name.clone()),
         outcome,
         reason,
@@ -991,6 +1070,7 @@ fn one_trial(options: &Options, task: &Task, trial: u32, variant: Option<&Varian
         tool_calls: Vec::new(),
         tool_log: Vec::new(),
         tokens: None,
+        cost_reported_usd: None,
         edits_behind: Vec::new(),
         wall_s: 0.0,
         tools_offered: Vec::new(),
@@ -1066,6 +1146,15 @@ fn one_trial(options: &Options, task: &Task, trial: u32, variant: Option<&Varian
         Agent::Nothing => run_nothing(&config),
         Agent::Oracle => run_oracle(task, &config),
         Agent::Omp => run_omp(options, task, &config, &project, &mut editor, &dir),
+        Agent::ClaudeCode => crate::claude::run(
+            &options.model,
+            &task.prompt,
+            task.budget.wall_s,
+            &config,
+            &project,
+            &mut editor,
+            &dir,
+        ),
     };
     let wall_s = started.elapsed().as_secs_f64();
     // **The editor's death outranks whatever the agent said about it.** An agent whose editor was killed
@@ -1091,6 +1180,7 @@ fn one_trial(options: &Options, task: &Task, trial: u32, variant: Option<&Varian
     record.tool_calls = run.tool_calls.clone();
     record.tool_log = run.tool_log.clone();
     record.tokens = run.usage;
+    record.cost_reported_usd = run.cost_usd;
     record.edits_behind = crate::grade::edits_behind_the_back(&before, &left);
     record.wall_s = wall_s;
     record.tools_offered = run.tools_offered.clone();
@@ -1115,6 +1205,8 @@ pub struct AgentRun {
     pub tokens: Option<u64>,
     /// **The same, by kind** (fresh input, output, cached read and written), which is what a price is applied to.
     pub usage: Option<Tokens>,
+    /// **A cost the harness itself reported**, dollars (Claude Code's `total_cost_usd`).
+    pub cost_usd: Option<f64>,
     /// The tools its `tools/list` held.
     pub tools_offered: Vec<String>,
     /// The decisions the harness made, by the name a `decide` check asks for.
@@ -1262,30 +1354,13 @@ fn run_omp(
         .stdin(Stdio::null())
         .stdout(stdout)
         .stderr(stderr);
-    let mut child = detach(&mut omp)
+    let child = detach(&mut omp)
         .spawn()
         .map_err(|e| format!("omp did not start: {e}"))?;
     // **Stopped at the budget**: the wall clock is the one bound a model's turns cannot be argued with.
-    // `--max-time` is what ends the agent's own turn; this deadline is the outer bound for a harness that
+    // `--max-time` is what ends the agent's own turn; the deadline is the outer bound for a harness that
     // ignores its own flag, and it is the same number so a trial is one budget and not two.
-    let deadline = Instant::now() + Duration::from_secs(u64::from(task.budget.wall_s));
-    while Instant::now() < deadline {
-        match child.try_wait() {
-            Ok(Some(_)) => break,
-            Ok(None) => {
-                // **A dead editor ends the trial now**, not at the budget: the agent is talking to nothing.
-                if let Some(reason) = editor_exit(editor) {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(reason);
-                }
-                std::thread::sleep(Duration::from_millis(AGENT_POLL_INTERVAL_MS));
-            }
-            Err(e) => return Err(format!("omp could not be waited on: {e}")),
-        }
-    }
-    let _ = child.kill();
-    let _ = child.wait();
+    wait_for_agent(child, editor, task.budget.wall_s, "omp")?;
     let server = config
         .get("mcpServers")
         .and_then(Value::as_object)
@@ -1574,7 +1649,7 @@ pub fn read_transcript(path: &Path, dir: &Path, server: &str) -> Result<AgentRun
 ///
 /// `deny_unknown_fields` is not applied here: a hand-back's extra fields are the harness's or the editor's,
 /// and a check reads the words rather than the shape.
-fn handback_of(params: &Value) -> Handback {
+pub fn handback_of(params: &Value) -> Handback {
     let strings = |key: &str| -> Vec<String> {
         params
             .get(key)
