@@ -274,14 +274,23 @@ pub fn fixture_or_project(root: &Path, rel: &str) -> Option<PathBuf> {
     None
 }
 
-/// **A refusal at a task's own line**, or at its file when the walk knows no line for the field.
+/// **A refusal at a task's own line and field**, with both in the sentence a person reads.
+///
+/// **The line is said in `what`, not only carried on `Location`**, because `Location`'s `Display` renders the
+/// file and the field and never the line — so a refusal that only set `Location::line` named the file and the
+/// field and left the line to a reader who happened to inspect the value. Every other reader of a project
+/// file says its line in the sentence for the same reason, and #411's acceptance asks for it by name.
 fn refuse_at(shown: &str, field: &str, line: Option<usize>, why: &str, fix: &str) -> Problem {
     let mut at = Location::file(shown.to_owned()).field(Some(field.to_owned()));
     if let Some(line) = line {
         at = at.line(line);
     }
+    let what = match line {
+        Some(line) => format!("the task was refused at line {line}"),
+        None => "the task was refused".to_owned(),
+    };
     Problem::with(
-        "the task was refused",
+        what,
         Detail::default().at(at).because(why.to_owned()).fix(fix.to_owned()),
     )
 }

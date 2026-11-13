@@ -70,7 +70,7 @@ pub use check::{
     PlacementNearWall, PlacementRef, PlacementRefField, PlacementRelative, PlacementRestsOn, ProblemKind,
     Unchanged, Verdict, Wall, CHECK_NAMES,
 };
-pub use grade::{Grading, Handback, Left, Outcome, Snapshot};
+pub use grade::{Grading, Handback, Left, Outcome, Snapshot, EDITOR_SCRATCH};
 pub use suite::{Suite, Variant, Variants};
 pub use run::{Agent, Options, TrialRecord};
 pub use task::{Budget, Step, Task, TASK_TOOL_CALLS_DEFAULT, TASK_WALL_S_DEFAULT};
@@ -79,10 +79,11 @@ pub use task::{Budget, Step, Task, TASK_TOOL_CALLS_DEFAULT, TASK_WALL_S_DEFAULT}
 /// task, each holding a `task.yaml`.
 pub const TASKS_DIR: &str = "bench/tasks";
 
-/// **Where the files laid over the fixture live**, relative to the repository (or game) root: a tree of
-/// the same shape as the project, so `bench/fixture/assets/grimoire/maps/x.map.yaml` lands at
-/// `assets/grimoire/maps/x.map.yaml` in the trial's copy.
-pub const FIXTURE_DIR: &str = "bench/fixture";
+/// **Where the files laid over the fixture live**, relative to the repository (or game) root.
+///
+/// **The constant is [`fixture::FIXTURE_DIR`]'s, re-exported**, not a second spelling of it: two constants
+/// with one value are two things to keep in step, and this crate has already paid for that once.
+pub use fixture::FIXTURE_DIR;
 
 /// **The step that hands a result back**, as an agent's `grimoire_present` call is named. A task's step
 /// is either an operation the editor's registry knows, or this  -  a hand-back is not an operation (it

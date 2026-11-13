@@ -42,12 +42,23 @@ pub const OPLOG: &str = "assets/grimoire/oplog.jsonl";
 /// by op name and outcome rather than by digest.
 pub const RUN_RECORD: &str = OPLOG;
 
+/// **Where the editor keeps its own working files**, relative to a project root: its thumbnail cache, its
+/// captures, its logs. **Never a project file**, and never what `project_unchanged` measures.
+///
+/// Measured on this host, 2026-11-13: a trial's read-only task failed `project_unchanged` naming 36
+/// `target/grimoire_thumbs/*.png`, because the editor bakes the palette's thumbnails while the agent is
+/// still thinking. A check that counted those would fail every task that ran longer than the bake, which is
+/// every task a real model attempts — so `unchanged` and `project_unchanged` measure the project, and the
+/// editor's own cache is not the project.
+pub const EDITOR_SCRATCH: &str = "target";
+
 /// **The files a project holds that a snapshot digests**: every regular file under the project, keyed by
 /// its path relative to the root with `/` separators.
 ///
-/// **Every file, not only the YAML**: an agent that moves a texture or leaves a stray file in the project
-/// has changed it, and `project_unchanged` is the check that says so. Dotfiles are skipped — a `.tmp` from
-/// an interrupted atomic write is not a project file, and neither is a `.git` directory.
+/// **Every file but the editor's own scratch** ([`EDITOR_SCRATCH`]), because an agent that moves a texture
+/// or leaves a stray file in the project has changed it, and `project_unchanged` is the check that says so.
+/// Dotfiles are skipped  -  a `.tmp` from an interrupted atomic write is not a project file  -  and so is
+/// the operation log ([`RUN_RECORD`]), which is read by name and outcome instead.
 pub fn project_files(root: &Path) -> Vec<String> {
     let mut out = Vec::new();
     walk(root, root, &mut out);
@@ -70,6 +81,10 @@ fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
             continue;
         };
         if kind.is_dir() {
+            // **The editor's own working directory is not the project**, see [`EDITOR_SCRATCH`].
+            if dir == root && name == EDITOR_SCRATCH {
+                continue;
+            }
             walk(root, &path, out);
         } else if kind.is_file()
             && let Ok(rel) = path.strip_prefix(root)
@@ -161,8 +176,11 @@ pub struct Found {
 
 /// **A project as data**, read once by [`Snapshot::read`].
 ///
-/// The map is [`Option`] because a project a run left in a state where its map no longer reads is a real
-/// outcome — and the checks then measure what they can, saying so, rather than the grader refusing.
+/// **A map that does not read is a failed run, not a partial one.** A run that leaves the map unparseable
+/// has broken the project, so every check that asks something about the map fails and names the reason
+/// ([`Self::map_problem`]). Substituting `Map::default()` and answering from it would *pass* `no_problem`
+/// (nothing found in a map that does not exist) and report "no `bed_double` is on the map" as though the
+/// agent had simply not placed it — the two answers a person would most want to tell apart.
 #[derive(Clone, Debug)]
 pub struct Snapshot {
     /// Every file's path relative to the root, and its digest.
@@ -180,7 +198,7 @@ pub struct Snapshot {
     /// What the problem passes found in [`Self::map`].
     pub found: Found,
     /// **Why the map did not read**, when it did not: a task whose agent left an unreadable map has failed
-    /// it, and the reason is the interesting part.
+    /// it, and the reason is the interesting part. Every map-derived check reads this first.
     pub map_problem: Option<String>,
 }
 

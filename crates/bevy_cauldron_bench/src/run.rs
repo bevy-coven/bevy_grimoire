@@ -512,8 +512,26 @@ impl McpClient {
     }
 
     /// **Call one tool**, and answer with its result.
+    ///
+    /// **A tool that refused is an error here**, and it is `isError` that says so rather than the
+    /// JSON-RPC envelope: an MCP tool reports a refusal as a *result* whose text carries the reason, so a
+    /// caller that only checked the envelope would read "the editor refused this change" as a success  -
+    /// which is exactly how the oracle's placement was silently dropped the first time this ran.
     pub fn call(&mut self, name: &str, arguments: Value) -> Result<Value, String> {
-        self.request("tools/call", json!({"name": name, "arguments": arguments}))
+        let answer = self.request("tools/call", json!({"name": name, "arguments": arguments}))?;
+        if answer.get("isError").and_then(Value::as_bool) == Some(true) {
+            return Err(format!("{name} refused: {}", tool_text(&answer)));
+        }
+        let structured = answer.get("structuredContent").cloned().unwrap_or(Value::Null);
+        // **A tool that answers "refused" in its own object** says so in the payload, not in the envelope:
+        // `grimoire_apply_operation` reports a refused operation that way, so the oracle stops on one
+        // rather than carrying on to a hand-back about a change that never happened.
+        if structured.get("refused").is_some()
+            || structured.get("outcome").and_then(Value::as_str) == Some("refused")
+        {
+            return Err(format!("{name} refused: {}", tool_text(&answer)));
+        }
+        Ok(answer)
     }
 }
 
@@ -522,6 +540,22 @@ impl Drop for McpClient {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
+}
+
+/// **What a tool's answer says, as text**: its `content` blocks joined, for a refusal's sentence.
+pub fn tool_text(answer: &Value) -> String {
+    answer
+        .get("content")
+        .and_then(Value::as_array)
+        .map(|blocks| {
+            blocks
+                .iter()
+                .filter_map(|b| b.get("text").and_then(Value::as_str))
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .filter(|text| !text.is_empty())
+        .unwrap_or_else(|| answer.to_string())
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -754,7 +788,7 @@ fn one_trial(options: &Options, task: &Task, trial: u32, variant: Option<&Varian
     let started = Instant::now();
     let run = match options.agent {
         Agent::Nothing => run_nothing(&config),
-        Agent::Oracle => run_oracle(task, &config, &setup),
+        Agent::Oracle => run_oracle(task, &config),
         Agent::Omp => run_omp(options, task, &config, &project, editor.port, &dir),
     };
     let wall_s = started.elapsed().as_secs_f64();
@@ -809,29 +843,29 @@ fn run_nothing(config: &Value) -> Result<AgentRun, String> {
 }
 
 /// **The task's own `solution`, called through the real MCP server**, which must pass every task.
-fn run_oracle(task: &Task, config: &Value, setup: &Value) -> Result<AgentRun, String> {
+fn run_oracle(task: &Task, config: &Value) -> Result<AgentRun, String> {
     let mut client = McpClient::from_config(config)?;
     let mut run = AgentRun {
         tools_offered: client.tool_names()?,
         ..AgentRun::default()
     };
-    let token = setup.get("token").and_then(Value::as_str).unwrap_or_default().to_owned();
     for step in &task.solution {
         if step.op == crate::PRESENT_STEP {
             run.tool_calls.push("grimoire_present".to_owned());
-            let answer = client.call("grimoire_present", step.params.clone())?;
+            client.call("grimoire_present", step.params.clone())?;
             run.handbacks.push(handback_of(&step.params));
-            let _ = answer;
             continue;
         }
         run.tool_calls.push("grimoire_apply_operation".to_owned());
+        // **The parameters are the tool's own**, which is `operation`, `parameters`, `dry_run` and an
+        // optional `agent`: the tool derives who did it from the launch it was started by, so a token
+        // here is a field it does not read.
         client.call(
             "grimoire_apply_operation",
             json!({
                 "operation": step.op,
                 "parameters": step.params,
                 "dry_run": false,
-                "token": token,
             }),
         )?;
     }
@@ -840,9 +874,22 @@ fn run_oracle(task: &Task, config: &Value, setup: &Value) -> Result<AgentRun, St
 
 /// **A real model harness**, launched on the config the editor handed out, in the trial's directory.
 ///
-/// **The agent knows only what the Dark Factory gives it**: an isolated `--profile`, no context files, no
-/// skills, no rules, and the trial's directory as its working directory — which holds the project copy and
-/// no benchmark file. A transcript showing a tool from outside that set is a harness error.
+/// **The agent knows only what the Dark Factory gives it**, and that takes three things:
+///
+/// - `--no-context-files --no-skills --no-rules --no-extensions -e <folder>`, so no `AGENTS.md`, no skill,
+///   no rule and no extension discovery beyond the one folder this writes;
+/// - **`HOME` set to the trial's own** (`<trial>/home`), so the harness reads no user
+///   `~/.omp/agent/mcp.json`, no memory and no session store. Measured on this host, 2026-11-13: without it
+///   omp loaded the developer's own `home-still` server into every trial  -  a tool from outside the set
+///   BM-02 allows  -  and the agent spent its turn on `bash` and `write` instead of the editor;
+/// - **the credential imported into that `HOME`**, because an isolated `HOME` also has no login: a trial
+///   with neither refuses at "No API key found", which is a harness error that says nothing about the
+///   editor. `omp auth export` from the user's own `HOME` and `omp auth import` into the trial's is the
+///   documented, supported way to carry it, and it carries credentials only  -  never an MCP server.
+///
+/// **Not `--profile`**, though isolation is what a profile is for: a profile is isolated in exactly the same
+/// way and has the same missing credential, so it buys nothing this does not and adds a directory outside
+/// the trial. Measured, 2026-11-13.
 fn run_omp(
     options: &Options,
     task: &Task,
@@ -858,12 +905,19 @@ fn run_omp(
     let text = serde_json::to_string_pretty(config).map_err(|e| format!("{e}"))? + "\n";
     bevy_grimoire_core::atomic_file::write(&extension.join(".mcp.json"), text)
         .map_err(|e| format!("{}: {e}", extension.display()))?;
+    // **A valid omp extension, because omp refuses one that does not export a factory** and then does not
+    // read the `.mcp.json` beside it. This one exports the factory and does nothing: the benchmark reads
+    // the agent's transcript, not the editor's session record, so it has nothing to report back.
     bevy_grimoire_core::atomic_file::write(
         &extension.join("index.ts"),
-        "// Written by the benchmark. An omp extension folder whose .mcp.json beside it names the editor's\n\
-         // MCP server exactly as the terminal's agent tab does.\nexport default {};\n",
+        "// Written by cauldron-bench. An omp extension folder whose .mcp.json beside it names the\n\
+         // editor's MCP server exactly as the terminal's agent tab does.\n\
+         export default function (_pi: any) {}\n",
     )
     .map_err(|e| format!("{}: {e}", extension.display()))?;
+    // **The credential the trial's HOME needs**, carried from the user's own and nothing else: `omp auth
+    // export` names credentials, so no MCP server, skill or memory can ride along.
+    seed_credentials(&dir.join("home"))?;
     let transcript = dir.join("transcript.jsonl");
     let stdout = std::fs::File::create(&transcript).map_err(|e| format!("{}: {e}", transcript.display()))?;
     let stderr = std::fs::File::create(dir.join("agent.err")).map_err(|e| format!("{e}"))?;
@@ -874,13 +928,13 @@ fn run_omp(
             "json",
             "--model",
             &options.model,
-            // **An isolated profile**: no user `AGENTS.md`, no skills, no memories, no other MCP servers.
-            "--profile",
-            "cauldron-bench",
             "--no-context-files",
             "--no-skills",
             "--no-rules",
             "--no-extensions",
+            // **No session file**, so a trial leaves a transcript and its project and nothing a later trial
+            // could resume by accident.
+            "--no-session",
             "-e",
             &extension.to_string_lossy(),
             "--cwd",
@@ -888,12 +942,16 @@ fn run_omp(
             &task.prompt,
         ])
         .env("BEVY_BRP_PORT", port.to_string())
+        // **The trial's own HOME**, so the harness reads no user `mcp.json`, no memory and no session
+        // store: see this function's own note.
+        .env("HOME", dir.join("home"))
         .stdin(Stdio::null())
         .stdout(stdout)
         .stderr(stderr)
         .spawn()
         .map_err(|e| format!("omp did not start: {e}"))?;
-    // **Stopped at the budget**, with a grace for the process to finish its turn.
+    // **Stopped at the budget**: the wall clock is the one bound a model turns cannot be argued with, and a
+    // `--max-time` in the arguments makes omp end its own turn rather than being killed mid-write.
     let deadline = Instant::now() + Duration::from_secs(u64::from(task.budget.wall_s));
     while Instant::now() < deadline {
         match child.try_wait() {
@@ -904,88 +962,163 @@ fn run_omp(
     }
     let _ = child.kill();
     let _ = child.wait();
-    read_transcript(&transcript, config)
+    read_transcript(&transcript, dir)
+}
+
+/// **Give a trial's isolated `HOME` the credentials the user's own holds**, and nothing else.
+///
+/// `omp auth export` prints what this host is logged in to; `omp auth import` writes it into the `HOME`
+/// this is pointed at. A failure here is a harness error, because a trial whose harness cannot reach a
+/// model measures the harness: **the reason is what the user has to fix**, and it is named.
+fn seed_credentials(home: &Path) -> Result<(), String> {
+    let exported = Command::new("omp")
+        .args(["auth", "export"])
+        .output()
+        .map_err(|e| format!("`omp auth export` could not be run: {e}"))?;
+    if !exported.status.success() {
+        return Err(format!(
+            "`omp auth export` failed ({}): {}",
+            exported.status,
+            String::from_utf8_lossy(&exported.stderr).lines().next().unwrap_or("nothing")
+        ));
+    }
+    let carried = serde_json::from_slice::<Value>(&exported.stdout)
+        .map_err(|e| format!("`omp auth export` did not print JSON: {e}"))?;
+    let count = carried
+        .get("credentials")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
+    if count == 0 {
+        return Err(
+            "this host has no stored omp credentials, so a trial's harness could not reach a model. \
+             Log in with `omp` once."
+                .to_owned(),
+        );
+    }
+    let file = home.join("auth-carried.json");
+    if let Some(parent) = file.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+    }
+    bevy_grimoire_core::atomic_file::write(
+        &file,
+        serde_json::to_vec(&carried).map_err(|e| format!("{e}"))?,
+    )
+    .map_err(|e| format!("{}: {e}", file.display()))?;
+    let imported = Command::new("omp")
+        .args(["auth", "import", &file.to_string_lossy()])
+        .env("HOME", home)
+        .output()
+        .map_err(|e| format!("`omp auth import` could not be run: {e}"))?;
+    if !imported.status.success() {
+        return Err(format!(
+            "`omp auth import` into the trial's HOME failed ({}): {}",
+            imported.status,
+            String::from_utf8_lossy(&imported.stderr).lines().next().unwrap_or("nothing")
+        ));
+    }
+    let _ = std::fs::remove_file(&file);
+    Ok(())
 }
 
 /// **What a transcript says the agent did**, read from `omp --mode json`'s own events.
 ///
-/// **A tool from outside the set the harness was told about is a harness error**, because it means the
-/// profile was not isolated: a result measured with a tool the benchmark did not hand out is not a result
-/// about this benchmark.
-fn read_transcript(path: &Path, config: &Value) -> Result<AgentRun, String> {
+/// **A harness that never reached the model is a harness error**, and it is the *model's own* refusal that
+/// says so: omp writes "No API key found" or "No such model" to its stderr, and a run whose transcript
+/// holds no assistant message at all is a run of nothing. Scoring that as an agent failure would be a
+/// result about the harness with the wrong name on it  -  measured on this host, 2026-11-13.
+fn read_transcript(path: &Path, dir: &Path) -> Result<AgentRun, String> {
     let text = std::fs::read_to_string(path)
         .map_err(|e| format!("the transcript at {} could not be read: {e}", path.display()))?;
-    let served: Vec<String> = config
-        .get("mcpServers")
-        .and_then(Value::as_object)
-        .map(|servers| servers.keys().cloned().collect())
-        .unwrap_or_default();
     let mut run = AgentRun::default();
     let mut tools: Vec<String> = Vec::new();
+    let mut spoke = false;
     for line in text.lines() {
         let Ok(event) = serde_json::from_str::<Value>(line) else {
             continue;
         };
         let kind = event.get("type").and_then(Value::as_str).unwrap_or_default();
-        match kind {
-            // **A tool call**, whatever the harness calls the event: the name is the thing.
-            "tool_use" | "tool_call" | "tool" => {
-                if let Some(name) = event
-                    .get("name")
-                    .or_else(|| event.get("tool"))
-                    .and_then(Value::as_str)
-                {
-                    let is_mcp = served
-                        .iter()
-                        .any(|server| name.starts_with(&format!("{server}_")) || name.starts_with(&format!("{server}.")));
-                    let known_builtin = matches!(
-                        name,
-                        "bash" | "read" | "write" | "edit" | "glob" | "grep" | "find" | "todo" | "task"
-                            | "eval" | "learn" | "manage_skill" | "ast_edit" | "debug" | "lsp" | "ask"
-                            | "wait" | "web_search"
-                    );
-                    if !is_mcp && !known_builtin {
-                        return Err(format!(
-                            "the transcript shows a tool `{name}` that is neither the editor's nor the \
-                             harness's own set, so the profile was not isolated"
-                        ));
-                    }
-                    // **The editor's tools only**, since the built-ins are the harness's own account of
-                    // itself and the benchmark grades the editor's work.
-                    if is_mcp {
-                        run.tool_calls.push(name.to_owned());
-                        tools.push(name.to_owned());
-                    }
-                }
-            }
-            // **The tokens**, when the harness reports them once at the end.
-            "usage" | "result" | "summary" => {
-                if let Some(total) = event
-                    .get("tokens")
-                    .or_else(|| event.get("total_tokens"))
-                    .and_then(Value::as_u64)
-                {
-                    run.tokens = Some(total);
-                }
-            }
-            _ => {}
-        }
-        // **The hand-back, from the arguments themselves**: `grimoire_present`'s parameters are the words a
-        // check reads, and they are in the transcript whether or not the editor recorded them.
-        if let Some(call) = event.get("arguments").or_else(|| event.get("input"))
-            && event
-                .get("name")
-                .and_then(Value::as_str)
-                .is_some_and(|n| n.ends_with("grimoire_present"))
-            && let Ok(params) = serde_json::from_value::<Value>(call.clone())
+        // **`tool_execution_end` is where omp reports a tool finishing**, and `details.xdev` names the
+        // editor tool it ran.
+        //
+        // **This harness reaches an MCP tool through omp's device namespace**, not as a bare call: the
+        // transcript shows `write xd://mcp__cauldron_grimoire_present {"content": "{…}"}`, and the answer
+        // carries `details.xdev = {tool: "mcp__cauldron_grimoire_present", mode: "execute", args: {…}}`.
+        // Measured on this host, 2026-11-13. So the tool's name is `details.xdev.tool`, its arguments are
+        // `details.xdev.args`, and its result is the text content — and a reader that looked only for
+        // `toolcall_end`'s `name` saw `write` and counted nothing.
+        if kind == "tool_execution_end"
+            && let Some(details) = event.get("result").and_then(|r| r.get("details"))
+            && let Some(xdev) = details.get("xdev")
+            && let Some(tool) = xdev.get("tool").and_then(Value::as_str)
         {
-            run.handbacks.push(handback_of(&params));
+            let Some(name) = tool.split("__").nth(1) else {
+                continue;
+            };
+            let args = xdev.get("args").cloned().unwrap_or(Value::Null);
+            run.tool_calls.push(name.to_owned());
+            tools.push(name.to_owned());
+            if name.ends_with("grimoire_present") {
+                run.handbacks.push(handback_of(&args));
+            }
+            if name.ends_with("grimoire_wish") {
+                run.wishes.push(args);
+            }
         }
-        if let Some(wish) = event.get("wish") {
-            run.wishes.push(wish.clone());
+        // **A `toolcall_end` inside a `message_update`** is a tool the model called by name, and a name
+        // that is not one of the harness's own is a tool the benchmark did not hand out  -  which means
+        // something outside the isolated set was loaded.
+        if kind == "message_update"
+            && let Some(inner) = event.get("assistantMessageEvent")
+            && inner.get("type").and_then(Value::as_str) == Some("toolcall_end")
+            && let Some(call) = inner.get("toolCall")
+            && let Some(name) = call.get("name").and_then(Value::as_str)
+        {
+            // **`read`/`write` against `xd://mcp__…` are the device path**, counted above from their
+            // execution; the built-ins are the harness's own.
+            let is_device = call
+                .get("arguments")
+                .and_then(|a| a.get("path"))
+                .and_then(Value::as_str)
+                .is_some_and(|p| p.starts_with("xd://mcp__"));
+            let known_builtin = matches!(
+                name,
+                "bash" | "read" | "write" | "edit" | "glob" | "grep" | "find" | "todo" | "task" | "eval"
+                    | "learn" | "manage_skill" | "ast_edit" | "debug" | "lsp" | "ask" | "wait"
+                    | "web_search" | "browser" | "archive"
+            );
+            if !is_device && !known_builtin {
+                return Err(format!(
+                    "the transcript shows a tool `{name}` that is neither the editor's nor the harness's \
+                     own set, so the profile was not isolated"
+                ));
+            }
+        }
+        // **A model turn**, and the tokens it cost.
+        if kind == "message_end"
+            && let Some(message) = event.get("message")
+            && message.get("role").and_then(Value::as_str) == Some("assistant")
+        {
+            spoke = true;
+            if let Some(total) = message
+                .get("usage")
+                .and_then(|u| u.get("totalTokens"))
+                .and_then(Value::as_u64)
+            {
+                run.tokens = Some(run.tokens.unwrap_or(0) + total);
+            }
         }
     }
     run.tools_offered = tools;
+    if !spoke {
+        let stderr = std::fs::read_to_string(dir.join("agent.err")).unwrap_or_default();
+        let lines: Vec<&str> = stderr.lines().filter(|l| !l.trim().is_empty()).collect();
+        let from = lines.len().saturating_sub(4);
+        return Err(format!(
+            "omp never reached the model, so this trial says nothing about the editor. Its stderr ends: {}",
+            lines[from..].join(" | ")
+        ));
+    }
     Ok(run)
 }
 

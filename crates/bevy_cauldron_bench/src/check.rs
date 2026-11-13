@@ -620,6 +620,16 @@ impl Check {
         }
     }
 
+    /// **Whether this check's answer comes from the map**, so a map that did not read fails it: every check
+    /// but the byte comparisons, the hand-back and a harness decision reads the map.
+    pub fn asks_about_the_map(&self) -> bool {
+        !matches!(
+            self,
+            Check::Unchanged(_) | Check::ProjectUnchanged(_) | Check::OplogHas(_) | Check::OplogLacks(_)
+                | Check::HandbackContains(_) | Check::Decide(_)
+        )
+    }
+
     /// **The files this check names**, relative to `assets/grimoire/`, so the loader can refuse one naming a
     /// file nothing holds before any trial runs.
     pub fn files_named(&self) -> Vec<String> {
@@ -720,6 +730,17 @@ pub fn grade(check: &Check, baseline: &Snapshot, left: &Snapshot) -> Verdict {
         passed,
         measured,
     };
+    // **A map that does not read fails every check about the map, naming why.** See `Snapshot::map_problem`:
+    // a default map would pass `no_problem` and read as "nothing placed" for a placement, which are the two
+    // answers a person most needs told apart from "the run broke the project".
+    if let Some(problem) = &left.map_problem
+        && check.asks_about_the_map()
+    {
+        return verdict(
+            false,
+            format!("the map did not read, so this could not be measured: {problem}"),
+        );
+    }
     match check {
         Check::PlacementExists(e) => {
             let subject = subject(&e.id, &e.piece);
@@ -962,11 +983,16 @@ fn grade_near_wall(
         Wall::East => (hx - (p.at.0 + half_x), p.at.1),
     };
     let mut says = format!(
-        "`{}` is {gap:.3} m from the {} wall",
+        "`{}` is {gap:.3} m from the {} wall{}",
         p.id,
-        w.wall.name()
+        w.wall.name(),
+        if gap < 0.0 { " (through it)" } else { "" }
     );
-    let mut passed = gap.abs() <= w.max_gap_m;
+    // **A gap is signed, and only a positive one is clearance.** A negative gap is the piece through the
+    // wall, and `abs()` here would have accepted a bed sunk `max_gap_m` into it — measured on the review of
+    // #411: with `max_gap_m: 0.05` a bed 3 cm inside the north wall passed. `grade_relative` has always
+    // been right; this is the same range.
+    let mut passed = (0.0..=w.max_gap_m).contains(&gap);
     if !passed {
         says.push_str(&format!(", and the task wants within {:.3} m", w.max_gap_m));
     }

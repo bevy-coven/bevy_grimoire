@@ -13,11 +13,17 @@
 //! A task that fails either way fails this test, naming the task, the check and the value the check
 //! measured  -  never only that something was wrong.
 //!
-//! # Why these three shapes, and why they are enough
+//! # Why these three shapes, and what they do not cover
 //!
 //! A suite is three kinds of work: **place something**, **refuse something the project cannot do**, and
-//! **report without changing anything**. Every check in the closed set is exercised by one of the three, so a
-//! check that stops measuring what it says it measures fails here rather than in a report nobody reads.
+//! **report without changing anything**. Between them the three tasks exercise the placement, the byte
+//! comparisons, the log, the problem passes and the hand-back checks.
+//!
+//! **Three checks are not exercised by any of them**: `placement_relative`, `placement_rests_on` and
+//! `decide`. The first two need a second piece placed in a relation to the first (a lamp on a desk), which is
+//! a fourth task shape; `decide` needs a calibrated decision a model or the decision API makes, which is
+//! outside this test's no-model rule. That is stated rather than claimed away: the proof here is for the three
+//! shapes the suite ships, and a task of another shape is proved when it is written.
 //!
 //! # And a task can be invalid in its own file
 //!
@@ -342,6 +348,81 @@ fn a_task_whose_solution_does_not_satisfy_it_is_refused() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// **A piece sunk into the wall fails `placement_near_wall`**, which a gap's `abs()` would have accepted.
+///
+/// The review of #411 measured this: with `max_gap_m: 0.05`, a bed 3 cm *through* the north wall passed,
+/// because the check compared the distance's absolute value. North is `−Z`, so a bed sunk 0.03 m into the
+/// north wall stands at `z = −1.92` and its own edge is 0.03 m the wrong side of the plane.
+#[test]
+fn a_piece_sunk_into_the_wall_fails_the_near_wall_check() {
+    let root = small_room("bench_task_sunk_wall");
+    let text = TASK_TEXT.replace("at: [0.0, -1.89]", "at: [0.0, -1.92]");
+    let task_dir = write_task(&root, "the-bed-in-the-wall", &text);
+    let known = known();
+    let task = Task::load(&task_dir, &root, &known).unwrap_or_else(|p| panic!("the task loads: {}", p.line()));
+    let sentence = prove(&root, &task).expect_err("a bed through the wall is refused");
+    assert!(
+        sentence.contains("placement_near_wall"),
+        "the failure names the near-wall check: {sentence}"
+    );
+    assert!(
+        sentence.contains("through it"),
+        "the failure says the piece is through the wall: {sentence}"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **A task whose graded map does not read fails every check about the map**, rather than passing
+/// `no_problem` on a default map and reporting "nothing placed".
+///
+/// A run that leaves the map unparseable has broken the project. The check that would otherwise pass is
+/// `no_problem`: nothing found, in a map that does not exist.
+#[test]
+fn an_unreadable_map_fails_the_map_checks() {
+    let root = small_room("bench_task_unreadable_map");
+    let task_dir = write_task(&root, "the-broken-map", TASK_TEXT);
+    let known = known();
+    let task = Task::load(&task_dir, &root, &known).unwrap_or_else(|p| panic!("the task loads: {}", p.line()));
+    // **The baseline first, while the map still reads**, so the only difference the grade sees is the map
+    // that stops reading. Corrupting it before the baseline would make both snapshots broken.
+    let before = snapshot(&root, &task.map, Vec::new());
+    assert!(before.map_problem.is_none(), "the baseline's map reads");
+    // **A map file that is not a map**, which is what a run that corrupted it leaves.
+    let map = root
+        .join("assets/grimoire/maps")
+        .join(format!("bench_bedroom{}", bevy_grimoire_core::map::MAP_SUFFIX));
+    std::fs::write(&map, "this: [is not, a map\n").unwrap_or_else(|e| panic!("{e}"));
+    let after = snapshot(&root, &task.map, Vec::new());
+    assert!(after.map_problem.is_some(), "the snapshot says the map did not read");
+    let graded = Grading::of(&task, &before, &after);
+    assert_eq!(graded.outcome, Outcome::Fail, "a run that broke the map failed the task");
+    for check in ["placement_exists", "placement_near_wall"] {
+        let verdict = graded
+            .verdicts
+            .iter()
+            .find(|v| v.check == check)
+            .unwrap_or_else(|| panic!("the task states `{check}`"));
+        assert!(!verdict.passed, "`{check}` fails on an unreadable map: {}", verdict.measured);
+        assert!(
+            verdict.measured.contains("did not read"),
+            "`{check}` says the map did not read: {}",
+            verdict.measured
+        );
+    }
+    // **And the check that would otherwise PASS**: `no_problem` finds nothing in a map that does not exist,
+    // which is the loophole this rule closes. Graded directly, because no shipped task states it.
+    let no_problem = bevy_cauldron_bench::Check::NoProblem(bevy_cauldron_bench::NoProblem {
+        kinds: vec![bevy_cauldron_bench::ProblemKind::Overlap],
+    });
+    let verdict = bevy_cauldron_bench::check::grade(&no_problem, &before, &after);
+    assert!(
+        !verdict.passed && verdict.measured.contains("did not read"),
+        "`no_problem` fails on an unreadable map rather than passing on an empty default: {}",
+        verdict.measured
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// **A task whose checks already hold after `setup` fails the proof**, which is the do-nothing loophole
 /// closed at the scale of one task.
 #[test]
@@ -398,6 +479,10 @@ fn a_task_with_an_unknown_operation_is_refused_at_load() {
     let line = problem.line();
     assert!(line.contains("placement_teleport"), "the refusal names the operation: {line}");
     assert!(line.contains("solution[0].op"), "the refusal names the step's field: {line}");
+    assert!(
+        line.contains("at line"),
+        "the refusal names the line in its sentence: {line}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -416,6 +501,12 @@ fn a_check_naming_a_missing_map_is_refused_at_load() {
     let line = problem.line();
     assert!(line.contains("a_room_nobody_made"), "the refusal names the map: {line}");
     assert!(line.contains("task.yaml"), "the refusal names the file: {line}");
+    // **The line, in the sentence a person reads** (review of #411, nit): `Location`'s `Display` renders
+    // the file and the field and never the line, so a refusal that only set it on the value named no line.
+    assert!(
+        line.contains("at line"),
+        "the refusal names the line in its sentence: {line}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
