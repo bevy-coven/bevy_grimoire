@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-13
 
+- **sg-02-style-chain** `dd9442a3` An agent reads the style of a place with grimoire_style: the game's files, then the region's, level's and area's, behind the person's trust, with the pictures they cite *For you: Your agent can read how a place in your game should look and feel, but only the style files you have allowed.* *No clip: an MCP tool; proved by the_style_of_a_place_is_the_chain_of_its_files, a_style_file_needs_the_persons_trust, the_style_of_a_place_is_served_behind_the_persons_trust, grimoire_style_attaches_the_pictures_the_style_cites*
 - **bm-02-cauldron-bench-run** `ab26869b` cauldron-bench run measures a real agent against a real editor: oracle passes every task and nothing passes none, the tool list is read from the agent, and a --variant hides exactly its tool (#412) *No clip: a command-line runner; proved by the four ignored tests in bevy_cauldron_bench/tests/a_run_measures_a_real_agent.rs (4 passed, 47.3 s) and the six measured omp trials*
 
 ## 2026-11-12
