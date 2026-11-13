@@ -142,6 +142,37 @@ fn agent_guide(
     Ok(crate::agent_guide::json(&composed))
 }
 
+/// **`grimoire/style` — the style of one place, as an agent should read it** (SG-02, #401).
+///
+/// **The chain, with the person's trust.** The game's files first, then the region's, the level's and the area's
+/// that holds `at`, each place's `style.md` and the file for `topic`; the most specific place comes last. A style
+/// file is prompt text fed to an agent that has a shell, so one the person has not allowed is withheld — one line in
+/// its place, never its text — and the question is raised in the editor (`Asked::TrustGuide`, the guide's). The
+/// pictures a served file cites are named with their captions and the files they resolve to; the MCP server reads
+/// them, and attaches at most `STYLE_IMAGES_MAX` of at most `STYLE_IMAGE_MAX_BYTES` each.
+///
+/// **A request that names nothing real is refused with the reason**, never guessed at. **Read on every call**, so an
+/// edit to a style file is in the next answer.
+fn style(
+    In(p): In<StyleParams>,
+    project: Option<Res<crate::project::Project>>,
+    store_root: Option<Res<crate::trusted::StoreRoot>>,
+    state: Option<ResMut<crate::editor::EditorState>>,
+) -> Result<Value, String> {
+    let Some(project) = project else {
+        return Err("no project is open, so there is no style to read.".to_owned());
+    };
+    let Some(mut state) = state else {
+        return Err("this editor holds no state, so the person's trust cannot be asked about a style file.".to_owned());
+    };
+    let request = bevy_grimoire_core::style::Request { map: p.map, at: p.at.map(|[x, z]| (x, z)), topic: p.topic };
+    let answer = crate::agent_guide::serve_style(&mut state, &project, store_root.as_deref(), &request)?;
+    if let Some(trouble) = &answer.trouble {
+        state.status.problem(format!("style: {trouble}"));
+    }
+    Ok(answer.json())
+}
+
 /// **`true`, the default for the fields that mean "yes".**
 fn yes() -> bool {
     true
@@ -203,6 +234,23 @@ pub struct LessonParams {
     pub lesson: String,
     /// Why it is worth the line.
     pub why: String,
+}
+
+/// **The parameters of `grimoire/style`** (SG-02, #401).
+///
+/// Every field is optional: with no `map` the answer is the game's files alone.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StyleParams {
+    /// **A map of the project**, by name.
+    #[serde(default)]
+    pub map: Option<String>,
+    /// **A point on that map**, `[x, z]` in map metres: the area that holds it closes the chain.
+    #[serde(default)]
+    pub at: Option<[f32; 2]>,
+    /// **A topic the game states**: `dialogue`, `sound`, `ui`.
+    #[serde(default)]
+    pub topic: Option<String>,
 }
 
 /// **The parameters of `grimoire/operation_preview`.**
@@ -2956,6 +3004,21 @@ impl Plugin for OpsBridgePlugin {
             )
             .example(json!({})),
             agent_guide,
+        );
+
+        app.add_debug_command(
+            DebugCommandInfo::new(
+                "grimoire/style",
+                "The style of one place as an agent should read it: the game's files, then the region's, \
+                 the level's and the area's that holds `at`, each place's style.md and the file for \
+                 `topic`, the most specific place last. Each file arrives under a heading naming its \
+                 path. A file the person has not allowed is one line, never its text, and the question \
+                 is raised in the editor. Also the pictures the served text cites, with captions, and \
+                 the ones left out with the reason. A request that names nothing real is refused. A read.",
+            )
+            .params("map: a map of the project; at: [x, z] in map metres, needs map; topic: a topic the game states.")
+            .example(json!({"map": "harbour", "at": [-10.0, 0.0], "topic": "dialogue"})),
+            style,
         );
 
         app.add_debug_command(
