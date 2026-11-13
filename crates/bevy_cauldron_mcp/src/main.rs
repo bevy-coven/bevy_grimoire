@@ -1837,9 +1837,10 @@ impl Grimoire {
             .await
         {
             Ok(answer) => answer,
-            // **The editor's own refusal says its reason and nothing is added to it**; any other failure is no
-            // editor to answer, and the tool says why it will not read the files itself.
-            Err(e) if e.starts_with("grimoire/style: ") => return Ok(refusal(&e)),
+            // **The editor's own refusal says its reason and nothing is added to it**; every failure of the
+            // transport begins "the editor", and is no editor to answer: the tool says why it will not read the
+            // files itself.
+            Err(e) if !e.starts_with("the editor") => return Ok(refusal(&e)),
             Err(e) => {
                 return Ok(refusal(&format!(
                     "{e} A style file is prompt text that needs the person's trust, so only the editor, which holds what they have allowed, serves it: this server reads none itself."
