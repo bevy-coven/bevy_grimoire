@@ -1152,6 +1152,12 @@ fn editor_state(
         // **The intended relations this map breaks** (#137): read from `<map>.relations.yaml` on every
         // call, so an edit to that file is seen by the next answer with no restart.
         "relations": open.as_ref().map(|o| relations_json(&o.map.placements, &o.map_path)),
+        // **The game's style** (SG-01, #400): the tree of places under `design/`, each with its topics and an
+        // area's rectangle in map metres, and what is wrong with it. **Read from disk on every call**, so an
+        // edit to a style file is in the next answer with no restart — the tree is not held anywhere, which is
+        // why its reload row is `Live`. `bevy_grimoire_core::design::Tree::read` is the one reader, so the
+        // tree an agent reads here and the chain `grimoire_style` serves cannot disagree.
+        "design": project.as_ref().map(|p| bevy_grimoire_core::design::Tree::read(&p.root).json()),
         "project": project_summary,
         // **The preview's clock, and what the scrubber asked for** (#282). `hour` is what the crate
         // reads; `scrub` is what the ENVIRONMENT panel's buttons set. A `scrub` of 23 beside an

@@ -111,6 +111,14 @@ const ALLOWED_DEPS: &[&str] = &[
     // **The container a bake writes** (#370, GD-08): postcard, over a value tree. serde-only, pure Rust, no engine type; added in
     // the commit that needed it (a new row, nothing loosened; assumed owner exception 2026-11-12).
     "postcard",
+    // **The CommonMark parser the design tree is read with** (SG-01, #400): the pictures a style text cites and
+    // the links it makes. Pure Rust, data only, no engine and no I/O of its own; it is the same crate
+    // `bevy_gooey`'s Markdown view draws a page with (G-79), so the editor and an agent list the same pictures
+    // for the same page. **Owner exception (2026-11-12), as the brief for this wave states it:** GD-11's "no
+    // new dependency" note governed the editor's syntax colours, which stay on their own tokenizer; checking
+    // CommonMark with tables is a parser's job and a second hand-written one would be the larger, less correct
+    // path.
+    "pulldown-cmark",
 ];
 
 /// Crate names that would mean the boundary has been crossed, checked as substrings so

@@ -52,6 +52,13 @@ sha2 = "0.10"
 # rather than pretending a shell started.
 alacritty_terminal = { version = "0.26.0", default-features = false }
 image = { version = "0.25", default-features = false, features = ["png"] }
+# **The CommonMark parser the design tree's pictures and links are read with** (SG-01, #400). The same crate
+# `bevy_gooey`'s Markdown view draws a page with (G-79), with the same extensions (tables, strikethrough, task
+# lists): a second parser written by hand would be a larger, less correct path, and the two disagreeing is how
+# a picture is missing on screen and present in an agent's answer. MIT, a pure data crate with no engine in it.
+# **Owner exception (2026-11-12):** GD-11's "no new dependency" note governed the editor's *syntax colours*,
+# which stay on their own tokenizer; rendering and checking CommonMark with tables is a parser's job.
+pulldown-cmark = { version = "0.13", default-features = false }
 
 # Same dev profile as Sanctuary: Bevy runs fast in debug without slowing rebuilds of these crates.
 [profile.dev]

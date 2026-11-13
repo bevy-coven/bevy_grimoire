@@ -69,6 +69,10 @@ const OWNED_ELSEWHERE: &[(&str, &str)] = &[
     ("scripts_rhai", "a script in the Rhai language: the crate that parses it owns its syntax, and the script has no header of its own"),
     // **The guide is prose for an agent** (#347): a person writes it by hand, so it has no header to version.
     ("guide", "Markdown prose a person writes for an agent: it has no record shape, so no version"),
+    // **The design tree is a folder of Markdown and area rectangles** (SG-01, #400). The Markdown's format is
+    // CommonMark's, which is the parser's to version; the one file with a record in it is each area's
+    // `area.yaml`, which states `version: 1` and is read and refused by `design::Tree::read` itself.
+    ("design", "CommonMark prose, and an area's `area.yaml`, which design::Tree::read versions and refuses itself"),
 ];
 
 /// **Versioned kinds that are a cache**: a file of another version is stale, never damaged, and the

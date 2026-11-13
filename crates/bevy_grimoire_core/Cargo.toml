@@ -49,6 +49,10 @@ serde_yaml_ng.workspace = true
 saphyr-parser.workspace = true
 # The JSON Schema each file kind publishes, generated from its type (`schema.rs`, GD-04, #366).
 schemars.workspace = true
+# **The CommonMark parser the design tree is read with** (SG-01, #400): the pictures a style text cites and
+# the links it makes. The same crate `bevy_gooey`'s Markdown view draws a page with (G-79), so the editor and
+# an agent list the same pictures for the same page. MIT, no engine in it.
+pulldown-cmark.workspace = true
 
 # **A JSON Schema validator, for the test and for nothing else** (#366). The schema tests check a fixture
 # against the schema an editor reads — a schema a wrong file passes is worse than none — and only a
