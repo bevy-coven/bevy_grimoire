@@ -13,7 +13,7 @@ publish = false
 # that were written before the cutover. Keeping it beside `bevy_grimoire_core` would have kept `ron`
 # in the core crate's dependency graph, which is the thing the issue's acceptance measures.
 [dependencies]
-bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.10.1" }
+bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.11.0" }
 # The reader of the files this converts, and nothing else here needs it.
 ron.workspace = true
 serde.workspace = true
