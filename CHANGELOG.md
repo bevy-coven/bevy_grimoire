@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-13
 
+- **af-03b-the-files-tree-follows** `fcad49e0c0714f903e64fa93b3c2d97a38062267` When an agent edits a file, the Files tree opens the folders above it and scrolls its row into view (#359) *No clip: visible, not yet recorded: fleet worker*
 - **sg-03c-reload-lists-nested-places** `5e426b924e2be1d9e1e4d576d3f874999e08db01` The Reload panel lists a place's board, its pictures and a nested design page wherever the place is, by the shape reload::kind_of uses (#420) *No clip: a list in a panel; proved by the_reload_panel_lists_nested_boards_and_design_pages and a_places_design_pages_are_kinds*
 - **sg-03b-agent-board-copy-in** `b262e02cb9a76fda71345544fbae1348f57b66c1` An agent's board_set add refuses an absolute path outside the project, naming it; only a person's drop copies a file in (#419) *No clip: a refusal in an operation; proved by an_agent_cannot_copy_a_host_file_onto_a_board*
 - **sg-02-style-chain** `dd9442a3` An agent reads the style of a place with grimoire_style: the game's files, then the region's, level's and area's, behind the person's trust, with the pictures they cite *For you: Your agent can read how a place in your game should look and feel, but only the style files you have allowed.* *No clip: an MCP tool; proved by the_style_of_a_place_is_the_chain_of_its_files, a_style_file_needs_the_persons_trust, the_style_of_a_place_is_served_behind_the_persons_trust, grimoire_style_attaches_the_pictures_the_style_cites*
