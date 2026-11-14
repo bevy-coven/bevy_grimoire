@@ -416,7 +416,7 @@ fn spawn_the_page(commands: &mut Commands, parent: Entity, page: &ProjectPage, i
     let kit_menu = commands.spawn((context_menu(()), KitMenu, ChildOf(parent))).id();
     spawn_menus(commands, map_menu, kit_menu, &page.catalog);
     let body = commands
-        .spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, PageBody, ChildOf(parent)))
+        .spawn((bevy_gooey::fill_region_with(crate::chrome::GAP_GROUP_STEPS), PageBody, ChildOf(parent)))
         .id();
     draw_body(commands, body, page, map_menu, kit_menu, images, splash, pictures);
 }

@@ -845,10 +845,7 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
     commands.entity(bar).with_children(|bar| {
         chrome::list_heading(bar, "Terminal");
         // A spacer, so the chips sit on the right the way every other bar in this editor puts them.
-        bar.spawn(Node {
-            flex_grow: 1.0,
-            ..default()
-        });
+        bar.spawn(bevy_gooey::spacer());
         // **The agent's LED** (feedback-1794230412409, and #343's four states): one LED in the bar for as long as the settings
         // choose an agent. Dark (`off`, a ring) while no agent tab is drawn, and the drawn agent tab's state (`busy`, `live`,
         // `failed`) once there is one. The chip after it says the same in words, and the LED stays after the card is gone.

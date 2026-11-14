@@ -450,7 +450,7 @@ impl Plugin for LauncherPlugin {
             .add_systems(OnEnter(Screen::Launcher), (build_launcher, fill_the_home).chain())
             .add_systems(
                 Update,
-                (hide_the_divider, say_the_startup_notices, open_requested, on_picked, say_the_problem, redraw_the_cards, apply_filter, show_the_tab, mark_the_focus)
+                (hide_the_divider, say_the_startup_notices, open_requested, on_picked, say_the_problem, redraw_the_cards, apply_filter, show_the_tab.before(bevy_gooey::GooeySystems::Style), mark_the_focus)
                     .chain()
                     .run_if(in_state(Screen::Launcher)),
             );
@@ -637,7 +637,7 @@ pub(crate) fn fill_sidebar(commands: &mut Commands, sidebar: Entity, launcher: &
                 nav.insert(Selected);
             }
         }
-        side.spawn(Node { flex_grow: 1.0, ..default() });
+        side.spawn(bevy_gooey::spacer());
         side.spawn((
             button("Settings"),
             observe(|_: On<Activate>, mut out: MessageWriter<crate::settings_screen::OpenSettings>| {
@@ -762,16 +762,16 @@ fn fill_the_home(
     commands.entity(content).with_children(|content| {
         content.spawn(bevy_gooey::fill_region()).with_children(|pages| {
             pages
-                .spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, HomePage(HomeTab::Projects)))
+                .spawn((bevy_gooey::fill_region_with(crate::chrome::GAP_GROUP_STEPS), bevy_gooey::Shown(true), HomePage(HomeTab::Projects)))
                 .with_children(|page| {
-                    page.spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, ProjectsBody))
+                    page.spawn((bevy_gooey::fill_region_with(crate::chrome::GAP_GROUP_STEPS), ProjectsBody))
                         .with_children(|body| projects_body(body, &launcher, &mut art));
                 });
             pages
-                .spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_GROUP), display: Display::None, ..default() }, HomePage(HomeTab::Learn)))
+                .spawn((bevy_gooey::column(crate::chrome::GAP_GROUP_STEPS), bevy_gooey::Shown(false), HomePage(HomeTab::Learn)))
                 .with_children(|page| learn_page(page, &launcher));
             pages
-                .spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_ROW), display: Display::None, ..default() }, HomePage(HomeTab::WhatsNew)))
+                .spawn((bevy_gooey::fill_region_with(crate::chrome::GAP_ROW_STEPS), bevy_gooey::Shown(false), HomePage(HomeTab::WhatsNew)))
                 .with_children(|page| {
                     // FOLLOW-OK: the entries are focusable buttons in a column, not a list with a
                     // highlight of its own — gooey's focus navigation scrolls a focused entry into
@@ -802,7 +802,7 @@ fn projects_body(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut
     }
     crate::chrome::gapped_row(body, crate::chrome::GAP_GROUP_STEPS, crate::chrome::NO_MARGIN, AlignItems::Center).with_children(|header| {
         header.spawn(heading("Projects"));
-        header.spawn(Node { flex_grow: 1.0, ..default() });
+        header.spawn(bevy_gooey::spacer());
         // The one accent button of the page: New project, or, with nothing else to start from, nothing.
         header.spawn((submit_button("New project"), observe(|_: On<Activate>, mut launcher: ResMut<Launcher>| launcher.new_project_asked = true)));
         header.spawn((button("Open folder…"), observe(|_: On<Activate>, mut out: MessageWriter<PickRequest>| { out.write(PickRequest(PickFor::OpenFolder)); })));
@@ -1393,11 +1393,11 @@ fn apply_filter(launcher: Res<Launcher>, mut cards: Query<Filterable, Or<(With<P
 }
 
 /// Shows the page the sidebar chose, and marks its row.
-fn show_the_tab(launcher: Res<Launcher>, mut pages: Query<(&HomePage, &mut Node)>, nav: Query<(Entity, &NavTab, Has<Selected>)>, mut commands: Commands) {
-    for (page, mut node) in &mut pages {
-        let display = if page.0 == launcher.tab { Display::Flex } else { Display::None };
-        if node.display != display {
-            node.display = display;
+fn show_the_tab(launcher: Res<Launcher>, mut pages: Query<(&HomePage, &mut bevy_gooey::Shown)>, nav: Query<(Entity, &NavTab, Has<Selected>)>, mut commands: Commands) {
+    for (page, mut shown) in &mut pages {
+        let on = page.0 == launcher.tab;
+        if shown.0 != on {
+            shown.0 = on;
         }
     }
     for (entity, tab, selected) in &nav {
