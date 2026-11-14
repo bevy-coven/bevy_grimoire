@@ -7,6 +7,7 @@
 //! inside the area ends with the area's files; the overlay's areas follow the files within a second, the line under the cursor names
 //! the area, and the inspector's Style link opens the area's page.
 
+use bevy::input::InputSystems;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_cauldron::design_areas::{self, StyleAreas};
@@ -18,9 +19,21 @@ use serde_json::{Value, json};
 
 use crate::fixtures;
 
+/// The window's cursor, as the test sets it: written in `PreUpdate` after the input systems, the way `a_click_outside_the_viewport_places_nothing` does.
+#[derive(Resource, Default)]
+struct Cursor(Option<Vec2>);
+
+fn inject(cursor: Res<Cursor>, mut windows: Query<&mut Window, With<PrimaryWindow>>) {
+    if let Ok(mut window) = windows.single_mut() {
+        window.set_cursor_position(cursor.0);
+    }
+}
+
 fn editor(tag: &str) -> (App, Ctx, std::path::PathBuf) {
     let root = fixtures::Fixture::new(&format!("{tag}_{}", std::process::id())).descriptor("site/wall", "alpha").place("site/wall", (1.5, 1.5)).build("m");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    app.init_resource::<Cursor>();
+    app.add_systems(PreUpdate, inject.after(InputSystems));
     app.world_mut().spawn((Window::default(), PrimaryWindow));
     for _ in 0..4 {
         app.update();
@@ -315,4 +328,79 @@ fn an_undo_of_a_creation_or_a_removal_keeps_the_page_and_its_own_undo_brings_it_
     id_of(&mut ctx, &restored);
     assert!(!folder.exists(), "doing the removal again leaves no folder behind");
     assert_eq!(std::fs::read_to_string(root.join(".dark_factory/removed-areas/docks/style.md")).unwrap(), "# Docks\n");
+}
+
+/// **The cursor over the map names the area, through the editor's own system** (`sense_under_cursor`, `StyleAreas::observe_cursor`): the cursor is injected
+/// on the screen point of a map point, on a map whose origin is not zero, and the resource and the UNDER CURSOR line follow it; over bare floor both clear;
+/// over the chrome (no ground under it) the last area is kept, which the inspector's Style link needs.
+#[test]
+fn the_cursor_over_the_map_names_the_area_in_the_line_and_the_resource() {
+    let (mut app, mut ctx, _root) = editor("area_cursor");
+    set(&mut ctx, json!({"name": "docks", "rect": DOCKS}));
+    pump(&mut app, design_areas::REFRESH_S as f64 + 0.8);
+    for _ in 0..12 {
+        app.update();
+    }
+    // The map's origin is not zero, so the step from the world's ground point to map metres is exercised.
+    app.world_mut().resource_mut::<OpenMap>().map.origin = (3.0, 0.0, 2.0);
+    for _ in 0..4 {
+        app.update();
+    }
+    let rect = {
+        let world = app.world_mut();
+        let camera = world.query_filtered::<&Camera, With<bevy_cauldron::view::MainCamera>>().single(world).expect("one main camera");
+        camera.logical_viewport_rect().expect("the main camera has a viewport")
+    };
+    let screen_of = |app: &mut App, map: (f32, f32)| -> Vec2 {
+        let world = app.world_mut();
+        let (camera, tf) = world.query_filtered::<(&Camera, &GlobalTransform), With<bevy_cauldron::view::MainCamera>>().single(world).expect("one main camera");
+        camera.world_to_viewport(tf, Vec3::new(3.0 + map.0, 0.0, 2.0 + map.1)).expect("the point is in front of the camera")
+    };
+    let hover = |app: &mut App, at: Vec2| {
+        app.world_mut().resource_mut::<Cursor>().0 = Some(at);
+        for _ in 0..3 {
+            app.update();
+        }
+    };
+    let line = |app: &App| app.world().resource::<bevy_cauldron::editor::UnderCursor>().line().to_owned();
+
+    let inside = screen_of(&mut app, (-4.0, -4.0));
+    assert!(rect.contains(inside), "the point is inside the viewport {rect:?}: {inside:?}");
+    hover(&mut app, inside);
+    assert_eq!(app.world().resource::<StyleAreas>().cursor_area.as_deref(), Some("docks"), "the cursor is over docks");
+    assert!(line(&app).contains("in the area docks"), "the UNDER CURSOR line names it: {:?}", line(&app));
+
+    // Over bare floor (the quay's corner is not an area here), both clear.
+    let outside = screen_of(&mut app, (4.0, 4.0));
+    assert!(rect.contains(outside), "{outside:?}");
+    hover(&mut app, outside);
+    assert_eq!(app.world().resource::<StyleAreas>().cursor_area, None, "over bare floor the area clears");
+    assert!(!line(&app).contains("in the area"), "{:?}", line(&app));
+
+    // A panel drawn over the area: the ground behind it is not the cursor's, so the area (None, from the floor above) stays None and the line names none.
+    // It fills the frame's viewport node (the camera's viewport), so wherever the cursor is in it, a panel is under it.
+    let viewport_node = app.world().resource::<bevy_cauldron::chrome::Frame>().viewport;
+    let panel = app
+        .world_mut()
+        .spawn((
+            Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+            bevy::picking::hover::Hovered::default(),
+            ChildOf(viewport_node),
+        ))
+        .id();
+    // The panel is laid out before the cursor goes under it: the first frame of a new node has no size, and a cursor arriving then is on the ground.
+    for _ in 0..3 {
+        app.update();
+    }
+    hover(&mut app, inside);
+    assert_eq!(app.world().resource::<StyleAreas>().cursor_area, None, "a cursor on a panel over the area does not enter it");
+    assert!(!line(&app).contains("in the area"), "{:?}", line(&app));
+    app.world_mut().entity_mut(panel).despawn();
+
+    // Back inside, then onto the chrome above the viewport: no ground, so the last area is kept and the line names none.
+    hover(&mut app, inside);
+    assert_eq!(app.world().resource::<StyleAreas>().cursor_area.as_deref(), Some("docks"));
+    hover(&mut app, Vec2::new(rect.center().x, rect.min.y - 6.0));
+    assert_eq!(app.world().resource::<StyleAreas>().cursor_area.as_deref(), Some("docks"), "a cursor off the map keeps the area for the Style link");
+    assert!(!line(&app).contains("in the area"), "and the line names none: {:?}", line(&app));
 }

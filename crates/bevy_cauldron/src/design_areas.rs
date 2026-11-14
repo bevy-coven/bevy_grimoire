@@ -48,6 +48,8 @@ pub struct StyleAreas {
     /// **The name of the area the cursor was last over on the map**, `None` when it was over none. It is not cleared by the
     /// cursor going onto a panel, because the Style link is in one and a click on it is the question this answers.
     pub cursor_area: Option<String>,
+    /// Whether the level's own folder holds a `style.md`, read with the areas so the Style link asks no file system a frame.
+    pub level_has_style: bool,
 }
 
 impl StyleAreas {
@@ -70,13 +72,13 @@ impl StyleAreas {
 
     /// **The page the Style link opens, and what to call it**: the area the cursor was last in when it has a `style.md`, else the
     /// level's own.
-    pub fn link(&self, root: &std::path::Path) -> Option<(String, String)> {
+    pub fn link(&self) -> Option<(String, String)> {
         if let Some(area) = self.cursor_area.as_deref().and_then(|name| self.areas.iter().find(|a| a.name == name)).filter(|a| a.has_style) {
             return Some((format!("area {}", area.name), format!("{}/{}.{}", area.path, design::STYLE_TOPIC, design::MARKDOWN_EXT)));
         }
         let level = self.level.as_deref()?;
         let page = format!("{level}/{}.{}", design::STYLE_TOPIC, design::MARKDOWN_EXT);
-        root.join(&page).is_file().then(|| ("this level".to_owned(), page))
+        self.level_has_style.then(|| ("this level".to_owned(), page))
     }
 }
 
@@ -165,10 +167,16 @@ fn refresh(mut areas: ResMut<StyleAreas>, project: Option<Res<Project>>, open: O
         (Some(project), Some(open)) => Some((project.root.clone(), bevy_grimoire_core::board::level_place(&project.root, &open.map.name))),
         _ => None,
     };
-    let (want_level, want_areas) = match &level {
-        Some((root, level)) => (Some(level.clone()), design::areas_of_level(root, level)),
-        None => (None, Vec::new()),
+    let (want_level, want_areas, want_style) = match &level {
+        Some((root, level)) => {
+            let page = format!("{level}/{}.{}", design::STYLE_TOPIC, design::MARKDOWN_EXT);
+            (Some(level.clone()), design::areas_of_level(root, level), root.join(page).is_file())
+        }
+        None => (None, Vec::new(), false),
     };
+    if areas.level_has_style != want_style {
+        areas.level_has_style = want_style;
+    }
     if areas.level != want_level {
         areas.level = want_level;
         areas.cursor_area = None;
@@ -272,14 +280,13 @@ pub struct StyleBlock;
 /// none. It is not kept hidden: a button that is not drawn is still a button to every screen that counts them.
 fn mirror_the_link(
     areas: Res<StyleAreas>,
-    project: Option<Res<Project>>,
     panes: Query<Entity, With<MapControlsPane>>,
     blocks: Query<Entity, With<StyleBlock>>,
     mut links: Query<(&mut StyleLink, &Children)>,
     mut texts: Query<&mut Text>,
     mut commands: Commands,
 ) {
-    let want = project.as_ref().and_then(|p| areas.link(&p.root));
+    let want = areas.link();
     let Some((what, page)) = want else {
         for block in &blocks {
             commands.entity(block).despawn();

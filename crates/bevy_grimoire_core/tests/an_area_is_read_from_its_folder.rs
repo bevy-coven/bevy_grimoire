@@ -36,3 +36,20 @@ fn levels_are_found_by_their_folders_and_an_area_file_reads_back() {
     assert_eq!((read[0].name.as_str(), read[0].rect, read[0].has_style), ("docks", [1.0, 2.0, 3.0, 4.0], false));
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn a_folder_moves_whole_to_a_new_place_and_never_into_one_that_is_there() {
+    let root = std::env::temp_dir().join(format!("move_folder_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("from")).unwrap();
+    std::fs::write(root.join("from/page.md"), "kept").unwrap();
+    bevy_grimoire_core::atomic_file::move_folder(&root.join("from"), &root.join("a/b/to")).unwrap();
+    assert_eq!(std::fs::read_to_string(root.join("a/b/to/page.md")).unwrap(), "kept");
+    assert!(!root.join("from").exists());
+
+    std::fs::create_dir_all(root.join("other")).unwrap();
+    let refused = bevy_grimoire_core::atomic_file::move_folder(&root.join("other"), &root.join("a/b/to")).expect_err("a folder that is there is not moved into");
+    assert_eq!(refused.kind(), std::io::ErrorKind::AlreadyExists);
+    assert!(root.join("other").is_dir() && !root.join("a/b/to/other").exists(), "and nothing moved");
+    std::fs::remove_dir_all(&root).unwrap();
+}
