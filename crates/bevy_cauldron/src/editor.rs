@@ -2638,6 +2638,11 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::activity_bar::ActivityBarPlugin);
         // **The World and Sound workspaces' panels** (NV-08, #385): spawned when their workspace is entered.
         app.add_plugins(crate::workspace_panels::WorkspacePanelsPlugin);
+        // **The project's page, in the Project workspace** (NV-08, #385): its actions and its panel, in a build that has no home. The home's plugins add
+        // the same plugin when this has not.
+        if !app.is_plugin_added::<crate::project_page::PageSystemsPlugin>() {
+            app.add_plugins(crate::project_page::PageSystemsPlugin);
+        }
         // **What the map and the project hold, as lists** (NV-11, #392-#395): cues, water, forest and lights, read from their files.
         app.add_plugins(crate::world_lists::WorldListsPlugin);
         // **The Game workspace** (NV-09, #386): the running game's panel, its log and its state, and the watching of it.
