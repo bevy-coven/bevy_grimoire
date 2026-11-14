@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-14
 
+- **ui-99-gooey-notes** `74c7ffd1` The notes and data editors' columns and the review thumbnail are laid out with bevy_gooey's column, row and image_box instead of hand-built nodes (UI-99, #260 part) *No clip: nobody can see this change; proved by the_editor_keeps_its_raw_nodes_counted and the whole editor binary*
 - **ui-99-gooey-readouts** `13346151` The Familiar's readout lines, the launcher's button lines and the project page's dialog answers are laid out with bevy_gooey's rows instead of hand-built nodes (UI-99, #260 part) *No clip: nobody can see this change; proved by the_editor_keeps_its_raw_nodes_counted and the_small_files_are_built_from_gooey_widgets*
 - **ui-99-gooey-rows** `260734cd` The library browser, the agent history, the panel heading and the dialogs' button lines are laid out with bevy_gooey's rows and columns (UI-99, #260 part) *No clip: nobody can see this change; proved by the_editor_keeps_its_raw_nodes_counted and the_small_files_are_built_from_gooey_widgets*
 - **ui-99-gooey-blocks** `fb6222ae` The World, Sound and Game panels, the outliner and the inspector's blocks are laid out with bevy_gooey's rows and columns instead of hand-built nodes (UI-99, #260 part) *No clip: nobody can see this change; proved by the_editor_keeps_its_raw_nodes_counted and the_small_files_are_built_from_gooey_widgets*
