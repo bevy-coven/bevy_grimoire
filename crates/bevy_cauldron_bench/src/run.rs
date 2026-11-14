@@ -1395,23 +1395,32 @@ pub fn preflight_turn(omp: &str, model: &str, scratch: &Path) -> Result<(), Stri
 }
 
 /// **What a one-turn run printed, read as omp's JSON events**: `Ok` when an assistant message came back and the
-/// provider did not refuse it, and otherwise the reason, in the provider's own words when it gave them.
+/// provider did not refuse it (a refusal omp retried and recovered from, `auto_retry_end{success: true}`, is not
+/// one), and otherwise the reason, in the provider's own words when it gave them.
 fn turn_verdict(stdout: &str, stderr: &str) -> Result<(), String> {
     let mut spoke = false;
+    let mut standing_refusal: Option<String> = None;
     for line in stdout.lines() {
         let Ok(event) = serde_json::from_str::<Value>(line) else {
             continue;
         };
-        if event.get("type").and_then(Value::as_str) != Some("message_end") {
+        let kind = event.get("type").and_then(Value::as_str);
+        if kind == Some("auto_retry_end") && event.get("success").and_then(Value::as_bool) == Some(true) {
+            standing_refusal = None;
+        }
+        if kind != Some("message_end") {
             continue;
         }
         let Some(message) = event.get("message").filter(|m| m.get("role").and_then(Value::as_str) == Some("assistant")) else {
             continue;
         };
-        if let Some(why) = provider_words(message) {
-            return Err(format!("the provider refused the turn: {why}"));
+        match provider_words(message) {
+            Some(why) => standing_refusal = Some(why),
+            None => spoke = true,
         }
-        spoke = true;
+    }
+    if let Some(why) = standing_refusal {
+        return Err(format!("the provider refused the turn: {why}"));
     }
     if spoke {
         return Ok(());
@@ -2072,11 +2081,18 @@ pub fn read_transcript(path: &Path, dir: &Path, server: &str) -> Result<AgentRun
         .map_err(|e| format!("the transcript at {} could not be read: {e}", path.display()))?;
     let mut run = AgentRun::default();
     let mut spoke = false;
+    // **The provider's last refusal that nothing has recovered from** (#432, D9): omp retries a transient 429 or
+    // 5xx itself, and says so with `auto_retry_end{success: true}` once an answer came. A refusal is held
+    // against the trial only if the stream ends with it still standing.
+    let mut standing_refusal: Option<String> = None;
     for line in text.lines() {
         let Ok(event) = serde_json::from_str::<Value>(line) else {
             continue;
         };
         let kind = event.get("type").and_then(Value::as_str).unwrap_or_default();
+        if kind == "auto_retry_end" && event.get("success").and_then(Value::as_bool) == Some(true) {
+            standing_refusal = None;
+        }
         // **`tool_execution_end` is where omp reports a tool finishing**, and `details.xdev` names the
         // editor tool it ran.
         //
@@ -2161,8 +2177,8 @@ pub fn read_transcript(path: &Path, dir: &Path, server: &str) -> Result<AgentRun
             // 0 tokens. That is the provider's answer with the agent's name on it, so it is a harness error
             // quoting the provider's own words.
             if let Some(why) = provider_words(message) {
-                // **Starts with [`PROVIDER_REFUSAL`]**, which is what the run's circuit breaker counts.
-                return Err(format!("{PROVIDER_REFUSAL}, so this trial measures the provider and not the agent: {why}"));
+                standing_refusal = Some(why);
+                continue;
             }
             spoke = true;
             if let Some(usage) = message.get("usage") {
@@ -2183,6 +2199,10 @@ pub fn read_transcript(path: &Path, dir: &Path, server: &str) -> Result<AgentRun
                 }
             }
         }
+    }
+    if let Some(why) = standing_refusal {
+        // **Starts with [`PROVIDER_REFUSAL`]**, which is what the run's circuit breaker counts.
+        return Err(format!("{PROVIDER_REFUSAL}, so this trial measures the provider and not the agent: {why}"));
     }
     if !spoke {
         let stderr = std::fs::read_to_string(dir.join("agent.err")).unwrap_or_default();
