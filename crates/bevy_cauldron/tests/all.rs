@@ -31,6 +31,7 @@ mod a_sound_cue_is_listed_without_bevy_siren;
 mod a_style_edit_stays_in_design_and_an_undo_grants_nothing;
 mod a_style_rows_lines_are_gooey_rows;
 mod a_terminals_default_colours_follow_the_theme;
+mod a_terminals_hangup_wait_is_listed_for_the_exit_watchdog;
 mod a_workspace_switch_keeps_the_map;
 mod areas_drawn_on_the_map;
 mod back_and_forward_across_workspaces;
