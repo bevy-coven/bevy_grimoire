@@ -1111,17 +1111,9 @@ fn report_overlay(
     let mut root = commands.spawn((
         ReportOpen,
         ReportPart,
-        Node {
-            // PLACES-ITSELF-OK: the whole frozen frame, drawn over the window rather than in any layout.
-            position_type: PositionType::Absolute,
-            left: Val::Px(0.0),
-            top: Val::Px(0.0),
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            ..default()
-        },
+        // The whole frozen frame, drawn over the window rather than in any layout (`cover` lets the pointer through).
+        bevy_gooey::cover(),
         GlobalZIndex(REPORT_Z),
-        Pickable::IGNORE,
         // The focus home: see this function's note. Only while pointing, so the note box's field
         // takes the keyboard the moment it is up.
         TabGroup::modal(),
@@ -1134,16 +1126,8 @@ fn report_overlay(
             root.spawn((
                 ReportPart,
                 ImageNode::new(frozen),
-                Node {
-                    // PLACES-ITSELF-OK: the frozen frame is the layer everything else is placed against.
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(0.0),
-                    top: Val::Px(0.0),
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(100.0),
-                    ..default()
-                },
-                Pickable::IGNORE,
+                // The frozen frame is the layer everything else is placed against.
+                bevy_gooey::cover(),
             ));
         }
         // **The picks already taken, the live outline, and the box being dragged**, drawn the same
@@ -1397,14 +1381,7 @@ fn report_box(
         .insert(GlobalZIndex(NOTE_Z))
         .with_children(|scrim| {
             scrim
-                .spawn(bevy_gooey::panel())
-                .insert(Node {
-                    flex_direction: FlexDirection::Column,
-                    width: Val::Px(NOTE_W),
-                    max_width: Val::Percent(100.0),
-                    row_gap: Val::Px(chrome::GAP_ROW),
-                    ..default()
-                })
+                .spawn(bevy_gooey::sized_panel(bevy_gooey::CardWidth::Px(NOTE_W)))
                 .with_children(|card| {
                     card.spawn(bevy_gooey::heading(heading));
                     card.spawn(bevy_gooey::label(line));

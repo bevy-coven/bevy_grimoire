@@ -29,7 +29,7 @@ use bevy_grimoire_core::family::{self, Family};
 use bevy_grimoire_core::live::KindVerdict;
 use bevy_grimoire_core::reload_check::{self, Check};
 use bevy::ecs::spawn::SpawnIter;
-use bevy_gooey::{Activate, Cancel, ValueChange, button, dialog, heading, label, list, menu, observe, panel, toggle};
+use bevy_gooey::{Activate, Cancel, ValueChange, button, dialog, heading, label, list, menu, observe, toggle};
 
 use crate::family_host;
 use crate::live::EditorReloads;
@@ -166,8 +166,7 @@ fn open(
         })
         .with_children(|dialog| {
             dialog
-                .spawn(panel())
-                .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(crate::launcher::CARD_WIDTH), max_width: Val::Percent(100.0), ..default() })
+                .spawn(bevy_gooey::sized_panel(bevy_gooey::CardWidth::Px(crate::launcher::CARD_WIDTH)))
                 .with_children(|card| {
                     card.spawn(heading("Project configuration"));
                     card.spawn((bevy_gooey::column(0.0), Lines));

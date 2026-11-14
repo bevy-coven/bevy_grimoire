@@ -426,13 +426,7 @@ fn spawn_a_row(
         WishRow { id: id.clone(), kind: RowKind::Wish },
         WishOf(id.clone()),
         Name::new(format!("wish {}", queued.wish.id)),
-        Node {
-            flex_direction: FlexDirection::Column,
-            width: Val::Percent(100.0),
-            flex_shrink: 0.0,
-            row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-            ..default()
-        },
+        bevy_gooey::column_with(crate::chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }),
     ))
     .with_children(|row| {
         // **The header is the row's own unfold**, which is what a person expects of a list row and
@@ -443,13 +437,7 @@ fn spawn_a_row(
             // CHROME-OK: the row is a fold, not a chip or a list row: its own header is the whole unfold target and wears no rest/hover/selected states of its own.
             bevy::ui_widgets::Button,
             Hovered::default(),
-            Node {
-                flex_direction: FlexDirection::Column,
-                width: Val::Percent(100.0),
-                flex_shrink: 0.0,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            },
+            bevy_gooey::column_with(crate::chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }),
         ))
         .observe(unfold_this_row)
         .with_children(|header| {
@@ -489,7 +477,7 @@ fn spawn_a_row(
         row.spawn((
             WishBody,
             WishOf(id.clone()),
-            Node { flex_direction: FlexDirection::Column, flex_shrink: 0.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+            bevy_gooey::column_with(crate::chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }),
         ))
         .with_children(|body| {
             for (name, words) in fields_of(queued) {
@@ -547,13 +535,7 @@ fn spawn_a_lesson_row(list: &mut ChildSpawnerCommands, queued: &crate::present::
         WishRow { id: id.clone(), kind: RowKind::Lesson },
         WishOf(id.clone()),
         Name::new(format!("lesson {}", queued.lesson.id)),
-        Node {
-            flex_direction: FlexDirection::Column,
-            width: Val::Percent(100.0),
-            flex_shrink: 0.0,
-            row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-            ..default()
-        },
+        bevy_gooey::column_with(crate::chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }),
     ))
     .with_children(|row| {
         row.spawn((
@@ -562,13 +544,7 @@ fn spawn_a_lesson_row(list: &mut ChildSpawnerCommands, queued: &crate::present::
             // CHROME-OK: the row is a fold, not a chip or a list row: its own header is the whole unfold target and wears no rest/hover/selected states of its own.
             bevy::ui_widgets::Button,
             Hovered::default(),
-            Node {
-                flex_direction: FlexDirection::Column,
-                width: Val::Percent(100.0),
-                flex_shrink: 0.0,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            },
+            bevy_gooey::column_with(crate::chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }),
         ))
         .observe(unfold_this_row)
         .with_children(|header| {
@@ -608,7 +584,7 @@ fn spawn_a_lesson_row(list: &mut ChildSpawnerCommands, queued: &crate::present::
         row.spawn((
             WishBody,
             WishOf(id.clone()),
-            Node { flex_direction: FlexDirection::Column, flex_shrink: 0.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+            bevy_gooey::column_with(crate::chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }),
         ))
         .with_children(|body| {
             lesson_line_of(body, "WHY", &id, &queued.lesson.why);
@@ -657,7 +633,7 @@ fn lesson_line_of(parent: &mut ChildSpawnerCommands, name: &'static str, id: &st
     crate::chrome::rigid_row(parent, 0.0, AlignItems::FlexStart)
         .with_children(|line| {
             crate::chrome::row_label(line, crate::editor::READOUT_LABEL_W, name);
-            line.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() })
+            line.spawn(bevy_gooey::fill_column(0.0))
                 .with_children(|col| {
                     col.spawn((
                         Text::new(words.to_owned()),
@@ -676,7 +652,7 @@ fn line_of(parent: &mut ChildSpawnerCommands, name: &'static str, id: &str, word
     crate::chrome::rigid_row(parent, 0.0, AlignItems::FlexStart)
         .with_children(|line| {
             crate::chrome::row_label(line, crate::editor::READOUT_LABEL_W, name);
-            line.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() })
+            line.spawn(bevy_gooey::fill_column(0.0))
                 .with_children(|col| {
                     col.spawn((
                         Text::new(words.to_owned()),

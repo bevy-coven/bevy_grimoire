@@ -40,7 +40,9 @@ const TILES_NODES_LEFT: usize = 0;
 // 3 -> 1: #245's last slice moved the prose line's flex item onto `chrome::fill_text` and the control-id marker onto a gooey `cell`.
 // The slot label stays: `the_stage_labels_are_on_screen` pins its pixel-space placement. Owner exception (2026-11-13): a ratchet tightened
 // to the real count.
-const COMPOSE_NODES_LEFT: usize = 1;
+// 1 -> 0: #260 moved the world-space slot label onto gooey's `placed` (its `PlacedAt` is what `place_labels` writes; `the_stage_labels_are_on_screen` passes
+// unedited). Owner exception (2026-11-14): a ratchet tightened to the real count.
+const COMPOSE_NODES_LEFT: usize = 0;
 
 /// **Every spelling of a raw `Node` literal in `name`** (review of #245): `Node {` and `Node{` are the
 /// same thing to Rust, and `Node::default()` is the same thing to a reader — counting one spelling let

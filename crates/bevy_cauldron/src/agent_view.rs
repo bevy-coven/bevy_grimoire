@@ -195,10 +195,8 @@ fn spawn_agent_panel(mut commands: Commands, frame: Res<Frame>, pause: Res<Agent
     let block = crate::familiar::spawn_the_block(&mut commands, pause.0, here.0);
     commands.entity(pane).add_child(block);
     commands.entity(pane).with_children(|s| {
-        let mut history = s.spawn(bevy_gooey::column(chrome::GAP_TIGHT_STEPS));
-        // The history keeps its height when the pane is short: a gooey column says nothing about shrinking.
-        history.entry::<Node>().and_modify(|mut node| node.flex_shrink = 0.0);
-        history
+        // The history keeps its height when the pane is short.
+        s.spawn(bevy_gooey::column_with(chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }))
             .with_children(|h| {
                 chrome::section(h, "HISTORY");
                 h.spawn((AgentHistory, bevy_gooey::column(chrome::GAP_TIGHT_STEPS)));
@@ -285,7 +283,7 @@ fn draw_the_history(
         for row in &rows {
             chrome::gapped_row(c, chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::FlexStart)
                 .with_children(|r| {
-                    r.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() }).with_children(|col| {
+                    r.spawn(bevy_gooey::fill_column(0.0)).with_children(|col| {
                         chrome::row_value(col, row.text.clone(), chrome::ink().text, AgentChangeRow);
                     });
                     chrome::button(
@@ -302,7 +300,7 @@ fn draw_the_history(
         for hand in &hands {
             chrome::gapped_row(c, chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::FlexStart)
                 .with_children(|r| {
-                    r.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() }).with_children(|col| {
+                    r.spawn(bevy_gooey::fill_column(0.0)).with_children(|col| {
                         chrome::row_value(col, format!("kept: {}", hand.title), chrome::ink().text, AgentHandBackRow);
                     });
                     let label = if hand.draft.is_some() { "Open the benchmark task" } else { "Make a benchmark task" };

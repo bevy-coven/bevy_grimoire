@@ -33,7 +33,7 @@ use bevy::prelude::*;
 use bevy::picking::events::PointerRelease;
 use bevy::ui_widgets::{SliderPrecision, SliderRange, SliderStep, SliderValue};
 use bevy_gooey::{
-    Activate, Cancel, TextHint, ValueChange, button, choice, dialog, heading, label, list, menu, observe, panel, slider, tab_page, tabs, text_input,
+    Activate, Cancel, TextHint, ValueChange, button, choice, dialog, heading, label, list, menu, observe, slider, tab_page, tabs, text_input,
     toggle,
 };
 
@@ -263,8 +263,7 @@ fn open(mut asks: MessageReader<OpenSettings>, existing: Query<(), With<Settings
         })
         .with_children(|dialog| {
             dialog
-                .spawn(panel())
-                .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(crate::launcher::CARD_WIDTH), max_width: Val::Percent(100.0), ..default() })
+                .spawn(bevy_gooey::sized_panel(bevy_gooey::CardWidth::Px(crate::launcher::CARD_WIDTH)))
                 .with_children(|card| {
                     card.spawn(heading("Settings"));
                     if available.len() > 1 {
@@ -506,7 +505,7 @@ fn setting_row(setting: &'static Setting, own: Option<Value>, below: Value, over
             }
             row.spawn(label(setting.description));
             let default_text = default_value.map_or_else(String::new, |d| format!("Default: {}", setting_catalogue::say(setting, d)));
-            row.spawn(Node { flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() })
+            row.spawn(bevy_gooey::row_with(crate::chrome::GAP_GROUP_STEPS, bevy_gooey::RowLayout { align: Some(AlignItems::Center), wrap: Some(FlexWrap::Wrap), ..default() }))
                 .with_children(|line| {
                     line.spawn(label(default_text));
                     if own.is_some() {

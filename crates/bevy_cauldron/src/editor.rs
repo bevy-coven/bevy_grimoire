@@ -3839,12 +3839,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                                 field.label(),
                                 ReceiptLabel,
                             );
-                            row.spawn(Node {
-                                flex_direction: FlexDirection::Column,
-                                flex_grow: 1.0,
-                                min_width: Val::Px(0.0),
-                                ..default()
-                            })
+                            row.spawn(bevy_gooey::fill_column(0.0))
                             .with_children(|col| {
                                 crate::chrome::row_value(col, "", crate::chrome::ink().text, Field::Last);
                             });
@@ -7190,7 +7185,7 @@ fn refresh_notes_list(
                     });
                 }
                 if !review.ops.is_empty() {
-                    crate::chrome::wrapping_row(p, crate::chrome::GAP_TIGHT_STEPS, 0.0, UiRect::ZERO, AlignItems::Stretch).with_children(|h| {
+                    crate::chrome::wrapping_row(p, crate::chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Stretch).with_children(|h| {
                         for op in &review.ops {
                             crate::chrome::button(h, NoteOpButton { op: op.clone() }, op, crate::chrome::Severity::Plain);
                         }

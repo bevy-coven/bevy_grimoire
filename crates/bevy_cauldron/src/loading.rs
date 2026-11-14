@@ -361,8 +361,7 @@ fn show_the_report(
         (None, None) => return,
     };
     commands.entity(root).with_children(|root| {
-        root.spawn((panel(), ReportCard))
-            .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(crate::launcher::CARD_WIDTH), max_width: Val::Percent(100.0), ..default() })
+        root.spawn((bevy_gooey::sized_panel(bevy_gooey::CardWidth::Px(crate::launcher::CARD_WIDTH)), ReportCard))
             .with_children(|card| {
             card.spawn(heading(head));
             for row in rows {

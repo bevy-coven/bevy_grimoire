@@ -2853,60 +2853,46 @@ pub fn spaced(margin: UiRect) -> Node {
     Node { margin, ..default() }
 }
 
-/// **A gooey row with room around it** (UI-59, #245): [`bevy_gooey::row`] with no gap of its own, the margin outside it and
+/// **A gooey row with room around it** (UI-59, #245): [`bevy_gooey::row_with`] with no gap of its own, the margin outside it and
 /// its cells on `align` across.
 ///
-/// gooey's row carries no margin and says nothing about alignment, and the skin writes only the fields a row owns (its gap
-/// and its floor width), so both are set over the bundle on the spawned entity, which keeps the one `Node` a bundle may
-/// hold. `.insert(..)` a marker on the returned commands, or `.with_children(..)` the row's cells.
+/// gooey's `RowLayout` carries the alignment; a margin is the one thing it has no field for, so a row that stands off its
+/// neighbours has it set over the spawned bundle (a zero margin writes nothing). `.insert(..)` a marker on the returned commands,
+/// or `.with_children(..)` the row's cells.
 pub fn spaced_row<'a>(parent: &'a mut ChildSpawnerCommands, margin: UiRect, align: AlignItems) -> EntityCommands<'a> {
     gapped_row(parent, 0.0, margin, align)
 }
 
 /// **A [`spaced_row`] whose cells stand `gap` steps of the skin's gap apart** (a gooey row's own rhythm: 1.0 is the skin's gap).
 pub fn gapped_row<'a>(parent: &'a mut ChildSpawnerCommands, gap: f32, margin: UiRect, align: AlignItems) -> EntityCommands<'a> {
-    let mut row = parent.spawn(bevy_gooey::row(gap));
-    row.entry::<Node>().and_modify(move |mut node| {
-        node.margin = margin;
-        node.align_items = align;
-    });
+    let mut row = parent.spawn(bevy_gooey::row_with(gap, bevy_gooey::RowLayout { align: Some(align), ..default() }));
+    if margin != UiRect::ZERO {
+        row.entry::<Node>().and_modify(move |mut node| node.margin = margin);
+    }
     row
 }
 
 /// **A gooey row that wraps its cells onto a second line instead of running off the panel's edge** (UI-59, #245): the cells
-/// stand `gap` steps of the skin's gap apart and the lines `row_gap` px apart (gooey's rhythm is one number, so the line gap
-/// is the caller's), and the row may narrow below its widest run, which a gooey row always may (the skin floors its width at
-/// nothing), so a last chip is never clipped by the panel (the 2026-09-03 audit's F7).
-pub fn wrapping_row<'a>(
-    parent: &'a mut ChildSpawnerCommands,
-    gap: f32,
-    row_gap: f32,
-    margin: UiRect,
-    align: AlignItems,
-) -> EntityCommands<'a> {
-    let mut row = gapped_row(parent, gap, margin, align);
-    row.entry::<Node>().and_modify(move |mut node| {
-        node.flex_wrap = FlexWrap::Wrap;
-        node.row_gap = Val::Px(row_gap);
-    });
+/// stand `gap` steps of the skin's gap apart, and so do the lines (gooey's wrapping container puts the skin's gap between its
+/// lines as well), and the row may narrow below its widest run, which a gooey row always may, so a last chip is never clipped
+/// by the panel (the 2026-09-03 audit's F7).
+pub fn wrapping_row<'a>(parent: &'a mut ChildSpawnerCommands, gap: f32, margin: UiRect, align: AlignItems) -> EntityCommands<'a> {
+    let mut row = parent.spawn(bevy_gooey::row_with(gap, bevy_gooey::RowLayout { align: Some(align), wrap: Some(FlexWrap::Wrap), ..default() }));
+    if margin != UiRect::ZERO {
+        row.entry::<Node>().and_modify(move |mut node| node.margin = margin);
+    }
     row
 }
 
 /// **A [`gapped_row`] that is never squeezed** (#260): the cells stand `gap` steps apart on `align` across, and the row keeps its height when
-/// the panel is shorter than its rows (a flex item that may shrink is made shorter than its text, which draws one line over the next). gooey's
-/// row says nothing about shrinking, so it is set over the bundle here, once, and not at each call.
+/// the panel is shorter than its rows (a flex item that may shrink is made shorter than its text, which draws one line over the next).
 pub fn rigid_row<'a>(parent: &'a mut ChildSpawnerCommands, gap: f32, align: AlignItems) -> EntityCommands<'a> {
-    let mut row = gapped_row(parent, gap, UiRect::ZERO, align);
-    row.entry::<Node>().and_modify(|mut node| node.flex_shrink = 0.0);
-    row
+    parent.spawn(bevy_gooey::row_with(gap, bevy_gooey::RowLayout { align: Some(align), shrink: Some(0.0), ..default() }))
 }
 
-/// **A [`gapped_row`] whose cells gather at the right edge** (#260): a dialog's answers. gooey's row says nothing about where its cells gather,
-/// so `justify_content` is set over the bundle here, once, and not at each call.
+/// **A [`gapped_row`] whose cells gather at the right edge** (#260): a dialog's answers.
 pub fn end_row<'a>(parent: &'a mut ChildSpawnerCommands, gap: f32) -> EntityCommands<'a> {
-    let mut row = gapped_row(parent, gap, UiRect::ZERO, AlignItems::Stretch);
-    row.entry::<Node>().and_modify(|mut node| node.justify_content = JustifyContent::FlexEnd);
-    row
+    parent.spawn(bevy_gooey::row_with(gap, bevy_gooey::RowLayout { justify: Some(JustifyContent::FlexEnd), ..default() }))
 }
 
 /// **A text that takes the rest of its row and wraps inside it** (UI-59, #245): a label column that grows with the row and

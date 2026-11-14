@@ -632,7 +632,7 @@ fn spawn_the_files_workspace(mut commands: Commands, frame: Res<Frame>) {
     commands.entity(panel).with_children(|p| {
         chrome::title(p, "FILES");
         p.spawn((bevy_gooey::label(String::new()), TreeNotice));
-        p.spawn(Node { flex_grow: 1.0, min_height: Val::Px(0.0), flex_direction: FlexDirection::Column, ..default() })
+        p.spawn(bevy_gooey::fill_region())
             .with_children(|column| {
                 column.spawn((tree(Vec::<TreeNode>::new()), FilesTree, SelectMode::Single, observe(open_the_picked_file)));
             });

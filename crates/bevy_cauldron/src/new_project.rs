@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use bevy::prelude::*;
 use bevy::ui::InteractionDisabled;
 use bevy::input_focus::AutoFocus;
-use bevy_gooey::{Cancel, FieldProblem, TextHint, TextInputValue, ValueChange, button, choice, dialog, heading, label, observe, panel, text_input};
+use bevy_gooey::{Cancel, FieldProblem, TextHint, TextInputValue, ValueChange, button, choice, dialog, heading, label, observe, text_input};
 
 use crate::launcher::{Launcher, OpenMapRequest};
 use crate::picker::{PickFor, PickRequest, Picked};
@@ -339,8 +339,7 @@ fn spawn_the_card(
             observe(|_: On<Cancel>, mut launcher: ResMut<Launcher>| launcher.new_project_done = true),
         ))
         .with_children(|scrim| {
-        scrim.spawn(panel())
-            .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(FORM_WIDTH), max_width: Val::Percent(100.0), row_gap: Val::Px(crate::chrome::GAP_ROW), ..default() })
+        scrim.spawn(bevy_gooey::sized_panel(bevy_gooey::CardWidth::Px(FORM_WIDTH)))
             .with_children(|card| {
                 card.spawn(heading("New project"));
                 card.spawn((

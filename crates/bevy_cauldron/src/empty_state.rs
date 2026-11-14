@@ -116,24 +116,21 @@ fn spawn_prompt(commands: &mut Commands, viewport: Entity, kind: EmptyMapPrompt)
         .spawn((
             Name::new("EmptyMapPrompt"),
             kind,
-            Node {
-                // PLACES-ITSELF-OK: an overlay on the viewport, not a panel in the frame's flow.
-                // `Frame` owns where docks go; this sits over the hole the world is drawn through.
-                position_type: PositionType::Absolute,
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                flex_direction: FlexDirection::Column,
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                row_gap: Val::Px(crate::chrome::GAP_GROUP),
-                ..default()
-            },
-            bevy::picking::Pickable::IGNORE,
+            // An overlay on the viewport, not a panel in the frame's flow: `Frame` owns where docks go, and this sits over the hole the
+            // world is drawn through. `cover` lets the pointer through to the world; the button takes its own.
+            bevy_gooey::cover(),
+            bevy_gooey::RowLayout { align: Some(AlignItems::Center), justify: Some(JustifyContent::Center), ..default() },
             ChildOf(viewport),
         ))
         .with_children(|p| {
-            p.spawn(bevy_gooey::label(SENTENCE));
-            p.spawn((bevy_gooey::button(ACTION), OpenLibraryButton));
+            p.spawn((
+                bevy_gooey::column_with(crate::chrome::GAP_GROUP_STEPS, bevy_gooey::RowLayout { align: Some(AlignItems::Center), ..default() }),
+                bevy::picking::Pickable::IGNORE,
+            ))
+            .with_children(|stack| {
+                stack.spawn(bevy_gooey::label(SENTENCE));
+                stack.spawn((bevy_gooey::button(ACTION), OpenLibraryButton));
+            });
         });
 }
 

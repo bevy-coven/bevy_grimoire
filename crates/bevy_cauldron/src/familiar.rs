@@ -220,13 +220,7 @@ pub fn spawn_the_block(commands: &mut Commands, pause: bool, here: bool) -> Enti
             // **Never squeezed**: the INSPECTOR's rows scroll, and a flex item that may shrink is made shorter than its text when
             // the panel's rows are taller than the panel, which draws one line over the next (found in a capture, where the
             // headless layout, whose panel is not full, shows nothing wrong).
-            Node {
-                flex_direction: FlexDirection::Column,
-                width: Val::Percent(100.0),
-                flex_shrink: 0.0,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            },
+            bevy_gooey::column_with(crate::chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }),
         ))
         .with_children(|block| {
             crate::chrome::list_heading(block, "AGENT");
@@ -237,14 +231,14 @@ pub fn spawn_the_block(commands: &mut Commands, pause: bool, here: bool) -> Enti
             for (line, name) in [(FamiliarLine::Heard, "HEARD"), (FamiliarLine::Newest, "NEWEST"), (FamiliarLine::HandBack, "HAND-BACK")] {
                 crate::chrome::rigid_row(block, 0.0, AlignItems::FlexStart).with_children(|row| {
                     crate::chrome::row_label(row, crate::editor::READOUT_LABEL_W, name);
-                    row.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() }).with_children(|col| {
+                    row.spawn(bevy_gooey::fill_column(0.0)).with_children(|col| {
                         crate::chrome::row_value(col, "", crate::chrome::ink().text, line);
                     });
                 });
             }
             crate::chrome::rigid_row(block, 0.0, AlignItems::FlexStart).with_children(|row| {
                 crate::chrome::row_label(row, crate::editor::READOUT_LABEL_W, "PLAN");
-                row.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() }).with_children(|col| {
+                row.spawn(bevy_gooey::fill_column(0.0)).with_children(|col| {
                     crate::chrome::row_value(col, "", crate::chrome::ink().text, FamiliarPlanLine);
                 });
             });
@@ -281,7 +275,7 @@ pub fn spawn_the_block(commands: &mut Commands, pause: bool, here: bool) -> Enti
             block.spawn((
                 crate::wish_view::WishRows,
                 Name::new("agent rows"),
-                Node { flex_direction: FlexDirection::Column, width: Val::Percent(100.0), flex_shrink: 0.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+                bevy_gooey::column_with(crate::chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }),
             ));
         })
         .id()
@@ -554,10 +548,10 @@ fn follow_the_hand_back(
                     .spawn((
                         HandBackCard,
                         Name::new("agent hand-back"),
-                        Node { flex_direction: FlexDirection::Column, flex_shrink: 0.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+                        bevy_gooey::column_with(crate::chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }),
                     ))
                     .with_children(|card| {
-                        crate::chrome::wrapping_row(card, crate::chrome::GAP_TIGHT_STEPS, 0.0, UiRect::ZERO, AlignItems::Stretch)
+                        crate::chrome::wrapping_row(card, crate::chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Stretch)
                             .with_children(|answers| {
                                 for (text, reply) in [
                                     ("Accept".to_owned(), crate::present::Reply::Accept),
@@ -585,7 +579,7 @@ fn follow_the_hand_back(
                             crate::chrome::rigid_row(card, 0.0, AlignItems::FlexStart)
                                 .with_children(|row| {
                                     crate::chrome::row_label(row, crate::editor::READOUT_LABEL_W, name);
-                                    row.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() })
+                                    row.spawn(bevy_gooey::fill_column(0.0))
                                         .with_children(|col| {
                                             crate::chrome::row_value(col, text, crate::chrome::ink().text, ());
                                         });

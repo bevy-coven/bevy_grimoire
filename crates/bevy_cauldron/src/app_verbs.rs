@@ -428,8 +428,7 @@ fn open_about(
             scrim.spawn((panel(), bevy::picking::hover::Hovered::default())).with_children(|card| {
                 if let Some((handle, size)) = art.as_ref() {
                     card.spawn((
-                        ImageNode::new(handle.clone()),
-                        Node { width: Val::Px(size.x), height: Val::Px(size.y), max_width: Val::Percent(100.0), aspect_ratio: Some(size.x / size.y), ..default() },
+                        bevy_gooey::aspect_image(handle.clone(), size.x, size.x / size.y),
                         Name::new("about splash"),
                     ));
                 }

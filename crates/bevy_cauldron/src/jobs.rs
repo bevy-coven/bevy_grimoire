@@ -248,7 +248,7 @@ fn spawn_band_item(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
             bevy::picking::Pickable::default(),
             JobsItem,
             children![
-                (Node::default(), Role::StatusMark, bevy::picking::Pickable::IGNORE),
+                bevy_gooey::status_mark(),
                 // **`ControlText`, not `ButtonText`.** The item is deliberately not on the `Activate`
                 // bus (see the comment above), so its words must not claim to be a button's: a test
                 // that counts the interface's buttons by their role would see a job row as one.
@@ -321,16 +321,9 @@ fn rows(panel: &mut ChildSpawnerCommands, snapshot: &[(&'static str, Job)]) {
     for (key, job) in snapshot {
         panel
             .spawn((
-                Node::default(),
-                Role::Button,
-                Hovered::default(),
+                bevy_gooey::plain_button(format!("Stop: {}", said(job))),
                 bevy::picking::Pickable::default(),
                 CancelJob(key),
-                children![(
-                    Text::new(format!("Stop: {}", said(job))),
-                    Role::ButtonText,
-                    bevy::picking::Pickable::IGNORE,
-                )],
             ))
             .observe(stop_this_job);
     }

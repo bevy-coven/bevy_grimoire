@@ -30,7 +30,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_gooey::{
     Activate, Binding, BindingValue, Cancel, Shortcut, TextHint, ValueChange, binding, button, dialog, heading, label, list, menu, observe,
-    panel, text_input,
+    text_input,
 };
 
 use crate::commands::{self, Command};
@@ -225,8 +225,7 @@ fn open(mut asks: MessageReader<OpenKeymap>, existing: Query<(), With<KeymapDial
         })
         .with_children(|dialog| {
             dialog
-                .spawn(panel())
-                .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(crate::launcher::CARD_WIDTH), max_width: Val::Percent(100.0), ..default() })
+                .spawn(bevy_gooey::sized_panel(bevy_gooey::CardWidth::Px(crate::launcher::CARD_WIDTH)))
                 .with_children(|card| {
                     card.spawn(heading("Keymap"));
                     card.spawn(label(
@@ -352,7 +351,7 @@ fn command_row(command: Command, chord: Shortcut, modified: bool, default_chord:
                 }),
             ));
             if modified {
-                row.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() })
+                row.spawn(bevy_gooey::row_with(crate::chrome::GAP_GROUP_STEPS, bevy_gooey::RowLayout { align: Some(AlignItems::Center), ..default() }))
                     .with_children(|line| {
                         line.spawn(label(format!("Modified; without it the chord is {}", default_chord.label())));
                         line.spawn((button(format!("Reset {}", command.title)), observe(move |_: On<Activate>, mut w: Writer| w.set(id, None))));

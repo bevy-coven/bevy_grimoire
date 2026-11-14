@@ -238,7 +238,7 @@ fn refresh_problems_list(
                 for row in rows {
                     crate::chrome::rigid_row(p, crate::chrome::GAP_TIGHT_STEPS, AlignItems::Center)
                         .with_children(|line| {
-                            line.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() }).with_children(|words| {
+                            line.spawn(bevy_gooey::fill_column(0.0)).with_children(|words| {
                                 let colour = if row.hard { ink.danger } else { ink.read };
                                 words.spawn((Text::new(row.words.clone()), TextColor(colour), crate::chrome::typed(crate::chrome::text::BODY)));
                             });
