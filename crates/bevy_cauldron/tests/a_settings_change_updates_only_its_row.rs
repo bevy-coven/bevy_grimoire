@@ -64,7 +64,10 @@ struct Frame {
     placed: Vec<(f32, f32)>,
     /// Every entity under the dialog.
     nodes: Vec<Entity>,
+    /// Where the list is drawn scrolled to, in logical px (layout clamps it to the content).
     scroll: f32,
+    /// Where the list says it is scrolled to: what a later change to the content would draw.
+    stored: f32,
     focus: Option<Entity>,
     list: Entity,
 }
@@ -115,9 +118,11 @@ fn record(app: &mut App, list: Entity) -> Frame {
             }
         }
     }
-    let scroll = world.get::<ScrollPosition>(list).map_or(0.0, |s| s.y);
+    // The drawn offset is layout's, clamped to the content; the stored one is what is written back to the list.
+    let scroll = world.get::<ComputedNode>(list).map_or(0.0, |n| n.scroll_position.y * n.inverse_scale_factor());
+    let stored = world.get::<ScrollPosition>(list).map_or(0.0, |s| s.y);
     let focus = world.resource::<InputFocus>().get();
-    Frame { rows, placed, nodes, scroll, focus, list }
+    Frame { rows, placed, nodes, scroll, stored, focus, list }
 }
 
 /// Scrolls the shown list to its end and lets it settle; returns the frame it settled on.
@@ -133,8 +138,9 @@ fn scrolled_to_the_end(app: &mut App) -> Frame {
 }
 
 /// Runs `FRAMES_AFTER` frames and checks each against `before`: the list is the same list, and no more than
-/// `max_gone` nodes (the marks of a row that is no longer modified) left the dialog.
-fn assert_the_list_is_untouched(app: &mut App, before: &Frame, changed_row: usize, what: &str, max_gone: usize) -> Frame {
+/// `max_gone` nodes (the marks of a row that is no longer modified) left the dialog. The focus ends on `focus_after`;
+/// the drawn scroll offset stays, unless the list got shorter at its end (`follows_end`), when it may only go back.
+fn assert_the_list_is_untouched(app: &mut App, before: &Frame, changed_row: usize, what: &str, max_gone: usize, focus_after: Option<Entity>, follows_end: bool) -> Frame {
     let mut last = before.clone();
     for n in 1..=FRAMES_AFTER {
         app.update();
@@ -144,8 +150,12 @@ fn assert_the_list_is_untouched(app: &mut App, before: &Frame, changed_row: usiz
         assert!(gone.len() <= max_gone, "{what}: frame {n}: {} nodes under the dialog were despawned, at most {max_gone} (the marks) may go: {gone:?}", gone.len());
         let added = now.nodes.len() - before.nodes.len().min(now.nodes.len());
         assert!(added <= MARK_NODES, "{what}: frame {n}: the change added {added} nodes; a mark and a Reset is at most {MARK_NODES}");
-        assert_eq!(now.scroll, before.scroll, "{what}: frame {n}: the list's scroll offset moved");
-        assert_eq!(now.focus, before.focus, "{what}: frame {n}: the focus moved");
+        if follows_end {
+            assert!(now.scroll <= before.scroll, "{what}: frame {n}: a list that got shorter scrolled further ({} to {})", before.scroll, now.scroll);
+        } else {
+            assert_eq!(now.scroll, before.scroll, "{what}: frame {n}: the list's drawn scroll offset moved");
+        }
+        assert_eq!(now.focus, focus_after, "{what}: frame {n}: the focus is not where it should be (before: {:?})", before.focus);
         // Every row but the changed one keeps its height, and the rows down to the changed one keep their
         // distance from each other: the card is centred, so a row that grows by a Reset button moves it all by
         // half of that, which is a translation and not a different layout.
@@ -162,6 +172,7 @@ fn assert_the_list_is_untouched(app: &mut App, before: &Frame, changed_row: usiz
         assert!(grew.abs() <= MARK_GROWTH_PX, "{what}: frame {n}: the changed row's height moved by {grew} px, more than a mark's {MARK_GROWTH_PX}");
         last = now;
     }
+    assert!(last.stored <= last.scroll + 1.0, "{what}: the stored scroll offset ({}) is past the drawn one ({}): stale", last.stored, last.scroll);
     last
 }
 
@@ -181,7 +192,7 @@ fn stepping_the_last_row_keeps_the_scroll_the_focus_and_every_row() {
     assert_eq!(before.focus, Some(agent), "the row's control has the keyboard focus");
 
     r.app.world_mut().commands().trigger(ValueChange { source: agent, value: 1usize, is_final: true });
-    let after = assert_the_list_is_untouched(&mut r.app, &before, last, "stepping Terminal agent", 0);
+    let after = assert_the_list_is_untouched(&mut r.app, &before, last, "stepping Terminal agent", 0, before.focus, false);
 
     assert!(std::fs::read_to_string(&r.user).unwrap().contains("terminal_agent"), "the change was written to the user's file");
     assert_eq!(r.app.world().get::<ChoiceValue>(agent).map(|c| c.0), Some(1), "the control shows the new value");
@@ -206,12 +217,22 @@ fn a_reset_puts_the_control_back_without_building_the_list_again() {
     let before = record(&mut r.app, before.list);
 
     r.app.world_mut().commands().trigger(bevy_gooey::Activate { entity: reset });
-    let after = assert_the_list_is_untouched(&mut r.app, &before, last, "resetting Terminal agent", MARK_NODES);
+    let after = assert_the_list_is_untouched(&mut r.app, &before, last, "resetting Terminal agent", MARK_NODES, Some(agent), true);
 
     assert_eq!(r.app.world().get::<ChoiceValue>(agent).map(|c| c.0), Some(0), "the control went back to what the layer below says: Off, on a machine with no agent");
     assert!(find_by_label(&mut r.app, "Reset Terminal agent").is_err(), "an unset key has no Reset");
     assert!(after.nodes.len() < before.nodes.len(), "the mark and the Reset were taken from the row");
     assert!(!std::fs::read_to_string(&r.user).unwrap().contains("terminal_agent"), "the key is out of the file");
+    // **The focus moved to the row's control**, which is on screen and is the one thing the person was working on.
+    assert_eq!(after.focus, Some(agent), "the keyboard focus is on the row's control, not on the Reset that went");
+    assert!(r.app.world().get_entity(after.focus.unwrap()).is_ok(), "and it is an entity that exists");
+    // **The list got shorter at its end, so its scroll went back with it** and is stored as drawn.
+    assert!(after.scroll < before.scroll, "the end of the list came up by the mark's height ({} to {})", before.scroll, after.scroll);
+    assert_eq!(after.stored, after.scroll, "the stored offset is the drawn one");
+    // And when the row grows again the list does not jump to where it had been.
+    r.app.world_mut().commands().trigger(ValueChange { source: agent, value: 1usize, is_final: true });
+    let regrown = assert_the_list_is_untouched(&mut r.app, &after, last, "stepping Terminal agent again", 0, Some(agent), false);
+    assert_eq!(regrown.scroll, after.scroll, "no jump when the list grows back");
 }
 
 #[test]
@@ -265,7 +286,7 @@ fn a_change_with_a_search_active_keeps_the_search_and_its_rows() {
     let before = record(&mut r.app, list);
 
     r.app.world_mut().commands().trigger(ValueChange { source: grid, value: false, is_final: true });
-    assert_the_list_is_untouched(&mut r.app, &before, 0, "flipping Grid lines under a search", 0);
+    assert_the_list_is_untouched(&mut r.app, &before, 0, "flipping Grid lines under a search", 0, before.focus, false);
 
     assert!(r.app.world().get::<Checked>(grid).is_none(), "the switch is off");
     assert!(find_by_label(&mut r.app, "Theme").is_err(), "the search still hides what it hid");
@@ -297,4 +318,31 @@ fn switching_whose_file_is_edited_changes_values_in_place() {
     assert!(after.nodes.contains(&grid), "the control is the same control");
     assert!(r.app.world().get::<Checked>(grid).is_none(), "the project file sets nothing, so the control shows what it inherits: off");
     assert!(find_by_label(&mut r.app, "Reset Grid lines").is_err(), "and the project's file has nothing to reset");
+}
+
+#[test]
+fn no_setting_is_built_as_an_unreadable_row_in_either_scope_so_a_change_never_builds_the_list_again() {
+    // A row is "unreadable value" only when the value a layer gives is not the kind its control shows; that is the one
+    // corner that falls back to building the list again, so it is pinned as unreachable: every setting of the catalogue
+    // has its control, with a file that sets some keys and with one that sets none, in the user's scope and the project's.
+    let mut r = rig("settings_change_no_unreadable");
+    std::fs::write(&r.user, "{version: 1, theme: Parchment, show_grid: false, text_scale: 1.5, terminal_cursor: Bar}").unwrap();
+    for scope in [Scope::User, Scope::Project] {
+        {
+            let world = r.app.world_mut();
+            let mut dialogs = world.query::<&mut SettingsDialog>();
+            dialogs.single_mut(world).expect("the dialog is open").scope = scope;
+        }
+        for _ in 0..30 {
+            r.app.update();
+            std::thread::sleep(std::time::Duration::from_millis(15));
+        }
+        let list = shown_list(&mut r.app);
+        let rows = record(&mut r.app, list).rows.len();
+        assert_eq!(rows, bevy_cauldron::setting_catalogue::CATALOGUE.len(), "{scope:?}: one row per setting");
+        let world = r.app.world_mut();
+        let mut texts = world.query::<&Text>();
+        let unreadable: Vec<String> = texts.iter(world).filter(|t| t.0.contains("unreadable value")).map(|t| t.0.clone()).collect();
+        assert!(unreadable.is_empty(), "{scope:?}: rows built as unreadable: {unreadable:?}");
+    }
 }

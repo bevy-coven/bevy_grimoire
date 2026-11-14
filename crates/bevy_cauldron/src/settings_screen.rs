@@ -27,7 +27,8 @@
 use std::path::PathBuf;
 
 use bevy::ecs::spawn::{SpawnIter, SpawnWith};
-use bevy::ui::Checked;
+use bevy::input_focus::{FocusCause, InputFocus};
+use bevy::ui::{Checked, ComputedNode, ScrollPosition};
 use bevy::ecs::relationship::RelatedSpawner;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -239,13 +240,35 @@ pub struct SettingsScreenPlugin;
 
 impl Plugin for SettingsScreenPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<OpenSettings>().add_systems(Update, (chord, open, refresh).chain()).add_systems(
+        app.add_message::<OpenSettings>().add_systems(Update, (chord, open, refresh, clamp_the_scroll).chain()).add_systems(
             Update,
             // After gooey has written its own readout (the number), so the percentage is the last word.
             say_the_percentage.after(bevy_gooey::GooeySystems::Style),
         );
     }
 }
+
+/// **The scroll a list is stored at is the one it is drawn at** (#429). Layout clamps what is drawn to the content, but leaves
+/// the stored [`ScrollPosition`] where it was, so a list that got shorter (a Reset took a mark off its last row) kept a stale
+/// offset that came back, as a jump, the next time it grew. Only this dialog's lists are held to it.
+fn clamp_the_scroll(
+    dialogs: Query<Entity, With<SettingsDialog>>,
+    mut lists: Query<(Entity, &mut ScrollPosition, &ComputedNode), With<bevy_gooey::ListView>>,
+    parents: Query<&ChildOf>,
+) {
+    let Ok(dialog) = dialogs.single() else { return };
+    for (list, mut scroll, node) in &mut lists {
+        let drawn = node.scroll_position.y * node.inverse_scale_factor();
+        // **Stale means nobody moved it this frame**: a wheel or a glide writes the offset before layout has seen it, and
+        // would be cut back to last frame's if it were looked at here.
+        if !scroll.is_changed() && scroll.y > drawn + SCROLL_SLACK_PX && parents.iter_ancestors(list).any(|ancestor| ancestor == dialog) {
+            scroll.y = drawn;
+        }
+    }
+}
+
+/// How far the stored scroll may be past the drawn one before it is pulled back, in logical px: layout floors the drawn one.
+const SCROLL_SLACK_PX: f32 = 1.0;
 
 /// Cmd/Ctrl+, : open the screen, or take it down when it is open. Not from a text field, where the
 /// comma is a comma.
@@ -402,6 +425,7 @@ fn refresh(
     marks: Query<(), With<LineMark>>,
     unreadable: Query<(), With<SettingUnreadable>>,
     mut since: Local<f32>,
+    mut focus: Option<ResMut<InputFocus>>,
     mut commands: Commands,
 ) {
     let Ok((dialog, mut built)) = dialogs.single_mut() else { return };
@@ -555,7 +579,19 @@ fn refresh(
             if line.own != own.is_some() || line.overridden != overridden {
                 line.own = own.is_some();
                 line.overridden = overridden;
-                for kid in kids.iter().filter(|kid| marks.contains(*kid)) {
+                // **Focus never stays on a mark that is about to go** (#429): a keyboard Reset takes its own button away,
+                // and the focus would be left on a despawned entity. It moves to the row's own control.
+                let going: Vec<Entity> = kids.iter().filter(|kid| marks.contains(*kid)).collect();
+                if let Some(focus) = focus.as_deref_mut()
+                    && focus.get().is_some_and(|held| going.contains(&held))
+                {
+                    let key = line.key;
+                    match controls.iter().find(|(_, control, ..)| control.key == key) {
+                        Some((control, ..)) => focus.set(control, FocusCause::Navigated),
+                        None => focus.clear(),
+                    }
+                }
+                for kid in going {
                     commands.entity(kid).despawn();
                 }
                 commands.entity(entity).with_children(|line| {
