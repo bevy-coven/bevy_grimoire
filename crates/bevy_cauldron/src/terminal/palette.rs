@@ -126,11 +126,20 @@ const GREY_STEP: u8 = 10;
 /// returns a `Color` rather than an `Option`, and a caller has no branch to get wrong.
 pub fn resolve(index: u8) -> Color {
     if index < 16 {
-        // **Built once** (review, 2026-11-10): `ansi()` mixes the ink into sixteen colours, and a
-        // terminal repaints a whole screen of cells per frame — a rebuild per cell was that work
-        // repeated for an answer that cannot change while the palette does not.
-        static ANSI: std::sync::OnceLock<[Color; 16]> = std::sync::OnceLock::new();
-        return ANSI.get_or_init(ansi)[index as usize];
+        // **Built once per ink** (review, 2026-11-10; #428): `ansi()` mixes the ink into sixteen colours, and a
+        // terminal repaints a whole screen of cells per frame — a rebuild per cell was that work repeated for
+        // an answer that cannot change while the palette does not. The palette *does* change with the theme,
+        // so the table is kept with the ink generation it was built in and rebuilt when that is not the ink's.
+        static ANSI: std::sync::RwLock<Option<(u64, [Color; 16])>> = std::sync::RwLock::new(None);
+        let generation = chrome::ink_generation();
+        if let Some((built, table)) = *ANSI.read().unwrap_or_else(std::sync::PoisonError::into_inner)
+            && built == generation
+        {
+            return table[index as usize];
+        }
+        let table = ansi();
+        *ANSI.write().unwrap_or_else(std::sync::PoisonError::into_inner) = Some((generation, table));
+        return table[index as usize];
     }
     let (r, g, b) = rgb(index);
     Color::srgb_u8(r, g, b)
