@@ -7530,6 +7530,11 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(rig_check_all::RigCheckAll),
         Box::new(kit_rescan::KitRescan),
         Box::new(rig_history_step::RigHistoryStep),
+        Box::new(crate::ops_tile_page::TilePageEnter),
+        Box::new(crate::ops_tile_page::TilePageLeave),
+        Box::new(crate::ops_tile_page::TileOpen),
+        Box::new(crate::ops_tile_page::TileClose),
+        Box::new(crate::ops_tile_page::TileNew),
         Box::new(crate::ops_labeller::LabelsSuggest),
         Box::new(crate::ops_labeller::LabelsWalk),
         Box::new(crate::ops_labeller::LabelsAbandon),
@@ -7838,6 +7843,13 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     ("kit_rescan", "\"kit_rescan\""),
     // **The rig bench's history keys** (E-002, #129 slice 35): Cmd+Z and Cmd+Shift+Z on the Anim tab dispatch `rig_history_step`, through `anim_tab::bench_history_keys`.
     ("rig_history_step", "\"rig_history_step\""),
+    // **The Tiles tab's page keys** (E-002, #129 slice 36): `right`, `left`, `Enter`, `C` and `N` (and the `+ New Tile` row's click)
+    // dispatch the page operations, through `build::page_through_operation`.
+    ("tile_page_enter", "\"tile_page_enter\""),
+    ("tile_page_leave", "\"tile_page_leave\""),
+    ("tile_open", "\"tile_open\""),
+    ("tile_close", "\"tile_close\""),
+    ("tile_new", "\"tile_new\""),
     // **The labeller's keys** (E-002, #129 slice 34): `L` dispatches `labels_suggest`, `Shift+L` `labels_walk` and `Shift+Y`
     // `labels_abandon`, through `labels::Labeller::dispatch`, the body an agent's call is carried out by too.
     ("labels_suggest", "\"labels_suggest\""),

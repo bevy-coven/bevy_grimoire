@@ -1363,24 +1363,44 @@ pub fn refit_tile(
     }
 }
 
-/// **Up one page, to the Tiles list** — the landing `left` and `Esc` share.
-///
-/// One function because two keys mean it, and the pair has already drifted once: `Esc` cleared
-/// `browsing` (descending to the Meshes page) while `left` set it, so the tab's two back-out keys
-/// went opposite ways. Written twice, that is two decisions to keep in step; written here, it is
-/// one.
-///
-/// A note rather than a problem when nothing is authored yet: the answer is to make one, and the
-/// `New Tile +` row is where that starts.
-fn ascend(build: &mut Build, state: &mut crate::tiles::ImportState, page: usize, landing: usize) {
-    // `page` counts the `+ New Tile` row, so a page of exactly one is an empty kit.
-    if page <= 1 {
-        state
-            .status
-            .note("no tiles in the kit yet — New Tile +, or build and press Cmd+S".to_owned());
-        build.browsing = Some(NEW_TILE_ROW);
-    } else {
-        build.browsing = Some(landing);
+/// **Dispatch a Tiles-page operation for a key or a click** (E-002, #129 slice 36), apply the answer to the `Build` and say what it
+/// said: its summary, or the refusal's sentence. `right`, `left`, `Enter`, `C` and `N` (and `Esc` on the Meshes page, and the
+/// `+ New Tile` row's click) all come through here, and an agent's call is carried out by the same [`Build::take_page`]. **Nothing to
+/// close is guidance, a note; any other refusal is a problem** where the author looks. Returns whether the operation applied.
+pub(crate) fn page_through_operation(
+    project: &crate::project::Project,
+    build: &mut Build,
+    state: &mut crate::tiles::ImportState,
+    operation: &str,
+    params: serde_json::Value,
+) -> bool {
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View {
+            tile_page: build.browsing.map(|row| crate::ops_view::TilePage { row, rows: page_len(project, build) }),
+            tile_hand: build.hand(),
+            ..Default::default()
+        }),
+        ..crate::ops::Ctx::default()
+    };
+    match crate::ops::dispatch(&mut ctx, operation, &params) {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => {
+            if let Some(view) = ctx.view.take() {
+                build.take_page(&view.page);
+            }
+            state.status.note(outcome.summary);
+            true
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+            if e.0 == crate::ops_tile_page::NOTHING_TO_CLOSE {
+                state.status.note(e.0);
+            } else {
+                state.status.problem(e.0);
+            }
+            false
+        }
     }
 }
 
@@ -1543,144 +1563,21 @@ pub fn build_keys(
         // return to the Meshes page without reopening it, so an undo stack is not a collateral
         // casualty.
         if pressed(Action::PageEnter) {
-            // **Row zero drills and says so.** `row_composition(NEW_TILE_ROW)` is `None`, so this
-            // used to fall through to *"nothing to open yet"* for ANY kit without a draft in hand —
-            // two keystrokes from the landing row, claiming a kit of forty tiles was empty (N17).
-            // The drill is still the drill (`right` means the Meshes page and needs no tile), and
-            // the note names what is true.
-            if row == NEW_TILE_ROW {
-                build.browsing = None;
-                state.status.note(if page > 1 {
-                    format!(
-                        "meshes — nothing in hand; {} on a tile row opens one",
-                        crate::keys::chord(Action::TileOpen)
-                    )
-                } else {
-                    format!(
-                        "no tiles in the kit yet — {} on + New Tile names one",
-                        crate::keys::chord(Action::TileOpen)
-                    )
-                });
-                return;
-            }
-            // **Row zero is NOT a name prompt here, and that distinction cost a test cluster.**
-            //
-            // `right` means *drill to the Meshes page* — the drill's own note above is right that it
-            // needs no tile. Raising the naming prompt on `right` put the editor into
-            // `Context::Typing`, which is a keyboard-wide mode: the arrows stopped walking the
-            // library and `F` stopped reaching the filter box, on a tab the author had only asked to
-            // drill into. `Enter` (`TileOpen`) is the key that acts on the row, and that is where
-            // `+ New Tile` answers.
-            //
-            // The draft row is the one case the kit has no tile for — a named, unsaved tile in
-            // hand is a row the author walked to, and it opens by re-arming the page: the draft is
-            // already open, so this is the `already` branch below doing the drill alone.
-            let Some(comp) = row_composition(row)
-                .and_then(|i| project.compositions.compositions.get(i))
-                .cloned()
-                .or_else(|| draft(&build, &project).cloned())
-            else {
-                // The row is drawn from the same source this indexes, so this is unreachable
-                // rather than unlikely — `TileOpen`'s own precedent below.
-                state
-                    .status
-                    .problem(format!("no tile at row {row}; the page has {page}"));
-                return;
-            };
-            // **A composition with no box is refused by name, and the row stays where it is.**
-            //
-            // `Envelope::Anchored` is what the Map's `M` captures — a table and its chairs, holding
-            // no tile — and this tab assembles tiles. Putting one into `build.open` is what bricked
-            // the tab (the 2026-09-03 review's T2): the size guard below then refused every verb,
-            // and there was no close key, so the only way out was opening a different tile.
-            //
-            // The refusal comes from [`open_saved`], the one writer of `build.open`, rather than
-            // from a check here — the alternatives to refusing are both worse: hiding the row lies
-            // about what is in the kit, and converting it silently rewrites what the author
-            // captured. `tiles::list_ink` marks the row, so the refusal is not the first they hear
-            // of it.
-            //
-            // **And the page does not flip.** The drill's own note above is right that the drill
-            // needs no tile — that is the empty-kit case — and wrong for this one: the author
-            // pointed at a row, and landing on the meshes with a *different* tile in hand would
-            // answer a question they did not ask.
-            let already = build
-                .open
-                .as_ref()
-                .is_some_and(|c| c.id == comp.id);
-            if !already {
-                let id = comp.id.clone();
-                let n = comp.members.len();
-                if let Err(e) = open_saved(&mut build, comp) {
-                    state.status.problem(e);
-                    return;
-                }
-                state.status.note(format!(
-                    "`{id}` opened — {n} member(s), Cmd+S saves over it"
-                ));
-            }
-            build.browsing = None;
+            // **Through `tile_page_enter`** (E-002, #129 slice 36), the operation an agent calls: row zero drills and says so, the
+            // draft row re-arms the page, a tile already in hand is not reopened, and a composition with no box is refused by
+            // name with the page left where it is. The writer of `build.open` is `Build::take_page`.
+            page_through_operation(&project, &mut build, &mut state, "tile_page_enter", serde_json::json!({}));
             return;
         }
         if pressed(Action::TileOpen) {
-            // **Row zero makes one**, the same door `right` and the row's click use.
-            if row == NEW_TILE_ROW {
-                build.naming = Some(NamePrompt { raw: String::new(), then: NameThen::Open });
-                return;
-            }
-            // **The tile in hand is not reopened.** `open_saved` takes the COMMITTED copy, so
-            // reopening the tile you are editing throws away every unsaved member edit and both
-            // undo stacks — and nothing on the page said which tile was open (N20). `right` has
-            // asked this since T2; `Enter` did not (N4). The draft row is the same case: it IS
-            // `build.open`, and reopening it kept the members but bumped `opened`, which cleared
-            // the history under it.
-            let at_row = row_composition(row)
-                .and_then(|i| project.compositions.compositions.get(i))
-                .map(|c| c.id.as_str())
-                .or_else(|| draft(&build, &project).map(|d| d.id.as_str()));
-            if let (Some(open), Some(id)) = (build.open.as_ref(), at_row)
-                && open.id == id
-            {
-                let (id, n) = (open.id.clone(), open.members.len());
-                build.browsing = None;
-                state
-                    .status
-                    .note(format!("`{id}` is already open — {n} member(s)"));
-                return;
-            }
-            // The draft is the last row of the page, and it is in hand by construction — the
-            // row the author just named. Committed rows come from the kit.
-            match row_composition(row)
-                .and_then(|i| project.compositions.compositions.get(i))
-                .cloned()
-                .or_else(|| draft(&build, &project).cloned())
-            {
-                // Refused by the same door `right` opens through, so the two keys cannot come to
-                // disagree about which rows this tab can open.
-                Some(comp) => {
-                    let id = comp.id.clone();
-                    let n = comp.members.len();
-                    match open_saved(&mut build, comp) {
-                        Ok(()) => state.status.note(format!(
-                            "`{id}` opened — {n} member(s), Cmd+S saves over it"
-                        )),
-                        Err(e) => state.status.problem(e),
-                    }
-                }
-                // The row is drawn from this same source this indexes, so this is unreachable
-                // rather than unlikely — said out loud because the alternative is an `unwrap`.
-                None => state
-                    .status
-                    .problem(format!("no tile at row {row}; the page has {page}")),
-            }
+            // **Through `tile_open`** (E-002, #129 slice 36): the row under the cursor, and on `+ New Tile` the name prompt.
+            page_through_operation(&project, &mut build, &mut state, "tile_open", serde_json::json!({}));
             return;
         }
     } else if pressed(Action::PageLeave) {
-        // **`left` walks back to the Tiles page** from the Meshes page. A note, not a problem,
-        // when nothing is authored yet: the answer is to make one, and the `New Tile +` row is
-        // where that starts.
-        let landing = landing_row(&project, &build);
-        ascend(&mut build, &mut state, page, landing);
+        // **`left` walks back to the Tiles page** from the Meshes page, through `tile_page_leave` (E-002, #129 slice 36): a note,
+        // not a problem, when nothing is authored yet.
+        page_through_operation(&project, &mut build, &mut state, "tile_page_leave", serde_json::json!({}));
         return;
     }
 
@@ -1691,40 +1588,9 @@ pub fn build_keys(
     // the one an author most needs to put down, and a close verb behind the guard that refuses it
     // would be the same trap one key further in.
     if pressed(Action::CloseTile) {
-        // Bound rather than matched in place, so the borrow of `build` ends before the writes.
-        let held = build.open.as_ref().map(|c| (c.id.clone(), c.members.len()));
-        match held {
-            Some((id, n)) => {
-                build.open = None;
-                build.focus = 0;
-                build.placing = false;
-                // **Back to the page**, which is where an author who has finished with a tile is
-                // standing. Leaving the Meshes page up over no tile is T1's dead state, and this
-                // verb exists to leave it rather than to arrive in it.
-                //
-                // **The cursor stays where it was, clamped to what is left.** Closing a *draft* —
-                // a tile named this session and never saved — takes its row off the page with it
-                // (`page_len` counts it), so a cursor on the last row would be left pointing past
-                // the end. Clamped to the committed count for that reason rather than reset to
-                // row 0, which would throw away a walk the author had just done.
-                // `kit` counts committed compositions; the page is that plus the draft plus the
-                // `+ New Tile` row at index 0, so the last valid row is `kit` and not `kit - 1`.
-                build.browsing = Some(build.browsing.unwrap_or(NEW_TILE_ROW).min(kit));
-                // **A closed tile is a document boundary**, so the undo stack goes with it:
-                // `tile_history` clears on `opened` changing, and an undo that reached across a
-                // close would put back a tile the author had deliberately put down — under a name
-                // `Cmd+S` would then save it over. See [`Build::opened`], which makes the same
-                // argument about opening a different one.
-                build.opened = build.opened.wrapping_add(1);
-                state.status.note(format!(
-                    "`{id}` closed — {n} member(s) in it, {} on its row opens it again",
-                    crate::keys::chord(Action::TileOpen)
-                ));
-            }
-            None => state
-                .status
-                .note("nothing open to close — the kit's tiles are on this page".to_owned()),
-        }
+        // **Through `tile_close`** (E-002, #129 slice 36), the operation an agent calls: back to the page with the cursor clamped
+        // to what is left, and a closed tile is a document boundary (`Build::opened`), so the undo stack goes with it.
+        page_through_operation(&project, &mut build, &mut state, "tile_close", serde_json::json!({}));
         return;
     }
 
@@ -1798,8 +1664,7 @@ pub fn build_keys(
                 ));
             }
             (false, _) => {
-                let landing = landing_row(&project, &build);
-                ascend(&mut build, &mut state, page, landing)
+                page_through_operation(&project, &mut build, &mut state, "tile_page_leave", serde_json::json!({}));
             }
         }
         return;
@@ -1812,13 +1677,8 @@ pub fn build_keys(
     // not by this press. Reachable with no tile in hand: the page is where the author decides
     // between reusing one and making a new one.
     if pressed(Action::BuildNew) {
-        build.naming = Some(NamePrompt {
-            raw: String::new(),
-            then: NameThen::Open,
-        });
-        state
-            .status
-            .note("name the tile — Enter opens it, Esc leaves things as they are".to_owned());
+        // **Through `tile_new`** (E-002, #129 slice 36): with no name it raises the prompt, and `Enter` in the prompt names it.
+        page_through_operation(&project, &mut build, &mut state, "tile_new", serde_json::json!({}));
         return;
     }
 
@@ -2186,24 +2046,11 @@ pub fn naming_keys(
                 let Some(prompt) = build.naming.clone() else {
                     return;
                 };
-                let name = bevy_grimoire_core::naming::to_snake_case(&prompt.raw);
-                if name.is_empty() {
-                    state
-                        .status
-                        .problem("a tile needs a name — type one, or Esc to leave it".to_owned());
-                    return;
+                // **Through `tile_new`** (E-002, #129 slice 36), the operation an agent calls with the name: an empty name and a name
+                // the kit has are refused by it, and the prompt stays up for the person to fix.
+                if page_through_operation(&project, &mut build, &mut state, "tile_new", serde_json::json!({ "name": prompt.raw })) {
+                    build.naming = None;
                 }
-                let id = format!("{}/{}", project.namespace, name);
-                if project.compositions.compositions.iter().any(|c| c.id == id) {
-                    // Refused by name rather than silently replacing somebody's tile.
-                    state
-                        .status
-                        .problem(format!("`{id}` is already in the kit — pick another name"));
-                    return;
-                }
-                build.naming = None;
-                                open_named(&mut build, &project, &id);
-                state.status.note(format!("building `{id}`"));
                 return;
             }
             bevy::input::keyboard::Key::Escape => {
@@ -2230,18 +2077,6 @@ pub fn naming_keys(
     }
 }
 
-/// **Open a blank tile under the name the author just typed.**
-fn open_named(build: &mut Build, project: &crate::project::Project, id: &str) {
-    let comp = blank(id, project.lattice.cell_height);
-    build.depth = DEFAULT_DEPTH;
-    build.open = Some(comp);
-    build.focus = 0;
-    // A freshly named tile lands on the Meshes page, exactly like a reopened one — the naming
-    // prompt was raised from the Tiles page, and the point of naming is to start filling it.
-    build.placing = false;
-    build.browsing = None;
-    build.opened = build.opened.wrapping_add(1);
-}
 
 /// **The tile in hand that is not yet in the kit** — the draft.
 ///
@@ -2317,22 +2152,49 @@ pub fn open_saved(build: &mut Build, comp: Composition) -> Result<(), String> {
     if !has_a_box(&comp) {
         return Err(claims_no_tile(&comp.id));
     }
-    build.depth = DEFAULT_DEPTH;
-    build.open = Some(comp);
-    build.focus = 0;
-    // **Reopening a tile IS holding it**, and the first version of this said the opposite: "the
-    // arrows should walk, not move, until something is picked up". There is nothing to pick up in a
-    // reopened tile -- the members are already in it -- so that landed the author in `Idle` with a
-    // tile on screen they could not touch, and `,`/`.` bound at `Holding` did nothing at all. They
-    // reported it within a minute of the verb existing.
-    //
-    // The third time this tab has keyed the stance on how you ARRIVED rather than on what there is
-    // to do; `docs/tiles_tab_contract.md` carries the other two. `focused` still decides, so a tile
-    // reopened with no members is `Idle`, which is right -- there is genuinely nothing to move.
-    build.placing = true;
-    build.browsing = None;
-    build.opened = build.opened.wrapping_add(1);
+    build.begin(comp, true);
     Ok(())
+}
+
+impl Build {
+    /// **Begin a different tile** (E-002, #129 slice 36): the one writer of `open`, which `open_saved` and [`Build::take_page`] share.
+    /// The ladder is at its default depth, the focus is on the first member and the Meshes page is up. `placing` is whether the arrows
+    /// steer the tile: a reopened tile IS held (there is nothing to pick up in it, and `,`/`.` bound at `Holding` would do nothing),
+    /// a freshly named blank one is not. A different document, so `opened` moves and the tile's history starts afresh.
+    fn begin(&mut self, tile: Composition, placing: bool) {
+        self.depth = DEFAULT_DEPTH;
+        self.open = Some(tile);
+        self.focus = 0;
+        self.placing = placing;
+        self.browsing = None;
+        self.naming = None;
+        self.opened = self.opened.wrapping_add(1);
+    }
+
+    /// **Take what a Tiles-page operation answered**: the tile in hand opened or put down, the page the tab shows and the name
+    /// prompt. The key and an agent's call both come through here; an answer that made nothing is left alone.
+    pub(crate) fn take_page(&mut self, answer: &crate::ops_view::PageAnswer) {
+        use crate::ops_view::TileAnswer;
+        if !answer.made {
+            return;
+        }
+        match &answer.tile {
+            TileAnswer::Keep => {}
+            TileAnswer::Open { tile, placing } => self.begin(tile.clone(), *placing),
+            TileAnswer::Close => {
+                self.open = None;
+                self.focus = 0;
+                self.placing = false;
+                self.opened = self.opened.wrapping_add(1);
+            }
+        }
+        if self.browsing != answer.browsing {
+            self.browsing = answer.browsing;
+        }
+        if answer.name && self.naming.is_none() {
+            self.naming = Some(NamePrompt { raw: String::new(), then: NameThen::Open });
+        }
+    }
 }
 
 /// One member of the tile as it currently stands on the stage.

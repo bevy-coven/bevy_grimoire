@@ -8556,17 +8556,18 @@ fn on_new_tile_click(
     click: On<PointerClick>,
     rows: Query<&NewTileRow>,
     build: Option<ResMut<crate::build::Build>>,
+    project: Option<Res<Project>>,
+    state: Option<ResMut<ImportState>>,
 ) {
     if rows.get(click.entity).is_err() {
         return;
     }
-    let Some(mut build) = build else {
+    let (Some(mut build), Some(project), Some(mut state)) = (build, project, state) else {
         return;
     };
-    build.naming = Some(crate::build::NamePrompt {
-        raw: String::new(),
-        then: crate::build::NameThen::Open,
-    });
+    // **Through `tile_new`** (E-002, #129 slice 36), the operation `N` and an agent's call dispatch: with no name it raises the
+    // prompt, so the pointer and the key ask the same question.
+    crate::build::page_through_operation(&project, &mut build, &mut state, "tile_new", serde_json::json!({}));
 }
 
 /// **A trailing number, in a column of its own.**

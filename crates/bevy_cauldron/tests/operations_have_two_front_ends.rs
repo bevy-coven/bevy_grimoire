@@ -247,10 +247,6 @@ const UNMIGRATED: &[Action] = &[
     // 87, re-pinned in the same commit rather than left to fail.
     Action::LookAtAgentChange,
     Action::Cancel,
-    Action::PageEnter,
-    Action::PageLeave,
-    Action::TileOpen,
-    Action::CloseTile,
     Action::PrevCandidate,
     Action::NextCandidate,
     Action::TypeId,
@@ -259,7 +255,6 @@ const UNMIGRATED: &[Action] = &[
     Action::RedoTile,
     Action::TileListPrev,
     Action::TileListNext,
-    Action::BuildNew,
     Action::FocusCandidates,
     Action::CopyInfo,
     Action::FocusLibrary,
@@ -311,7 +306,8 @@ const UNMIGRATED: &[Action] = &[
 // 31 -> 30: `Rescan` -> `kit_rescan` (E-002, #129 slice 33): `R` on the Meshes tab reads the pack's directory again through the operation an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `Rescan` from the `World` set for the same reason; nothing is skipped.
 // 30 -> 27: `SuggestLabels`, `SuggestAll` and `DiscardAllSuggestions` -> `labels_suggest`, `labels_walk` and `labels_abandon` (E-002, #129 slice 34): `L` photographs the focused piece, `Shift+L` walks, holds or resumes the batch and `Shift+Y` drops everything the labeller holds, through the operations an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the three from the `World` set for the same reason; nothing is skipped.
 // 27 -> 25: `UndoBench` and `RedoBench` -> `rig_history_step` (E-002, #129 slice 35): `Cmd+Z` and `Cmd+Shift+Z` on the Anim tab step the bench's record of `rigs.yaml` back and forward through the operation an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the two from the `World` set for the same reason; nothing is skipped.
-const UNMIGRATED_MAX: usize = 25;
+// 25 -> 20: `PageEnter`, `PageLeave`, `TileOpen`, `CloseTile` and `BuildNew` -> `tile_page_enter`, `tile_page_leave`, `tile_open`, `tile_close` and `tile_new` (E-002, #129 slice 36): `right` opens the tile under the Tiles page's cursor and drills to the Meshes page, `left` comes back, `Enter` opens a tile or raises the name prompt, `C` puts the tile in hand down and `N` names a new one, through the operations an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the five from the `Camera` set for the same reason; nothing is skipped.
+const UNMIGRATED_MAX: usize = 20;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///
@@ -662,7 +658,7 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     assert_eq!(
         camera,
         [
-            "FrameView", "LookAtAgentChange", "PageEnter", "PageLeave", "TileOpen", "CloseTile", "BuildNew",
+            "FrameView", "LookAtAgentChange",
         ],
         "the `Camera` set changed. A verb belongs here when a BRP method already moves the camera \
          (`grimoire/frame_view`) or when a front end reads it every frame; neither can be a `Ctx` \

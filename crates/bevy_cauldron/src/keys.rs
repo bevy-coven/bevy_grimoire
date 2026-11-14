@@ -1101,22 +1101,23 @@ impl Action {
             // land through their own undoable write); migrated to `labels_suggest`, `labels_walk` and `labels_abandon`.
             | Action::SuggestLabels
             | Action::SuggestAll
-            | Action::DiscardAllSuggestions => Change::View,
+            | Action::DiscardAllSuggestions
+            // **The Tiles tab's page keys** (E-002, #129 slice 36): which page is up, the tile in hand opened or put down and the name
+            // prompt, session state until `Cmd+S` saves the tile. They were classified `Camera` on a note that they were "read with
+            // `pressed`, every frame": the `pressed` in `build::build_keys` is `just_pressed`, so each is a one-shot; migrated to
+            // `tile_page_enter`, `tile_page_leave`, `tile_open`, `tile_close` and `tile_new`.
+            | Action::BuildNew
+            | Action::CloseTile
+            | Action::PageEnter
+            | Action::PageLeave
+            | Action::TileOpen => Change::View,
 
             // **Held, not pressed.** The effect is the hold: things fade, a pick is live, the overlay is
             // up. An operation whose effect reverses when a key is released is not a value an agent can
             // set once, so these stay keys. `Shortcuts` is the clearest: four systems read `pressed`.
             Action::FrameView
             | Action::LookAtAgentChange
-            | Action::ToggleGhost
-            // **Read with `pressed`, every frame.** A key held down is not a one-shot `Outcome`:
-            // `CloseTile`, `PageEnter` and `PageLeave` walk the Tiles tab's pages, and `BuildNew` raises a name prompt.
-            // Measured by scanning every handler for `pressed` vs `just_pressed`.
-            | Action::BuildNew
-            | Action::CloseTile
-            | Action::PageEnter
-            | Action::PageLeave
-            | Action::TileOpen => Change::Camera,
+            | Action::ToggleGhost => Change::Camera,
 
             Action::Shortcuts => Change::Held,
 
@@ -1225,6 +1226,13 @@ impl Action {
             // **The rig bench's history** (E-002, #129 slice 35): `Cmd+Z` and `Cmd+Shift+Z` on the Anim tab step the bench's record
             // of `rigs.yaml` back and forward through the operation an agent calls.
             Action::UndoBench | Action::RedoBench => Some("rig_history_step"),
+            // **The Tiles tab's page keys** (E-002, #129 slice 36): `right`, `left`, `Enter`, `C` and `N` move between the pages, open
+            // and close the tile in hand and name a new one, through the operations an agent calls.
+            Action::PageEnter => Some("tile_page_enter"),
+            Action::PageLeave => Some("tile_page_leave"),
+            Action::TileOpen => Some("tile_open"),
+            Action::CloseTile => Some("tile_close"),
+            Action::BuildNew => Some("tile_new"),
             // **The tool keys** (E-002, #129): `B`, `Shift+B` and the run chord arm a tool through `tool_arm`.
             // **`Remove` and `NoteTool` arm a tool, so they name the arming operation** (E-002,
             // #129). They named `placement_remove` and `note_add`: a write neither key makes — its

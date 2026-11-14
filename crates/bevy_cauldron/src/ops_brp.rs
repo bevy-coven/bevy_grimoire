@@ -981,6 +981,13 @@ impl Gates<'_, '_> {
         {
             build.set_hand(&hand);
         }
+        // **A Tiles-page operation's answer** (E-002, #129 slice 36): the page, the tile in hand opened or put down and the name
+        // prompt, written by the one body a key uses. Only an answer that was made touches the `Build`.
+        if view.page.made
+            && let Some(build) = self.build.as_deref_mut()
+        {
+            build.take_page(&view.page);
+        }
         // **The Map camera** (E-002, #129 slice 31), written only when it moved: the focus and the yaw it is heading for. The
         // eased yaw and the zoom are the camera's own, and a write through a `ResMut` marks the rig changed.
         if self.rig.as_deref().is_some_and(|r| !r.is_at(&view.camera))

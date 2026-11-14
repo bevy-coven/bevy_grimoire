@@ -81,6 +81,14 @@ const PINNED_NOWHERE: &[&str] = &[
     // labeller's batch: the status band and the Meshes tab's tab badge a person is looking at, like the stage's controls above.
     "labels_walk",
     "labels_abandon",
+    // Assumed owner exception (2026-11-13): the list grows by the five operations #129 slice 36 registers, which move the Tiles tab
+    // between its pages, open and close the tile in hand and name a new one: a draft in the tab's own state until `Cmd+S` saves
+    // it, which a person's own view holds, like the tile in hand's operations above.
+    "tile_page_enter",
+    "tile_page_leave",
+    "tile_open",
+    "tile_close",
+    "tile_new",
     // Assumed owner exception (2026-11-13): the list grows by the operation #129 slice 27 registers, the lattice grid's cursor,
     // which a person's own view holds, like the picker's above.
     "lattice_cursor_step",

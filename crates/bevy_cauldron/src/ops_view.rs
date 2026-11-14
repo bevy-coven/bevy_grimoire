@@ -133,6 +133,51 @@ pub struct View {
     /// nothing the project keeps. Not serialised while it is where a session opens.
     #[serde(default, skip_serializing_if = "LabelsCursor::is_default")]
     pub labels: LabelsCursor,
+    /// **The answer of a Tiles-page operation** (E-002, #129 slice 36): which page the Tiles tab shows after it, what became of the
+    /// tile in hand and whether the name prompt is raised. A request the front end carries out; not serialised while it is
+    /// where a session opens (no answer).
+    #[serde(default, skip_serializing_if = "PageAnswer::is_default")]
+    pub page: PageAnswer,
+}
+
+/// **What a Tiles-page operation answers** (E-002, #129 slice 36): `tile_page_enter`, `tile_page_leave`, `tile_open`, `tile_close` and
+/// `tile_new` read where the page is (`View::tile_page`) and the tile in hand (`View::tile_hand`) and answer with this. The draft is
+/// session state until `Cmd+S` saves it, so none of it is written to `compositions.yaml`; the front end carries it out in
+/// `Build::take_page`, one body for a key and an agent's call.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PageAnswer {
+    /// Whether an operation answered at all.
+    #[serde(default)]
+    pub made: bool,
+    /// Which page the tab shows after it: `Some(row)` is the Tiles page with the cursor on `row`, `None` the Meshes page.
+    #[serde(default)]
+    pub browsing: Option<usize>,
+    /// What became of the tile in hand.
+    #[serde(default)]
+    pub tile: TileAnswer,
+    /// Whether the prompt for a new tile's name is raised.
+    #[serde(default)]
+    pub name: bool,
+}
+
+impl PageAnswer {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// **What became of the tile in hand** (E-002, #129 slice 36).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TileAnswer {
+    /// The tile in hand stays as it is.
+    #[default]
+    Keep,
+    /// Open this tile, with the arrows steering it (`placing`) or walking the library list. A different document: its history starts afresh.
+    Open { tile: bevy_grimoire_core::composition::Composition, placing: bool },
+    /// Put the tile in hand down.
+    Close,
 }
 
 /// **The labeller's state and request, as a value an operation reads and answers** (E-002, #129 slice 34).
@@ -673,6 +718,8 @@ mod tests {
             rescan: false,
             // Owner exception (2026-11-13): the literal names the field #129 slice 34 adds (its default); the round trip is unchanged.
             labels: LabelsCursor::default(),
+            // Owner exception (2026-11-13): the literal names the field #129 slice 36 adds (its default); the round trip is unchanged.
+            page: PageAnswer::default(),
         };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);
