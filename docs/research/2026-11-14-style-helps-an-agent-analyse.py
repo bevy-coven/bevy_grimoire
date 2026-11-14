@@ -3,11 +3,12 @@
 
 usage:  analyse.py <without run>[,<run>...] <with run>[,<run>...]     two or more run names per arm are combined (a round-by-round run, or a repeated unfit arm)
         analyse.py --selftest                                          the script on synthetic data, with known answers
-        analyse.py --routes <run>[,<run>...]                           each trial's route and whether it cited followed lines (the probe: is the reading right on a real transcript?)
+        analyse.py --routes <run>[,<run>...]                           each trial's route, citations and attempts at the hidden tool (the probe: READ this and check it by hand against the transcript before the 30 runs)
+        analyse.py --assemble <name> <run>,<run>...                    one run directory <name> from one-trial rounds (trials renumbered, headers merged, refused if the rounds were run differently), for `report` and `compare`
 
 Python 3 standard library only.  It reads `trial.json` (the runner's record) and `transcript.jsonl` (the agent's own stream) under ~/.local/state/cauldron-bench/<run>/.
 """
-import itertools, json, math, os, random, re, sys, tempfile
+import itertools, json, math, os, random, re, shutil, sys, tempfile
 from collections import Counter
 from fractions import Fraction
 from pathlib import Path
@@ -54,7 +55,15 @@ def events(transcript):
             args = call.get("arguments") or {}
             if call.get("name") in GENERIC_TOOLS and not str(args.get("path", "")).startswith("xd://mcp__"):
                 out.append(("generic", call["name"], args))
+            elif call.get("name") in ("read", "write") and str(args.get("path", "")).startswith("xd://mcp__"):
+                out.append(("device", call["name"], args))   # an editor tool asked for by its device path, which the transcript shows before the tool's own answer
     return out
+
+
+def hidden_attempts(calls):
+    """(writes, reads) of the device path of `grimoire_style` itself (never `grimoire_style_propose`): an agent calling, or looking up, a tool; in the without-style arm that tool is absent."""
+    own = [(name, args) for kind, name, args in calls if kind == "device" and re.search(r"grimoire_style(?!_)", str(args.get("path", "")))]
+    return sum(n == "write" for n, _ in own), sum(n == "read" for n, _ in own)
 
 
 def route_of(calls):
@@ -86,6 +95,7 @@ def load(runs, state=None):
                     "route": route_of(calls), "followed": cited_followed(calls),
                     "style_before_edit": next((n == "grimoire_style" for k, n, _ in calls if k == "mcp" and n in ("grimoire_style", "grimoire_apply_operation")), False),
                     "wishes": t["wishes"], "offered": t["tools_offered"],
+                    "hidden_writes": hidden_attempts(calls)[0], "hidden_reads": hidden_attempts(calls)[1],
                 })
     return cells, errors
 
@@ -141,7 +151,8 @@ def analyse(without, with_, errors, rng=None):
     out["p_permutation"] = permutation_p(without, with_, tasks)
     runs = [r for t in tasks for r in with_[t]]
     out["routes"] = {k: sum(r["route"] == k for r in runs) for k in ROUTES}
-    out["tool_share"] = (out["routes"]["tool"] + out["routes"]["both"]) / len(runs)
+    out["tool_share"] = (out["routes"]["tool"] + out["routes"]["both"]) / len(runs)        # the runs that called the tool, whether or not they also read a page
+    out["tool_only_share"] = out["routes"]["tool"] / len(runs)                              # the runs that called the tool and opened no page: reported beside it
     out["tool_claim_allowed"] = out["verdict"] == "better" and out["tool_share"] >= TOOL_SHARE_MIN
     out["by_route"] = {}
     for k in ROUTES:   # D of the with-style runs that took one route against every without-style run, over the tasks that have both
@@ -154,6 +165,8 @@ def analyse(without, with_, errors, rng=None):
     out["followed"] = sum(r["followed"] for r in runs)
     out["wishes"] = [(t, w) for t in tasks for r in with_[t] for w in r["wishes"]]
     out["without_offered_style"] = sum("grimoire_style" in r["offered"] for t in tasks for r in without[t])
+    out["without_attempts"] = {"runs": sum(r.get("hidden_writes", 0) > 0 for t in tasks for r in without[t]), "writes": sum(r.get("hidden_writes", 0) for t in tasks for r in without[t]),
+                               "reads": sum(r.get("hidden_reads", 0) for t in tasks for r in without[t]), "of": sum(len(without[t]) for t in tasks)}
     out["per_task"] = {t: (mean([r["lines"] for r in without[t]]), mean([r["lines"] for r in with_[t]]), len(without[t]), len(with_[t])) for t in tasks}
     return out
 
@@ -170,16 +183,56 @@ def report(a):
     print(f"lines satisfied per task-triple (max {a['max_lines']}): without {a['m_without']:.2f}  with {a['m_with']:.2f}")
     print(f"PRIMARY  difference with - without: {a['d']:+.2f}  95% bootstrap interval [{a['lo']:+.2f}, {a['hi']:+.2f}]  ->  {a['verdict']}")
     print(f"second reading, exact permutation test (arm labels exchanged within a task), two-sided p = {a['p_permutation']:.4f}")
-    print("route of the with-style runs: " + ", ".join(f"{k} {v}" for k, v in a["routes"].items()) + f"  (share that called grimoire_style: {a['tool_share']:.0%}, needed {TOOL_SHARE_MIN:.0%})")
+    print("route of the with-style runs: " + ", ".join(f"{k} {v}" for k, v in a["routes"].items()) + f"  (called grimoire_style, with or without a page: {a['tool_share']:.0%}; the tool alone, no page: {a['tool_only_share']:.0%}; needed {TOOL_SHARE_MIN:.0%} of the first)")
     for k, r in a["by_route"].items():
         print(f"  D over the {r['n']} with-style runs by route `{k}` ({len(r['tasks'])} tasks): {r['d']:+.2f}  [{r['lo']:+.2f}, {r['hi']:+.2f}]  (descriptive, a thin cell)")
     print("CLAIM: " + ("`grimoire_style` changes what an agent builds: the tool share was met and D is better" if a["tool_claim_allowed"] else "the style, available to the agent, " + ("changed what it built" if a["verdict"] == "better" else "did not measurably change what it built") + "; nothing is claimed about the tool in particular"))
     print(f"with-style runs that called grimoire_style before their first edit: {a['style_before_edit']} of {sum(a['routes'].values())}")
     print(f"with-style runs whose own grimoire_present call cited followed lines: {a['followed']} of {sum(a['routes'].values())}")
     print(f"without-style runs offered grimoire_style (must be 0): {a['without_offered_style']}")
+    w = a["without_attempts"]
+    print(f"without-style runs that tried the hidden grimoire_style by its device path: {w['runs']} of {w['of']} ({w['writes']} writes, {w['reads']} reads)")
     print(f"wishes made by with-style runs: {len(a['wishes'])}")
     for task, w in a["wishes"]:
         print("  -", task, json.dumps(w))
+
+
+
+SAME_IN_EVERY_ROUND = ("commit", "guide_sha256", "agent", "agent_version", "model", "variant", "suite", "host")
+
+
+def assemble(dest, runs, state=None):
+    """One run directory `dest` from the one-trial rounds `runs`, for `cauldron-bench report` and `compare` (which read one run per arm).
+
+    The trials of each task are renumbered in round order and only `trial.json` and `transcript.jsonl` are kept. The merged `run.json` is the first round's with `label` = dest and
+    `trials` = the rounds per task; it is only made if every round was run alike (the editor commit, the guide, the agent and its version, the model, the arm, the suite and the host
+    are equal), because a header that said one commit over trials of two would be false. The date is the first round's."""
+    state = state or STATE
+    heads = [json.loads((state / r / "run.json").read_text()) for r in runs]
+    for key in SAME_IN_EVERY_ROUND:
+        values = sorted({json.dumps(h.get(key)) for h in heads})
+        if len(values) > 1:
+            raise SystemExit(f"the rounds were not run alike: `{key}` is {', '.join(values)}; rerun them, never assemble them")
+    out = state / dest
+    if out.exists():
+        shutil.rmtree(out)
+    counts = {}
+    for run in runs:
+        for task_dir in sorted(p for p in (state / run).iterdir() if p.is_dir()):
+            for trial in sorted(task_dir.glob("trial-*"), key=lambda p: int(p.name.split("-")[1])):
+                if not (trial / "trial.json").is_file():
+                    continue
+                n = counts[task_dir.name] = counts.get(task_dir.name, 0) + 1
+                target = out / task_dir.name / f"trial-{n}"
+                target.mkdir(parents=True)
+                record = json.loads((trial / "trial.json").read_text())
+                record["trial"] = n
+                (target / "trial.json").write_text(json.dumps(record, indent=2))
+                if (trial / "transcript.jsonl").is_file():
+                    shutil.copy(trial / "transcript.jsonl", target / "transcript.jsonl")
+    head = dict(heads[0], label=dest, trials=max(counts.values()))
+    (out / "run.json").write_text(json.dumps(head, indent=2))
+    return head, counts
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -195,11 +248,12 @@ def selftest():
     assert a["verdict"] == "better" and a["lo"] > 0, a
     assert a["routes"] == {"tool": 5, "file": 5, "both": 5, "neither": 0} and abs(a["tool_share"] - 10 / 15) < 1e-9 and not a["tool_claim_allowed"]   # 67% < 70%
     assert a["by_route"]["file"]["d"] == 8 and a["by_route"]["file"]["tasks"] == ["light-the-gate-at-night"]
-    # the exact permutation p-value: fully separated samples of 5 and 5 in three tasks give 2 / 252 per task, so 2 ** 3 / 252 ** 3 two-sided is 8 / 252 ** 3 at the extreme
+    # the exact permutation p-value: fully separated samples of 5 and 5 in a task give 1 assignment of 252 at each extreme, so in three tasks only the all-with and the all-without
+    # assignments reach |D| = 9, and the two-sided p is 2 / 252 ** 3
     sep_without = {t: [run(0)] * 5 for t in GUARDS}
     sep_with = {t: [run(3)] * 5 for t in GUARDS}
     p = analyse(sep_without, sep_with, 0)["p_permutation"]
-    assert abs(p - 2 / 252 ** 3) < 1e-12, p   # one assignment each way: all-equal runs make every relabelling the same value, see below
+    assert abs(p - 2 / 252 ** 3) < 1e-12, p
     # ties: when every run scores alike the interval is the point, the verdict is "better" only if D > 0, and a null difference is "no measurable change"
     flat = {t: [run(2)] * 5 for t in GUARDS}
     a = analyse(flat, flat, 0)
@@ -227,6 +281,32 @@ def selftest():
     assert route_of(events_from([gen("write", {"path": "xd://mcp__cauldron_grimoire_style", "content": "{}"})])) == "neither"   # the device path is counted as the MCP call, not as a file
     assert cited_followed(events_from([mcp("grimoire_present", {"title": "t", "followed": [{"path": "design/style.md", "line": 3}]})]))
     assert not cited_followed(events_from([mcp("grimoire_present", {"title": "t"}), mcp("grimoire_state", {"followed": [1]}), gen("read", {"path": "followed"})]))
+    # editor tools asked for by their device path (`write xd://mcp__<server>_grimoire_style`) are the agent trying a tool: in the without-style arm that tool is absent
+    assert hidden_attempts(events_from([gen("write", {"path": "xd://mcp__cauldron_grimoire_style", "content": "{}"})])) == (1, 0)
+    assert hidden_attempts(events_from([gen("read", {"path": "xd://mcp__cauldron_grimoire_style"}), gen("write", {"path": "xd://mcp__cauldron_grimoire_style_propose", "content": "{}"})])) == (0, 1)
+    assert hidden_attempts(events_from([mcp("grimoire_state", {})])) == (0, 0)
+    # the 70% rule counts the runs that only used the tool separately from the runs that used both, and reports both numbers
+    a = analyse(without, with_, 0)
+    assert abs(a["tool_only_share"] - 5 / 15) < 1e-9 and abs(a["tool_share"] - 10 / 15) < 1e-9
+    # assembling one-trial rounds into one run directory: the trials renumbered, the header merged, a round run differently refused
+    with tempfile.TemporaryDirectory() as d:
+        state = Path(d)
+        head = {"version": 1, "label": "x", "commit": "abc", "guide_sha256": "g", "agent": "omp", "agent_version": "1", "model": "m", "variant": "with-style", "suite": "s", "trials": 1, "host": "h", "date": "2026-11-14", "price": None}
+        for r in ("r1", "r2", "r3"):
+            for task in ("dress-the-market-area", "light-the-gate-at-night"):
+                (state / r / task / "trial-1").mkdir(parents=True)
+                (state / r / task / "trial-1" / "trial.json").write_text(json.dumps({"task": task, "trial": 1, "outcome": "pass"}))
+                (state / r / task / "trial-1" / "transcript.jsonl").write_text("{}")
+            (state / r / "run.json").write_text(json.dumps(dict(head, commit="abc" if r != "r3" else "other")))
+        merged, counts = assemble("all", ["r1", "r2"], state)
+        assert counts == {"dress-the-market-area": 2, "light-the-gate-at-night": 2} and merged["trials"] == 2 and merged["label"] == "all" and merged["commit"] == "abc"
+        assert [json.loads((state / "all" / "dress-the-market-area" / f"trial-{n}" / "trial.json").read_text())["trial"] for n in (1, 2)] == [1, 2]
+        assert json.loads((state / "all" / "run.json").read_text())["trials"] == 2
+        try:
+            assemble("bad", ["r1", "r3"], state)
+            raise AssertionError("rounds built at different commits were assembled")
+        except SystemExit as stop:
+            assert "commit" in str(stop)
     print("selftest passed")
 
 
@@ -244,7 +324,10 @@ if __name__ == "__main__":
         for run in sys.argv[2].split(","):
             for path in sorted((STATE / run).glob("*/trial-*/transcript.jsonl")):
                 calls = events(path)
-                print(f"{path.parent.relative_to(STATE)}: route {route_of(calls)}, followed {cited_followed(calls)}, {len(calls)} calls: " + ", ".join(f"{n}" for _, n, _ in calls[:40]))
+                print(f"{path.parent.relative_to(STATE)}: route {route_of(calls)}, followed {cited_followed(calls)}, hidden-tool attempts {hidden_attempts(calls)}, {len(calls)} calls: " + ", ".join(f"{k}:{n}" for k, n, _ in calls[:40]))
+    elif sys.argv[1:2] == ["--assemble"]:
+        head, counts = assemble(sys.argv[2], sys.argv[3].split(","))
+        print(f"assembled {sys.argv[2]}: {counts} trials per task, header trials = {head['trials']}, commit {head['commit']}, date {head['date']}")
     else:
         without, e0 = load(sys.argv[1])
         with_, e1 = load(sys.argv[2])
