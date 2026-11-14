@@ -380,6 +380,9 @@ fn open(mut asks: MessageReader<OpenSettings>, existing: Query<(), With<Settings
         });
 }
 
+/// A setting's control and what it shows: a switch is `Checked`, a slider has a value, a choice has an option.
+type ControlState = (Entity, &'static mut SettingControl, Option<&'static mut ChoiceValue>, Option<&'static SliderValue>, Has<Checked>);
+
 /// **Follow what the rows are built from**: a choice, a search, or either file.
 ///
 /// A search changes which settings are listed, so it builds the pages again. Anything else (a write from a
@@ -393,7 +396,7 @@ fn refresh(
     mut dialogs: Query<(Ref<SettingsDialog>, &mut Built)>,
     pages: Query<(Entity, &Rows)>,
     mut problem_line: Query<&mut Text, (With<ProblemLine>, Without<LineDefault>)>,
-    mut controls: Query<(Entity, &mut SettingControl, Option<&mut ChoiceValue>, Option<&SliderValue>, Has<Checked>)>,
+    mut controls: Query<ControlState>,
     mut lines: Query<(Entity, &mut SettingLine, &Children)>,
     mut defaults: Query<&mut Text, (With<LineDefault>, Without<ProblemLine>)>,
     marks: Query<(), With<LineMark>>,
