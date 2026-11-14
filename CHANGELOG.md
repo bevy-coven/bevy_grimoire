@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-13
 
+- **tile-history-operation** `bf4a71bc` Cmd+Z and Cmd+Shift+Z on the Tiles tab are one operation an agent calls too (tile_history_step) *No clip: an API behind existing keys, no new picture; proved by tile_pieces_are_operations*
 - **tile-nudge-flush-drop-operations** `948b6289` The tile in hand: the arrows, Shift and the arrows, Enter and Shift and Enter are operations an agent calls too (tile_member_nudge, tile_member_flush, tile_member_drop, tile_slot_drop) *No clip: an API behind existing keys, no new picture; proved by tile_pieces_are_operations*
 - **ops-review-26-28** `77c1fae8` The agent guide names every operation a slice added, and a refused lattice step or a scrub press on a frame of no time behaves (#129 review) *No clip: a docs and API fix behind existing keys; proved by every_operation_has_a_row_in_the_agent_guide, lattice_cursor_is_an_operation and stage_is_an_operation*
 - **tile-in-hand-operations** `9123e37e` The tile in hand: Space, the member keys, J, R and the remove keys are operations an agent calls too (tile_hand_arm, tile_member_focus, tile_grid_deepen, tile_member_turn, tile_member_remove, tile_clear) *No clip: an API behind existing keys, no new picture; proved by tile_in_hand_is_operations*
