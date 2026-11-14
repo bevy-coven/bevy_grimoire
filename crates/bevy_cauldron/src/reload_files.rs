@@ -142,8 +142,10 @@ fn walk(dir: &Path, rel: &str, base: Base, depth: usize, out: &mut Vec<Listed>) 
             Err(_) => false,
         };
         if is_dir {
-            if depth > 1 && (base == Base::Grimoire || root_enters(&name)) {
-                walk(&path, &file, base, depth - 1, out);
+            // A place's folders are entered by the shape `kind_of` classifies them by, not by a depth of the walk's own.
+            let in_a_place = base == Base::Root && reload::holds_place_files(&file);
+            if in_a_place || (depth > 1 && (base == Base::Grimoire || root_enters(&name))) {
+                walk(&path, &file, base, depth.saturating_sub(1), out);
             }
         } else if let Some(kind) = reload::kind_of(base, &file) {
             let modified_ms = entry.metadata().ok().and_then(|m| m.modified().ok()).map(ms_of);

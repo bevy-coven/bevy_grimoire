@@ -10,8 +10,9 @@
 //!
 //! **A picture stays where it is.** `add` with a path inside the project references it where it is; an absolute path to a
 //! file outside it (a drop) is copied into the place's `board/` first, and a different file already holding that name
-//! is refused rather than overwritten. **A restricted picture never ships**: one under `assets/` is refused, and a
-//! restricted one is never copied anywhere a project ships.
+//! is refused rather than overwritten. **Only a person's drop copies**: an agent's call (`Ctx::source` is not `Human`) naming a
+//! path outside the project is refused, naming the path, because it would let a prompt pull any readable file into a repository.
+//! **A restricted picture never ships**: one under `assets/` is refused, and a restricted one is never copied anywhere a project ships.
 //!
 //! Its inverse is the same operation sent a parameter only an undo may send (`put_back`: the board as it was).
 //! Undo does not delete a picture file that an `add` copied in: it is the person's file now.
@@ -23,7 +24,7 @@ use bevy_grimoire_core::board::{self, Board, Entry};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Source, Undo};
 
 /// **A board as it stood**, for an undo. `None` is "there was no board file", which an undo puts back by removing it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -63,7 +64,7 @@ pub struct Params {
     /// The place whose board it is: `design`, `design/levels/<map>`, `design/regions/<r>`, an area. The open map's level when left out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub place: Option<String>,
-    /// The picture: a project-relative path, or (for `add`) an absolute path to a file outside the project, which is copied in.
+    /// The picture: a project-relative path, or (for a person's drop, by `add`) an absolute path to a file outside the project, which is copied in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
     /// What to take from the picture, in a line (`add`, `caption`). Not what it shows.
@@ -93,7 +94,7 @@ impl Params {
             "properties": {
                 "action": {"type": "string", "enum": ["add", "remove", "caption", "move"], "description": "add a picture, remove one, say again what to take from one (caption), or reorder (move)."},
                 "place": {"type": "string", "description": "The place whose board: `design` (the game), `design/levels/<map>`, `design/regions/<region>`, or an area. Omit it for the level of the open map."},
-                "path": {"type": "string", "description": "The picture: its path inside the project (png, jpg, jpeg, webp or gif), referenced where it is. For add, an absolute path to a file outside the project is copied into the place's board/ folder."},
+                "path": {"type": "string", "description": "The picture: its path inside the project (png, jpg, jpeg, webp or gif), referenced where it is. An absolute path to a file outside the project is refused when an agent sends it: only a person's drop copies one into the place's board/ folder."},
                 "caption": {"type": "string", "description": "What to take from the picture, in a line (\"the fog's colour, not its density\"): not what it shows. Required for add and caption; empty is refused."},
                 "source": {"type": "string", "description": "add: where the picture came from, a URL."},
                 "creator": {"type": "string", "description": "add: who made it."},
@@ -196,17 +197,37 @@ struct Dropped {
 }
 
 /// **Where a dropped file goes in the project**, or `None` when `path` is a path in the project to be referenced where it is.
-fn drop_target(root: &Path, place: &str, path: &str) -> Result<Option<Dropped>, Refusal> {
+fn drop_target(root: &Path, place: &str, path: &str, source: Source) -> Result<Option<Dropped>, Refusal> {
     let given = Path::new(path);
     if !given.is_absolute() {
         return Ok(None);
     }
     let shown = given.display();
+    let outside = || {
+        Refusal::new(format!(
+            "{shown} is outside the project, and only a person's drop copies a file in from there: name a picture inside the project, or ask the person to drop it. Nothing was changed."
+        ))
+    };
+    // **Only a person's drop pulls a file in from outside the project** (#419): an agent that could would let a prompt copy any
+    // readable image under the user's home into a repository. **And it is refused before the disk is asked about the path**,
+    // so the refusal is the same sentence whether the file is there or not and an agent cannot probe the host for files.
+    // A `..` is outside by this check (it could climb out); a link inside the project that leads out is refused below with the same words.
+    let human = source == Source::Human;
+    if !human {
+        let climbs = given.components().any(|c| matches!(c, std::path::Component::ParentDir));
+        let under_root = given.starts_with(root) || root.canonicalize().is_ok_and(|canon_root| given.starts_with(canon_root));
+        if climbs || !under_root {
+            return Err(outside());
+        }
+    }
     let canon = given.canonicalize().map_err(|e| Refusal::new(format!("{shown} cannot be read ({e}), so it is not on the board. Nothing was changed.")))?;
     let canon_root = root.canonicalize().map_err(|e| Refusal::new(format!("the project folder {} cannot be read ({e}), so {shown} is not on the board. Nothing was changed.", root.display())))?;
     let relative = |p: &Path| p.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect::<Vec<_>>().join("/");
     if let Ok(inside) = canon.strip_prefix(&canon_root) {
         return Ok(Some(Dropped { rel: relative(inside), from: canon, copy: false }));
+    }
+    if !human {
+        return Err(outside());
     }
     let name = canon.file_name().ok_or_else(|| Refusal::new(format!("{shown} has no file name, so it is not on the board. Nothing was changed.")))?;
     let into = Path::new(place).join(board::BOARD_DIR).join(name);
@@ -272,7 +293,7 @@ fn apply(ctx: &mut Ctx, params: &serde_json::Value, write: bool) -> Result<Optio
             Action::Add => {
                 let given = need(&p.path, "path", action)?;
                 let caption = need(&p.caption, "caption", action)?;
-                let rel = match drop_target(&root, &place, given)? {
+                let rel = match drop_target(&root, &place, given, ctx.source)? {
                     Some(dropped) => {
                         // The destination is checked as a board path before anything is copied.
                         board::normalise(&dropped.rel).map_err(Refusal::new)?;
@@ -359,7 +380,7 @@ impl Operation for BoardSet {
         state_of_project(ctx)
     }
     fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
-        let mut scratch = Ctx { open: ctx.open.clone(), project: ctx.project.clone(), root: ctx.root.clone(), ..Ctx::default() };
+        let mut scratch = Ctx { open: ctx.open.clone(), project: ctx.project.clone(), root: ctx.root.clone(), source: ctx.source, ..Ctx::default() };
         apply(&mut scratch, params, false)?;
         Ok(params.clone())
     }
