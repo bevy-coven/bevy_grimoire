@@ -1300,12 +1300,25 @@ pub fn wait_within(
     Ok(())
 }
 
-/// **Kill an agent's process group, then the agent itself, and wait for it.**
-fn stop_group(child: &mut Child) {
-    let group = format!("-{}", child.id());
-    let _ = Command::new("kill").args(["-KILL", "--", &group]).status();
-    let _ = child.kill();
+/// **Kill an agent's process group while its leader still runs, then the agent itself, and wait for it.**
+///
+/// Answers whether the group was signalled. **A leader that was already reaped is not group-killed** (#432, D4):
+/// `kill -KILL -- -<pid>` on a number nothing holds prints `No such process` for every normal trial, and once the
+/// number is reused it can hit an unrelated group. A process still running keeps its group's number, so that is the
+/// only time the number is safe to signal.
+pub fn stop_group(child: &mut Child) -> bool {
+    let running = matches!(child.try_wait(), Ok(None));
+    if running {
+        let group = format!("-{}", child.id());
+        let _ = Command::new("kill")
+            .args(["-KILL", "--", &group])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        let _ = child.kill();
+    }
     let _ = child.wait();
+    running
 }
 
 /// **Refuse a model this host does not list**, before any trial runs.
