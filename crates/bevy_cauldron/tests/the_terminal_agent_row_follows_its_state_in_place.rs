@@ -12,12 +12,13 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use bevy::prelude::*;
-use bevy::ui::{Checked, ComputedNode};
+use bevy::input_focus::InputFocus;
+use bevy::ui::{Checked, ComputedNode, ScrollPosition};
 use bevy::ui_widgets::ValueChange;
 use bevy_cauldron::settings::{MachineAgent, TerminalAgent, UserSettingsFile};
 use bevy_cauldron::settings_screen::OpenSettings;
 use bevy_gooey::testing::{click, find_by_label};
-use bevy_gooey::{ListView, TextHint};
+use bevy_gooey::{ChoiceValue, ListView, TextHint};
 
 use crate::fixtures;
 
@@ -143,12 +144,12 @@ fn the_custom_command_button_opens_the_field_in_the_row() {
     assert!(find_by_label(&mut r.app, "Custom command…").is_err(), "in place of the button that asked for it");
 }
 
-/// The rows of the list on screen, in order.
-fn rows(app: &mut App) -> Vec<Entity> {
+/// The settings list on screen.
+fn shown_list(app: &mut App) -> Entity {
     let world = app.world_mut();
     let mut lists = world.query_filtered::<(Entity, &ComputedNode, &InheritedVisibility), With<ListView>>();
     let dialog = world.query_filtered::<Entity, With<bevy_cauldron::settings_screen::SettingsDialog>>().single(world).expect("the settings dialog is open");
-    let list = lists
+    lists
         .iter(world)
         .filter(|(list, node, shown)| {
             let mut at = *list;
@@ -162,9 +163,90 @@ fn rows(app: &mut App) -> Vec<Entity> {
         })
         .map(|(e, ..)| e)
         .next()
-        .expect("a settings list is on screen");
-    let column = world.get::<Children>(list).and_then(|c| c.first().copied()).expect("the list has its column");
+        .expect("a settings list is on screen")
+}
+
+/// The rows of the list on screen, in order.
+fn rows(app: &mut App) -> Vec<Entity> {
+    let list = shown_list(app);
+    rows_of(app, list)
+}
+
+fn rows_of(app: &mut App, list: Entity) -> Vec<Entity> {
+    let world = app.world_mut();
+    let column = world.get::<Children>(list).and_then(|c| c.first().copied()).expect("the list has its column: it was despawned, so the list was built again");
     world.get::<Children>(column).map(|c| c.iter().collect()).unwrap_or_default()
+}
+
+/// Where the list is drawn scrolled to, in logical px, and where it says it is scrolled to.
+fn scroll_of(app: &mut App, list: Entity) -> (f32, f32) {
+    let world = app.world();
+    let drawn = world.get::<ComputedNode>(list).map_or(0.0, |n| n.scroll_position.y * n.inverse_scale_factor());
+    (drawn, world.get::<ScrollPosition>(list).map_or(0.0, |s| s.y))
+}
+
+/// The Terminal agent row's own choice: the one control under `row` that holds a choice's value.
+fn choice_under(app: &mut App, row: Entity) -> Entity {
+    let world = app.world();
+    world.get::<Children>(row).and_then(|kids| kids.iter().find(|kid| world.get::<ChoiceValue>(*kid).is_some())).expect("the agent row has its choice")
+}
+
+/// **Stepping through the agent row's own states never moves the list, its other rows or the focus** (#429's promise, kept by #425's
+/// row): the list is scrolled to its end, where the agent row is, and a person asks for a command, types it and presses Enter.
+#[test]
+fn the_agent_row_follows_its_state_without_moving_the_list_or_losing_the_focus() {
+    let mut r = rig("seam_scroll", TerminalAgent::OhMyPi);
+    let list = shown_list(&mut r.app);
+    r.app.world_mut().get_mut::<ScrollPosition>(list).expect("a list scrolls").y = 100_000.0;
+    for _ in 0..10 {
+        r.app.update();
+    }
+    let before = rows_of(&mut r.app, list);
+    let (drawn, stored) = scroll_of(&mut r.app, list);
+    assert!(drawn > 0.0, "the list is scrolled to its end ({drawn} px), so a rebuild would show");
+    let agent_row = *before.last().expect("the Terminal agent row is the last of the list");
+    let choice = choice_under(&mut r.app, agent_row);
+
+    // Asking for a command: the button goes and the field comes, in the row that was there.
+    let ask = find_by_label(&mut r.app, "Custom command…").unwrap_or_else(|e| panic!("the row offers a way to set a command: {e}"));
+    r.app.world_mut().commands().trigger(bevy_gooey::Activate { entity: ask });
+    for _ in 0..6 {
+        r.app.update();
+    }
+    let field = command_field(&mut r.app).expect("the row opened a field for the command");
+    assert_eq!(rows_of(&mut r.app, list), before, "asking for a command built the list again");
+    let (drawn_now, stored_now) = scroll_of(&mut r.app, list);
+    assert!(drawn_now > 0.0 && stored_now == stored, "asking for a command moved the list: drawn {drawn} -> {drawn_now}, stored {stored} -> {stored_now}");
+    // The widget hands the focus on to the editor inside it, so the focus is the field or something under it.
+    let held = r.app.world().resource::<InputFocus>().get().expect("something has the focus");
+    let under_the_field = held == field || r.app.world().get::<ChildOf>(held).is_some_and(|_| {
+        let mut at = held;
+        while let Some(parent) = r.app.world().get::<ChildOf>(at) {
+            at = parent.parent();
+            if at == field {
+                return true;
+            }
+        }
+        false
+    });
+    assert!(under_the_field, "the command field has the keyboard focus: it is {held:?}, the field {field:?}");
+    assert_eq!(choice_under(&mut r.app, agent_row), choice, "the choice is the control that was there: no command is set, so its options did not change");
+
+    // Typing is not an end; Enter is.
+    r.app.world_mut().commands().trigger(ValueChange { source: field, value: "claude".to_owned(), is_final: false });
+    r.app.world_mut().commands().trigger(ValueChange { source: field, value: "claude".to_owned(), is_final: true });
+    for _ in 0..8 {
+        r.app.update();
+    }
+    assert!(std::fs::read_to_string(&r.user).unwrap_or_default().contains("claude"), "Enter saved the command");
+    assert_eq!(rows_of(&mut r.app, list), before, "saving the command built the list again");
+    let (drawn_end, stored_end) = scroll_of(&mut r.app, list);
+    assert!(drawn_end > 0.0 && stored_end == stored, "saving the command moved the list: drawn {drawn} -> {drawn_end}, stored {stored} -> {stored_end}");
+    let choice_now = choice_under(&mut r.app, agent_row);
+    assert_eq!(r.app.world().resource::<InputFocus>().get(), Some(choice_now), "the focus went to the row's control, not to the field that went");
+    assert!(r.app.world().get_entity(choice_now).is_ok(), "and it exists");
+    assert_eq!(custom_options(&mut r.app), 1, "Custom command is a choice now that a command is set");
+    assert!(command_field(&mut r.app).is_none(), "and the field is gone");
 }
 
 /// **A setting that is not the agent's still changes in place**, after the agent's row was built again.

@@ -31,7 +31,6 @@ use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::ui::{Checked, ComputedNode, ScrollPosition};
 use bevy::ecs::relationship::RelatedSpawner;
 use bevy::ecs::system::SystemParam;
-use bevy::input_focus::AutoFocus;
 use bevy::prelude::*;
 use bevy::picking::events::PointerRelease;
 use bevy::ui_widgets::{SliderPrecision, SliderStep, SliderValue};
@@ -84,9 +83,6 @@ pub struct SettingsDialog {
 #[derive(Component, Default)]
 struct Built {
     snapshot: Option<Snapshot>,
-    /// What the Terminal agent row was built with (#425): its problem line, its command and the choices it offers are built only
-    /// with the row, so a change to any of them builds the pages again, the one thing besides a search that does.
-    agent: Option<AgentRow>,
     /// The search the pages were built for: the settings listed follow from it alone.
     query: Option<String>,
 }
@@ -303,7 +299,7 @@ pub struct SettingsScreenPlugin;
 
 impl Plugin for SettingsScreenPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<OpenSettings>().add_systems(Update, (chord, open, refresh, clamp_the_scroll).chain()).add_systems(
+        app.add_message::<OpenSettings>().add_systems(Update, (chord, open, refresh, land_the_focus, clamp_the_scroll).chain()).add_systems(
             Update,
             // After gooey has written its own readout (the number), so the percentage is the last word.
             say_the_percentage.after(bevy_gooey::GooeySystems::Style),
@@ -477,9 +473,11 @@ type ControlState = (Entity, &'static mut SettingControl, Option<&'static mut Ch
 
 /// **Follow what the rows are built from**: a choice, a search, or either file.
 ///
-/// A search changes which settings are listed, so it builds the pages again. So does a change to what the **Terminal agent row**
-/// holds beyond its choice (#425): its problem line, its `Use Oh My Pi` button, its command and the field `command_editing` opens,
-/// and the choices it offers are spawned with the row and nowhere else, so [`Built::agent`] says what they were built from. Anything
+/// A search changes which settings are listed, so it builds the pages again. The **Terminal agent row** (#425) holds more than its
+/// choice: a problem line, a `Use Oh My Pi` button, its command and the field `command_editing` opens, in an [`AgentSlot`] under the
+/// control, and the choices it offers. When what they were built from changes, the slot's children are replaced where they stand,
+/// and the control is replaced only if the choices it offers changed: the row, its siblings, the list's scroll offset and the focus
+/// stay. Anything
 /// else (a write from a control, a Reset, an edit made by hand, the Applies-to choice) changes only what a row shows: the
 /// control's value and the line's *Modified* mark, Reset and project note are updated where they stand, so
 /// the list keeps its scroll offset, its focus and its layout (#429).
@@ -498,6 +496,8 @@ fn refresh(
     mut since: Local<f32>,
     mut focus: Option<ResMut<InputFocus>>,
     parents: Query<&ChildOf>,
+    mut slots: Query<(Entity, &mut AgentSlot, &ChildOf)>,
+    children: Query<&Children>,
     mut commands: Commands,
 ) {
     let Ok((dialog, mut built)) = dialogs.single_mut() else { return };
@@ -557,8 +557,8 @@ fn refresh(
     };
 
     // **The Terminal agent row's extras** (#425): a problem line, a `Use Oh My Pi` button, the command and its field, and a choice
-    // list that offers `Custom command` only with a command set. They are spawned with the row and nowhere else, so what they are
-    // built from decides the rebuild below, next to the search.
+    // list that offers `Custom command` only with a command set. They are spawned with the row, and replaced where they stand (below)
+    // when what they are built from changes.
     let agent_problem = crate::settings::custom_agent_without_command(snapshot.user.layer(), snapshot.project.layer()).map(|file| match file {
         AgentFile::User => (Scope::User, "your settings file".to_owned()),
         AgentFile::Project => (Scope::Project, "this project's settings file".to_owned()),
@@ -572,16 +572,17 @@ fn refresh(
                 editing: dialog.command_editing,
                 problem: agent_problem.clone(),
                 omp_installed: files.machine_agent() == TerminalAgent::OhMyPi,
-                current_custom: own.unwrap_or(below) == Value::Option(setting_catalogue::agent_index(TerminalAgent::Custom)),
+                offered: edited.command().is_some() || own.unwrap_or(below) == Value::Option(setting_catalogue::agent_index(TerminalAgent::Custom)),
             }
         })
     };
-    let agent = setting_catalogue::find("terminal_agent").and_then(agent_of);
+    let agent_setting = setting_catalogue::find("terminal_agent");
+    let agent = agent_setting.and_then(agent_of);
 
     // The rows stand when the same settings are listed; they are built again when a search lists others, or
     // when a control cannot show what its row now holds (a row built as "unreadable value", or a kind that
     // does not match).
-    let mut rebuild = built.query.as_deref() != Some(dialog.query.as_str()) || !unreadable.is_empty() || built.agent != agent;
+    let mut rebuild = built.query.as_deref() != Some(dialog.query.as_str()) || !unreadable.is_empty();
     let mut switches: Vec<(Entity, bool)> = Vec::new();
     let mut sliders: Vec<(Entity, f32)> = Vec::new();
     if !rebuild {
@@ -703,9 +704,53 @@ fn refresh(
                 });
             }
         }
+        // **The Terminal agent row follows its state where it stands** (#425): the slot's children are replaced, and the choice only
+        // when the choices it offers changed (`Custom command` appears with a command). The row and the other rows are untouched, so
+        // the list keeps its scroll offset. Focus that was on something that goes is not set on a control that is not laid out yet
+        // (gooey scrolls a list to follow a focus, and a node with no layout is at the list's top): it is cleared, and
+        // [`land_the_focus`] sets it once the new control, or the command field the row has just opened, has its place. A control that
+        // stays takes the focus at once.
+        if let (Some(agent), Some(setting)) = (&agent, agent_setting) {
+            for (slot, mut built_with, slot_of) in &mut slots {
+                if built_with.0 == *agent {
+                    continue;
+                }
+                let row = slot_of.parent();
+                let old_control = controls.iter().find(|(control, held, ..)| held.key == setting.key && parents.get(*control).ok().map(ChildOf::parent) == Some(row)).map(|(control, ..)| control);
+                let mut going: Vec<Entity> = children.iter_descendants(slot).collect();
+                let mut control = old_control;
+                if built_with.0.offered != agent.offered
+                    && let Some(old) = old_control
+                {
+                    let (own, below, ..) = view(setting);
+                    let shown = own.unwrap_or(below);
+                    if let Value::Option(i) = shown {
+                        let new = commands.spawn(choice_control(setting, agent_choices_of(agent), i, shown)).id();
+                        commands.entity(row).insert_children(0, &[new]);
+                        commands.entity(old).despawn();
+                        going.push(old);
+                        control = Some(new);
+                    }
+                }
+                if let Some(focus) = focus.as_deref_mut()
+                    && focus.get().is_some_and(|held| going.contains(&held))
+                {
+                    match control {
+                        Some(control) if !agent.editing && Some(control) == old_control && !going.contains(&control) => focus.set(control, FocusCause::Navigated),
+                        Some(control) if !agent.editing => {
+                            focus.clear();
+                            commands.entity(control).insert(FocusWhenLaidOut);
+                        }
+                        _ => focus.clear(),
+                    }
+                }
+                built_with.0 = agent.clone();
+                let extras = agent.clone();
+                commands.entity(slot).despawn_children().insert(Children::spawn(SpawnWith(move |slot: &mut RelatedSpawner<ChildOf>| spawn_agent_extras(slot, &extras))));
+            }
+        }
     }
     built.snapshot = Some(snapshot);
-    built.agent = agent;
 }
 
 /// A scale slider that was just built or whose value moved.
@@ -743,8 +788,54 @@ struct AgentRow {
     problem: Option<(Scope, String)>,
     /// The agent is installed on this machine, so the problem has a one-press fix.
     omp_installed: bool,
-    /// The choice shown is `Custom command`, which stays offered whatever the command says (it is what the file holds).
-    current_custom: bool,
+    /// `Custom command` is among the choices: a command is set, or it is the choice the file holds (so the row never misreports what
+    /// is in use). The one thing about the choices that changes the control's structure.
+    offered: bool,
+}
+
+/// **What the Terminal agent row's extras were built from**, kept on the container they are children of, so a change to it replaces
+/// those children where they stand (#425, #429).
+#[derive(Component)]
+struct AgentSlot(AgentRow);
+
+/// The choices the Terminal agent row offers.
+fn agent_choices_of(agent: &AgentRow) -> Vec<&'static str> {
+    setting_catalogue::agent_choices(agent.offered, TerminalAgent::Off).to_vec()
+}
+
+/// One setting's choice and what it carries: the control [`refresh`] keeps current, and the write a step of it makes.
+fn choice_control(setting: &'static Setting, offered: Vec<&'static str>, i: usize, shown: Value) -> impl Bundle {
+    let key = setting.key;
+    (
+        choice(setting.label, offered, i),
+        SettingControl { key, shown },
+        observe(move |c: On<ValueChange<usize>>, mut w: Writer| w.set(key, Some(Value::Option(c.value)))),
+    )
+}
+
+/// **A control that takes the focus once it has its place** (#429): the Terminal agent row's command field, and its choice when the
+/// field's Enter replaced it. Focus set on a node before layout has placed it makes a list scroll to its top.
+#[derive(Component)]
+struct FocusWhenLaidOut;
+
+/// Gives the keyboard focus to each [`FocusWhenLaidOut`] control the frame after layout placed it, if it is shown; one on a page that
+/// is not shown never takes it.
+fn land_the_focus(
+    waiting: Query<(Entity, &ComputedNode, &InheritedVisibility), With<FocusWhenLaidOut>>,
+    mut focus: Option<ResMut<InputFocus>>,
+    mut commands: Commands,
+) {
+    for (entity, node, shown) in &waiting {
+        if node.size().y <= 0.0 {
+            continue;
+        }
+        if shown.get()
+            && let Some(focus) = focus.as_deref_mut()
+        {
+            focus.set(entity, FocusCause::Navigated);
+        }
+        commands.entity(entity).remove::<FocusWhenLaidOut>();
+    }
 }
 
 /// **The Terminal agent row's extras**: the problem with its one-press fix, the command and the way to set it.
@@ -765,7 +856,7 @@ fn spawn_agent_extras(row: &mut RelatedSpawner<ChildOf>, agent: &AgentRow) {
         row.spawn((
             text_input("Custom command", agent.command.clone().unwrap_or_default()),
             TextHint("a program, like claude --mcp-config $CAULDRON_MCP_CONFIG".into()),
-            AutoFocus,
+            FocusWhenLaidOut,
             observe(|c: On<ValueChange<String>>, mut w: Writer| {
                 if c.is_final {
                     w.finish_command(&c.value);
@@ -842,25 +933,22 @@ fn setting_row(
                 }
                 (Kind::Options(names), Value::Option(i)) => {
                     // **`Custom command` is a choice only once a command is set** (#425), so no step of the row can save it without one.
-                    let offered: Vec<&str> = match &agent {
-                        Some(agent) => {
-                            let current = if agent.current_custom { TerminalAgent::Custom } else { TerminalAgent::Off };
-                            setting_catalogue::agent_choices(agent.has_command, current).to_vec()
-                        }
+                    let offered = match &agent {
+                        Some(agent) => agent_choices_of(agent),
                         None => names.to_vec(),
                     };
-                    row.spawn((
-                        choice(setting.label, offered, i),
-                        SettingControl { key, shown },
-                        observe(move |c: On<ValueChange<usize>>, mut w: Writer| w.set(key, Some(Value::Option(c.value)))),
-                    ));
+                    row.spawn(choice_control(setting, offered, i, shown));
                 }
                 _ => {
                     row.spawn((label(format!("{}: unreadable value", setting.label)), SettingUnreadable));
                 }
             }
-            if let Some(agent) = &agent {
-                spawn_agent_extras(row, agent);
+            if let Some(agent) = agent {
+                row.spawn((
+                    bevy_gooey::column(0.0),
+                    AgentSlot(agent.clone()),
+                    Children::spawn(SpawnWith(move |slot: &mut RelatedSpawner<ChildOf>| spawn_agent_extras(slot, &agent))),
+                ));
             }
             row.spawn(label(setting.description));
             row.spawn((
