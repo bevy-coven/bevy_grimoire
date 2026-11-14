@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-13
 
+- **ops-review-31-33** `f361cded` A check queues every rig for the watcher and a refused call moves no view, both tested; Cmd+Z's note and problem are tested (#129 review) *No clip: a test and API fix behind existing keys; proved by rig_check_is_an_operation, kit_rescan_is_an_operation and tile_pieces_are_operations*
 - **rig-check-and-rescan-operations** `db8554b8` The Anim tab check-all key (C) and the Meshes tab rescan key (R) are operations an agent calls too (rig_check_all, kit_rescan) *No clip: an API behind existing keys, no new picture; proved by rig_check_is_an_operation and kit_rescan_is_an_operation*
 - **camera-operations** `c677aa33` The Map camera keys (W A S D held, Q and E) are operations an agent calls too (camera_pan, camera_turn) *No clip: an API behind existing keys, no new picture; proved by camera_is_an_operation*
 - **ops-review-29-30** `6621cff0` The agent guide list of undocumented operations only shrinks, the Tiles history test runs the recorder between an agent's steps, and Cmd+Z files a real refusal as a problem (#129 review) *No clip: a test and API fix behind existing keys; proved by every_operation_has_a_row_in_the_agent_guide and tile_pieces_are_operations*
