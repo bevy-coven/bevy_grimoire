@@ -208,6 +208,10 @@ pub struct TerminalScreen {
     default_caret: CaretShape,
     /// How many lines of history this screen keeps: [`SCROLLBACK`] unless the person set another.
     scrollback: usize,
+    /// **The ink the rows were last built with.** The emulator keeps a cell's colour as the program wrote it (the default, an ANSI
+    /// slot, a 24-bit value) and `rows` hold it resolved, so when the theme changes the live ink is no longer the one the rows
+    /// were drawn in and the screen is dirty again, whatever the program has or has not redrawn (#428).
+    built_ink: Option<crate::chrome::Ink>,
 }
 
 impl TerminalScreen {
@@ -236,6 +240,7 @@ impl TerminalScreen {
             search: None,
             default_caret: CaretShape::Block,
             scrollback: SCROLLBACK,
+            built_ink: None,
         }
     }
 
@@ -463,8 +468,12 @@ impl TerminalScreen {
         }
     }
 
-    /// Was anything drawn since the last time the pane asked?
+    /// Was anything drawn since the last time the pane asked? Or has the theme changed the ink the rows were built with: the
+    /// default colours, and the editor's own words the ANSI slots are, are read from the live ink when the rows are built.
     pub fn take_dirty(&mut self) -> bool {
+        if self.built_ink != Some(crate::chrome::ink()) {
+            self.dirty = true;
+        }
         std::mem::replace(&mut self.dirty, false)
     }
 
@@ -782,6 +791,7 @@ impl TerminalScreen {
             shape,
         };
         self.rows = rows;
+        self.built_ink = Some(crate::chrome::ink());
         self.stamp = NEXT_STAMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 }

@@ -173,7 +173,7 @@ pub const CATALOGUE: &[Setting] = &[
         key: "terminal_agent",
         label: "Terminal agent",
         category: "Terminal",
-        description: "The agent the terminal's Invoke Agent button starts, connected to the editor's tools and checked with a self test. The terminal starts no agent by itself: a session costs tokens to warm up. Custom command runs terminal_agent_command from settings.yaml.",
+        description: "The agent the terminal's Start agent button starts, connected to the editor's tools and checked with a self test. The terminal starts no agent by itself: a session costs tokens to warm up. Custom command runs terminal_agent_command from settings.yaml, and is offered once a command is set.",
         kind: Kind::Options(TERMINAL_AGENTS),
     },
 ];
@@ -372,6 +372,13 @@ impl SettingsLayer {
     }
 }
 
+/// **The agent choices a Terminal agent row offers** (#425): `Custom command` only once a command is set, or while it is the choice
+/// the row already shows (so the row never misreports what is in use). Stepping through them can never land on a choice that would be
+/// refused.
+pub fn agent_choices(has_command: bool, current: TerminalAgent) -> &'static [&'static str] {
+    if has_command || current == TerminalAgent::Custom { TERMINAL_AGENTS } else { &TERMINAL_AGENTS[..agent_index(TerminalAgent::Custom)] }
+}
+
 /// **Writes one key of the settings file at `path`**, or takes it out when `value` is `None`; every other
 /// key in the file stays as the file has it.
 ///
@@ -382,6 +389,12 @@ impl SettingsLayer {
 pub fn write_key(path: &Path, key: &str, value: Option<Value>) -> Result<(), String> {
     edit_layer(path, |layer| match value {
         Some(v) if !layer.set(key, v) => Err(format!("`{key}` is not a {KIND} key that takes {v:?}")),
+        // **A choice without a command is never saved** (#425): `Custom` runs `terminal_agent_command`, so a file that chooses it
+        // without one is a terminal whose agent cannot start. Only this key is held to it, so a file that already has the problem
+        // can still be changed everywhere else.
+        Some(_) if key == "terminal_agent" && layer.terminal_agent == Some(TerminalAgent::Custom) && layer.terminal_agent_command.is_none() => {
+            Err("Custom command needs a command to run: type it in the Terminal agent row first, nothing was saved".to_owned())
+        }
         Some(_) => Ok(()),
         None => {
             layer.clear(key);

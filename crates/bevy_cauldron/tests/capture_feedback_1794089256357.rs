@@ -42,6 +42,7 @@ fn editor_with_an_agent() -> App {
     let guard = SHELL_ENV.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     unsafe { std::env::set_var("SHELL", "/bin/sh") };
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    app.world_mut().resource_mut::<bevy_cauldron::terminal::Terminal>().set_collapsed(false); // #424: the pane starts collapsed; this test needs it raised
     app.insert_non_send(PosixShell(guard));
     app.insert_resource(AgentSetup { port: Some(15799), server, files });
     app
@@ -60,16 +61,12 @@ fn until(app: &mut App, why: &str, test: impl Fn(&mut App) -> bool) {
     panic!("{why}");
 }
 
-/// The card's rows' words, top to bottom; none while no card shows.
+/// The card's rows' words, top to bottom; none while no card shows. Owner exception (2026-11-14): a row is an LED and its sentence in a row of
+/// their own now (#421), so the sentences are read from the entities that carry `TerminalAgentCardRow`; the words are the same minus the
+/// `OK`/`FAIL`/`SKIP` the card no longer draws.
 fn card_rows(app: &mut App) -> Vec<String> {
     let world = app.world_mut();
-    let children = world
-        .query_filtered::<&Children, With<TerminalAgentCard>>()
-        .iter(world)
-        .next()
-        .map(|children| children.to_vec())
-        .unwrap_or_default();
-    children.iter().filter_map(|child| world.get::<Text>(*child).map(|text| text.0.clone())).collect()
+    world.query::<(&bevy_cauldron::terminal_pane::TerminalAgentCardRow, &Text)>().iter(world).map(|(_, text)| text.0.clone()).collect()
 }
 
 fn token(app: &App) -> String {
@@ -110,19 +107,10 @@ fn invoke_the_agent(app: &mut App) {
 /// The rows of the card as laid out: `(words, height)` in physical px, with the heading first.
 fn laid_out_rows(app: &mut App) -> Vec<(String, f32)> {
     let world = app.world_mut();
-    let children = world
-        .query_filtered::<&Children, With<TerminalAgentCard>>()
+    world
+        .query::<(&bevy_cauldron::terminal_pane::TerminalAgentCardRow, &Text, &ComputedNode)>()
         .iter(world)
-        .next()
-        .map(|children| children.to_vec())
-        .unwrap_or_default();
-    children
-        .iter()
-        .filter_map(|child| {
-            let text = world.get::<Text>(*child)?;
-            let node = world.get::<ComputedNode>(*child)?;
-            Some((text.0.clone(), node.size().y))
-        })
+        .map(|(_, text, node)| (text.0.clone(), node.size().y))
         .collect()
 }
 
@@ -137,7 +125,7 @@ fn rect_of(app: &mut App, entity: Entity) -> (Vec2, Vec2) {
 fn every_row_of_the_self_test_card_is_one_line_and_the_card_stays_inside_the_terminal() {
     let mut app = editor_with_an_agent();
     invoke_the_agent(&mut app);
-    until(&mut app, "the card never said the agent started", |app| card_rows(app).iter().any(|row| row.starts_with("OK Agent started")));
+    until(&mut app, "the card never said the agent started", |app| card_rows(app).iter().any(|row| row.starts_with("Agent started")));
 
     // What omp's own self test said in the capture, word for word.
     let token = token(&app);
@@ -155,7 +143,7 @@ fn every_row_of_the_self_test_card_is_one_line_and_the_card_stays_inside_the_ter
     ]);
     let known = terminal_agent::self_test_result(&mut app.world_mut().resource_mut::<Terminal>(), &json!({"token": token, "checks": checks}));
     assert_eq!(known, Ok(json!({"known": true})));
-    let longest = "OK Agent self test: the editor is on launcher · 88 operations · a 2560x1406 picture";
+    let longest = "Agent self test: the editor is on launcher · 88 operations · a 2560x1406 picture";
     until(&mut app, "the card never listed the self test's findings", |app| card_rows(app).iter().any(|row| row == longest));
     for _ in 0..4 {
         app.update();

@@ -225,6 +225,27 @@ fn other_inks(theme: Theme) -> Vec<Color> {
     THEMES.iter().filter(|t| **t != theme).flat_map(|t| expected(*t).fields()).filter(|c| !one_of(*c, &own)).collect()
 }
 
+/// **Which node this is**, for a failure to say: its words, its name, the components that are not layout
+/// or visibility plumbing, and the same for its parents, nearest first.
+fn describe(world: &World, entity: Entity) -> String {
+    const PLUMBING: [&str; 14] = [
+        "ChildOf", "Children", "AccessibilityNode", "Visibility", "InheritedVisibility", "ViewVisibility", "ComputedNode", "ComputedStackIndex",
+        "UiGlobalTransform", "ContentSize", "UiTransform", "ComputedUiTargetCamera", "ComputedUiRenderTargetInfo", "FocusPolicy",
+    ];
+    let mut at = Some(entity);
+    let mut chain: Vec<String> = Vec::new();
+    while let Some(e) = at.filter(|_| chain.len() < 5) {
+        let words = world.get::<Text>(e).map(|t| format!(" {:?}", t.0)).unwrap_or_default();
+        let names: Vec<String> = world
+            .inspect_entity(e)
+            .map(|c| c.map(|(_, info)| info.name().shortname().to_string()).filter(|n| !n.starts_with("Inherited<") && !PLUMBING.contains(&n.as_str())).collect())
+            .unwrap_or_default();
+        chain.push(format!("{e:?}{words} [{}]", names.join(", ")));
+        at = world.get::<ChildOf>(e).map(|c| c.parent());
+    }
+    chain.join("\n        < ")
+}
+
 fn one_of(colour: Color, set: &[Color]) -> bool {
     set.iter().any(|c| same(colour, *c))
 }
@@ -307,32 +328,27 @@ fn nothing_is_left_in_another_themes_colours() {
         let world = app.world_mut();
         let mut left: Vec<String> = Vec::new();
         let mut checked = 0usize;
-        let mut check = |what: &str, entity: Entity, colour: Color| {
+        let mut found: Vec<(&str, Entity, Color)> = Vec::new();
+        let mut fills = world.query::<(Entity, &BackgroundColor)>();
+        found.extend(fills.iter(world).map(|(e, c)| ("fill", e, c.0)));
+        let mut borders = world.query::<(Entity, &BorderColor)>();
+        found.extend(borders.iter(world).map(|(e, c)| ("edge", e, c.top)));
+        let mut texts = world.query::<(Entity, &TextColor)>();
+        found.extend(texts.iter(world).map(|(e, c)| ("text", e, c.0)));
+        for (what, entity, colour) in found {
             // A node with no fill has `rgba(0, 0, 0, 0)`, which is nobody's colour.
             if Srgba::from(colour).alpha == 0.0 {
-                return;
+                continue;
             }
             checked += 1;
             if one_of(colour, &own) {
-                return;
+                continue;
             }
             for (other, colours) in &others {
                 if one_of(colour, colours) {
-                    left.push(format!("{entity:?} {what} is {colour:?}, a colour of {other:?}"));
+                    left.push(format!("{entity:?} {what} is {colour:?}, a colour of {other:?}\n        {}", describe(world, entity)));
                 }
             }
-        };
-        let mut fills = world.query::<(Entity, &BackgroundColor)>();
-        for (entity, fill) in fills.iter(world) {
-            check("fill", entity, fill.0);
-        }
-        let mut borders = world.query::<(Entity, &BorderColor)>();
-        for (entity, border) in borders.iter(world) {
-            check("edge", entity, border.top);
-        }
-        let mut texts = world.query::<(Entity, &TextColor)>();
-        for (entity, colour) in texts.iter(world) {
-            check("text", entity, colour.0);
         }
         assert!(checked > 200, "{theme:?}: the census looked at the editor's colours ({checked})");
         assert!(

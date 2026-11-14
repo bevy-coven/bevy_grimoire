@@ -200,6 +200,7 @@ fn take_the_terminal_settings(
     mut terminal: ResMut<Terminal>,
     mut metrics: ResMut<CellMetrics>,
     mut drawn: ResMut<Drawn>,
+    mut collapse_taken: Local<Option<bool>>,
 ) {
     let Some(settings) = settings else {
         // An app with no settings has none to wait for: its terminal opens plain shells.
@@ -219,6 +220,15 @@ fn take_the_terminal_settings(
         args: settings.terminal_shell_args.clone(),
     }));
     terminal.set_agent(settings.terminal_agent, settings.terminal_agent_command.clone());
+    // **The collapse a person left, when a file states one** (#424), taken when the *setting* changes, never again: the pane's own
+    // raise and lower (a chord, the status bar's label) write the file, and a later read of that same value must not undo a raise
+    // made since. A layer that states nothing leaves the pane as it starts, collapsed.
+    if settings.terminal_collapsed != *collapse_taken {
+        *collapse_taken = settings.terminal_collapsed;
+        if let Some(collapsed) = settings.terminal_collapsed {
+            terminal.set_collapsed(collapsed);
+        }
+    }
     if metrics.text_scale != settings.terminal_text_scale {
         metrics.text_scale = settings.terminal_text_scale;
         metrics.measured = false;
@@ -827,6 +837,7 @@ fn type_keys(
         }
         if closes.just_pressed(&keys)
             || crate::terminal_pane::COLLAPSE_CHORD.just_pressed(&keys)
+            || crate::terminal_pane::maximise_chord().just_pressed(&keys)
             || FIND_CHORD.just_pressed(&keys)
             || crate::terminal_pane::CLEAR_CHORD.just_pressed(&keys)
         {

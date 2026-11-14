@@ -41,8 +41,7 @@ use crate::chrome;
 /// the ink is the skin's now — read from `src/editor_skin.yaml` at run time, so the table cannot be a
 /// compile-time constant any more. The twelve that are nobody's word are still written here, each
 /// with the reason it has no palette name.
-fn ansi() -> [Color; 16] {
-    let ink = chrome::ink();
+fn ansi(ink: &chrome::Ink) -> [Color; 16] {
     [
         // 0–7: black, red, green, yellow, blue, magenta, cyan, white.
         Color::srgb(0.129, 0.122, 0.110), // CHROME-OK: ANSI slot 0 is a shade below `ink.panel_bg`, so a
@@ -126,11 +125,23 @@ const GREY_STEP: u8 = 10;
 /// returns a `Color` rather than an `Option`, and a caller has no branch to get wrong.
 pub fn resolve(index: u8) -> Color {
     if index < 16 {
-        // **Built once** (review, 2026-11-10): `ansi()` mixes the ink into sixteen colours, and a
-        // terminal repaints a whole screen of cells per frame — a rebuild per cell was that work
-        // repeated for an answer that cannot change while the palette does not.
-        static ANSI: std::sync::OnceLock<[Color; 16]> = std::sync::OnceLock::new();
-        return ANSI.get_or_init(ansi)[index as usize];
+        // **Built once per ink** (review, 2026-11-10; #428): `ansi()` mixes the ink into sixteen colours, and a terminal repaints a
+        // whole screen of cells per frame, so a rebuild per cell was work repeated for an answer that cannot change while the
+        // ink does not. The ink is the theme's and changes live, so the table is built again when the four inks it takes
+        // (danger, accent, text, muted) are not the ones it was built from, and only then.
+        static ANSI: std::sync::Mutex<Option<([Color; 4], [Color; 16])>> = std::sync::Mutex::new(None);
+        let ink = chrome::ink();
+        let key = [ink.danger, ink.accent, ink.text, ink.muted];
+        let mut built = ANSI.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let table = match &*built {
+            Some((from, table)) if *from == key => *table,
+            _ => {
+                let table = ansi(&ink);
+                *built = Some((key, table));
+                table
+            }
+        };
+        return table[index as usize];
     }
     let (r, g, b) = rgb(index);
     Color::srgb_u8(r, g, b)

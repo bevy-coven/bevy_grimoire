@@ -46,6 +46,7 @@ fn editor(name: &str) -> App {
         .place("site/wall", (0.0, 0.0))
         .build("m");
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    app.world_mut().resource_mut::<bevy_cauldron::terminal::Terminal>().set_collapsed(false); // #424: the pane starts collapsed; this test needs it raised
     app.init_resource::<Script>();
     app.world_mut().spawn((Window::default(), PrimaryWindow));
     app.add_systems(PreUpdate, aim.after(InputSystems));

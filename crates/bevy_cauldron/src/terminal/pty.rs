@@ -293,6 +293,10 @@ pub const HANGUP_GRACE_MS: u64 = 1_000;
 /// How often the wait for the child looks, milliseconds.
 const HANGUP_POLL_MS: u64 = 10;
 
+/// **How long the exit watchdog lets the hang-up wait run before it calls it overdue**, milliseconds: the grace, and a little over
+/// it for the kill and the look that follows.
+const HANGUP_WAIT_BOUND_MS: u64 = HANGUP_GRACE_MS + 500;
+
 /// **Closing a session never waits on its child for ever** (#337).
 ///
 /// `alacritty_terminal`'s `Pty` hangs the child up and then blocks in `Child::wait` with no limit
@@ -302,12 +306,16 @@ const HANGUP_POLL_MS: u64 = 10;
 /// window-less, until it was killed by hand. This runs first (a type's own `Drop` runs before its
 /// fields'): it hangs up, gives the child [`HANGUP_GRACE_MS`] to go, and kills it if it has not, so the
 /// `Pty`'s own wait that follows returns at once. The pane that had it is already closed.
+///
+/// **The wait is listed for the exit watchdog** while it lasts, as `a terminal's shell hanging up`, so a quit that is stuck here
+/// is cut short saying so and not saying nothing.
 #[cfg(unix)]
 impl Drop for TerminalSession {
     fn drop(&mut self) {
         let Some(pid) = i32::try_from(self.pty.child().id()).ok().and_then(rustix::process::Pid::from_raw) else {
             return;
         };
+        let _wait = crate::exit_watchdog::waiting("a terminal's shell hanging up", std::time::Duration::from_millis(HANGUP_WAIT_BOUND_MS));
         hang_up_then_kill(pid, std::time::Duration::from_millis(HANGUP_GRACE_MS));
     }
 }

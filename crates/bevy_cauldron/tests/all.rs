@@ -15,6 +15,7 @@
 //! must be unique to its test (its name and `std::process::id()`), never a fixed name.
 
 mod a_chord_shows_the_problems_list;
+mod a_custom_agent_without_a_command_is_a_settings_problem;
 mod a_dock_tab_reordered_glides_to_its_place;
 mod a_game_field_opens_the_file_that_sets_it;
 mod a_maps_forest_is_listed_in_the_world_workspace;
@@ -29,6 +30,8 @@ mod a_settings_change_updates_only_its_row;
 mod a_sound_cue_is_listed_without_bevy_siren;
 mod a_style_edit_stays_in_design_and_an_undo_grants_nothing;
 mod a_style_rows_lines_are_gooey_rows;
+mod a_terminals_default_colours_follow_the_theme;
+mod a_terminals_hangup_wait_is_listed_for_the_exit_watchdog;
 mod a_workspace_switch_keeps_the_map;
 mod areas_drawn_on_the_map;
 mod back_and_forward_across_workspaces;
@@ -36,8 +39,14 @@ mod back_and_forward_returns_to_a_cue_and_a_file;
 mod fixtures;
 mod new_topics_start_from_templates_in_the_design_workspace;
 mod opening_a_project_never_holds_a_frame_past_the_budget;
+mod shift_primary_j_maximises_the_terminal;
 mod the_agent_workspace_takes_a_change_back_from_its_row;
 mod the_finder_goes_to_cues_scripts_and_files;
+mod the_leds_word_is_the_size_of_the_text_beside_it;
+mod the_self_test_cards_rows_each_carry_an_led;
+mod the_terminal_agent_row_follows_its_state_in_place;
+mod the_terminal_bar_says_what_each_item_is;
+mod the_terminal_starts_collapsed_with_a_label_in_the_status_bar;
 
 mod a_badge_draws_in_the_skins_ink;
 mod capture_feedback_1793927698061;

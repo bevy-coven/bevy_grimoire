@@ -324,6 +324,11 @@ pub struct EditorSettings {
     /// The shell line `TerminalAgent::Custom` types. Deliberately not in the settings catalogue: the
     /// Settings screen has no text control (#324), so this key is set in the file only.
     pub terminal_agent_command: Option<String>,
+    /// **Did the person leave the terminal collapsed or raised?** (#424) `None` until they raise or lower it: the pane then starts
+    /// collapsed, on every screen. The editor writes `true` or `false` to the user's file when the pane is raised or lowered, so a
+    /// relaunch opens it as it was left, the way the window's arrangement is kept. Not in the settings catalogue: it is a thing a
+    /// person does with a chord, not a row they set.
+    pub terminal_collapsed: Option<bool>,
     /// **The program a new terminal tab runs** (#324): VS Code's `terminal.integrated.defaultProfile`.
     /// `None` is `$SHELL`, then `/bin/sh`. Tabs already open keep the shell they started with. Like
     /// `terminal_agent_command`, not in the settings catalogue: the Settings screen has no text control.
@@ -361,6 +366,7 @@ impl Default for EditorSettings {
             terminal_scrollback: crate::terminal::SCROLLBACK,
             terminal_agent: TerminalAgent::default(),
             terminal_agent_command: None,
+            terminal_collapsed: None,
             terminal_shell: None,
             terminal_shell_args: Vec::new(),
             workspace_layout: BTreeMap::new(),
@@ -420,6 +426,8 @@ pub struct SettingsLayer {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_agent_command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_collapsed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_shell: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_shell_args: Option<Vec<String>>,
@@ -456,6 +464,7 @@ impl Default for SettingsLayer {
             terminal_scrollback: None,
             terminal_agent: None,
             terminal_agent_command: None,
+            terminal_collapsed: None,
             terminal_shell: None,
             terminal_shell_args: None,
             workspace_layout: BTreeMap::new(),
@@ -573,6 +582,9 @@ impl EditorSettings {
             out.terminal_agent = layer.terminal_agent.unwrap_or(out.terminal_agent);
             if let Some(command) = &layer.terminal_agent_command {
                 out.terminal_agent_command = Some(command.clone());
+            }
+            if let Some(collapsed) = layer.terminal_collapsed {
+                out.terminal_collapsed = Some(collapsed);
             }
             // **A shell and its arguments are one value**: a layer that names a shell brings its own
             // arguments (none when it gives none), never the earlier layer's, which were for another program.
@@ -705,6 +717,43 @@ impl SettingsSources<'_> {
     }
 }
 
+/// **Which settings file a finding is about** (#425): the person's own, or the open project's.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AgentFile {
+    User,
+    Project,
+}
+
+/// **What a settings file that chooses the Custom agent without a command says, and how to fix it** (#425). The Settings screen
+/// offers the fix in the Terminal agent row; this is the same sentence in the file's own verdict, which the status band counts.
+pub const CUSTOM_WITHOUT_COMMAND: &str = "terminal_agent is Custom but terminal_agent_command is not set, so no agent can start. Fix: choose Oh My Pi (or Off) for Terminal agent in Settings, or add terminal_agent_command to this file";
+
+/// **The file that chose `Custom` where no layer gives it a command** (#425), or `None` when the agent is anything else or the command
+/// is set somewhere. The project's layer is the later one, so it is the culprit when it chose Custom itself; otherwise the user's.
+pub fn custom_agent_without_command(user: Option<&SettingsLayer>, project: Option<&SettingsLayer>) -> Option<AgentFile> {
+    let chosen = [user, project].into_iter().flatten().filter_map(|layer| layer.terminal_agent).next_back();
+    if chosen != Some(TerminalAgent::Custom) {
+        return None;
+    }
+    if [user, project].into_iter().flatten().any(|layer| layer.terminal_agent_command.is_some()) {
+        return None;
+    }
+    if project.is_some_and(|layer| layer.terminal_agent == Some(TerminalAgent::Custom)) {
+        Some(AgentFile::Project)
+    } else {
+        Some(AgentFile::User)
+    }
+}
+
+/// One file that read: applied, or refused for the Custom agent it chose without a command.
+fn agent_verdict(file: String, source: AgentFile, culprit: Option<AgentFile>) -> KindVerdict {
+    if culprit == Some(source) {
+        KindVerdict::refused(KIND, file, Some("terminal_agent".to_owned()), CUSTOM_WITHOUT_COMMAND)
+    } else {
+        KindVerdict::applied(KIND, file)
+    }
+}
+
 /// **Look at both settings files, decide what changed, and keep [`EditorSettings`] the layers' sum.**
 ///
 /// A file that does not read is refused and its layer stays as it last read; a file that is gone has no
@@ -716,27 +765,36 @@ pub fn sync_settings(
     mut settings: ResMut<EditorSettings>,
     mut reloads: Option<ResMut<EditorReloads>>,
     mut state: Option<ResMut<EditorState>>,
+    mut last_culprit: Local<Option<AgentFile>>,
 ) {
     let dt = time.delta_secs();
-    let mut looks: Vec<(String, Look)> = Vec::new();
+    let mut looks: Vec<(String, Look, AgentFile)> = Vec::new();
+    // Every file this frame can name, looked at or not, so a verdict that depends on the *other* file can be said again.
+    let mut named: Vec<(String, AgentFile)> = Vec::new();
     if let Some(file) = &sources.user_file {
         let name = file.0.to_string_lossy().replace('\\', "/");
+        named.push((name.clone(), AgentFile::User));
         if let Some(look) = view.user.look(&file.0, &name, dt) {
-            looks.push((name, look));
+            looks.push((name, look, AgentFile::User));
         }
     }
     if let Some(project) = &sources.project {
         let path = project.project_dir.join(PROJECT_FILE);
         let name = crate::map_files::file_name(project, &path);
+        named.push((name.clone(), AgentFile::Project));
         if let Some(look) = view.project.look(&path, &name, dt) {
-            looks.push((name, look));
+            looks.push((name, look, AgentFile::Project));
         }
     } else if view.project.path.is_some() {
         view.project = Watch::default();
     }
-    for (file, look) in looks {
+    // **The file that chose a Custom agent and gave it no command** (#425), judged on both layers together: a project that
+    // chooses Custom is fine when the user's file holds the command.
+    let culprit = custom_agent_without_command(view.user.good.as_ref(), view.project.good.as_ref());
+    let looked: Vec<AgentFile> = looks.iter().map(|(_, _, source)| *source).collect();
+    for (file, look, source) in looks {
         let verdict = match look {
-            Look::Applied => KindVerdict::applied(KIND, file),
+            Look::Applied => agent_verdict(file, source, culprit),
             Look::Gone => {
                 if let Some(reloads) = reloads.as_deref_mut() {
                     reloads.forget_file(KIND, &file);
@@ -754,6 +812,25 @@ pub fn sync_settings(
         }
         if let Some(reloads) = reloads.as_deref_mut() {
             reloads.decide(vec![verdict]);
+        }
+    }
+    // **The other file's verdict follows**: a project file that now sets the command clears the user file's problem, and one that
+    // chooses Custom without it raises it, though that other file did not change. A file whose own text changed but read as `Applied`
+    // again (the fix a person pressed) says nothing new as a look, so the verdict is also decided again whenever the culprit moved.
+    let moved = culprit != *last_culprit;
+    *last_culprit = culprit;
+    if !looked.is_empty() || moved {
+        for (file, source) in named {
+            let good = match source {
+                AgentFile::User => view.user.good.is_some(),
+                AgentFile::Project => view.project.good.is_some(),
+            };
+            if !good || looked.contains(&source) {
+                continue;
+            }
+            if let Some(reloads) = reloads.as_deref_mut() {
+                reloads.decide(vec![agent_verdict(file, source, culprit)]);
+            }
         }
     }
     let resolved = EditorSettings::resolve_on_this_machine(

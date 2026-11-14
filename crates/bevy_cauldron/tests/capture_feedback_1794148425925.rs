@@ -66,6 +66,7 @@ fn open(machine: &Machine) -> App {
         std::env::set_var("ENV", &machine.rc);
     }
     let mut app = bevy_cauldron::harness::build_headless(&machine.root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    app.world_mut().resource_mut::<bevy_cauldron::terminal::Terminal>().set_collapsed(false); // #424: the pane starts collapsed; this test needs it raised
     app.insert_non_send(PosixShell(guard));
     app.insert_resource(AgentSetup { port: Some(15797), server: machine.server.clone(), files: machine.files.clone() });
     app
