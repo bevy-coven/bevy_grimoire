@@ -15,7 +15,9 @@ use crate::fixtures;
 // 31 -> 13: #260 round 8 moved the frame, the chips, the buttons, the rows, the text field, the name box and the toast strip onto gooey rows, columns and placed nodes (G-87). Owner exception (2026-11-14): a ratchet tightened to the real count.
 // 13 -> 10: #260 round 8: the back button and the bars' spacers are gooey's (G-87). Owner exception (2026-11-14): a ratchet tightened to the real count.
 // 10 -> 8: #260 round 9: modal_card is retired and the shell split is a filling split (G-88). Owner exception (2026-11-14): a ratchet tightened to the real count.
-const CHROME_NODES_LEFT: usize = 8;
+// 8 -> 5: #260 round 10: panel_root, the journal panel and the bottom dock are gooey boxes with ShownFollow (G-89). Owner exception (2026-11-14): a ratchet tightened to the real count.
+// 5 -> 6: #260 round 10: panel_root stays a raw node (its width has three writers); the journal and the bottom dock are gooey boxes (G-89). Owner exception (2026-11-14): a ratchet tightened to the real count.
+const CHROME_NODES_LEFT: usize = 6;
 
 #[test]
 fn chrome_rs_carries_no_more_raw_nodes_than_it_is_counted_to() {

@@ -1088,6 +1088,8 @@ pub fn panel_root<'a>(
     // walks every ground is what makes it the skin's, once per frame, comparing before it writes.
     let panel = commands
         .spawn((
+            // **A raw node, and why** (GAP7): the panel's width is written by three systems (`fit_docks_to_the_window` and the left pane's two), which a skin-written `Sizing` width
+            // would fight; the gooey form broke the snip and library layout tests at a doubled scale (a split clamp panicked), found by the whole run.
             node,
             PanelWidth { preferred: width, side },
             // **The panel's name, for something that cannot see it** (UI-30, #224). A `Role::Panel` is a
@@ -1682,18 +1684,15 @@ pub fn spawn_frame(
             bevy::picking::Pickable::IGNORE,
         ))
         .id();
+    // The window wide and `BOTTOM_DOCK_H` tall, never shrinking, with a 1 px edge along its top, in the editor's colours (`InkFollow`). **Not shown until there is room**
+    // ([`crate::shell_view::give_the_bottom_dock_its_room`] opens it, writing `display` itself: `ShownFollow`): a dock that is never laid out has no text for a label census to
+    // find drawn outside it, and takes nothing from the workbench.
     commands.entity(bottom).insert((
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Px(BOTTOM_DOCK_H),
-            flex_shrink: 0.0,
-            // **Not shown until there is room** ([`crate::shell_view::give_the_bottom_dock_its_room`]
-            // opens it): a dock that is never laid out has no text for a label census to find drawn
-            // outside it, and takes nothing from the workbench.
-            display: Display::None,
-            border: UiRect::top(Val::Px(EDGE_W)),
-            ..default()
-        },
+        bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(100.0)), height: Some(bevy_gooey::Extent::Px(BOTTOM_DOCK_H)), ..default() },
+        bevy_gooey::TextFlow { shrink: Some(0.0), ..default() },
+        bevy_gooey::BorderPx(bevy_gooey::Sides { top: Some(EDGE_W), ..default() }),
+        bevy_gooey::InkFollow,
+        bevy_gooey::ShownFollow::closed(),
         BorderColor::all(ink().panel_edge),
     ));
 
@@ -2235,21 +2234,16 @@ pub struct ProblemLogLine;
 pub fn journal_panel(mut commands: Commands, frame: Res<Frame>) {
     let panel = commands
         .spawn((
-            Node {
-                // PLACES-ITSELF-OK: an overlay, not a panel in the frame's flow. It is asked for,
-                // read, and dismissed — `Frame` owns the docks and this is deliberately not one.
-                position_type: PositionType::Absolute,
-                top: Val::Percent(8.0),
-                left: Val::Percent(10.0),
-                width: Val::Percent(80.0),
-                max_height: Val::Percent(76.0),
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(GAP_ROW),
-                padding: UiRect::all(Val::Px(PAD)),
-                border: UiRect::all(Val::Px(1.0)),
-                display: Display::None,
-                ..default()
-            },
+            // An overlay, not a panel in the frame's flow: it is asked for, read, and dismissed, and `Frame` owns the docks. Placed 8% down and 10% in, 80% wide and at most 76% tall, its lines
+            // `GAP_ROW` apart and `PAD` in, a 1 px edge, in the editor's own colours (`InkFollow`); closed until `Cmd+E`, and `display` is the notices' to write (`ShownFollow`).
+            bevy_gooey::placed(UiRect { left: Val::Percent(10.0), top: Val::Percent(8.0), ..UiRect::all(Val::Auto) }),
+            bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(80.0)), max_height: Some(bevy_gooey::Extent::Percent(76.0)), ..default() },
+            bevy_gooey::RowLayout { direction: Some(FlexDirection::Column), ..default() },
+            bevy_gooey::GapPx(GAP_ROW),
+            bevy_gooey::Spacing { padding: bevy_gooey::Sides::all(STEP_PAD), ..default() },
+            bevy_gooey::BorderPx(bevy_gooey::Sides::all(1.0)),
+            bevy_gooey::InkFollow,
+            bevy_gooey::ShownFollow::closed(),
             BackgroundColor(ink().panel_bg),
             BorderColor::all(ink().key),
             JournalPanel,
@@ -2270,6 +2264,8 @@ pub fn journal_panel(mut commands: Commands, frame: Res<Frame>) {
             // the picking backend and `over_ui` skip for the same reason.
             Hovered::default(),
         ))
+        // `placed` is `Pickable::IGNORE`; the journal is the opposite (see above), so it is put back over it.
+        .insert(Pickable::default())
         .id();
     commands.entity(panel).with_children(|p| {
         title(p, "EVERY ERROR THIS SESSION");
