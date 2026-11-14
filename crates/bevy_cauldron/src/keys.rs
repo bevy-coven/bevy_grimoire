@@ -1080,18 +1080,21 @@ impl Action {
             // **The Tiles tab's own history** (E-002, #129 slice 30): `Cmd+Z` and `Cmd+Shift+Z` step the draft's record of
             // itself, session state like the draft; migrated to `tile_history_step`.
             | Action::UndoBuild
-            | Action::RedoBuild => Change::View,
-
-            // **Held, not pressed.** The effect is the hold: things fade, a pick is live, the overlay is
-            // up. An operation whose effect reverses when a key is released is not a value an agent can
-            // set once, so these stay keys. `Shortcuts` is the clearest: four systems read `pressed`.
-            Action::PanForward
+            | Action::RedoBuild
+            // **The Map camera** (E-002, #129 slice 31): where the view looks and how it is turned are what a person is looking
+            // through, session state; migrated to `camera_pan` and `camera_turn`. A held pan is the operation repeated every
+            // frame (`ops::dispatch_repeat`), which is the model `ScrubBack` and `ScrubFwd` already follow.
+            | Action::PanForward
             | Action::PanBack
             | Action::PanLeft
             | Action::PanRight
             | Action::TurnViewLeft
-            | Action::TurnViewRight
-            | Action::FrameView
+            | Action::TurnViewRight => Change::View,
+
+            // **Held, not pressed.** The effect is the hold: things fade, a pick is live, the overlay is
+            // up. An operation whose effect reverses when a key is released is not a value an agent can
+            // set once, so these stay keys. `Shortcuts` is the clearest: four systems read `pressed`.
+            Action::FrameView
             | Action::LookAtAgentChange
             | Action::ToggleGhost
             // **Read with `pressed`, every frame.** A key held down is not a one-shot `Outcome`:
@@ -1198,6 +1201,10 @@ impl Action {
             // **The tab's history** (E-002, #129 slice 30): `Cmd+Z` and `Cmd+Shift+Z` on the Tiles tab step it back and forward,
             // through the operation an agent calls.
             Action::UndoBuild | Action::RedoBuild => Some("tile_history_step"),
+            // **The Map camera is view state** (E-002, #129 slice 31): `W`, `A`, `S` and `D` pan the view, held, and `Q` and `E`
+            // turn it a quarter, through the operations an agent calls.
+            Action::PanForward | Action::PanBack | Action::PanLeft | Action::PanRight => Some("camera_pan"),
+            Action::TurnViewLeft | Action::TurnViewRight => Some("camera_turn"),
             // **The tool keys** (E-002, #129): `B`, `Shift+B` and the run chord arm a tool through `tool_arm`.
             // **`Remove` and `NoteTool` arm a tool, so they name the arming operation** (E-002,
             // #129). They named `placement_remove` and `note_add`: a write neither key makes — its

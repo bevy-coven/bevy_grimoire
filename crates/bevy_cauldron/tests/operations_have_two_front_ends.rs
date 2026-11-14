@@ -251,12 +251,6 @@ const UNMIGRATED: &[Action] = &[
     Action::PageLeave,
     Action::TileOpen,
     Action::CloseTile,
-    Action::PanForward,
-    Action::PanBack,
-    Action::PanLeft,
-    Action::PanRight,
-    Action::TurnViewLeft,
-    Action::TurnViewRight,
     Action::PrevCandidate,
     Action::NextCandidate,
     Action::TypeId,
@@ -319,7 +313,8 @@ const UNMIGRATED: &[Action] = &[
 // 59 -> 52: `BuildArm`, `MemberPrev`, `MemberNext`, `BuildRung`, `BuildTurn`, `BuildDropMember` and `ClearTile` -> `tile_hand_arm`, `tile_member_focus`, `tile_grid_deepen`, `tile_member_turn`, `tile_member_remove` and `tile_clear` (E-002, #129 slice 28): `Space` takes the piece, `,` and `.` walk the tile's members, `J` deepens the ladder, `R` turns, the remove key removes and Shift with it empties the tile in hand, through the operations an agent calls. Assumed owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the seven from the `Camera` set for the same reason; nothing is skipped.
 // 52 -> 40: `BuildForward`, `BuildBack`, `BuildLeft`, `BuildRight`, `BuildUp`, `BuildDown`, `AlignForward`, `AlignBack`, `AlignLeft`, `AlignRight`, `BuildDrop` and `BuildSlot` -> `tile_member_nudge`, `tile_member_flush`, `tile_member_drop` and `tile_slot_drop` (E-002, #129 slice 29): the arrows and `[` and `]` nudge the focused member along its ladder, Shift with an arrow puts it flush, Enter drops the picked piece and the hole key drops a hole, through the operations an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the twelve from the `Camera` set for the same reason; nothing is skipped.
 // 40 -> 38: `UndoBuild` and `RedoBuild` -> `tile_history_step` (E-002, #129 slice 30): `Cmd+Z` and `Cmd+Shift+Z` on the Tiles tab step the draft's own history back and forward through the operation an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the two from the `World` set for the same reason; nothing is skipped.
-const UNMIGRATED_MAX: usize = 38;
+// 38 -> 32: `PanForward`, `PanBack`, `PanLeft`, `PanRight`, `TurnViewLeft` and `TurnViewRight` -> `camera_pan` and `camera_turn` (E-002, #129 slice 31): `W`, `A`, `S` and `D` pan the Map view along the screen's axes, held, and `Q` and `E` turn it a quarter, through the operations an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the six from the `Camera` set for the same reason; nothing is skipped.
+const UNMIGRATED_MAX: usize = 32;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///
@@ -666,13 +661,12 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     // **`Camera` verbs are already reachable by an agent.** `grimoire/frame_view` says in its own doc
     // that it is "not an operation, it is not in the registry or the operation log, and it is not
     // undoable" — the key and the method already dispatch one thing, so a `Ctx` operation would be a
-    // second name for it. The continuous arrows (pan, orbit) are read every frame and cannot be a
-    // one-shot `Outcome` at all.
+    // second name for it. The held pan and turn keys it used to name here are operations now (`camera_pan`, `camera_turn`,
+    // #129 slice 31): a held key is the operation repeated every frame (`ops::dispatch_repeat`).
     assert_eq!(
         camera,
         [
-            "FrameView", "LookAtAgentChange", "PageEnter", "PageLeave", "TileOpen", "CloseTile", "PanForward", "PanBack",
-            "PanLeft", "PanRight", "TurnViewLeft", "TurnViewRight", "BuildNew",
+            "FrameView", "LookAtAgentChange", "PageEnter", "PageLeave", "TileOpen", "CloseTile", "BuildNew",
         ],
         "the `Camera` set changed. A verb belongs here when a BRP method already moves the camera \
          (`grimoire/frame_view`) or when a front end reads it every frame; neither can be a `Ctx` \

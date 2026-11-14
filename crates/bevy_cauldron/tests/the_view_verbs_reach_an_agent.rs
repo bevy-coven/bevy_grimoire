@@ -234,6 +234,8 @@ fn an_operation_that_needs_a_view_says_so() {
     assert_eq!(
         says,
         [
+            "camera_pan",
+            "camera_turn",
             "compose_carousel_step",
             "compose_focus",
             "compose_walk",

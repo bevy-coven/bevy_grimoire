@@ -3969,6 +3969,215 @@ pub mod stage {
     }
 }
 
+/// **The Map camera, panned and turned** (E-002, #129 slice 31): `W`, `A`, `S` and `D` pan the view along the screen's own axes and
+/// `Q` and `E` turn it in quarters. Two view operations on one body of rules each, so a held key, a tap and an agent's call cannot
+/// disagree about how far a second of panning is or what a quarter turn means. The camera is what a person is looking through:
+/// none of these writes a file or takes an undo step.
+pub mod camera {
+    use super::list_walk::need_view;
+    use super::*;
+    use crate::ops_view::CameraCursor;
+    use crate::view::{PAN_SPEED, PANS, ROTATION_STEPS};
+    use serde_json::json;
+
+    /// **The longest pan one call may make**, in seconds of the key being held: far past any frame, so a request is a sweep
+    /// and not a flight across the map.
+    pub const MAX_PAN_SECONDS: f32 = 10.0;
+
+    /// **A pan's default length**, in seconds of the key being held: a quarter of a second is a short tap.
+    pub const DEFAULT_PAN_SECONDS: f32 = 0.25;
+
+    fn camera_in<'a>(ctx: &'a Ctx, what: &str) -> Result<&'a CameraCursor, Refusal> {
+        Ok(&need_view(ctx, what)?.camera)
+    }
+
+    /// **Put the camera where an operation answered**, and say what happened.
+    fn settle(ctx: &mut Ctx, landed: CameraCursor, summary: String, after: serde_json::Value) -> Result<Outcome, Refusal> {
+        let Some(view) = ctx.view.as_mut() else {
+            return Err(Refusal::new("no view is in hand, so there is no camera to move."));
+        };
+        view.camera = landed;
+        Ok(Outcome { summary, affected: 0, saved: false, inverse: None, after: Some(after) })
+    }
+
+    /// **Pan the view** along the screen's axes, as `W`, `A`, `S` and `D` do.
+    pub mod camera_pan {
+        use super::*;
+        use bevy::math::{Vec2, Vec3};
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// The keys held, by name: `forward`, `back`, `left` and `right`. Two at once are the diagonal.
+            pub directions: Vec<String>,
+            /// For how long the keys would be held, in seconds.
+            #[serde(default = "default_seconds")]
+            pub seconds: f32,
+        }
+
+        fn default_seconds() -> f32 {
+            DEFAULT_PAN_SECONDS
+        }
+
+        pub struct CameraPan;
+
+        impl CameraPan {
+            fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<CameraCursor, Refusal> {
+                let p: Params = serde_json::from_value(params.clone()).map_err(|e| {
+                    Refusal::new(format!("these are not a pan: {e}. The fields are `directions`, a list of forward, back, left and right, and `seconds`."))
+                })?;
+                if !(p.seconds > 0.0 && p.seconds <= MAX_PAN_SECONDS) {
+                    return Err(Refusal::new(format!("`seconds` is {}, and a pan is longer than 0 and at most {MAX_PAN_SECONDS}", p.seconds)));
+                }
+                // **A key is held or it is not**, so a name said twice is one key.
+                let mut wish = Vec2::ZERO;
+                let mut named: Vec<&str> = Vec::new();
+                for name in &p.directions {
+                    let Some(&(_, said, dir)) = PANS.iter().find(|(_, said, _)| *said == name.as_str()) else {
+                        return Err(Refusal::new(format!("`{name}` is not a direction; say any of {}", names().join(", "))));
+                    };
+                    if !named.contains(&said) {
+                        named.push(said);
+                        wish += dir;
+                    }
+                }
+                if wish == Vec2::ZERO {
+                    return Err(Refusal::new(if named.is_empty() {
+                        "name at least one direction to pan: forward, back, left or right.".to_owned()
+                    } else {
+                        format!("{} cancel each other, so the view would not move.", named.join(" and "))
+                    }));
+                }
+                let now = camera_in(ctx, "pan")?;
+                // **A fraction of what is on screen, not a fixed number of metres**: the rule the keys always had.
+                let moved = crate::view::pan_direction(wish, now.yaw) * PAN_SPEED * now.height * p.seconds;
+                Ok(CameraCursor { focus: (Vec3::from(now.focus) + moved).to_array(), ..*now })
+            }
+        }
+
+        /// The four names an agent says, in the order of the keys, from the table the key loop reads.
+        pub fn names() -> Vec<&'static str> {
+            PANS.iter().map(|(_, said, _)| *said).collect()
+        }
+
+        impl Operation for CameraPan {
+            fn name(&self) -> &'static str {
+                "camera_pan"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["directions"],
+                    "properties": {
+                        "directions": {"type": "array", "minItems": 1, "items": {"type": "string", "enum": names()}, "description": "Which pan keys are held: `forward` is W, `left` A, `back` S and `right` D, along the screen's axes at the view's current turn. Two at once are the diagonal; opposite keys cancel and are refused."},
+                        "seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": MAX_PAN_SECONDS, "description": "For how long the keys would be held, in seconds: the view moves 16/18 of what it shows per second. A quarter of a second unless given."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                Ok(json!({ "focus": Self::landing(ctx, params)?.focus }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let landed = Self::landing(ctx, params)?;
+                let [x, _, z] = landed.focus;
+                settle(ctx, landed, format!("the camera looks at ({x:.1}, {z:.1})"), json!({ "focus": landed.focus }))
+            }
+        }
+    }
+
+    /// **Turn the view** in quarters, as `Q` and `E` do.
+    pub mod camera_turn {
+        use super::*;
+        use std::f32::consts::TAU;
+
+        /// The two ways to turn, named as the keys are (`TurnViewLeft`, `TurnViewRight`).
+        pub const DIRECTIONS: &[&str] = &["left", "right"];
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `"left"` or `"right"`.
+            pub by: String,
+            /// How many quarter turns, one unless given: at most a full turn.
+            #[serde(default = "one_quarter")]
+            pub quarters: u32,
+        }
+
+        fn one_quarter() -> u32 {
+            1
+        }
+
+        pub struct CameraTurn;
+
+        impl CameraTurn {
+            fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<CameraCursor, Refusal> {
+                let p: Params = serde_json::from_value(params.clone())
+                    .map_err(|e| Refusal::new(format!("these are not a turn: {e}. The fields are `by`, `left` or `right`, and `quarters`.")))?;
+                let sign = match p.by.as_str() {
+                    "left" => 1.0,
+                    "right" => -1.0,
+                    other => return Err(Refusal::new(format!("`{other}` is not a way to turn; say one of {}", DIRECTIONS.join(", ")))),
+                };
+                if !(1..=ROTATION_STEPS).contains(&p.quarters) {
+                    return Err(Refusal::new(format!("`quarters` is {}, and a turn is from 1 to {ROTATION_STEPS} quarters", p.quarters)));
+                }
+                let now = camera_in(ctx, "turn")?;
+                let goal_yaw = now.goal_yaw + sign * p.quarters as f32 * TAU / ROTATION_STEPS as f32;
+                Ok(CameraCursor { goal_yaw, ..*now })
+            }
+        }
+
+        impl Operation for CameraTurn {
+            fn name(&self) -> &'static str {
+                "camera_turn"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["by"],
+                    "properties": {
+                        "by": {"type": "string", "enum": DIRECTIONS, "description": "Which way to turn the view: `left` is Q and `right` is E."},
+                        "quarters": {"type": "integer", "minimum": 1, "maximum": ROTATION_STEPS, "description": "How many quarter turns: one unless given."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                Ok(json!({ "goal_yaw": Self::landing(ctx, params)?.goal_yaw }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let landed = Self::landing(ctx, params)?;
+                settle(ctx, landed, "the view turns".to_owned(), json!({ "goal_yaw": landed.goal_yaw }))
+            }
+        }
+    }
+}
+
 /// **The lattice grid's cursor, stepped** (E-002, #129 slice 27): `F`, `H`, `T` and `G` step the selected cell along a
 /// layer and `[` and `]` step the layer the grid shows, on the Meshes tab. One view operation for the six keys, on the rules
 /// the keys always had: a step stops at the grid's edges, the cursor rides the layer instead of being dropped by it, and a
@@ -7080,6 +7289,8 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(stage::stage_play::StagePlay),
         Box::new(stage::stage_scrub::StageScrub),
         Box::new(stage::stage_camera::StageCamera),
+        Box::new(camera::camera_pan::CameraPan),
+        Box::new(camera::camera_turn::CameraTurn),
         Box::new(lattice_cursor_step::LatticeCursorStep),
         Box::new(tile_hand::tile_hand_arm::TileHandArm),
         Box::new(tile_hand::tile_member_focus::TileMemberFocus),
@@ -7375,6 +7586,10 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     ("stage_play", "\"stage_play\""),
     ("stage_scrub", "\"stage_scrub\""),
     ("stage_camera", "\"stage_camera\""),
+    // **The Map camera keys** (E-002, #129 slice 31): `W`, `A`, `S` and `D` dispatch `camera_pan` and `Q` and `E` `camera_turn`,
+    // through `view::drive`.
+    ("camera_pan", "\"camera_pan\""),
+    ("camera_turn", "\"camera_turn\""),
     // **The lattice grid's cursor keys** (E-002, #129 slice 27): `F`, `H`, `T`, `G`, `[` and `]` dispatch `lattice_cursor_step`,
     // through `tiles::lattice_keys`.
     ("lattice_cursor_step", "\"lattice_cursor_step\""),

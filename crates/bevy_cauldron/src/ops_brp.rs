@@ -779,6 +779,8 @@ struct Gates<'w, 's> {
     cells: Option<ResMut<'w, crate::tiles::CellEdit>>,
     /// **The Tiles tab's history** (E-002, #129 slice 30): what `tile_history_step` steps, carried by the same view.
     tile_history: Option<ResMut<'w, crate::build::TileHistory>>,
+    /// **The Map camera** (E-002, #129 slice 31): what `camera_pan` and `camera_turn` move, carried by the same view.
+    rig: Option<ResMut<'w, crate::view::Rig>>,
 }
 
 impl Gates<'_, '_> {
@@ -815,6 +817,7 @@ impl Gates<'_, '_> {
             lattice: self.cells.as_deref().zip(import).zip(project).and_then(|((edit, import), project)| crate::tiles::lattice_cursor(edit, import, project)),
             tile_hand: self.build.as_deref().and_then(|b| b.hand()),
             tile_history: self.tile_history.as_deref().zip(self.build.as_deref()).map(|(history, build)| history.cursor(build)),
+            camera: self.rig.as_deref().map(|r| r.cursor()).unwrap_or_default(),
             stage: crate::ops_view::StageCursor {
                 playing: self.scrub.as_deref().is_none_or(|s| s.playing),
                 phase: self.scrub.as_deref().map(|s| s.phase).unwrap_or_default(),
@@ -946,6 +949,13 @@ impl Gates<'_, '_> {
             && let Some(build) = self.build.as_deref_mut()
         {
             build.set_hand(&hand);
+        }
+        // **The Map camera** (E-002, #129 slice 31), written only when it moved: the focus and the yaw it is heading for. The
+        // eased yaw and the zoom are the camera's own, and a write through a `ResMut` marks the rig changed.
+        if self.rig.as_deref().is_some_and(|r| !r.is_at(&view.camera))
+            && let Some(rig) = self.rig.as_deref_mut()
+        {
+            rig.set_cursor(&view.camera);
         }
     }
 

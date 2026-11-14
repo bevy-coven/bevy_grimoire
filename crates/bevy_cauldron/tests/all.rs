@@ -254,6 +254,7 @@ mod asset_spike;
 mod b027_the_pin_reason_names_its_piece;
 mod before_picture_is_the_last_after;
 mod brush_arm_is_an_operation;
+mod camera_is_an_operation;
 mod carved_ground_is_drawn;
 mod census_is_the_one_counter;
 mod check_view_asks_the_checks_on_demand;

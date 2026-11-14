@@ -587,9 +587,9 @@ type Blenders<'w, 's> = Query<
     Or<(With<BenchStage>, With<BenchGhost>)>,
 >;
 
-/// **The least a press scrubs for**, in seconds: one frame at 240 Hz. `stage_scrub` refuses a scrub of no time, so a press
-/// that lands on a frame whose delta is zero (a first frame, a paused clock) scrubs for this much instead of not logging.
-const PRESS_FLOOR_SECONDS: f32 = 1.0 / 240.0;
+/// **The least a press holds for**, in seconds: one frame at 240 Hz. `stage_scrub` and `camera_pan` refuse a move of no time, so a
+/// press that lands on a frame whose delta is zero (a first frame, a paused clock) moves for this much instead of not logging.
+pub(crate) const PRESS_FLOOR_SECONDS: f32 = 1.0 / 240.0;
 
 /// **Drive the staged blender** — the bench's creature driver, ordered exactly like the game's
 /// (`.after(PoseAttachSet).before(PoseBlendSet)`).

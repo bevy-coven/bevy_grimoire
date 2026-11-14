@@ -120,6 +120,50 @@ pub struct View {
     /// tiles `Cmd+Z` steps back to and `Cmd+Shift+Z` forward to. `None` is no history to step, so a step is refused.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tile_history: Option<TileHistoryCursor>,
+    /// **Where the Map camera looks from** (E-002, #129 slice 31): the ground point it is on, the yaw it is turned to and the zoom.
+    /// Session state like the rest; not serialised while it is where a session opens.
+    #[serde(default, skip_serializing_if = "CameraCursor::is_default")]
+    pub camera: CameraCursor,
+}
+
+/// **Where the Map camera is**, as a value an operation can move (E-002, #129 slice 31).
+///
+/// The same facts `view::Rig` holds: the point looked at, the yaw it is easing to and has reached, and how much of the map is on
+/// screen. `camera_pan` moves the focus along the screen's own axes, which depend on the yaw it stands at, and `camera_turn` moves
+/// the yaw the camera is heading for; the front end carries this in and writes the focus and the goal back when they moved. The
+/// eased yaw and the zoom are read, never written: easing and the wheel are the camera's own.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CameraCursor {
+    /// The point the camera looks at, in map metres: `[x, y, z]`.
+    #[serde(default)]
+    pub focus: [f32; 3],
+    /// The yaw the camera has eased to, in radians: the screen's axes are measured against it.
+    #[serde(default)]
+    pub yaw: f32,
+    /// The yaw the camera is heading for, in radians: a quarter turn moves it.
+    #[serde(default)]
+    pub goal_yaw: f32,
+    /// The height of the map the camera shows, in metres: a pan's speed is a fraction of it.
+    #[serde(default = "default_zoom")]
+    pub height: f32,
+}
+
+/// **The zoom a session opens at**: the one `view::Rig` starts with.
+fn default_zoom() -> f32 {
+    crate::view::DEFAULT_VIEW_HEIGHT
+}
+
+impl Default for CameraCursor {
+    fn default() -> Self {
+        CameraCursor { focus: [0.0; 3], yaw: 0.0, goal_yaw: 0.0, height: crate::view::DEFAULT_VIEW_HEIGHT }
+    }
+}
+
+impl CameraCursor {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 /// **Where the Tiles tab's history stands**, as a value an operation can step (E-002, #129 slice 30).
@@ -478,6 +522,8 @@ mod tests {
             tile_hand: None,
             // Owner exception (2026-11-13): the literal names the field #129 slice 30 adds (its default); the round trip is unchanged.
             tile_history: None,
+            // Owner exception (2026-11-13): the literal names the field #129 slice 31 adds (its default); the round trip is unchanged.
+            camera: CameraCursor::default(),
         };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);
