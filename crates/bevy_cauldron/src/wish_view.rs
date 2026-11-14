@@ -732,6 +732,7 @@ fn open_this_wish(
     activate: On<Activate>,
     buttons: Query<&WishOf, With<WishOpen>>,
     wishes: Option<Res<Wishes>>,
+    handbacks: Option<Res<crate::present::HandBacks>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
     mut commands: Commands,
 ) {
@@ -741,7 +742,17 @@ fn open_this_wish(
     if queued.state != WishState::Waiting {
         return;
     }
-    let url = queued.url.clone();
+    // **A benchmark task drafted from this wish's hand-back is named in the issue** (BM-07, #417): the tool the wish asks for can then be
+    // measured on the task that motivated it. The address is built again with the line in its context; one GitHub would not take keeps the
+    // address the wish was queued with, which is the wish as the agent made it.
+    let url = match handbacks.as_deref().and_then(|h| h.draft_for_key(&queued.key)) {
+        Some(path) => {
+            let mut wish = queued.wish.clone();
+            wish.context = format!("{}\nBenchmark task: {path}", wish.context);
+            wish.issue_url().unwrap_or_else(|_| queued.url.clone())
+        }
+        None => queued.url.clone(),
+    };
     let title = queued.wish.title();
     if let Some(state) = state.as_mut() {
         state.status.note(format!("opening {title} on GitHub"));

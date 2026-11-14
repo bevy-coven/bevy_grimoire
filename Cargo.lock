@@ -769,6 +769,7 @@ dependencies = [
  "bevy",
  "bevy_cauldron",
  "bevy_fairy",
+ "bevy_gooey",
  "bevy_grimoire_core",
  "libc",
  "serde",

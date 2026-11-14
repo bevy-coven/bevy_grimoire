@@ -3451,7 +3451,7 @@ fn editor_present(
         return Err("this editor keeps no hand-back record, so a wish could not cite this result"
             .to_owned());
     };
-    let id = handbacks.ask(&record.root, p.title.clone(), p.operation_ids.clone());
+    let id = handbacks.ask(&record.root, p.title.clone(), p.specified.clone(), p.operation_ids.clone());
     presenting.0 = Some(crate::present::Presented {
         id: id.clone(),
         title: p.title.clone(),

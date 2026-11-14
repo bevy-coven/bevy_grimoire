@@ -191,6 +191,15 @@ cauldron-bench run --trials 5 --label baseline --held-out /mnt/codex_fs/bench/da
 - **The directory is refused if it is inside a repository**, and so is a task there that does not say
   `split: held_out`.
 
+## Task drafts (BM-07)
+
+A hand-back a person kept can be made a benchmark task: **Make a benchmark task** on its row in the Agent
+workspace's history writes `.dark_factory/bench/drafts/<id>/task.yaml` in the project. Its prompt is what the
+person asked for, its `fixture/` is the map as it was before the agent's first change (rebuilt on a copy; the open
+map is never touched), its `solution` is what the agent did, and its `checks` are drafted from the change. **A
+draft is never run**: the loader skips `drafts/`, and the person moves a draft up into `.dark_factory/bench/` once
+they have read it. A wish the person keeps from that hand-back names the draft in its issue (`Benchmark task:`).
+
 ## Another project's suite
 
 `--project <root> --suite <dir>` runs a game's own suite (its `.dark_factory/bench/`) against that game's

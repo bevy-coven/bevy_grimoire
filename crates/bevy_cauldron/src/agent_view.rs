@@ -28,6 +28,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
 
 use bevy::prelude::*;
+use bevy::ui::InteractionDisabled;
 use bevy_gooey::Activate;
 use serde_json::Value;
 
@@ -79,6 +80,16 @@ pub struct AgentChangeLook {
 #[derive(Component, Clone, Debug, PartialEq, Eq)]
 pub struct AgentChangeUndo(pub String);
 
+/// **The text of a kept hand-back's row** (BM-07, #417).
+#[derive(Component)]
+pub struct AgentHandBackRow;
+
+/// **The Make a benchmark task button of a kept hand-back**, carrying the hand-back's id (`present-1`). Pressing it writes the draft under
+/// `.dark_factory/bench/drafts/` and opens it in the Files workspace; a hand-back whose setup cannot be rebuilt has it disabled, with the
+/// operation named in its tooltip.
+#[derive(Component, Clone, Debug, PartialEq, Eq)]
+pub struct AgentMakeTask(pub String);
+
 /// **One of the agent's changes**, as the history lists it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Change {
@@ -97,6 +108,7 @@ struct Watch {
     length: Option<u64>,
     modified: Option<SystemTime>,
     rows: Vec<Change>,
+    hands: Vec<HandBackRow>,
     drawn: bool,
 }
 
@@ -110,7 +122,8 @@ impl Plugin for AgentViewPlugin {
             // Runs in every workspace: the Look is carried out on the Map, after it has been left for.
             .add_systems(Update, finish_the_look.run_if(in_state(Screen::Editor)))
             .add_observer(on_look)
-            .add_observer(on_undo);
+            .add_observer(on_undo)
+            .add_observer(on_make_task);
     }
 }
 
@@ -188,9 +201,35 @@ fn spawn_agent_panel(mut commands: Commands, frame: Res<Frame>, pause: Res<Agent
     });
 }
 
-/// **Draw the agent's last changes** when the log moved and they are different.
+/// **One kept hand-back, as the history lists it** (BM-07, #417): its id, its title, the draft already made from it, and why one cannot be.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HandBackRow {
+    pub id: String,
+    pub title: String,
+    /// The draft's path under the project, once Make a benchmark task was pressed.
+    pub draft: Option<String>,
+    /// **Why no task can be made of it**, which is the disabled button's tooltip.
+    pub cannot: Option<String>,
+}
+
+/// **The kept hand-backs of this project, newest first**, each with the reason it cannot be made a task, when it cannot.
+fn kept_handbacks(project: &Project, handbacks: &crate::present::HandBacks) -> Vec<HandBackRow> {
+    handbacks
+        .kept_in(&project.root)
+        .take(HISTORY_ROWS)
+        .map(|h| HandBackRow {
+            id: h.id.clone(),
+            title: h.title.clone(),
+            draft: h.draft.clone(),
+            cannot: if h.draft.is_some() { None } else { crate::bench_draft::cannot(project, h) },
+        })
+        .collect()
+}
+
+/// **Draw the agent's last changes**, and the hand-backs the person kept, when the log or the hand-backs moved and they are different.
 fn draw_the_history(
     project: Option<Res<Project>>,
+    handbacks: Option<Res<crate::present::HandBacks>>,
     list: Query<(Entity, Option<&Children>), With<AgentHistory>>,
     mut watch: Local<Watch>,
     mut commands: Commands,
@@ -205,20 +244,23 @@ fn draw_the_history(
     let meta = std::fs::metadata(&path).ok();
     let (length, modified) = (meta.as_ref().map(std::fs::Metadata::len), meta.and_then(|m| m.modified().ok()));
     let unchanged = watch.root.as_ref() == Some(&project.root) && watch.length == length && watch.modified == modified;
-    if unchanged && watch.drawn {
+    let hands_moved = handbacks.as_ref().is_some_and(|h| h.is_changed());
+    if unchanged && watch.drawn && !hands_moved {
         return;
     }
     let rows = if unchanged && !watch.rows.is_empty() { watch.rows.clone() } else { agent_changes(&project.root, HISTORY_ROWS) };
+    let hands = handbacks.as_deref().map(|h| kept_handbacks(&project, h)).unwrap_or_default();
     watch.root = Some(project.root.clone());
     watch.length = length;
     watch.modified = modified;
-    if watch.drawn && watch.rows == rows {
+    if watch.drawn && watch.rows == rows && watch.hands == hands {
         return;
     }
     for child in children.into_iter().flatten() {
         commands.entity(*child).despawn();
     }
     watch.rows.clone_from(&rows);
+    watch.hands.clone_from(&hands);
     watch.drawn = true;
     commands.entity(container).with_children(|c| {
         if rows.is_empty() {
@@ -239,7 +281,51 @@ fn draw_the_history(
                     chrome::button(r, AgentChangeUndo(row.operation_id.clone()), "Undo this", Severity::Plain);
                 });
         }
+        // **The hand-backs the person kept** (BM-07, #417): a result is a benchmark task once somebody accepted it. Drawn only when there is
+        // one, so a workspace that has kept nothing holds no extra button.
+        for hand in &hands {
+            c.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::FlexStart, column_gap: Val::Px(chrome::GAP_TIGHT), ..default() })
+                .with_children(|r| {
+                    r.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() }).with_children(|col| {
+                        chrome::row_value(col, format!("kept: {}", hand.title), chrome::ink().text, AgentHandBackRow);
+                    });
+                    let label = if hand.draft.is_some() { "Open the benchmark task" } else { "Make a benchmark task" };
+                    let mut button = chrome::button(r, AgentMakeTask(hand.id.clone()), label, Severity::Plain);
+                    if let Some(why) = &hand.cannot {
+                        button.insert((InteractionDisabled, bevy_gooey::Tooltip::new(why.clone())));
+                    }
+                });
+        }
     });
+}
+
+/// **Make a benchmark task of a kept hand-back** (BM-07, #417): the draft is written, the person's hand-back remembers it, and the file opens in
+/// the Files workspace to be read. A refusal is the sentence on the status line, never a silent no-op. The open map is never touched.
+fn on_make_task(
+    activate: On<Activate>,
+    buttons: Query<&AgentMakeTask>,
+    project: Option<Res<Project>>,
+    open: Option<Res<OpenMap>>,
+    mut handbacks: Option<ResMut<crate::present::HandBacks>>,
+    mut state: Option<ResMut<crate::editor::EditorState>>,
+    mut commands: Commands,
+) {
+    let Ok(AgentMakeTask(id)) = buttons.get(activate.entity) else { return };
+    let (Some(project), Some(open), Some(handbacks), Some(state)) = (project.as_deref(), open.as_deref(), handbacks.as_mut(), state.as_mut()) else { return };
+    let Some(hand) = handbacks.kept_in(&project.root).find(|h| &h.id == id).cloned() else { return };
+    match crate::bench_draft::make(project, open, &hand) {
+        Ok(made) => {
+            handbacks.set_draft(&hand.id, &project.root, made.rel.clone());
+            state.status.note(if made.written {
+                format!("made the benchmark task `{}`: {}", made.id, made.rel)
+            } else {
+                format!("the benchmark task `{}` is already drafted: {}", made.id, made.rel)
+            });
+            let rel = made.rel;
+            commands.queue(move |world: &mut World| crate::crosslinks::open_in_files(world, &rel, None));
+        }
+        Err(why) => state.status.problem(format!("no benchmark task was made: {why}")),
+    }
 }
 
 /// **A Look asked for and not yet carried out.** A `Session` resource: the switch it asks for resets every workspace's own state, and a
