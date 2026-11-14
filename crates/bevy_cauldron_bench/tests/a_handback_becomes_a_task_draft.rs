@@ -466,3 +466,49 @@ fn a_hand_back_nobody_kept_offers_no_task() {
     assert!(make_button(&mut app, &handback).is_none(), "a hand-back the person took back has a Make a benchmark task");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// **A hand-back that changed no placement makes no task** (review): the only checks such a draft could hold are the `unchanged` ones on the
+/// other maps, which a run that does nothing passes, so the draft would measure nothing. The press says why on the status line and writes nothing.
+#[test]
+fn a_hand_back_that_changed_no_placement_makes_no_task() {
+    let root = project("no_placement");
+    let (mut app, _settings) = editor(&root, "no_placement");
+    let ids = vec![apply(&mut app, "note_add", serde_json::json!({"cells": [0, 0, 2, 2], "text": "a wall here"}))];
+    let handback = hand_back_and_keep(&mut app, &ids);
+    switch_to(&mut app, Workspace::Agent);
+    let button = make_button(&mut app, &handback).unwrap_or_else(|| panic!("a kept hand-back has its button"));
+    press(&mut app, button);
+    assert!(drafts(&root).is_empty(), "a draft that asks for nothing was written: {:?}", drafts(&root));
+    let said = said(&app);
+    assert!(said.contains("no benchmark task was made") && said.contains("changed no placement"), "the refusal is named on the status line: {said}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **Two sessions' hand-backs with one title are two drafts** (review): the hand-back's number restarts with the editor, so the first
+/// session's `present-1` and a later session's `present-1` of the same title must not share a folder, or the later one opens the earlier
+/// one's draft as "already drafted".
+#[test]
+fn a_later_sessions_handback_with_the_same_title_gets_its_own_draft() {
+    let root = project("sessions");
+    let (mut app, _settings) = editor(&root, "sessions");
+    let first = vec![apply(&mut app, "placement_add", serde_json::json!({"piece": "bed_double", "at": [0.0, -1.39], "yaw": 0.0}))];
+    let first_id = hand_back_and_keep(&mut app, &first);
+    switch_to(&mut app, Workspace::Agent);
+    let button = make_button(&mut app, &first_id).unwrap_or_else(|| panic!("no button for `{first_id}`"));
+    press(&mut app, button);
+    assert_eq!(drafts(&root).len(), 1, "the first draft: {}", said(&app));
+    drop(app);
+
+    // **A later session**: a new editor on the same project, whose hand-backs are numbered from `present-1` again.
+    let (mut app, _settings) = editor(&root, "sessions2");
+    let second = vec![apply(&mut app, "placement_set_yaw", serde_json::json!({"id": "chair", "yaw": 180.0}))];
+    let second_id = hand_back_and_keep(&mut app, &second);
+    assert_eq!(second_id, first_id, "the number restarts with the session");
+    switch_to(&mut app, Workspace::Agent);
+    let button = make_button(&mut app, &second_id).unwrap_or_else(|| panic!("no button for `{second_id}`"));
+    press(&mut app, button);
+    let made = drafts(&root);
+    assert_eq!(made.len(), 2, "the later session's hand-back has a draft of its own: {made:?}; {}", said(&app));
+    assert!(!said(&app).contains("already drafted"), "{}", said(&app));
+    let _ = std::fs::remove_dir_all(&root);
+}

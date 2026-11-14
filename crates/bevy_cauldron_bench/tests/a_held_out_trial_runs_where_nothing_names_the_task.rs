@@ -69,7 +69,7 @@ fn held_dir(dir: &Path) -> PathBuf {
 
 /// **The stand-in `omp`**: it answers the harness's questions, and when it is launched as the agent it searches
 /// the run's directory (three levels above its `--cwd`) for the markers and writes what it found.
-fn stand_in(bin: &Path, report: &Path) {
+fn stand_in(bin: &Path, report: &Path, tmp: &Path) {
     let script = format!(
         "#!/bin/sh\n\
          case \"$1\" in\n\
@@ -91,8 +91,11 @@ fn stand_in(bin: &Path, report: &Path) {
          echo '--- files holding a marker'\n\
          grep -rlF -e '{ID}' -e '{PROMPT}' -e '{CHECK}' \"$root\" 2>/dev/null\n\
          echo '--- end'\n\
+         echo '--- tmp'\n\
+         ls -1 '{}'\n\
          }} > '{}'\n\
          exit 0\n",
+        tmp.display(),
         report.display()
     );
     let omp = bin.join("omp");
@@ -108,9 +111,11 @@ fn a_held_out_trial_runs_where_nothing_names_the_task() {
     let dir = scratch("run");
     let bin = dir.join("bin");
     let report = dir.join("agent-report.txt");
-    stand_in(&bin, &report);
+    stand_in(&bin, &report, &dir.join("tmp"));
     let held = held_dir(&dir);
     let home = dir.join("home");
+    let tmp = dir.join("tmp");
+    std::fs::create_dir_all(&tmp).unwrap_or_else(|e| panic!("{}: {e}", tmp.display()));
     let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
     let mut child = Command::new(env!("CARGO_BIN_EXE_cauldron-bench"))
         .args(["run", "--agent", "omp", "--run", "held-run", "--trials", "1", "--task", ID, "--held-out"])
@@ -121,6 +126,7 @@ fn a_held_out_trial_runs_where_nothing_names_the_task() {
         .arg(&server)
         .current_dir(repo())
         .env("HOME", &home)
+        .env("TMPDIR", &tmp)
         .env("PATH", path)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -150,6 +156,11 @@ fn a_held_out_trial_runs_where_nothing_names_the_task() {
     };
     assert!(!paths.contains(ID), "a path under the run's directory names the task while the agent runs:\n{paths}");
     assert!(!paths.contains("validity"), "the validity proofs (which hold the solution) are gone before the trial:\n{paths}");
+    // **The validity scratch is under `$TMPDIR`, not under the run's directory** (review): the stand-in also lists the temp directory the
+    // run was given, and no `cauldron-bench-validity-*` may be in it while a trial runs. The `--- tmp` marker is written before the listing,
+    // so a stand-in that never listed it fails here rather than passing an empty search.
+    let tmp_listing = seen.split("--- tmp").nth(1).unwrap_or_else(|| panic!("the stand-in did not list the temp directory:\n{seen}"));
+    assert!(!tmp_listing.contains("cauldron-bench-validity"), "a validity proof (the task's solution) is still in the temp directory while the agent runs:\n{tmp_listing}");
     assert!(leaks.is_empty(), "files under the run's directory carry the task's id, prompt or check text while the agent runs:\n{leaks}");
     // And what the run left behind afterwards is no different: the same search over the finished run.
     let run = home.join(".local/state/cauldron-bench/held-run");

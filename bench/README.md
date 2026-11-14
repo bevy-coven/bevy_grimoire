@@ -176,16 +176,21 @@ cauldron-bench run --trials 5 --label baseline --held-out /mnt/codex_fs/bench/da
 - **A trial is given its own scene and nothing of the task**: the task's `fixture/` is laid over the trial's
   copy, and its prompt, solution and checks are not written into a trial's folder.
 - **A held-out trial is filed by ordinal and recorded as a count.** Its folder is `held-out-<n>/trial-<k>/`,
-  never the task's id, and its `trial.json` holds the outcome and how many checks held and nothing of the task: no id,
-  prompt, title, tags or check text. The folder is an ancestor of every later trial's working directory, and a
-  model that reads `../trial-1/trial.json` learns what a score is and nothing about what it scored. The validity
-  proofs (whose records hold the solution) are written to a scratch directory and deleted before any model trial
-  starts.
-- **The separation is a path nobody is told, and that is all it is.** The share is world-readable on the hosts
-  that mount it and `omp` has no sandbox, so an agent that searched the filesystem for task files could find them.
-  The fixes above remove every place a *run* writes the tasks; they do not make the share private. A benchmark
-  run on a host that mounts it trusts the agent not to go looking, the way a student is trusted with an exam in
-  the next room.
+  never the task's id, and its `trial.json` holds the outcome, how many checks held, and how many calls, refusals, wishes
+  and files changed behind the tools there were, and nothing of the task: no id, prompt, title, tags, check text, call
+  arguments or wish text (the lists are placeholders of the right length). The folder is an ancestor of every later
+  trial's working directory, and a model that reads `../trial-1/trial.json` learns what a score is and nothing about what
+  it scored. The validity proofs (whose records hold the solution) are written to a scratch directory under `$TMPDIR`
+  and deleted before any model trial starts. A refusal of the held-out directory, or a harness error on a held-out task,
+  says `task 3 of 8` and never the id or a path under the directory.
+- **The share is readable and trusted; the protection is that nothing a trial can reach names a held-out task.** The
+  directory is written down here (`HELD_OUT_DIR`) and given to the runner on its command line (`--held-out <dir>`, which
+  `ps` shows), so it is not a secret, and it is readable on the hosts that mount it. `omp` has no sandbox, so an agent that
+  went looking for it could read the tasks. A run on a host that mounts it trusts the agent not to go looking, the way a
+  student is trusted with an exam in the next room. What the runner guarantees is narrower and is tested: **nothing under a
+  trial's working directory or any of its ancestors, up to the run's directory, names a held-out task or holds its prompt,
+  solution or checks**, and the validity scratch under `$TMPDIR` is gone before a model trial starts. The fixes above remove
+  every place a *run* writes the tasks; they do not make the share private.
 - **Nothing prints them by name**: a console line is `(a held-out task) trial 2: PASS`, and a report states
   them as a total (`held-out (total only)`), never by task, tag or prompt.
 - **The directory is refused if it is inside a repository**, and so is a task there that does not say

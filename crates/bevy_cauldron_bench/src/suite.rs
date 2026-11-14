@@ -69,12 +69,11 @@ pub struct Variants {
 pub const VARIANTS_VERSION: u32 = 1;
 
 impl Suite {
-    /// **Read every task under `dir`**, refusing the suite on the first task that cannot be run.
+    /// **The directory of every task under `dir`**, sorted, so a task's place in it is the same on every read; `drafts/` is not one.
     ///
-    /// `root` is the project the tasks run against — the repository, or a game's root — and `known` every
-    /// operation name the caller's registry has.
+    /// A held-out task's place in this list is what a log says of it ([`crate::run::held_out_label`]).
     #[allow(clippy::result_large_err)]
-    pub fn load(root: &Path, dir: &Path, known: &[&str]) -> Result<Suite, Problem> {
+    pub fn task_dirs(dir: &Path) -> Result<Vec<PathBuf>, Problem> {
         let entries = std::fs::read_dir(dir).map_err(|e| {
             Problem::with(
                 format!("{} could not be read", dir.display()),
@@ -92,6 +91,16 @@ impl Suite {
             .filter(|p| p.is_dir() && p.file_name().and_then(|n| n.to_str()) != Some(DRAFTS_DIR_NAME))
             .collect();
         task_dirs.sort();
+        Ok(task_dirs)
+    }
+
+    /// **Read every task under `dir`**, refusing the suite on the first task that cannot be run.
+    ///
+    /// `root` is the project the tasks run against — the repository, or a game's root — and `known` every
+    /// operation name the caller's registry has.
+    #[allow(clippy::result_large_err)]
+    pub fn load(root: &Path, dir: &Path, known: &[&str]) -> Result<Suite, Problem> {
+        let task_dirs = Suite::task_dirs(dir)?;
         let mut tasks = Vec::with_capacity(task_dirs.len());
         for task_dir in task_dirs {
             tasks.push(Task::load(&task_dir, root, known)?);

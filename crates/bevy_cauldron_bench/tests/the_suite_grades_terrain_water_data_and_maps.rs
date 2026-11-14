@@ -231,3 +231,18 @@ fn a_piece_rests_on_a_host_named_by_its_piece() {
     assert!(said.contains("neither"), "naming no host is refused by name: {said}");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// **A terrain file that does not read fails the lake check** (review): the ground under a lake is the terrain's, and reading a damaged
+/// file as flat ground at 0 m would grade the lake against ground the map does not have. The refusal names the file.
+#[test]
+fn a_terrain_file_that_does_not_read_fails_a_lake_check() {
+    let root = project("water_bad_terrain");
+    write(&root, "furniture/water/broken.yaml", "version: 1\nlakes:\n- x: 0.0\n  z: 0.0\n  radius_m: 1.0\n  level_m: 0.3\n");
+    write(&root, "furniture/terrain/broken.yaml", "version: 1\nwidth: not a number\n");
+    let said = fails(&root, "water_lake: {map: broken, x: [-1.0, 1.0], z: [-1.0, 1.0], level_above_ground_m: [0.0, 1.0]}");
+    assert!(said.contains("furniture/terrain/broken.yaml") && said.contains("did not read"), "the unreadable terrain is named: {said}");
+    // The same lake with the terrain file absent is flat ground, and passes: the refusal is for a file that is there and unreadable.
+    let _ = std::fs::remove_file(root.join("assets/grimoire/furniture/terrain/broken.yaml"));
+    holds(&root, "water_lake: {map: broken, x: [-1.0, 1.0], z: [-1.0, 1.0], level_above_ground_m: [0.0, 1.0]}");
+    let _ = std::fs::remove_dir_all(&root);
+}

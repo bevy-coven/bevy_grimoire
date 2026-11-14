@@ -870,7 +870,7 @@ pub fn run(options: &Options, held_out: Option<&Path>) -> Result<Vec<TrialRecord
     let held: Vec<Task> = match held_out {
         Some(dir) => {
             Suite::load_held_out(&options.root, dir, &known_refs)
-                .map_err(|p| format!("the held-out tasks were refused: {}", p.line()))?
+                .map_err(|_| held_out_refusal(&options.root, dir, &known_refs))?
                 .tasks
         }
         None => Vec::new(),
@@ -1155,9 +1155,32 @@ fn check_model(model: &str) -> Result<(), String> {
     ))
 }
 
+/// **What a held-out record puts where a call, a file or a wish was**: a record keeps how many there were, not what they said.
+const HELD_OUT_BLANK: &str = "held-out";
+
 /// **What a held-out task is called in a path and in a record**: its place among the held-out tasks of the run.
 pub fn held_out_label(ordinal: usize) -> String {
     format!("held-out-{ordinal}")
+}
+
+/// **Why the held-out directory was refused, without naming a task.** The loader's own sentence names the task (its id, a path under the
+/// held-out directory), and the run's output is a log. This finds the first task that does not load and says its place in the directory,
+/// which is also what a record calls it; a refusal that is about the directory, not one task, says so.
+pub fn held_out_refusal(root: &Path, dir: &Path, known: &[&str]) -> String {
+    if let Ok(dirs) = Suite::task_dirs(dir) {
+        for (n, task_dir) in dirs.iter().enumerate() {
+            if Task::load(task_dir, root, known).is_err() {
+                return format!(
+                    "the held-out tasks were refused: task {} of {} in the held-out directory does not load; the loader's sentence names the task, so read it there",
+                    n + 1,
+                    dirs.len()
+                );
+            }
+        }
+    }
+    "the held-out tasks were refused: the directory is inside a repository, cannot be read, holds a task that does not say `split: held_out`, \
+     or holds two tasks with one id; the loader's sentence names the task, so run it where the directory is"
+        .to_owned()
 }
 
 /// **One trial, from the copy to its `trial.json`**, and never a `pass` for a harness that failed.
@@ -1187,6 +1210,7 @@ fn one_trial(options: &Options, task: &Task, label: &str, trial: u32, variant: O
         dir: dir.clone(),
         held_out: task.split == crate::task::Split::HeldOut,
     };
+    let held_out = task.split == crate::task::Split::HeldOut;
     let harness = |reason: String| {
         let record = record(Outcome::HarnessError, reason.clone());
         write_record(&record, task, &reason);
@@ -1197,7 +1221,12 @@ fn one_trial(options: &Options, task: &Task, label: &str, trial: u32, variant: O
     }
     let project = dir.join("project");
     if let Err(e) = fixture::lay_out_task(&options.root, &task.dir, &project) {
-        return harness(format!("the fixture was not laid out: {e}"));
+        // **A held-out task's own files are not named**: the error is a path under the held-out directory, which ends in the task's id.
+        return harness(if held_out {
+            "the fixture was not laid out (the task's own files; read the task in the held-out directory)".to_owned()
+        } else {
+            format!("the fixture was not laid out: {e}")
+        });
     }
     // **The arm's overlay**, laid over the copy after the fixture: a different `AGENTS.md` is the example.
     if let Some(variant) = variant {
@@ -1230,7 +1259,12 @@ fn one_trial(options: &Options, task: &Task, label: &str, trial: u32, variant: O
             json!({"operation": step.op, "parameters": step.params, "dry_run": false}),
         );
         if let Err(e) = answer {
-            return harness(format!("the task's setup was refused: {e}"));
+            // **The refusal quotes the step's operation and arguments**, which for a held-out task are its setup.
+            return harness(if held_out {
+                "the task's setup was refused (read the task in the held-out directory)".to_owned()
+            } else {
+                format!("the task's setup was refused: {e}")
+            });
         }
     }
     // **What the setup left**, which the byte comparisons are against.
@@ -1795,8 +1829,10 @@ fn write_record(record: &TrialRecord, task: &Task, sentence: &str) {
 ///
 /// A dev trial's record names its task, quotes its prompt and states every check with what it measured, so a
 /// report is built from the trials alone. **A held-out trial's record is a count and nothing else of the
-/// task**: no id (its label is an ordinal), no prompt, title or tags, no sentence, and each check is only
-/// whether it held. The record sits in a directory that is an ancestor of every later trial's working
+/// task**: no id (its label is an ordinal), no prompt, title or tags, no sentence, each check is only
+/// whether it held, and **the agent's calls are only how many there were**: for `--agent oracle` the tool log
+/// *is* the task's solution, with its arguments, and the wishes and the files changed behind the tools are the
+/// agent's account of the task. The record sits in a directory that is an ancestor of every later trial's working
 /// directory, and a model that reads `../trial-1/trial.json` must learn what a score is and nothing about the
 /// task it was a score of.
 pub fn record_json(record: &TrialRecord, task: &Task, sentence: &str) -> Value {
@@ -1808,9 +1844,19 @@ pub fn record_json(record: &TrialRecord, task: &Task, sentence: &str) -> Value {
             .iter()
             .map(|c| crate::Verdict { check: "held-out".to_owned(), asks: String::new(), passed: c.passed, measured: String::new() })
             .collect();
+        // **The counts the JSON derives from the calls** (`tool_call_count`, `refusals`, `undos`) are written from the full record; the
+        // lists they come from are then blanked to as many placeholders, so a report that counts a list's length still counts, and
+        // nothing that was in one is left.
+        let (calls, behind, wishes) = (record.tool_calls.len(), record.edits_behind.len(), record.wishes.len());
         let mut value = shown.to_json();
         if let Some(object) = value.as_object_mut() {
             object.insert("split".to_owned(), json!(task.split.name()));
+            object.insert("tool_calls".to_owned(), json!(vec![HELD_OUT_BLANK; calls]));
+            object.insert("tool_log".to_owned(), json!([]));
+            object.insert("edits_behind".to_owned(), json!(vec![HELD_OUT_BLANK; behind]));
+            object.insert("wishes".to_owned(), json!(vec![json!({ "tool": HELD_OUT_BLANK }); wishes]));
+            object.insert("refusals_by_tool".to_owned(), json!({}));
+            // The tools offered are the server's own list, which a held-out task does not choose, and are kept.
         }
         return value;
     }

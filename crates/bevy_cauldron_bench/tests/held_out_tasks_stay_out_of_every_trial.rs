@@ -242,14 +242,15 @@ fn a_held_out_record_says_how_many_checks_held_and_nothing_of_the_task() {
         outcome: Outcome::Fail,
         reason: "ALPHA-REASON".to_owned(),
         checks: vec![verdict("placement_at", true), verdict("handback_contains", false)],
-        tool_calls: Vec::new(),
-        tool_log: Vec::new(),
+        // **What the agent did is the task's content**: for the oracle the log is the solution, arguments and all.
+        tool_calls: vec!["ALPHA-CALL".to_owned()],
+        tool_log: vec![bevy_cauldron_bench::run::CallLog { tool: "ALPHA-CALL".to_owned(), args: r#"{"piece":"ALPHA-ARGS"}"#.to_owned(), refused: true }],
         tokens: None,
         cost_reported_usd: None,
-        edits_behind: Vec::new(),
+        edits_behind: vec!["ALPHA-FILE.yaml".to_owned()],
         wall_s: 1.0,
         tools_offered: Vec::new(),
-        wishes: Vec::new(),
+        wishes: vec![serde_json::json!({"tool": "ALPHA-WISH", "task": "ALPHA-WISH-TASK"})],
         dir: std::path::PathBuf::new(),
         held_out,
     };
@@ -260,11 +261,44 @@ fn a_held_out_record_says_how_many_checks_held_and_nothing_of_the_task() {
     assert!(shown.contains("held-out-1"), "it is recorded by its place: {shown}");
     assert!(shown.contains(r#""split":"held_out""#), "and still says what it is, which a report needs: {shown}");
     assert!(shown.contains(r#""passed":1"#) && shown.contains(r#""total":2"#), "and keeps the score: {shown}");
+    // **The counts survive and the contents do not**: a report counts calls, refusals, wishes and files changed behind the tools.
+    let value: serde_json::Value = serde_json::from_str(&shown).unwrap_or_else(|e| panic!("{e}: {shown}"));
+    assert_eq!(value["tool_call_count"], 1, "the number of calls is kept: {shown}");
+    assert_eq!(value["refusals"], 1, "and the refusals: {shown}");
+    assert_eq!(value["tool_calls"].as_array().map(Vec::len), Some(1), "a list still counts what it held: {shown}");
+    assert_eq!(value["edits_behind"].as_array().map(Vec::len), Some(1), "{shown}");
+    assert_eq!(value["wishes"].as_array().map(Vec::len), Some(1), "{shown}");
+    assert_eq!(value["tool_log"].as_array().map(Vec::len), Some(0), "the arguments of the calls are gone: {shown}");
     // A dev record is the whole account, as a report is built from it.
     let dev = bevy_cauldron_bench::run::record_json(&record(false), alpha, "ALPHA-SENTENCE").to_string();
-    for kept in ["alpha-task", "ALPHA-ASKS", "ALPHA-MEASURED", "ALPHA-SENTENCE", "ALPHA-SECRET-prompt"] {
+    for kept in ["alpha-task", "ALPHA-ASKS", "ALPHA-MEASURED", "ALPHA-SENTENCE", "ALPHA-SECRET-prompt", "ALPHA-ARGS", "ALPHA-FILE", "ALPHA-WISH-TASK"] {
         assert!(dev.contains(kept), "a dev record still carries `{kept}`: {dev}");
     }
     let _ = std::fs::remove_dir_all(&root);
     let _ = std::fs::remove_dir_all(&held);
+}
+
+/// **A held-out directory the runner refuses is refused by place, never by name** (review): the loader's own sentence names the task and its
+/// path, and the run's output is a log. The runner says which task of the directory failed, as a count, and a refusal about the
+/// directory as a whole names no task either.
+#[test]
+fn a_refused_held_out_directory_is_named_by_place_and_not_by_task() {
+    let root = project("refusal");
+    let held = held_dir("refusal");
+    // The second task loses the scene it opens, so it does not load.
+    std::fs::remove_dir_all(held.join("beta-task/fixture")).unwrap_or_else(|e| panic!("{e}"));
+    let said = bevy_cauldron_bench::run::held_out_refusal(&root, &held, &[]);
+    assert!(said.contains("task 2 of 2"), "the refusal says which place failed: {said}");
+    let held_path = held.display().to_string();
+    for secret in ["alpha", "beta", "BETA-SECRET", "ALPHA-SECRET", held_path.as_str()] {
+        assert!(!said.contains(secret), "the refusal names `{secret}`: {said}");
+    }
+    // **A refusal about the directory** (a dev task in it) names no task.
+    let mixed = scratch("refusal-mixed-held");
+    write(&mixed.join("a-dev-task/task.yaml"), &task_text("a-dev-task", "dev", "house", "DEV-MARKER"));
+    let said = bevy_cauldron_bench::run::held_out_refusal(&root, &mixed, &[]);
+    assert!(!said.contains("a-dev-task") && !said.contains("DEV-MARKER"), "the refusal names the task: {said}");
+    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&held);
+    let _ = std::fs::remove_dir_all(&mixed);
 }

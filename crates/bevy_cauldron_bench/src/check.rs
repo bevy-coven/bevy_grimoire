@@ -1536,10 +1536,23 @@ fn grade_water_lake(
             fails.push(format!("lake {i} is under {min:.3} m wide"));
         }
         if let Some((least, most)) = w.level_above_ground_m {
-            let ground = left
-                .text(&format!("{AUTHORING_KIT}/terrain/{}.yaml", w.map))
-                .and_then(|t| bevy_grimoire_core::heightfield::Heightfield::parse(&t).ok())
-                .map_or(0.0, |field| field.height_at(lake.x, lake.z));
+            let terrain = format!("{AUTHORING_KIT}/terrain/{}.yaml", w.map);
+            // **A map with no terrain file is flat at 0**, which is what the editor draws; **a terrain file that is there and does not read
+            // is not**, and reading it as flat ground would pass or fail a lake against ground that is not the map's. It is a refusal.
+            let ground = match left.text(&terrain) {
+                Some(text) => match bevy_grimoire_core::heightfield::Heightfield::parse(&text) {
+                    Ok(field) => field.height_at(lake.x, lake.z),
+                    Err(why) => {
+                        fails.push(format!("`{terrain}` did not read, so lake {i} cannot be set against the ground: {why}"));
+                        continue;
+                    }
+                },
+                None if left.digest(&terrain).is_some() => {
+                    fails.push(format!("`{terrain}` is in the project but cannot be read, so lake {i} cannot be set against the ground"));
+                    continue;
+                }
+                None => 0.0,
+            };
             let above = lake.level_m - ground;
             says.push(format!("lake {i} stands {above:.3} m over the ground at its centre"));
             if !(least..=most).contains(&above) {
