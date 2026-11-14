@@ -127,6 +127,19 @@ pub const POLL_INTERVAL_MS: u64 = 50;
 /// found while the agent runs, not minutes later when the budget ends.
 pub const AGENT_POLL_INTERVAL_MS: u64 = 250;
 
+/// **The directory under a run's output where the pre-flight turn's isolated HOME is made**, and deleted again.
+pub const PREFLIGHT_DIR: &str = "preflight";
+
+/// **What the pre-flight turn says**: a few words, so the model's answer costs next to nothing.
+pub const PREFLIGHT_PROMPT: &str = "reply ok";
+
+/// **How long omp itself is given for the pre-flight turn** (`--max-time`), seconds. A trial's own turn took ~35 s
+/// to be refused on a spent quota (#432), and an answering model needs a few: this is several times either.
+pub const PREFLIGHT_WALL_S: u64 = 90;
+
+/// **How long past [`PREFLIGHT_WALL_S`] the harness waits before killing an omp that ignored its own flag**, seconds.
+pub const PREFLIGHT_GRACE_S: u64 = 15;
+
 /// **The harness's own tools**, which an agent is offered beside the editor's and which are not a leak.
 ///
 /// Measured on this host (omp 18.18.9, 2026-11-13) from the registry of an isolated trial: twenty names.
@@ -917,12 +930,18 @@ pub fn run(options: &Options, held_out: Option<&Path>) -> Result<Vec<TrialRecord
     // **The runner refuses a model this host does not have** (BM-02): a run whose harness could not start
     // would report every trial as a harness error and say nothing about the editor.
     match options.agent {
-        Agent::Omp => check_model(&options.model)?,
+        Agent::Omp => check_model(OMP_PROGRAM, &options.model)?,
         Agent::ClaudeCode => check_claude()?,
         Agent::Oracle | Agent::Nothing => {}
     }
     std::fs::create_dir_all(&options.out)
         .map_err(|e| format!("{}: {e}", options.out.display()))?;
+    // **One real turn before any trial** (#432, D2): a model the host lists can still have a provider with no
+    // quota left or a key that is refused, and finding that out trial by trial costs 35 s each, for every
+    // trial of the run. The turn runs in the same kind of isolated HOME a trial uses, with the same credential.
+    if options.agent == Agent::Omp {
+        preflight_turn(OMP_PROGRAM, &options.model, &options.out.join(PREFLIGHT_DIR))?;
+    }
     // **A model is only scored on held-out tasks that are valid** (BM-04): the scripted agents are the proof
     // themselves, so they skip it.
     let held_selected: Vec<&Task> = selected.iter().filter(|t| t.split == crate::task::Split::HeldOut).collect();
@@ -952,38 +971,103 @@ pub fn run(options: &Options, held_out: Option<&Path>) -> Result<Vec<TrialRecord
             work.push((task.clone(), label.clone(), trial));
         }
     }
-    let next = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let records = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-    let mut handles = Vec::new();
-    let workers = options.jobs.max(1) as usize;
-    for _ in 0..workers {
-        let next = next.clone();
-        let records = records.clone();
-        let work = work.clone();
-        let options = options.clone();
-        let variant = variant.clone();
-        handles.push(std::thread::spawn(move || {
-            loop {
-                let i = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                let Some((task, label, trial)) = work.get(i) else {
-                    return;
-                };
-                let record = one_trial(&options, task, label, *trial, variant.as_ref());
-                if let Ok(mut records) = records.lock() {
-                    records.push(record);
-                }
-            }
-        }));
+    let records = run_work(
+        &work,
+        options.jobs,
+        &|task, label, trial| one_trial(options, task, label, trial, variant.as_ref()),
+        &|task, label, trial, reason| not_run(options, task, label, trial, variant.as_ref(), reason),
+    )?;
+    Ok(records)
+}
+
+/// **One unit of a run's work**: a task, the name its trials are filed under, and which trial of it.
+pub type Work = (Task, String, u32);
+
+/// **How many provider refusals in a row stop a run** (#432, D2). Three in a row is not a flaky network and not
+/// the agent's doing: it is a provider that is not answering, and every later trial would say the same thing.
+pub const PROVIDER_REFUSALS_MAX: u32 = 3;
+
+/// **How a trial's reason begins when the model's provider refused a turn** (an HTTP 429 for a spent quota, a
+/// refused key), which is what the run's circuit breaker counts.
+pub const PROVIDER_REFUSAL: &str = "the model provider refused a turn";
+
+/// **Whether a trial ended because the provider refused**, and for no other reason.
+pub fn is_provider_refusal(record: &TrialRecord) -> bool {
+    record.outcome == Outcome::HarnessError && record.reason.starts_with(PROVIDER_REFUSAL)
+}
+
+/// **Run a work list on `jobs` workers, and stop it when the provider has stopped answering.**
+///
+/// `run_one` makes one trial. After [`PROVIDER_REFUSALS_MAX`] provider refusals **in a row** (a success, a
+/// failure or any other harness error resets the count) no worker takes another trial: those in flight finish,
+/// and every trial that was not started gets a record from `not_run` carrying the reason, so the run's report
+/// counts all of them and says why they are harness errors rather than leaving them out.
+pub fn run_work(
+    work: &[Work],
+    jobs: u32,
+    run_one: &(dyn Fn(&Task, &str, u32) -> TrialRecord + Sync),
+    not_run: &(dyn Fn(&Task, &str, u32, String) -> TrialRecord + Sync),
+) -> Result<Vec<TrialRecord>, String> {
+    use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering::SeqCst};
+    let next = AtomicUsize::new(0);
+    let consecutive = AtomicU32::new(0);
+    let stopped = AtomicBool::new(false);
+    let last_refusal: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+    let finished: std::sync::Mutex<Vec<(usize, TrialRecord)>> = std::sync::Mutex::new(Vec::new());
+    let panicked = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..jobs.max(1))
+            .map(|_| {
+                scope.spawn(|| {
+                    loop {
+                        if stopped.load(SeqCst) {
+                            return;
+                        }
+                        let i = next.fetch_add(1, SeqCst);
+                        let Some((task, label, trial)) = work.get(i) else {
+                            return;
+                        };
+                        let record = run_one(task, label, *trial);
+                        if is_provider_refusal(&record) {
+                            if let Ok(mut last) = last_refusal.lock() {
+                                *last = Some(record.reason.clone());
+                            }
+                            if consecutive.fetch_add(1, SeqCst) + 1 >= PROVIDER_REFUSALS_MAX {
+                                stopped.store(true, SeqCst);
+                            }
+                        } else {
+                            consecutive.store(0, SeqCst);
+                        }
+                        if let Ok(mut finished) = finished.lock() {
+                            finished.push((i, record));
+                        }
+                    }
+                })
+            })
+            .collect();
+        let joined: Vec<bool> = handles.into_iter().map(|h| h.join().is_err()).collect();
+        joined.contains(&true)
+    });
+    if panicked {
+        return Err("a trial's worker panicked".to_owned());
     }
-    for handle in handles {
-        if handle.join().is_err() {
-            return Err("a trial's worker panicked".to_owned());
+    let mut finished = finished.into_inner().map_err(|_| "a trial's records were poisoned".to_owned())?;
+    if stopped.load(SeqCst) {
+        let why = last_refusal
+            .into_inner()
+            .map_err(|_| "a trial's records were poisoned".to_owned())?
+            .unwrap_or_default();
+        let started: std::collections::BTreeSet<usize> = finished.iter().map(|(i, _)| *i).collect();
+        for (i, (task, label, trial)) in work.iter().enumerate() {
+            if !started.contains(&i) {
+                let reason = format!(
+                    "not run: the run was stopped after {PROVIDER_REFUSALS_MAX} consecutive provider refusals, so this \
+                     trial was never started. The last refusal: {why}"
+                );
+                finished.push((i, not_run(task, label, *trial, reason)));
+            }
         }
     }
-    let mut records = std::sync::Arc::try_unwrap(records)
-        .map_err(|_| "a trial's records were still held".to_owned())?
-        .into_inner()
-        .map_err(|_| "a trial's records were poisoned".to_owned())?;
+    let mut records: Vec<TrialRecord> = finished.into_iter().map(|(_, record)| record).collect();
     records.sort_by(|a, b| a.task.cmp(&b.task).then(a.trial.cmp(&b.trial)));
     Ok(records)
 }
@@ -1097,22 +1181,116 @@ fn check_claude() -> Result<(), String> {
         })
 }
 
-/// **Wait for an agent to finish, or stop it at its wall budget** (`wall_s` seconds), and stop it for good.
+/// **The calls an agent has made so far, counted from the transcript its harness is writing**, against the
+/// number its task gave it (`budget.tool_calls`, #432 D3).
+///
+/// The transcript is read as it grows: each poll reads only the bytes appended since the last, keeps a line
+/// that is not finished yet until it is, and adds up what `count` says each whole event is. omp counts a
+/// `tool_execution_end` ([`omp_calls`]) and Claude Code the `tool_use` blocks of an assistant message
+/// ([`claude_calls`]); every tool counts, the harness's own as well as the editor's.
+pub struct ToolBudget {
+    path: PathBuf,
+    count: fn(&Value) -> u32,
+    limit: u32,
+    offset: u64,
+    pending: Vec<u8>,
+    calls: u32,
+}
+
+impl ToolBudget {
+    /// **A meter over the transcript at `path`**, spent after `limit` calls.
+    pub fn new(path: PathBuf, count: fn(&Value) -> u32, limit: u32) -> ToolBudget {
+        ToolBudget { path, count, limit, offset: 0, pending: Vec::new(), calls: 0 }
+    }
+
+    /// **How many calls the transcript holds**, whole lines only. A transcript that is not there yet holds none.
+    pub fn calls(&mut self) -> u32 {
+        use std::io::{Read, Seek, SeekFrom};
+        let Ok(mut file) = std::fs::File::open(&self.path) else {
+            return self.calls;
+        };
+        if file.seek(SeekFrom::Start(self.offset)).is_err() {
+            return self.calls;
+        }
+        let mut bytes = Vec::new();
+        if file.read_to_end(&mut bytes).is_err() {
+            return self.calls;
+        }
+        self.offset += bytes.len() as u64;
+        self.pending.extend_from_slice(&bytes);
+        while let Some(end) = self.pending.iter().position(|b| *b == b'\n') {
+            let line: Vec<u8> = self.pending.drain(..=end).collect();
+            if let Ok(event) = serde_json::from_slice::<Value>(&line[..line.len() - 1]) {
+                self.calls += (self.count)(&event);
+            }
+        }
+        self.calls
+    }
+
+    /// **Whether the agent has made all the calls it was given.**
+    pub fn spent(&mut self) -> bool {
+        self.calls() >= self.limit
+    }
+}
+
+/// **omp's call count for one event**: a `tool_execution_end` is a call that finished.
+pub fn omp_calls(event: &Value) -> u32 {
+    u32::from(event.get("type").and_then(Value::as_str) == Some("tool_execution_end"))
+}
+
+/// **Claude Code's call count for one stream-json event**: every `tool_use` block of an assistant message.
+pub fn claude_calls(event: &Value) -> u32 {
+    if event.get("type").and_then(Value::as_str) != Some("assistant") {
+        return 0;
+    }
+    event
+        .get("message")
+        .and_then(|m| m.get("content"))
+        .and_then(Value::as_array)
+        .map_or(0, |blocks| {
+            blocks.iter().filter(|b| b.get("type").and_then(Value::as_str) == Some("tool_use")).count() as u32
+        })
+}
+
+/// **Wait for an agent to finish, or stop it at its wall budget** (`wall_s` seconds) or its call budget, and stop it for good.
 ///
 /// A dead editor ends the trial now, not at the budget: the agent is talking to nothing, and the editor's own
 /// exit is the reason to report. **The whole process group is killed**, not only the child: a harness runs
 /// its tools as children of its own, and a `bash` left running after its parent was killed is a process
 /// holding the trial's project (the follow-up #412's review named). The agent leads its own group
 /// ([`detach`]), so the group is the agent's and nothing else's.
-pub fn wait_for_agent(mut child: Child, editor: &mut Editor, wall_s: u32, name: &str) -> Result<(), String> {
+///
+/// **An agent that has made all the calls its task gave it is stopped** as one that ran out of time is
+/// (`budget`, [`ToolBudget`]), and what it left is graded: the call budget is a bound on the run, not a failure of it.
+pub fn wait_for_agent(
+    child: Child,
+    editor: &mut Editor,
+    wall_s: u32,
+    name: &str,
+    budget: Option<&mut ToolBudget>,
+) -> Result<(), String> {
+    wait_within(child, wall_s, name, budget, || editor_exit(editor))
+}
+
+/// **[`wait_for_agent`] with the editor's death passed as a question**, so a stand-in agent needs no editor.
+pub fn wait_within(
+    mut child: Child,
+    wall_s: u32,
+    name: &str,
+    mut budget: Option<&mut ToolBudget>,
+    mut editor_gone: impl FnMut() -> Option<String>,
+) -> Result<(), String> {
     let deadline = Instant::now() + Duration::from_secs(u64::from(wall_s));
     while Instant::now() < deadline {
         match child.try_wait() {
             Ok(Some(_)) => break,
             Ok(None) => {
-                if let Some(reason) = editor_exit(editor) {
+                if let Some(reason) = editor_gone() {
                     stop_group(&mut child);
                     return Err(reason);
+                }
+                if budget.as_mut().is_some_and(|b| b.spent()) {
+                    break;
                 }
                 std::thread::sleep(Duration::from_millis(AGENT_POLL_INTERVAL_MS));
             }
@@ -1123,17 +1301,32 @@ pub fn wait_for_agent(mut child: Child, editor: &mut Editor, wall_s: u32, name: 
     Ok(())
 }
 
-/// **Kill an agent's process group, then the agent itself, and wait for it.**
-fn stop_group(child: &mut Child) {
-    let group = format!("-{}", child.id());
-    let _ = Command::new("kill").args(["-KILL", "--", &group]).status();
-    let _ = child.kill();
+/// **Kill an agent's process group while its leader still runs, then the agent itself, and wait for it.**
+///
+/// Answers whether the group was signalled. **A leader that was already reaped is not group-killed** (#432, D4):
+/// `kill -KILL -- -<pid>` on a number nothing holds prints `No such process` for every normal trial, and once the
+/// number is reused it can hit an unrelated group. A process still running keeps its group's number, so that is the
+/// only time the number is safe to signal.
+pub fn stop_group(child: &mut Child) -> bool {
+    let running = matches!(child.try_wait(), Ok(None));
+    if running {
+        let group = format!("-{}", child.id());
+        let _ = Command::new("kill")
+            .args(["-KILL", "--", &group])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        let _ = child.kill();
+    }
     let _ = child.wait();
+    running
 }
 
 /// **Refuse a model this host does not list**, before any trial runs.
-fn check_model(model: &str) -> Result<(), String> {
-    let out = Command::new("omp")
+///
+/// Listing proves the name and nothing about the provider behind it; [`preflight_turn`] asks the provider.
+pub fn check_model(omp: &str, model: &str) -> Result<(), String> {
+    let out = Command::new(omp)
         .args(["models", "find", model])
         .output()
         .map_err(|e| format!("`omp models find` could not be run: {e}"))?;
@@ -1153,6 +1346,134 @@ fn check_model(model: &str) -> Result<(), String> {
          `omp models find {last}` said: {}",
         text.lines().next().unwrap_or("nothing")
     ))
+}
+
+/// **One real turn of the model, before any trial** (#432, D2): `omp -p --model <m> "reply ok"`.
+///
+/// It runs the way a trial does, in an isolated HOME made under `scratch` that holds the model's provider's
+/// credential and is deleted before this returns, so it also proves the credential a trial would carry. A
+/// provider with no quota left (HTTP 429), a refused key or a model that does not answer is an error naming
+/// the model and quoting the provider; a run that would have found it out 35 s at a time, trial by trial,
+/// finds it out here, once.
+pub fn preflight_turn(omp: &str, model: &str, scratch: &Path) -> Result<(), String> {
+    let home = scratch.join("home");
+    let _secrets = TrialSecrets::new([scratch.to_path_buf()]);
+    seed_credentials(omp, &home, model)?;
+    let wall = format!("{PREFLIGHT_WALL_S}s");
+    let mut command = Command::new(omp);
+    command
+        .args([
+            "-p",
+            "--mode",
+            "json",
+            "--model",
+            model,
+            "--no-session",
+            "--no-context-files",
+            "--no-skills",
+            "--no-rules",
+            "--no-extensions",
+            "--max-time",
+            &wall,
+            "--cwd",
+        ])
+        .arg(scratch)
+        .arg(PREFLIGHT_PROMPT)
+        .env("HOME", &home)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let child = detach(&mut command)
+        .spawn()
+        .map_err(|e| format!("omp did not start for the pre-flight turn: {e}"))?;
+    let (stdout, stderr) = output_within(child, Duration::from_secs(PREFLIGHT_WALL_S + PREFLIGHT_GRACE_S))?;
+    turn_verdict(&stdout, &stderr).map_err(|why| {
+        format!(
+            "`{model}` is listed, but a one-turn pre-flight (`{PREFLIGHT_PROMPT}`) got no answer, so no trial of \
+             this run could: {why}"
+        )
+    })
+}
+
+/// **What a one-turn run printed, read as omp's JSON events**: `Ok` when an assistant message came back and the
+/// provider did not refuse it (a refusal omp retried and recovered from, `auto_retry_end{success: true}`, is not
+/// one), and otherwise the reason, in the provider's own words when it gave them.
+fn turn_verdict(stdout: &str, stderr: &str) -> Result<(), String> {
+    let mut spoke = false;
+    let mut standing_refusal: Option<String> = None;
+    for line in stdout.lines() {
+        let Ok(event) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        let kind = event.get("type").and_then(Value::as_str);
+        if kind == Some("auto_retry_end") && event.get("success").and_then(Value::as_bool) == Some(true) {
+            standing_refusal = None;
+        }
+        if kind != Some("message_end") {
+            continue;
+        }
+        let Some(message) = event.get("message").filter(|m| m.get("role").and_then(Value::as_str) == Some("assistant")) else {
+            continue;
+        };
+        match provider_words(message) {
+            Some(why) => standing_refusal = Some(why),
+            None => spoke = true,
+        }
+    }
+    if let Some(why) = standing_refusal {
+        return Err(format!("the provider refused the turn: {why}"));
+    }
+    if spoke {
+        return Ok(());
+    }
+    let lines: Vec<&str> = stderr.lines().filter(|l| !l.trim().is_empty()).collect();
+    let from = lines.len().saturating_sub(4);
+    Err(format!("omp never reached the model. Its stderr ends: {}", lines[from..].join(" | ")))
+}
+
+/// **The provider's own words for an assistant message it refused**, or `None` for a message it answered.
+///
+/// An assistant message whose `stopReason` is `error` (an HTTP 429 for a spent usage limit, a dropped
+/// connection) holds no content and no tokens.
+fn provider_words(message: &Value) -> Option<String> {
+    if message.get("stopReason").and_then(Value::as_str) != Some("error") {
+        return None;
+    }
+    let why = message.get("errorMessage").and_then(Value::as_str).unwrap_or("it gave no reason");
+    Some(why.lines().collect::<Vec<_>>().join(" "))
+}
+
+/// **A child's stdout and stderr, read whole, or an error when it is still running after `within`** (and killed).
+fn output_within(mut child: Child, within: Duration) -> Result<(String, String), String> {
+    use std::io::Read;
+    fn drain(pipe: Option<impl Read + Send + 'static>) -> std::thread::JoinHandle<String> {
+        std::thread::spawn(move || {
+            let mut text = String::new();
+            if let Some(mut pipe) = pipe {
+                let mut bytes = Vec::new();
+                let _ = pipe.read_to_end(&mut bytes);
+                text = String::from_utf8_lossy(&bytes).into_owned();
+            }
+            text
+        })
+    }
+    let out = drain(child.stdout.take());
+    let err = drain(child.stderr.take());
+    let deadline = Instant::now() + within;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(AGENT_POLL_INTERVAL_MS)),
+            Ok(None) => {
+                stop_group(&mut child);
+                return Err(format!("it was still running after {} s, and was stopped", within.as_secs()));
+            }
+            Err(e) => return Err(format!("it could not be waited on: {e}")),
+        }
+    }
+    let stdout = out.join().map_err(|_| "its output could not be read".to_owned())?;
+    let stderr = err.join().map_err(|_| "its error output could not be read".to_owned())?;
+    Ok((stdout, stderr))
 }
 
 /// **What a held-out record puts where a call, a file or a wish was**: a record keeps how many there were, not what they said.
@@ -1183,14 +1504,22 @@ pub fn held_out_refusal(root: &Path, dir: &Path, known: &[&str]) -> String {
         .to_owned()
 }
 
-/// **One trial, from the copy to its `trial.json`**, and never a `pass` for a harness that failed.
-///
-/// `label` is what the trial is filed and recorded under: the task's id for a dev task, and
-/// [`held_out_label`] for a held-out one, whose id is not to reach a path an agent can read.
-fn one_trial(options: &Options, task: &Task, label: &str, trial: u32, variant: Option<&Variant>) -> TrialRecord {
-    let dir = options.out.join(label).join(format!("trial-{trial}"));
-    let _ = std::fs::remove_dir_all(&dir);
-    let record = |outcome: Outcome, reason: String| TrialRecord {
+/// **Where one trial is filed** under a run's output directory.
+fn trial_dir(options: &Options, label: &str, trial: u32) -> PathBuf {
+    options.out.join(label).join(format!("trial-{trial}"))
+}
+
+/// **A trial's record before anything has been measured**: no checks, no calls, no tokens.
+fn blank_record(
+    options: &Options,
+    task: &Task,
+    label: &str,
+    trial: u32,
+    variant: Option<&Variant>,
+    outcome: Outcome,
+    reason: String,
+) -> TrialRecord {
+    TrialRecord {
         task: label.to_owned(),
         trial,
         agent: options.agent.name().to_owned(),
@@ -1207,9 +1536,29 @@ fn one_trial(options: &Options, task: &Task, label: &str, trial: u32, variant: O
         wall_s: 0.0,
         tools_offered: Vec::new(),
         wishes: Vec::new(),
-        dir: dir.clone(),
+        dir: trial_dir(options, label, trial),
         held_out: task.split == crate::task::Split::HeldOut,
-    };
+    }
+}
+
+/// **A trial the run never started**, filed as the harness error it is, with `reason` (the run's own stop).
+fn not_run(options: &Options, task: &Task, label: &str, trial: u32, variant: Option<&Variant>, reason: String) -> TrialRecord {
+    let record = blank_record(options, task, label, trial, variant, Outcome::HarnessError, reason.clone());
+    let _ = std::fs::remove_dir_all(&record.dir);
+    if std::fs::create_dir_all(&record.dir).is_ok() {
+        write_record(&record, task, &reason);
+    }
+    record
+}
+
+/// **One trial, from the copy to its `trial.json`**, and never a `pass` for a harness that failed.
+///
+/// `label` is what the trial is filed and recorded under: the task's id for a dev task, and
+/// [`held_out_label`] for a held-out one, whose id is not to reach a path an agent can read.
+fn one_trial(options: &Options, task: &Task, label: &str, trial: u32, variant: Option<&Variant>) -> TrialRecord {
+    let dir = trial_dir(options, label, trial);
+    let _ = std::fs::remove_dir_all(&dir);
+    let record = |outcome: Outcome, reason: String| blank_record(options, task, label, trial, variant, outcome, reason);
     let held_out = task.split == crate::task::Split::HeldOut;
     let harness = |reason: String| {
         let record = record(Outcome::HarnessError, reason.clone());
@@ -1293,7 +1642,7 @@ fn one_trial(options: &Options, task: &Task, label: &str, trial: u32, variant: O
         Agent::ClaudeCode => crate::claude::run(
             &options.model,
             &task.prompt,
-            task.budget.wall_s,
+            task.budget,
             &config,
             &project,
             &mut editor,
@@ -1460,8 +1809,12 @@ fn run_omp(
     )
     .map_err(|e| format!("{}: {e}", extension.display()))?;
     // **The credential the trial's HOME needs**, carried from the user's own and nothing else: `omp auth
-    // export` names credentials, so no MCP server, skill or memory can ride along.
-    seed_credentials(&dir.join("home"))?;
+    // export` names credentials, so no MCP server, skill or memory can ride along. **Only the model's own
+    // provider's** is carried, and the HOME (which also holds omp's 128 MB of natives) is deleted when the
+    // trial's agent is done, on every path out of this function (#432, D6 and D7). The guard is made first, so
+    // a failed import leaves nothing behind either.
+    let _secrets = TrialSecrets::new([dir.join("home")]);
+    seed_credentials(OMP_PROGRAM, &dir.join("home"), &options.model)?;
     let transcript = dir.join("transcript.jsonl");
     let stdout = std::fs::File::create(&transcript).map_err(|e| format!("{}: {e}", transcript.display()))?;
     let stderr = std::fs::File::create(dir.join("agent.err")).map_err(|e| format!("{e}"))?;
@@ -1469,7 +1822,7 @@ fn run_omp(
     // middle of one: `--max-time` is omp's own stop, and a trial that kills a write leaves a project no agent
     // wrote. The wait below is the outer bound for a harness that ignores it.
     let wall = format!("{}s", task.budget.wall_s);
-    let mut omp = Command::new("omp");
+    let mut omp = Command::new(OMP_PROGRAM);
     omp.args([
             "-p",
             "--mode",
@@ -1503,8 +1856,10 @@ fn run_omp(
         .map_err(|e| format!("omp did not start: {e}"))?;
     // **Stopped at the budget**: the wall clock is the one bound a model's turns cannot be argued with.
     // `--max-time` is what ends the agent's own turn; the deadline is the outer bound for a harness that
-    // ignores its own flag, and it is the same number so a trial is one budget and not two.
-    wait_for_agent(child, editor, task.budget.wall_s, "omp")?;
+    // ignores its own flag, and it is the same number so a trial is one budget and not two. **The calls it
+    // was given are the other bound** (#432, D3): the transcript is counted while the agent runs.
+    let mut calls = ToolBudget::new(transcript.clone(), omp_calls, task.budget.tool_calls);
+    wait_for_agent(child, editor, task.budget.wall_s, "omp", Some(&mut calls))?;
     let server = config
         .get("mcpServers")
         .and_then(Value::as_object)
@@ -1583,13 +1938,99 @@ pub fn parse_tools_offered(text: &str, server: &str) -> Result<Vec<String>, Stri
     Ok(names)
 }
 
-/// **Give a trial's isolated `HOME` the credentials the user's own holds**, and nothing else.
+/// **The program a trial runs for the `omp` harness**, found on `PATH`.
+///
+/// A parameter of [`check_model`] and [`seed_credentials`] and not only a literal, so a test drives them
+/// with a stand-in script that holds no credential and calls no model.
+pub const OMP_PROGRAM: &str = "omp";
+
+/// **The provider a model runs on**: the part of `provider/model` before its first `/`, or `None` for a
+/// bare model name that names none.
+pub fn model_provider(model: &str) -> Option<&str> {
+    model.split_once('/').map(|(provider, _)| provider).filter(|provider| !provider.is_empty())
+}
+
+/// **What a trial keeps from `omp auth export`: the credentials of one provider**, in the export's own shape.
+///
+/// A trial runs one model, so it needs one provider's login and no other: copying every stored credential
+/// into every trial's `HOME` put the host's whole login (an OAuth refresh token included, which omp itself
+/// warns signs the source machine out once a copy refreshes it) in a directory that outlived the trial (#432,
+/// D6). `provider` is `None` for a bare model name, and then nothing can be narrowed: every credential is kept.
+///
+/// An export that holds nothing for the provider is an error naming the providers it does hold (a provider's
+/// name is not a secret) and the one to log in to.
+pub fn credentials_for(carried: &Value, provider: Option<&str>, model: &str) -> Result<Value, String> {
+    let all = carried.get("credentials").and_then(Value::as_array).cloned().unwrap_or_default();
+    if all.is_empty() {
+        return Err(
+            "this host has no stored omp credentials, so a trial's harness could not reach a model. \
+             Log in with `omp` once."
+                .to_owned(),
+        );
+    }
+    let Some(provider) = provider else {
+        return Ok(carried.clone());
+    };
+    let own: Vec<Value> = all
+        .iter()
+        .filter(|c| c.get("provider").and_then(Value::as_str) == Some(provider))
+        .cloned()
+        .collect();
+    if own.is_empty() {
+        let held: Vec<&str> = all.iter().filter_map(|c| c.get("provider").and_then(Value::as_str)).collect();
+        return Err(format!(
+            "this host has no stored omp credential for `{provider}`, the provider `{model}` runs on, so a trial's \
+             harness could not reach it. It holds credentials for: {}. Log in to `{provider}` with `omp` once.",
+            held.join(", ")
+        ));
+    }
+    let mut narrowed = carried.clone();
+    if let Some(object) = narrowed.as_object_mut() {
+        object.insert("credentials".to_owned(), Value::Array(own));
+    }
+    Ok(narrowed)
+}
+
+/// **Directories and files a trial made that hold a credential, deleted when this is dropped.**
+///
+/// A trial's isolated `HOME` holds the imported login (`agent.db`, mode 600) and, because omp extracts its
+/// natives there, about 200 MB (a 128 MB `.node` and a 10 MB `models.db`): kept for every trial of a 140-trial
+/// run that is 28 GB and 140 copies of a secret on a disk nobody reads again (#432, D6 and D7). Nothing in
+/// them is needed once the trial is graded, so they go with the guard: **on every path out of the trial**, an
+/// error and a panic included, because the guard is made *before* anything is written.
+pub struct TrialSecrets {
+    paths: Vec<PathBuf>,
+}
+
+impl TrialSecrets {
+    /// **A guard over these paths**, which need not exist yet.
+    pub fn new(paths: impl IntoIterator<Item = PathBuf>) -> TrialSecrets {
+        TrialSecrets { paths: paths.into_iter().collect() }
+    }
+}
+
+impl Drop for TrialSecrets {
+    fn drop(&mut self) {
+        for path in &self.paths {
+            let _ = std::fs::remove_dir_all(path);
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+/// **The file the credentials travel in** between `omp auth export` and `omp auth import`, inside the trial's `HOME`.
+const AUTH_CARRIED_FILE: &str = "auth-carried.json";
+
+/// **Give a trial's isolated `HOME` the credential of its model's provider**, and nothing else.
 ///
 /// `omp auth export` prints what this host is logged in to; `omp auth import` writes it into the `HOME`
 /// this is pointed at. A failure here is a harness error, because a trial whose harness cannot reach a
 /// model measures the harness: **the reason is what the user has to fix**, and it is named.
-fn seed_credentials(home: &Path) -> Result<(), String> {
-    let exported = Command::new("omp")
+///
+/// **The carrying file is removed on every path**, a failed import included: it holds the credentials in
+/// plain text. The caller holds a [`TrialSecrets`] over `home`, which removes what the import wrote.
+pub fn seed_credentials(omp: &str, home: &Path, model: &str) -> Result<(), String> {
+    let exported = Command::new(omp)
         .args(["auth", "export"])
         .output()
         .map_err(|e| format!("`omp auth export` could not be run: {e}"))?;
@@ -1602,28 +2043,20 @@ fn seed_credentials(home: &Path) -> Result<(), String> {
     }
     let carried = serde_json::from_slice::<Value>(&exported.stdout)
         .map_err(|e| format!("`omp auth export` did not print JSON: {e}"))?;
-    let count = carried
-        .get("credentials")
-        .and_then(Value::as_array)
-        .map(Vec::len)
-        .unwrap_or(0);
-    if count == 0 {
-        return Err(
-            "this host has no stored omp credentials, so a trial's harness could not reach a model. \
-             Log in with `omp` once."
-                .to_owned(),
-        );
-    }
-    let file = home.join("auth-carried.json");
-    if let Some(parent) = file.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
-    }
-    bevy_grimoire_core::atomic_file::write(
-        &file,
-        serde_json::to_vec(&carried).map_err(|e| format!("{e}"))?,
-    )
-    .map_err(|e| format!("{}: {e}", file.display()))?;
-    let imported = Command::new("omp")
+    let carried = credentials_for(&carried, model_provider(model), model)?;
+    let file = home.join(AUTH_CARRIED_FILE);
+    std::fs::create_dir_all(home).map_err(|e| format!("{}: {e}", home.display()))?;
+    let imported = import_credentials(omp, home, &file, &carried);
+    // **Removed whether or not the import worked**: the file is the secret in plain text.
+    let _ = std::fs::remove_file(&file);
+    imported
+}
+
+/// **Write the carrying file and run `omp auth import` on it** into `home`.
+fn import_credentials(omp: &str, home: &Path, file: &Path, carried: &Value) -> Result<(), String> {
+    bevy_grimoire_core::atomic_file::write(file, serde_json::to_vec(carried).map_err(|e| format!("{e}"))?)
+        .map_err(|e| format!("{}: {e}", file.display()))?;
+    let imported = Command::new(omp)
         .args(["auth", "import", &file.to_string_lossy()])
         .env("HOME", home)
         .output()
@@ -1635,7 +2068,6 @@ fn seed_credentials(home: &Path) -> Result<(), String> {
             String::from_utf8_lossy(&imported.stderr).lines().next().unwrap_or("nothing")
         ));
     }
-    let _ = std::fs::remove_file(&file);
     Ok(())
 }
 
@@ -1650,11 +2082,18 @@ pub fn read_transcript(path: &Path, dir: &Path, server: &str) -> Result<AgentRun
         .map_err(|e| format!("the transcript at {} could not be read: {e}", path.display()))?;
     let mut run = AgentRun::default();
     let mut spoke = false;
+    // **The provider's last refusal that nothing has recovered from** (#432, D9): omp retries a transient 429 or
+    // 5xx itself, and says so with `auto_retry_end{success: true}` once an answer came. A refusal is held
+    // against the trial only if the stream ends with it still standing.
+    let mut standing_refusal: Option<String> = None;
     for line in text.lines() {
         let Ok(event) = serde_json::from_str::<Value>(line) else {
             continue;
         };
         let kind = event.get("type").and_then(Value::as_str).unwrap_or_default();
+        if kind == "auto_retry_end" && event.get("success").and_then(Value::as_bool) == Some(true) {
+            standing_refusal = None;
+        }
         // **`tool_execution_end` is where omp reports a tool finishing**, and `details.xdev` names the
         // editor tool it ran.
         //
@@ -1738,16 +2177,9 @@ pub fn read_transcript(path: &Path, dir: &Path, server: &str) -> Result<AgentRun
             // measured on this host, 2026-11-13, a spent weekly limit scored a trial `fail` with 0 calls and
             // 0 tokens. That is the provider's answer with the agent's name on it, so it is a harness error
             // quoting the provider's own words.
-            if message.get("stopReason").and_then(Value::as_str) == Some("error") {
-                let why = message
-                    .get("errorMessage")
-                    .and_then(Value::as_str)
-                    .unwrap_or("it gave no reason");
-                return Err(format!(
-                    "the model provider refused a turn, so this trial measures the provider and not the \
-                     agent: {}",
-                    why.lines().collect::<Vec<_>>().join(" ")
-                ));
+            if let Some(why) = provider_words(message) {
+                standing_refusal = Some(why);
+                continue;
             }
             spoke = true;
             if let Some(usage) = message.get("usage") {
@@ -1768,6 +2200,10 @@ pub fn read_transcript(path: &Path, dir: &Path, server: &str) -> Result<AgentRun
                 }
             }
         }
+    }
+    if let Some(why) = standing_refusal {
+        // **Starts with [`PROVIDER_REFUSAL`]**, which is what the run's circuit breaker counts.
+        return Err(format!("{PROVIDER_REFUSAL}, so this trial measures the provider and not the agent: {why}"));
     }
     if !spoke {
         let stderr = std::fs::read_to_string(dir.join("agent.err")).unwrap_or_default();

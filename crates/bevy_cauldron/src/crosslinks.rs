@@ -258,6 +258,12 @@ fn relative_to(project: &Project, path: &Path) -> Result<String, String> {
 ///
 /// **The one way a file is opened from anywhere but the Files tree**: Open file, a finder result and a followed reference all end here.
 pub fn open_in_files(world: &mut World, rel: &str, line: Option<usize>) {
+    // **A page of the game's style is read in the Design workspace** (SG-05, #404): a link to one, a finder row and a followed reference
+    // are not opened as text. The Files tree's own click still opens it here, because the person chose the file editor.
+    if crate::design_view::is_page(rel) {
+        crate::design_view::show_file(world, rel, line);
+        return;
+    }
     if let Err(why) = crate::files::open_file(world, rel) {
         if let Some(mut state) = world.get_resource_mut::<EditorState>() {
             state.status.problem(format!("NOT OPENED: {why}"));

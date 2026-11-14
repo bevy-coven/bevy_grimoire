@@ -567,6 +567,7 @@ enumerated! {
     WorkspaceFiles,
     WorkspaceGame,
     WorkspaceAgent,
+    WorkspaceDesign,
     // ── Global ───────────────────────────────────────────────────────────────
     /// Walk the composition list.
     ComposePrev,
@@ -990,6 +991,7 @@ impl Action {
             Action::WorkspaceFiles => Some(Workspace::Files),
             Action::WorkspaceGame => Some(Workspace::Game),
             Action::WorkspaceAgent => Some(Workspace::Agent),
+            Action::WorkspaceDesign => Some(Workspace::Design),
             _ => None,
         }
     }
@@ -1284,7 +1286,8 @@ impl Action {
             | Action::WorkspaceSound
             | Action::WorkspaceFiles
             | Action::WorkspaceGame
-            | Action::WorkspaceAgent => Some("door_open"),
+            | Action::WorkspaceAgent
+            | Action::WorkspaceDesign => Some("door_open"),
             // **The three generate sources and the commit door** (S-001). Each key dispatches the
             // same operation an agent calls: `propose_layout` for the three, `accept_layout` for
             // Enter. `Action::Cancel` stays unmigrated — it peels several things.
@@ -1509,7 +1512,7 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Global,
         "1",
-        "workspace 1 to 9",
+        "workspace 1 to 0",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
     b(
@@ -1518,7 +1521,7 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Global,
         "2",
-        "workspace 1 to 9",
+        "workspace 1 to 0",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
     b(
@@ -1527,7 +1530,7 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Global,
         "3",
-        "workspace 1 to 9",
+        "workspace 1 to 0",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
     b(
@@ -1536,7 +1539,7 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Global,
         "4",
-        "workspace 1 to 9",
+        "workspace 1 to 0",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
     b(
@@ -1545,7 +1548,7 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Global,
         "5",
-        "workspace 1 to 9",
+        "workspace 1 to 0",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
     b(
@@ -1554,7 +1557,7 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Global,
         "6",
-        "workspace 1 to 9",
+        "workspace 1 to 0",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
     b(
@@ -1563,7 +1566,7 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Global,
         "7",
-        "workspace 1 to 9",
+        "workspace 1 to 0",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
     b(
@@ -1572,7 +1575,7 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Global,
         "8",
-        "workspace 1 to 9",
+        "workspace 1 to 0",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
     b(
@@ -1581,7 +1584,17 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Global,
         "9",
-        "workspace 1 to 9",
+        "workspace 1 to 0",
+    )
+    .at(Home::Control(ControlId::WorkspaceStrip)),
+    // **`Cmd`/`Ctrl`+`0` is the tenth workspace, Design** (SG-05, #404), appended so no chord changes meaning.
+    b(
+        Action::WorkspaceDesign,
+        KeyCode::Digit0,
+        true,
+        Context::Global,
+        "0",
+        "workspace 1 to 0",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
     // **`Cmd`+remove, not `Cmd`+a tab key.**
@@ -4168,6 +4181,7 @@ mod tests {
             Action::WorkspaceFiles,
             Action::WorkspaceGame,
             Action::WorkspaceAgent,
+            Action::WorkspaceDesign,
             Action::Undo,
             Action::Redo,
             Action::Shortcuts,
@@ -4852,7 +4866,10 @@ mod tests {
             // issue says; `view.switch_door` and `view.panel_1` to `view.panel_3` are removed, and the
             // protected tests that pinned them are re-pinned to the workspace commands (listed in the
             // commit that did it).
-            (Context::Global, 24),
+            // 24 -> 25: `WorkspaceDesign`, the tenth workspace on `Cmd`/`Ctrl`+`0` (SG-05, #404).
+            // Owner exception (2026-11-13): keys.rs::no_context_gains_a_key: Global 24 -> 25 (+1), the literal count following the tenth workspace
+            // the issue's own decision appends; the assertion's direction is unchanged.
+            (Context::Global, 25),
             // 16 -> 17: `FocusFilter`, on `Cmd+F`. **The filter box was mouse-only on every tab
             // but one.** `FocusFilter` was `Context::Tiles`, so the Map tab's PLACE palette and the
             // Rigs tab's rig list had no keyboard route to their own filter at all — and a box the

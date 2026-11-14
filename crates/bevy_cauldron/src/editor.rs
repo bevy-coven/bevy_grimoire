@@ -2657,6 +2657,8 @@ impl Plugin for EditorPlugin {
         // **The open page's outline** (SG-04, #403): View ▸ Show outline, and `grimoire_state.file_outline`.
         app.add_plugins(crate::file_outline::FileOutlinePlugin);
         app.add_plugins(crate::design_areas::StyleAreasPlugin);
+        // **The Design workspace** (SG-05, #404): the design tree, the rendered page and the place's board.
+        app.add_plugins(crate::design_view::DesignViewPlugin);
         app.add_plugins(crate::app_verbs::AppVerbsPlugin);
         // **Each panel header's "?"** (UI-91, #257): the guide page that covers what the panel holds.
         app.add_plugins(crate::help::HelpPlugin);
@@ -5790,7 +5792,12 @@ fn drop_to_board(
     project: Option<Res<Project>>,
     open: Option<Res<OpenMap>>,
     mut state: ResMut<EditorState>,
+    workspace: Option<Res<crate::workspace::Workspace>>,
 ) {
+    // **The Design workspace's drop goes on the selected place's board** (SG-05, #404), which is `design_view`'s; this one is the open map's level.
+    if workspace.is_some_and(|w| *w == crate::workspace::Workspace::Design) {
+        return;
+    }
     for drop in drops.read() {
         let bevy::window::FileDragAndDrop::DroppedFile { path_buf, .. } = drop else {
             continue;

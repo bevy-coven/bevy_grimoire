@@ -126,6 +126,8 @@ pub enum Kind {
     Data,
     /// A sound cue of the project's `family/bevy_siren.ron`, on the Sound workspace's list (NV-07, #384).
     Cue,
+    /// **A place of the game's style, or one of its topics** (SG-05, #404): a page of the Design workspace.
+    Design,
     /// A script: a Rhai file of the project, opened in the Files workspace.
     Script,
     /// Any other text file of the project, opened in the Files workspace.
@@ -148,6 +150,7 @@ impl Kind {
             Kind::Clip => "clip",
             Kind::Data => "data",
             Kind::Cue => "cue",
+            Kind::Design => "design",
             Kind::Script => "script",
             Kind::File => "file",
             Kind::Note => "note",
@@ -168,6 +171,7 @@ impl Kind {
             Kind::Clip => "Clip",
             Kind::Data => "Data file",
             Kind::Cue => "Cue",
+            Kind::Design => "Design",
             Kind::Script => "Script",
             Kind::File => "File",
             Kind::Note => "Note",
@@ -187,7 +191,7 @@ impl Kind {
     }
 
     /// **The order the headings appear in**, which is [`GotoIndex`]'s own order.
-    pub const ALL: [Kind; 14] = [
+    pub const ALL: [Kind; 15] = [
         Kind::Map,
         Kind::Placement,
         Kind::Piece,
@@ -197,6 +201,7 @@ impl Kind {
         Kind::Clip,
         Kind::Data,
         Kind::Cue,
+        Kind::Design,
         Kind::Script,
         Kind::File,
         Kind::Note,
@@ -427,6 +432,7 @@ fn rebuild_the_index(
     entries.extend(collect_the_library(project));
     entries.extend(collect_the_rest(project, notes.as_deref(), bench.as_deref()));
     entries.extend(collect_the_cues(project));
+    entries.extend(collect_the_design(project));
     let files = collect_the_files(&index.files, &entries);
     entries.extend(files);
     // **One order, the index's own**, so a rebuild cannot reorder the list under a person's finger.
@@ -450,6 +456,43 @@ fn collect_the_cues(project: &Project) -> Vec<Entry> {
             opens: None,
         })
         .collect()
+}
+
+/// **Every place of the game's style and each of its topics** (SG-05, #404): a row per place, which opens its `style.md`, and one per topic
+/// file the place has. A page is the Design workspace's, through the one reveal.
+fn collect_the_design(project: &Project) -> Vec<Entry> {
+    use bevy_grimoire_core::design::{self, PlaceKind, Tree};
+    let tree = Tree::read(&project.root);
+    let mut out = Vec::new();
+    for place in &tree.places {
+        let name = crate::design_view::place_label(place);
+        let kind_word = match place.kind {
+            PlaceKind::Game => "the game",
+            PlaceKind::Region => "region",
+            PlaceKind::Level => "level",
+            PlaceKind::Area => "area",
+        };
+        let style_file = format!("{}/{}.{}", place.path, design::STYLE_TOPIC, design::MARKDOWN_EXT);
+        out.push(Entry {
+            kind: Kind::Design,
+            key: style_file.clone(),
+            title: name.clone(),
+            lives: format!("Style ▸ {kind_word}"),
+            shown: Shown::File { path: style_file, lines: None },
+            opens: None,
+        });
+        for topic in place.topics.iter().filter(|t| t.name != design::STYLE_TOPIC) {
+            out.push(Entry {
+                kind: Kind::Design,
+                key: topic.file.clone(),
+                title: topic.name.clone(),
+                lives: format!("Style ▸ {name}"),
+                shown: Shown::File { path: topic.file.clone(), lines: None },
+                opens: None,
+            });
+        }
+    }
+    out
 }
 
 /// **Every text file the Files tree lists**, scripts under their own heading, except a file a row already names (a registered data file is

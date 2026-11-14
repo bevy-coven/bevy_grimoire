@@ -405,6 +405,31 @@ class WhatTheRefusalsSay(unittest.TestCase):
         self.assertIn("--label baseline", text)
 
 
+class TheReleaseCommandIsTheOneThatWorks(unittest.TestCase):
+    """The command a refusal quotes and the one RUNNING-A-LOOP.md gives are one command: parallel, on a model with a quota (#432)."""
+
+    COMMAND = (
+        "target/release/cauldron-bench run --agent omp --model anthropic/claude-sonnet-5-5 --trials 5 --jobs 4"
+    )
+
+    def test_the_constants_name_the_model_and_the_jobs(self):
+        self.assertEqual(bench_gate.RELEASE_MODEL, "anthropic/claude-sonnet-5-5")
+        self.assertEqual(bench_gate.RELEASE_JOBS, 4)
+
+    def test_a_refusal_quotes_the_whole_command_and_says_why_the_model_is_named(self):
+        verdict = bench_gate.check(GIT, RELEASE, None, [], Compare(comparison("better")))
+        text = " ".join(verdict.reasons)
+        self.assertIn(self.COMMAND, text)
+        self.assertIn("--held-out", text)
+        self.assertIn("no quota", text, "the refusal says why the default model is not the one to run")
+
+    def test_the_docs_give_the_same_command(self):
+        doc = (bench_gate.REPO / "docs" / "loop" / "RUNNING-A-LOOP.md").read_text()
+        flat = " ".join(doc.replace("\\\n", " ").split())
+        self.assertIn(self.COMMAND, flat, "RUNNING-A-LOOP.md's release command names --model and --jobs")
+        self.assertIn("no quota", flat, "and says why the model is named")
+
+
 class MalformedReports(unittest.TestCase):
     def read(self, files):
         runs = Path(tempfile.mkdtemp(prefix=f"bench_gate_{self._testMethodName}_{os.getpid()}_"))

@@ -363,11 +363,19 @@ release runs this first, at the commit it will release, and commits the report:*
 
 ```sh
 cargo build --release -p bevy_cauldron -p bevy_cauldron_mcp -p bevy_cauldron_bench   # the editor, its MCP server, and the runner, side by side
-target/release/cauldron-bench run --agent omp --trials 5 \
+target/release/cauldron-bench run --agent omp --model anthropic/claude-sonnet-5-5 --trials 5 --jobs 4 \
     --held-out /mnt/codex_fs/bench/dark_factory/held_out --label release-<version>
 python3 tools/release/bench_gate.py check --version "$(python3 tools/loop/version.py next)" --bench target/release/cauldron-bench   # what the release step will say
 git add docs/bench && git commit -m "docs(bench): the benchmark run for <version>"
 ```
+
+**`--model` is named because the runner's default model (`ollama-cloud/deepseek-v4.1-flash:1017`) has no quota
+today**: its provider answers every turn with HTTP 429 (a spent weekly limit), so a run on it measures the provider.
+The run stops itself after three provider refusals in a row, and says so in the report's "Harness errors" section; a
+one-turn pre-flight finds a dead provider before the first trial. Name the same model for every release run, because
+the gate compares only runs of one model. **`--jobs 4`** runs four trials at once, each under its own Xvfb: a
+140-trial run (28 tasks x 5 trials) measured 3 to 8 h serial and 0.6 to 2.5 h at `--jobs 4..6` (BM-08, #432); a
+trial's `home/` (its one provider's credential and omp's 128 MB of natives) is deleted as the trial ends.
 
 (`--label` publishes `docs/bench/runs/<date>-release-<version>.md` and `.json`.) **The first run on this
 repository is the baseline**: with no `*-baseline` report committed, `--label release-<version>` is refused

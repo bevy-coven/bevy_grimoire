@@ -86,12 +86,13 @@ pub fn seed_credentials(config: &Path) -> Result<(), String> {
 
 /// **Run Claude Code on the config the editor handed out**, in the trial's directory.
 ///
-/// Stopped at the task's wall budget (Claude Code has no flag for it), and the editor's death ends the
+/// Stopped at the task's budget (Claude Code has no flag for either): its wall clock, and the calls it was
+/// given, counted from the stream it writes ([`crate::run::ToolBudget`]). The editor's death ends the
 /// trial at once. Answers what the transcript says the agent did.
 pub fn run(
     model: &str,
     prompt: &str,
-    wall_s: u32,
+    budget: crate::task::Budget,
     config: &Value,
     project: &Path,
     editor: &mut Editor,
@@ -106,6 +107,9 @@ pub fn run(
     let text = serde_json::to_string_pretty(config).map_err(|e| format!("{e}"))? + "\n";
     bevy_grimoire_core::atomic_file::write(&mcp, text).map_err(|e| format!("{}: {e}", mcp.display()))?;
     let claude_config = dir.join("claude-config");
+    // **The login copied into the trial and the HOME beside it are deleted with the trial's agent**, on every
+    // path out of this function, as `omp`'s are: a copy of the user's credential file does not outlive its use (#432, D6).
+    let _secrets = crate::run::TrialSecrets::new([claude_config.clone(), dir.join("home")]);
     seed_credentials(&claude_config)?;
     let transcript = dir.join("transcript.jsonl");
     let stdout = std::fs::File::create(&transcript).map_err(|e| format!("{}: {e}", transcript.display()))?;
@@ -144,7 +148,8 @@ pub fn run(
     let child = crate::run::detach(&mut claude)
         .spawn()
         .map_err(|e| format!("claude did not start: {e}"))?;
-    crate::run::wait_for_agent(child, editor, wall_s, "claude")?;
+    let mut calls = crate::run::ToolBudget::new(transcript.clone(), crate::run::claude_calls, budget.tool_calls);
+    crate::run::wait_for_agent(child, editor, budget.wall_s, "claude", Some(&mut calls))?;
     read_stream(&transcript, dir, &server)
 }
 

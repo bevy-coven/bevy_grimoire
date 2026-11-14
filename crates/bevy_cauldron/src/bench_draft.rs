@@ -182,7 +182,8 @@ fn copy_yaml_tree(from: &Path, to: &Path) -> Result<(), String> {
         if kind.is_dir() {
             copy_yaml_tree(&path, &target)?;
         } else if kind.is_file() && is_yaml(&path) {
-            std::fs::copy(&path, &target).map_err(|e| format!("{} -> {}: {e}", path.display(), target.display()))?;
+            let held = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            bevy_grimoire_core::atomic_file::write(&target, held).map_err(|e| format!("{} -> {}: {e}", path.display(), target.display()))?;
         }
     }
     Ok(())

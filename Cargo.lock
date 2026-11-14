@@ -1247,6 +1247,7 @@ source = "git+https://github.com/bevy-coven/bevy_gooey?rev=b750eae6d995f936b514a
 dependencies = [
  "accesskit",
  "bevy",
+ "pulldown-cmark",
  "serde",
 ]
 

@@ -186,6 +186,16 @@ pub fn page_of(shown: &Shown, project: Option<&Project>) -> Result<Page, String>
                 tab: Mode::Map,
                 select: Select::DataFile(file),
             },
+            // **A page of the game's style is the Design workspace's** (SG-05, #404): `design/**/*.md`, rendered, at the line. One route again —
+            // Go to anything, Back and Forward, a cross-link, the Map inspector's Style link and an agent's edit all land here.
+            None if crate::design_view::is_page(path) => Page::Workspace {
+                workspace: Workspace::Design,
+                tab: Mode::Design,
+                select: Select::File {
+                    path: path.clone(),
+                    line: lines.map(|[first, _]| usize::try_from(first).unwrap_or(0).saturating_sub(1)),
+                },
+            },
             None => Page::Workspace {
                 workspace: Workspace::Files,
                 tab: Mode::Files,
