@@ -2558,8 +2558,9 @@ fn rebuild(input: ComposeInput<'_, '_>) {
                             // is its own control id, because the Meshes tab's `IdField` is already
                             // claimed and two visible nodes claiming one id is a bug the census fails
                             // on.
+                            // A zero-width gooey `cell`, which is the box the badge for the name's control stands on.
                             row.spawn((
-                                Node::default(),
+                                bevy_gooey::cell(0.0),
                                 crate::chrome::Control(crate::keys::ControlId::ComposeNames),
                             ));
                             row.spawn((
@@ -2735,28 +2736,14 @@ fn spawn_line(p: &mut ChildSpawnerCommands, text: &str, colour: Color) {
             // type size is the ratio the old expression reduced to (0.6), written as what it is.
             row.spawn(bevy_gooey::cell(indent as f32 * LABEL_CHAR_W / ROW_PX.px()));
         }
-        // **The line itself, with no `Node` of its own** (UI-59, #245). `flex_grow` hands the text the
-        // row's remaining width as a DEFINITE size and `min_width: 0` lets it shrink below its longest
-        // line — the pair that was measured in the live window on 2026-08-17 (without them the text's
-        // flex base resolved to zero width and every row laid out one glyph per line, clipped, over 38
-        // healthy rows). Neither is reachable from a bundle: `row`'s `align_items` is the row's, and a
-        // text item's grow is not a widget's look. So this is the one `Node` left in the module, and the
-        // marker says why it is not a second layout path.
-        row.spawn((
-            // CHROME-OK: a flex item's own measure (grow and a zero minimum), which no widget's bundle
-            // carries; the 2026-08-17 measurement above is what chose it.
-            Node {
-                flex_grow: 1.0,
-                min_width: Val::Px(0.0),
-                ..default()
-            },
-            Text::new(content.to_owned()),
-            TextColor(colour),
-            crate::chrome::typed(ROW_PX),
-            // The default, stated: this is the column that wraps, against the spacer that never
-            // does.
-            TextLayout::new(Justify::Left, LineBreak::WordOrCharacter),
-        ));
+        // **The line itself, through the one helper that gives a text its flex measure** (UI-59, #245). `flex_grow` hands the text
+        // the row's remaining width as a DEFINITE size and a zero minimum lets it shrink below its longest line — the pair that was
+        // measured in the live window on 2026-08-17 (without them the text's flex base resolved to zero width and every row laid out
+        // one glyph per line, clipped, over 38 healthy rows). `chrome::fill_text` carries it, in the line's own ink: gooey's
+        // `fill_text` would carry it too, but the skin writes that role's colour, and a prose line's ink says whether it is a fault.
+        crate::chrome::fill_text(row, content.to_owned(), colour, ROW_PX)
+            // The default, stated: this is the column that wraps, against the spacer that never does.
+            .insert(TextLayout::new(Justify::Left, LineBreak::WordOrCharacter));
     });
 }
 

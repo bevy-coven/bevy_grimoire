@@ -23,13 +23,11 @@
 //! [`bevy_grimoire_core::import::Finding`] that has an obvious remedy carries it, and the panel shows both.
 
 use bevy::input::keyboard::{Key, KeyboardInput};
-use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
-use bevy::ui_widgets::{Activate, Button as UiButton};
+use bevy::ui_widgets::Activate;
 use bevy_grimoire_core::descriptor::{Descriptor, mount_label, mount_options};
 use bevy_grimoire_core::import::{self, Candidate, Severity};
 
-use crate::chrome::{CHIP_PAD, MIN_FIELD_H};
 use crate::keys::{self, Action};
 use crate::project::Project;
 
@@ -1559,33 +1557,33 @@ fn layer_label(y: u32, dy: u32) -> String {
 
 /// One header button. `*` fills the layer, `v` a column, `>` a row — ASCII only, per `docs/ui.md` §5.
 fn header_button(row: &mut ChildSpawnerCommands, header: FillHeader, glyph: &str) {
-    row.spawn((
-        // `chrome::button`'s `BUTTON_PAD` would make a 3 x 3 subgrid wider than the panel it sits
-        // in, so this keeps its own geometry — but it carries `RowRest`, so the five states still
-        // come from one repainter.
-        // CHROME-OK: a lattice cell, not one of the three shapes.
-        UiButton,
-        Hovered::default(),
-        header,
-        crate::chrome::RowRest(crate::chrome::ink().header_bg),
-        Node {
-            // 20 x `MIN_FIELD_H` is the smallest box a `*` / `v` / `>` glyph stays clickable in
-            // (Fitts: selection time grows as the target narrows).
-            // CHROME-OK: a hit target's floor, not a spacing step.
-            min_width: Val::Px(20.0),
-            min_height: Val::Px(MIN_FIELD_H),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            ..default()
-        },
-        BackgroundColor(crate::chrome::ink().header_bg),
-    ))
-    .with_children(|b| {
-        b.spawn((
-            Text::new(glyph.to_owned()),
-            TextColor(crate::chrome::ink().label),
-            crate::chrome::typed(crate::chrome::text::HINT),
-        ));
+    // **Gooey's `glyph_button`** (UI-59, #245): a button for a mark too small to press, whose hit area is the skin's target on each
+    // side whatever the glyph, with a button's fill, frame, focus ring and states. Its name is what a screen reader says and its tooltip.
+    let name = match header.span {
+        Span::Layer => "Fill the whole layer".to_owned(),
+        Span::Column(x) => format!("Fill column {x}"),
+        Span::Row(z) => format!("Fill row {z}"),
+    };
+    row.spawn((bevy_gooey::glyph_button(glyph.to_owned(), name), header));
+}
+
+/// **Put markers on the words a gooey widget spawned for itself.**
+///
+/// A widget bundle such as `glyph_button` or `edge_tab` carries its own label as a child, so a panel that repaints that text in place
+/// (a cell's glyph, a tab's name) cannot put a marker on it in the bundle. This queues the insert for after the widget is spawned and
+/// puts it on the first text among the widget's children, which is the one the bundle made; a child the panel adds later is never it,
+/// because the panel tags before it adds any.
+fn tag_the_words<B: Bundle>(widget: &mut EntityCommands, markers: B) {
+    widget.queue(move |mut entity: EntityWorldMut| {
+        let id = entity.id();
+        entity.world_scope(|world| {
+            let words = world
+                .get::<Children>(id)
+                .and_then(|children| children.iter().find(|child| world.get::<Text>(*child).is_some()));
+            if let Some(words) = words {
+                world.entity_mut(words).insert(markers);
+            }
+        });
     });
 }
 
@@ -2967,7 +2965,8 @@ fn refresh_cells(
     // **The proposals, because the box this repaints shows them.** `Option`, since the labeler is a
     // feature a project may never have used and a missing `Res<T>` panics its system in Bevy 0.19.
     suggestions: Option<Res<crate::labels::Suggestions>>,
-    mut cells: Query<(&CellButton, &CellLayer, &mut crate::chrome::RowRest)>,
+    cells: Query<(Entity, &CellButton, &CellLayer, Has<bevy_gooey::PrimaryButton>)>,
+    mut commands: Commands,
     readouts: CellReadouts<'_, '_>,
 ) {
     let CellEdits {
@@ -2992,27 +2991,21 @@ fn refresh_cells(
     let empty = bevy_grimoire_core::descriptor::Subgrid::default();
     let grid = d.subgrid.as_ref().unwrap_or(&empty);
 
-    // **Only which cell is picked.** This used to write `BackgroundColor` and restate
-    // `chrome::style_list_rows`'s selected-beats-hover priority, which since 2026-09-03 would be
-    // two systems writing one component in whatever order the schedule picked. Selection is the
-    // one fact this module knows; hover, press and disabled come from the shared repainter, and
-    // `RowRest == ROW_SELECTED` is how it is told that this is the one being acted on.
-    for (button, layer, mut rest) in &mut cells {
+    // **Only which cell is picked.** Selection is the one fact this module knows; hover, press and disabled come from gooey's skin,
+    // and a picked cell is lit as gooey lights a primary button, so it is told by `PrimaryButton` and by nothing else.
+    for (button_entity, button, layer, lit) in &cells {
         let selected = cell_edit.at == Some((button.0, layer.0, button.1));
-        let want = if selected { crate::chrome::ink().row_selected } else { crate::chrome::ink().row_bg };
-        if rest.0 != want {
-            rest.0 = want;
+        if selected && !lit {
+            commands.entity(button_entity).insert(bevy_gooey::PrimaryButton);
+        } else if !selected && lit {
+            commands.entity(button_entity).remove::<bevy_gooey::PrimaryButton>();
         }
     }
-    for (g, layer, mut text, mut colour) in &mut glyphs {
+    for (g, layer, mut text) in &mut glyphs {
         let cell = grid.at((g.0, layer.0, g.1));
         let want = cell_glyph(cell);
         if text.0 != want {
             text.0 = want.to_owned();
-        }
-        let tint = if cell.is_some() { crate::chrome::ink().accent } else { crate::chrome::ink().label };
-        if colour.0 != tint {
-            colour.0 = tint;
         }
     }
 
@@ -3116,11 +3109,11 @@ fn refresh_cells(
     }
 }
 
-/// The cell glyph column: each cell's character and tint.
+/// The cell glyph column: each cell's character. Its ink is the skin's, which inverts it on a lit cell.
 type GlyphQuery<'w, 's> = Query<
     'w,
     's,
-    (&'static CellGlyph, &'static CellLayer, &'static mut Text, &'static mut TextColor),
+    (&'static CellGlyph, &'static CellLayer, &'static mut Text),
     (
         Without<SelectedCellLine>,
         Without<NoteReadout>,
@@ -3657,16 +3650,16 @@ pub(crate) struct ExcludedHeader;
 #[derive(Component, Clone, Copy)]
 pub struct Tab(pub Mode);
 
-/// The tab's name, so the active one can be lit without touching its key.
+/// The tab's name: the text gooey's `edge_tab` made for its label, found by this marker so a panel can repaint it in place.
 #[derive(Component)]
 pub struct TabLabel;
 
 /// The tab's badge — the anim bench's stale count, in its own text so it can hold its own colour.
 ///
-/// Its own node rather than a suffix on [`TabLabel`], because `style_tabs` owns every label's
-/// `TextColor` per frame (active/inactive), so a colour written into the label is stomped on the
-/// next frame. The badge carries no `TabLabel`, so the frame-owner never touches it — the same
-/// division that keeps the badge apart from the name.
+/// Its own node rather than a suffix on [`TabLabel`], because gooey's skin owns every tab label's
+/// `TextColor` (it writes it with the tab's state), so a colour written into the label is stomped.
+/// The badge carries no gooey role, so the skin never touches it — the same division that keeps the
+/// badge apart from the name.
 ///
 /// `Ink::danger`, and only the count: a persistent peripheral element wants medium intensity, not
 /// maximum (Lewandowska, Dziśko & Jankowski 2022, `10.1038/s41598-022-16284-2` — high contrast is
@@ -4069,6 +4062,11 @@ impl Plugin for TilesPlugin {
     }
 }
 
+/// The height of the workspace strip, logical px: what the hand-built tab made it (two 8 px paddings, a 3 px edge and a 16 px line).
+/// The tabs are gooey's `edge_tab`s, whose own inset is smaller, so the strip holds this height itself: the panels under it
+/// (the inspector's scroll, the badges' free ground, the history list) are laid out from where the strip ends.
+const TAB_STRIP_H: f32 = 35.0;
+
 /// **The strip of panels this workspace holds** — three on the Kit workspace, one on Map and
 /// Animation, and none on a workspace whose part is not built.
 ///
@@ -4118,48 +4116,27 @@ fn spawn_tab_strip(
         ))
         .id();
     commands.entity(frame.door_strip).add_child(strip);
+    // **The strip keeps the height the hand-built tab gave it** ([`TAB_STRIP_H`]): gooey's `edge_tab` brings a smaller inset of its own, and
+    // everything under the strip (the inspector, the badges' free ground, the history list) is laid out from where it ends.
+    commands.entity(strip).entry::<Node>().and_modify(|mut node| node.min_height = Val::Px(TAB_STRIP_H));
     commands
         .entity(strip)
         .with_children(|p| {
             for &mode in workspace.panels() {
-                p.spawn((
-                    // **Deliberately not a `UiButton`** — see [`click_tab`]. `Hovered` is what
-                    // `style_tabs` lights it with, and it is all that was ever needed.
-                    Hovered::default(),
+                // **Gooey's `edge_tab`** (UI-59, #245): the tab's own inset and an edge along its bottom that is always there and lit
+                // while the tab is `Selected`, so changing panel changes a colour and moves no neighbour. **Deliberately not a button** —
+                // see [`click_tab`]: an `edge_tab` takes no focus and answers no `Enter`, which is the whole reason it is used.
+                let mut tab = p.spawn((
+                    bevy_gooey::edge_tab(mode.label()),
                     Tab(mode),
-                    bevy::a11y::AccessibilityNode::from(accesskit::Node::new(accesskit::Role::Tab)),
                     // The label the reader hears. `mode.label()` rather than a second string, so a
                     // panel renamed once is renamed everywhere — the same rule `chrome::key_census`
                     // keeps for chords.
                     bevy::prelude::AccessibleLabel::new(mode.label()),
-                    Node {
-                        // A tab is deliberately neither a button nor a row (see `click_tab`), and
-                        // this inset is the only one of its kind in the editor — it is what makes
-                        // the strip read as a row of boxes rather than as words on a bar. Naming
-                        // it would put a fifth padding on a three-step scale.
-                        // CHROME-OK: a tab's own inset, and the only one of its kind.
-                        padding: UiRect::axes(Val::Px(16.0), Val::Px(8.0)),
-                        align_items: AlignItems::Center,
-                        // A thick bottom border is the active marker: it reads at a glance and does
-                        // not depend on telling two dark greys apart, which `docs/ui.md` §1.3 rules
-                        // out as an encoding on its own.
-                        // Deliberately heavier than `chrome::SELECT_RAIL_W`, because it is read
-                        // across the width of a whole tab rather than down the edge of one row.
-                        // CHROME-OK: the active-tab marker's thickness, not a spacing step.
-                        border: UiRect::bottom(Val::Px(3.0)),
-                        ..default()
-                    },
-                    BorderColor::all(Color::NONE),
-                    BackgroundColor(crate::chrome::ink().row_bg),
-                ))
-                .with_children(|tab| {
-                    tab.spawn((
-                        Text::new(mode.label()),
-                        TextColor(crate::chrome::ink().label),
-                        crate::chrome::typed(crate::chrome::text::TAB),
-                        TextLayout::new(Justify::Left, LineBreak::NoWrap),
-                        TabLabel,
-                    ));
+                ));
+                // Before the badge is added: the first text among the tab's children is the label `edge_tab` made.
+                tag_the_words(&mut tab, TabLabel);
+                tab.with_children(|tab| {
                     // Empty until the anim bench has something stale to say — see [`TabBadge`].
                     tab.spawn((
                         Text::new(String::new()),
@@ -4313,44 +4290,18 @@ fn name_the_other_door(
 /// cannot read is a tab you do not know is there.
 fn style_tabs(
     mode: Res<Mode>,
-    mut tabs: Query<(
-        &Tab,
-        &Hovered,
-        &mut BackgroundColor,
-        &mut BorderColor,
-        &Children,
-    )>,
-    mut names: Query<&mut TextColor, With<TabLabel>>,
+    tabs: Query<(Entity, &Tab, Has<bevy::ui::Selected>)>,
+    mut commands: Commands,
 ) {
-    for (tab, hovered, mut bg, mut border, children) in &mut tabs {
+    // **The look is gooey's** (UI-59, #245): the selected `edge_tab` continues the surface under it and lights its edge in the accent, and
+    // the others are a button's raised fill, lifted under the pointer. All this decides is which one is `Selected`, and it writes only
+    // when that moves, so a settled strip changes nothing.
+    for (tab_entity, tab, selected) in &tabs {
         let active = tab.0 == *mode;
-        // The active tab continues the panel beneath it, so the two read as one surface rather than
-        // as a button sitting on top of a box.
-        let want_bg = if active {
-            crate::chrome::ink().panel_bg
-        } else if hovered.0 {
-            crate::chrome::ink().row_hover
-        } else {
-            crate::chrome::ink().row_bg
-        };
-        if bg.0 != want_bg {
-            bg.0 = want_bg;
-        }
-        let want_border = if active { crate::chrome::ink().accent } else { Color::NONE };
-        // Guarded like every other write in this function. `BorderColor` is change-detected and the
-        // UI extraction reads that, so an unconditional assignment dirtied the whole strip sixty
-        // times a second for a colour that changes when a tab does.
-        if border.top != want_border {
-            *border = BorderColor::all(want_border);
-        }
-
-        for child in children.iter() {
-            if let Ok(mut colour) = names.get_mut(child) {
-                let want = if active { crate::chrome::ink().text } else { crate::chrome::ink().dim };
-                if colour.0 != want {
-                    colour.0 = want;
-                }
-            }
+        if active && !selected {
+            commands.entity(tab_entity).insert(bevy::ui::Selected);
+        } else if !active && selected {
+            commands.entity(tab_entity).remove::<bevy::ui::Selected>();
         }
     }
 }
@@ -8514,19 +8465,15 @@ fn on_new_tile_click(
 /// wrapped rendered as `kenney_prototype-kit/Models/GLB 145 format` and
 /// `low_poly_furniture/glb/ 8 Electronics` — the 2026-09-03 audit's F6. The count is a second
 /// column, not the last word of a sentence: it never wraps and never shrinks, and the name beside
-/// it carries `flex_grow: 1.0` with a zero minimum so it wraps *within* its own column instead of
-/// pushing the number out of the row.
-pub(crate) fn count_cell(row: &mut ChildSpawnerCommands, text: String, ink: Color) {
+/// it wraps *within* its own column instead of pushing the number out of the row.
+///
+/// **Gooey's `count_text`** (UI-59, #245), a text that is a flex item of its own and keeps its words whole. Its ink is the skin's
+/// (the skin writes a `CountText`'s colour, so a colour put over the bundle would be undone), and a row that needs a count in
+/// its own ink (`editor::rebuild_palette`'s triangle cost) spawns its own.
+pub(crate) fn count_cell(row: &mut ChildSpawnerCommands, text: String) {
     row.spawn((
-        Node {
-            flex_shrink: 0.0,
-            margin: UiRect::left(Val::Px(crate::chrome::GAP_ROW)),
-            ..default()
-        },
-        Text::new(text),
-        TextColor(ink),
-        crate::chrome::typed(crate::chrome::text::LABEL),
-        TextLayout::new(Justify::Left, LineBreak::NoWrap),
+        bevy_gooey::count_text(text),
+        crate::chrome::spaced(UiRect::left(Val::Px(crate::chrome::GAP_ROW))),
     ));
 }
 
@@ -9018,12 +8965,12 @@ fn draw_ink(
                         crate::chrome::text::BODY,
                     );
                     if *openable {
-                        count_cell(row, format!("{members} member(s)"), crate::chrome::ink().label);
+                        count_cell(row, format!("{members} member(s)"));
                     } else {
                         // The reason, in the count's column, because that is where the eye
                         // already is and because a row that refuses should say so before it is
                         // pressed.
-                        count_cell(row, "no tile — see COMPOSE".to_owned(), crate::chrome::ink().muted);
+                        count_cell(row, "no tile — see COMPOSE".to_owned());
                     }
                 });
             }
@@ -9066,93 +9013,40 @@ fn draw_pack_band(
     folded: bool,
     excluded: bool,
 ) {
-    p.spawn((
-        // See the `EXCLUDED` band. It carries `RowRest`, so the five states come from
-        // `chrome::style_list_rows`.
-        // CHROME-OK: a group band, not a list row.
-        UiButton,
-        Hovered::default(),
-        PackHeader(pack.to_owned()),
-        // The band's rest fill, so the shared repainter gives it hover and press. `ROW_SELECTED`
-        // is how `style_list_rows` recognises "the one being acted on", and `arm_list_rows`
-        // writes it there when the cursor stands on this heading.
-        crate::chrome::RowRest(crate::chrome::ink().header_bg),
-        Node {
-            width: Val::Percent(100.0),
-            // `CHIP_PAD`, not the hand copy of its two numbers that stood here — the audit found
-            // this file restating the constant it already imports (F8).
-            padding: CHIP_PAD,
-            flex_direction: FlexDirection::Row,
-            column_gap: Val::Px(crate::chrome::GAP_ROW),
-            margin: UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
-            ..default()
-        },
-        BackgroundColor(crate::chrome::ink().header_bg),
-    ))
-    .with_children(|row| {
-        crate::chrome::text_cell(row, crate::chrome::COL_TIGHT, if folded { ">" } else { "v" }, crate::chrome::ink().label, crate::chrome::text::LABEL);
+    // **Gooey's `band`** (UI-59, #245): a full-width button with a button's fill, frame, focus ring and states, so it shades under the
+    // pointer as a list's row does. The heading the cursor stands on is lit as gooey lights a primary button, by `PrimaryButton`
+    // (see `arm_list_rows`). The words in it are gooey's too: their ink follows the band's state, so a lit band keeps them legible.
+    p.spawn((bevy_gooey::band(), PackHeader(pack.to_owned()))).with_children(|row| {
+        row.spawn((Text::new(if folded { ">" } else { "v" }), bevy_gooey::Role::ButtonText));
         // **The pack's name, and — when it is excluded — the way back.**
         //
         // An excluded pack keeps its words because it names a state the chevron does NOT show,
         // and the way out of it (`docs/ui.md` §1.4). They live in the growing column beside the
         // name rather than in the count's column, because a sentence wraps and a tally must not.
-        crate::chrome::fill_text(
-            row,
-            if excluded {
-                format!("{pack}  -  {} restores", keys::chord(Action::ExcludePack))
-            } else {
-                pack.to_owned()
-            },
-            if excluded { crate::chrome::ink().muted } else { crate::chrome::ink().label },
-            crate::chrome::text::LABEL,
-        );
+        row.spawn(bevy_gooey::fill_text(if excluded {
+            format!("{pack}  -  {} restores", keys::chord(Action::ExcludePack))
+        } else {
+            pack.to_owned()
+        }));
         // **The count, and nothing else.** A folded pack used to say "{n} hidden — click to
         // open"; removed at the keyboard, 2026-08-18: that is a whole sentence on every folded
         // row of a list an author is scrolling, and the chevron to the left of the name (`>`
         // folded, `v` open) already carries both the state and the affordance.
-        count_cell(
-            row,
-            format!("{members}"),
-            if excluded { crate::chrome::ink().muted } else { crate::chrome::ink().label },
-        );
+        row.spawn(bevy_gooey::count_text(format!("{members}")));
     });
 }
 
-/// **The `EXCLUDED` band.** It keeps `Ink::header_bg` because it is a signpost over rows rather than one
-/// of them, and carries `RowRest` so the five states still come from `chrome::style_list_rows` —
-/// and so `arm_list_rows` can put the cursor on it, now that the arrows reach it (M8).
+/// **The `EXCLUDED` band.** A gooey `band`, a signpost over rows rather than one of them; `arm_list_rows` can put the cursor on it,
+/// now that the arrows reach it (M8).
 fn draw_excluded_band(p: &mut ChildSpawnerCommands, packs: usize, meshes: usize, open: bool) {
-    p.spawn((
-        // CHROME-OK: a group band, not a list row.
-        UiButton,
-        Hovered::default(),
-        ExcludedHeader,
-        crate::chrome::RowRest(crate::chrome::ink().header_bg),
-        Node {
-            width: Val::Percent(100.0),
-            padding: CHIP_PAD,
-            flex_direction: FlexDirection::Row,
-            column_gap: Val::Px(crate::chrome::GAP_ROW),
-            // `GAP_GROUP`, not a bare 8: this band starts a block, and the space above it is
-            // what says so.
-            margin: UiRect::top(Val::Px(crate::chrome::GAP_GROUP)),
-            ..default()
-        },
-        BackgroundColor(crate::chrome::ink().header_bg),
-    ))
-    .with_children(|row| {
-        crate::chrome::text_cell(row, crate::chrome::COL_TIGHT, if open { "v" } else { ">" }, crate::chrome::ink().muted, crate::chrome::text::LABEL);
+    p.spawn((bevy_gooey::band(), ExcludedHeader)).with_children(|row| {
+        row.spawn((Text::new(if open { "v" } else { ">" }), bevy_gooey::Role::ButtonText));
         // **The name column wraps within itself; the tally does not.** The state and the way
         // out of it both stay on the band (`docs/ui.md` §1.4) — what changed is that they now
         // share the *growing* column, so the count can hold a column of its own rather than
         // being the last words of a sentence that wraps around it (F6).
-        crate::chrome::fill_text(
-            row,
-            format!("EXCLUDED  -  {} restores one", keys::chord(Action::ExcludePack)),
-            crate::chrome::ink().muted,
-            crate::chrome::text::LABEL,
-        );
-        count_cell(row, format!("{packs} pack(s), {meshes} mesh(es)"), crate::chrome::ink().muted);
+        row.spawn(bevy_gooey::fill_text(format!("EXCLUDED  -  {} restores one", keys::chord(Action::ExcludePack))));
+        row.spawn(bevy_gooey::count_text(format!("{packs} pack(s), {meshes} mesh(es)")));
     });
 }
 
@@ -9318,13 +9212,14 @@ fn arm_list_rows(
             With<NewTileRow>,
         )>,
     >,
-    mut bands: Query<
-        (&mut crate::chrome::RowRest, Option<&PackHeader>, Has<ExcludedHeader>),
+    bands: Query<
+        (Entity, Option<&PackHeader>, Has<ExcludedHeader>, Has<bevy_gooey::PrimaryButton>),
         (
             Without<crate::chrome::RowSelected>,
             Or<(With<PackHeader>, With<ExcludedHeader>)>,
         ),
     >,
+    mut commands: Commands,
 ) {
     let now = Selected::now(&state, &build);
     for (mut rest, mut selected, mut border, candidate, library, kit, new_tile) in &mut rows {
@@ -9349,17 +9244,18 @@ fn arm_list_rows(
             *border = BorderColor::all(edge);
         }
     }
-    // Bands carry `RowRest` only: `chrome::style_list_rows` writes their `BackgroundColor` from it
-    // each frame, compared.
-    for (mut rest, pack, excluded) in &mut bands {
+    // Bands are gooey's: the skin paints their states, and the one the cursor stands on is lit as gooey lights a primary button,
+    // written only when it moves.
+    for (band, pack, excluded, lit) in &bands {
         let armed = match &now {
             Selected::Header(p) => pack.is_some_and(|h| h.0 == *p),
             Selected::Excluded => excluded,
             _ => false,
         };
-        let fill = if armed { crate::chrome::ink().row_selected } else { crate::chrome::ink().header_bg };
-        if rest.0 != fill {
-            rest.0 = fill;
+        if armed && !lit {
+            commands.entity(band).insert(bevy_gooey::PrimaryButton);
+        } else if !armed && lit {
+            commands.entity(band).remove::<bevy_gooey::PrimaryButton>();
         }
     }
 }
@@ -9516,11 +9412,7 @@ fn build_detail(p: &mut ChildSpawnerCommands, build: &crate::build::Build, proje
         // amber — a cursor drawn into the text as well would be one fact said twice.
         crate::chrome::list_row(p, focused, MemberRow(i)).with_children(|row| {
             crate::chrome::fill_text(row, what, crate::chrome::ink().text, crate::chrome::text::LABEL);
-            count_cell(
-                row,
-                format!("({:+.2}, {:+.2}) +{:.2}{yaw}", m.at.0, m.at.1, m.lift),
-                crate::chrome::ink().label,
-            );
+            count_cell(row, format!("({:+.2}, {:+.2}) +{:.2}{yaw}", m.at.0, m.at.1, m.lift));
         });
     }
 }
@@ -10688,52 +10580,21 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                                         let at = (x, y, z);
                                         let cell = grid.at(at);
                                         let selected = cell_edit.at == Some(at);
-                                        row.spawn((
-                                            // See [`header_button`]: it carries `RowRest`, so the
-                                            // five states come from `chrome::style_list_rows`.
-                                            // CHROME-OK: a lattice cell.
-                                            UiButton,
-                                            Hovered::default(),
+                                        // **A gooey `glyph_button`** (UI-59, #245): the cell is a hit target of the skin's size, and the
+                                        // cell the author picked is lit as gooey lights a primary button (an accent fill and the
+                                        // inverted glyph), by `PrimaryButton` here and in [`refresh_cells`].
+                                        let mut button = row.spawn((
+                                            bevy_gooey::glyph_button(
+                                                cell_glyph(cell).to_owned(),
+                                                format!("Cell {x}, {z} of layer {y}"),
+                                            ),
                                             CellButton(x, z),
                                             CellLayer(y),
-                                            crate::chrome::RowRest(if selected {
-                                                crate::chrome::ink().row_selected
-                                            } else {
-                                                crate::chrome::ink().row_bg
-                                            }),
-                                            Node {
-                                                // The smallest box a cell glyph stays clickable
-                                                // in (Fitts).
-                                                // CHROME-OK: a hit target's floor.
-                                                min_width: Val::Px(20.0),
-                                                min_height: Val::Px(MIN_FIELD_H),
-                                                justify_content: JustifyContent::Center,
-                                                align_items: AlignItems::Center,
-                                                ..default()
-                                            },
-                                            BackgroundColor(if selected {
-                                                crate::chrome::ink().row_selected
-                                            } else {
-                                                crate::chrome::ink().row_bg
-                                            }),
-                                        ))
-                                        .with_children(
-                                            |b| {
-                                                b.spawn((
-                                                    Text::new(cell_glyph(cell).to_owned()),
-                                                    // A marked cell is brighter than an empty one —
-                                                    // luminance, not hue, per `docs/ui.md` §1.3.
-                                                    TextColor(if cell.is_some() {
-                                                        crate::chrome::ink().accent
-                                                    } else {
-                                                        crate::chrome::ink().label
-                                                    }),
-                                                    crate::chrome::typed(crate::chrome::text::BODY),
-                                                    CellGlyph(x, z),
-                                                    CellLayer(y),
-                                                ));
-                                            },
-                                        );
+                                        ));
+                                        if selected {
+                                            button.insert(bevy_gooey::PrimaryButton);
+                                        }
+                                        tag_the_words(&mut button, (CellGlyph(x, z), CellLayer(y)));
                                     }
                                 });
                             }

@@ -33,10 +33,14 @@ use crate::fixtures;
 // `wrapping_row`, `fill_text`). Owner exception (2026-11-12): a ratchet tightened to the real count.
 // 10 -> 6: #245 moved the severity mark, the two fold chevrons and the detail line's group gap onto gooey's `cell` through `chrome::text_cell` and
 // `chrome::gap_cell`. Owner exception (2026-11-13): a ratchet tightened to the real count.
-const TILES_NODES_LEFT: usize = 6;
-/// The number `compose.rs` may carry: a world-space slot label, the flex item the 2026-08-17
-/// measurement sized, and one `Node::default()` that is a bundle's own direction.
-const COMPOSE_NODES_LEFT: usize = 3;
+// 6 -> 0: #245's last slice moved the two glyph hit targets onto gooey's `glyph_button`, the tab onto `edge_tab`, the two pack bands onto `band`
+// and the trailing count onto `count_text`. Owner exception (2026-11-13): a ratchet tightened to the real count.
+const TILES_NODES_LEFT: usize = 0;
+/// The number `compose.rs` may carry: the world-space slot label.
+// 3 -> 1: #245's last slice moved the prose line's flex item onto `chrome::fill_text` and the control-id marker onto a gooey `cell`.
+// The slot label stays: `the_stage_labels_are_on_screen` pins its pixel-space placement. Owner exception (2026-11-13): a ratchet tightened
+// to the real count.
+const COMPOSE_NODES_LEFT: usize = 1;
 
 /// **Every spelling of a raw `Node` literal in `name`** (review of #245): `Node {` and `Node{` are the
 /// same thing to Rust, and `Node::default()` is the same thing to a reader — counting one spelling let

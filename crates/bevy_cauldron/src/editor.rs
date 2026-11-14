@@ -4310,7 +4310,7 @@ fn rebuild_palette(
                     ));
                     // The count in a non-wrapping column of its own, through the one builder — F6
                     // was this same defect on the Kit door's pack headings.
-                    crate::tiles::count_cell(row, format!("{}", members.len()), crate::chrome::ink().label);
+                    crate::tiles::count_cell(row, format!("{}", members.len()));
                 });
 
                 if folded {
@@ -4387,7 +4387,19 @@ fn rebuild_palette(
                                 // the row could not wrap, and it drew over the count beside it.
                                 TextLayout::new(Justify::Left, LineBreak::WordOrCharacter),
                             ));
-                            crate::tiles::count_cell(row, brief_count(tris), cost_tint(tris));
+                            // **The triangle cost keeps its own ink** (`cost_tint`: the accent past a busy piece, the danger past the
+                            // importer's limit), which gooey's `count_text` would not: the skin writes that text's colour.
+                            row.spawn((
+                                Node {
+                                    flex_shrink: 0.0,
+                                    margin: UiRect::left(Val::Px(crate::chrome::GAP_ROW)),
+                                    ..default()
+                                },
+                                Text::new(brief_count(tris)),
+                                TextColor(cost_tint(tris)),
+                                crate::chrome::typed(crate::chrome::text::LABEL),
+                                TextLayout::new(Justify::Left, LineBreak::NoWrap),
+                            ));
                     });
                 }
             }
