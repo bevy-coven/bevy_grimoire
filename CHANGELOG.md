@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-13
 
+- **labeller-operations** `9a630c29` L, Shift+L and Shift+Y ask the labeller through operations an agent calls too (labels_suggest, labels_walk, labels_abandon) *No clip: an API behind existing keys, no new picture; proved by labeller_requests_are_operations*
 - **ops-review-31-33** `f361cded` A check queues every rig for the watcher and a refused call moves no view, both tested; Cmd+Z's note and problem are tested (#129 review) *No clip: a test and API fix behind existing keys; proved by rig_check_is_an_operation, kit_rescan_is_an_operation and tile_pieces_are_operations*
 - **rig-check-and-rescan-operations** `db8554b8` The Anim tab check-all key (C) and the Meshes tab rescan key (R) are operations an agent calls too (rig_check_all, kit_rescan) *No clip: an API behind existing keys, no new picture; proved by rig_check_is_an_operation and kit_rescan_is_an_operation*
 - **camera-operations** `c677aa33` The Map camera keys (W A S D held, Q and E) are operations an agent calls too (camera_pan, camera_turn) *No clip: an API behind existing keys, no new picture; proved by camera_is_an_operation*
