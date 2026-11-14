@@ -25,6 +25,9 @@
 //! - `a_pictures_tint_and_a_clear_node_are_not_the_themes` — what is *not* the theme's stays put: an image's
 //!   default white tint (which is also High contrast's `text`), a model's default white material and a
 //!   transparent node, through High contrast -> Parchment -> Tool dark -> High contrast.
+//! - `a_cell_built_in_one_theme_is_rebuilt_in_the_next` — a screen's rows hold concrete colours (a program's
+//!   "bright black" is the theme's `muted`), resolved when the rows are built; they are rebuilt when the ink
+//!   changes, so a shell's text follows the theme. (Found on the Linux gate, where a shell is running.)
 //! - `every_theme_carries_the_tones_the_editor_draws_with` — `Ink::of` answers magenta for a missing tone,
 //!   so every theme file must name exactly the tones the editor's own skin does.
 //!
@@ -518,5 +521,32 @@ fn every_theme_carries_the_tones_the_editor_draws_with() {
             !one_of(magenta, &Ink::of(&skin).fields()),
             "{theme:?}: no ink is the magenta that answers a missing tone"
         );
+    }
+}
+
+/// **A shell's text follows the theme.** The terminal emulator resolves a program's "bright black" (`ESC[90m`)
+/// to the theme's `muted` and its "default" to the theme's `text` when it builds the rows it draws, and kept
+/// those rows until something was written, so a prompt drawn in Parchment stayed Parchment's brown on the dark
+/// theme (the Linux gate: ten `muted` words left in another theme's colour). No pty and no editor entity: a
+/// bare screen fed bytes, read before and after each switch.
+#[test]
+fn a_cell_built_in_one_theme_is_rebuilt_in_the_next() {
+    let (mut app, file) = editor("theme_cells", Theme::ToolDark);
+    let mut screen = bevy_cauldron::terminal::TerminalScreen::new(40, 3);
+    screen.feed(b"\x1b[90mdim words\x1b[0m plain");
+    let read = |screen: &mut bevy_cauldron::terminal::TerminalScreen| {
+        let cells = &screen.lines()[0].cells;
+        let at = |ch: char| cells.iter().find(|c| c.ch == ch).map(|c| c.fg).expect("the word is on the first row");
+        (at('d'), at('p'))
+    };
+    let (dim, plain) = read(&mut screen);
+    let ink = expected(Theme::ToolDark);
+    assert!(same(dim, ink.muted) && same(plain, ink.text), "built in Tool dark: {dim:?}, {plain:?}");
+    for theme in [Theme::Parchment, Theme::HighContrast, Theme::ToolDark, Theme::Parchment] {
+        choose(&mut app, &file, theme);
+        let ink = expected(theme);
+        let (dim, plain) = read(&mut screen);
+        assert!(same(dim, ink.muted), "{theme:?}: bright black is the theme's `muted`: {dim:?} vs {:?}", ink.muted);
+        assert!(same(plain, ink.text), "{theme:?}: the default ink is the theme's `text`: {plain:?} vs {:?}", ink.text);
     }
 }

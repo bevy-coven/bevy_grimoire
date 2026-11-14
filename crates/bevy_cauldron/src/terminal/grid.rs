@@ -38,6 +38,7 @@ use bevy::prelude::*;
 
 use super::input::{MouseEncoding, MouseTracking, WheelTarget};
 use super::palette;
+use crate::chrome;
 
 /// How many lines of history a session keeps above its viewport.
 pub const SCROLLBACK: usize = 5_000;
@@ -192,6 +193,11 @@ pub struct TerminalScreen {
     /// [`take_dirty`](Self::take_dirty). A settled prompt therefore costs one `bool` read per frame
     /// rather than a rebuild of two hundred rows.
     dirty: bool,
+    /// **The ink the rows were resolved in** ([`chrome::ink_generation`], #428). A cell stores the concrete
+    /// colour a program's "default" or "bright black" meant when it was built, so a theme change leaves the
+    /// rows in the old theme's colours until something redraws them; [`lines`](Self::lines) rebuilds when this
+    /// is not the ink's own.
+    ink_generation: u64,
     /// What [`lines`](Self::lines) last built, so a rebuild happens once per change rather than once
     /// per frame — and so a caller can hold a row across frames without re-asking.
     rows: Vec<Line>,
@@ -228,6 +234,7 @@ impl TerminalScreen {
             parser: Processor::new(),
             listener,
             dirty: true,
+            ink_generation: chrome::ink_generation(),
             rows: Vec::new(),
             stamp: 0,
             caret: Cursor { row: 0, column: 0, visible: true, shape: CaretShape::Block },
@@ -472,6 +479,11 @@ impl TerminalScreen {
     ///
     /// Returned by reference so a still terminal hands back the same `Vec` sixty times a second.
     pub fn lines(&mut self) -> &[Line] {
+        let ink = chrome::ink_generation();
+        if self.ink_generation != ink {
+            self.ink_generation = ink;
+            self.dirty = true;
+        }
         if self.take_dirty() {
             self.rebuild();
         }

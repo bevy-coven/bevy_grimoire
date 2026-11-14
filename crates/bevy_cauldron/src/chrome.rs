@@ -288,9 +288,22 @@ pub fn ink() -> Ink {
     *LIVE_INK.read().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
+/// How many times the ink has been replaced: 0 until a theme changes the skin's colours.
+static INK_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// **Which ink this is**, for a cache of something resolved from it (#428): the terminal emulator turns a
+/// program's "default foreground" and "bright black" into concrete colours when it builds its rows, and
+/// asks this to know the rows it holds were built in an ink that is gone. It changes exactly when [`ink`]
+/// does, so a settled editor compares two integers.
+pub fn ink_generation() -> u64 {
+    INK_GENERATION.load(std::sync::atomic::Ordering::Acquire)
+}
+
 /// Replaces the editor's ink and returns the one it replaced. Only `crate::theme_ink` calls it.
 pub(crate) fn swap_ink(next: Ink) -> Ink {
-    std::mem::replace(&mut *LIVE_INK.write().unwrap_or_else(std::sync::PoisonError::into_inner), next)
+    let previous = std::mem::replace(&mut *LIVE_INK.write().unwrap_or_else(std::sync::PoisonError::into_inner), next);
+    INK_GENERATION.fetch_add(1, std::sync::atomic::Ordering::Release);
+    previous
 }
 
 /// **How far a ground fill steps back while the shortcuts key is held.**
