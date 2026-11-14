@@ -15,6 +15,7 @@
 //! must be unique to its test (its name and `std::process::id()`), never a fixed name.
 
 mod a_chord_shows_the_problems_list;
+mod a_dock_tab_reordered_glides_to_its_place;
 mod a_game_field_opens_the_file_that_sets_it;
 mod a_maps_forest_is_listed_in_the_world_workspace;
 mod a_maps_lights_are_listed_without_bevy_lights;
@@ -68,6 +69,7 @@ mod a_refused_project_offers_to_migrate_itself;
 mod a_project_with_a_ron_file_is_refused_at_open;
 mod an_old_users_files_are_converted_once;
 mod an_oplog_line_of_another_version_is_refused;
+mod an_unbuilt_workspace_is_refused_with_its_reason;
 mod a_dead_end_names_its_closest_piece;
 mod capture_feedback_1793905912313;
 mod capture_feedback_1793905798698;
@@ -204,6 +206,7 @@ mod the_settings_screen_searches_and_resets;
 mod the_settings_sizes_are_sliders;
 mod the_editor_chrome_speaks_plainly;
 mod the_environment_panel_is_reachable;
+mod the_kit_lists_hold_their_fixed_columns_in_gooey_cells;
 mod the_kit_panels_are_built_from_gooey_widgets;
 mod the_keymap_refuses_a_clash_and_saves_nothing;
 mod the_project_configuration_toggles_a_family_crate;
@@ -285,6 +288,7 @@ mod every_key_has_a_home;
 mod editor_skin;
 mod editor_ui_plugin;
 mod every_list_follows_its_selection;
+mod every_listed_part_is_found_in_its_workspace;
 mod every_panel_is_in_its_workspace;
 mod every_refusal_is_in_a_problem;
 mod every_resource_says_what_a_door_does_to_it;
