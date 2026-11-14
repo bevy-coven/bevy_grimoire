@@ -4407,7 +4407,10 @@ pub mod rig_history_step {
                 summary: says(back).to_owned(),
                 affected: 1,
                 saved: false,
-                inverse: None,
+                // **The step the other way is its inverse**, so a log line that cannot be written takes the step back: `take_back` runs
+                // `commit` again over the history this one left in the view, which restores `rigs.yaml` and the stacks together. The
+                // line is `Undo::None`, so `undo_target` never reads this; it exists for that one failure.
+                inverse: Some(json!({ "by": if back { "forward" } else { "back" } })),
                 after: Some(json!({ "back": back, "undo_left": undo_left, "redo_left": redo_left })),
             })
         }

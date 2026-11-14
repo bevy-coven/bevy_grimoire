@@ -111,8 +111,10 @@ const REFUSALS: &[Site] = &[
     // mid-batch.
     // Owner exception (2026-11-13): re-pointed, because #129 slice 34 moved the sentence `no batch: {remedy}` into `labels_walk`
     // (`ops_labeller.rs`), the operation the Shift+L key now dispatches, which refuses with it. **This row is weak, and says so**: its
-    // marker is the problem call itself, in `Labeller::dispatch`, where every refusal of the three label operations is filed. The
-    // No test asserts the sentence itself any more: the slot is the one `dispatch` files every refusal of the three operations in.
+    // marker is the problem call itself, in `Labeller::dispatch`, where every refusal of the three label operations is filed, so it
+    // cannot fail for `no batch:` alone. The sentence and its slot are pinned by
+    // `labeller_requests_are_operations::a_walk_with_no_endpoint_is_refused_as_no_batch_for_the_key_and_for_an_agent`, which presses
+    // Shift+L over a port nothing listens on and reads the problem the author is shown.
     Site {
         file: "labels.rs",
         marker: "state.status.problem(e.0)",

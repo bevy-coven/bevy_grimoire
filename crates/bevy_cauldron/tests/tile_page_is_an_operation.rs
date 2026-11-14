@@ -174,7 +174,6 @@ fn keys_and_an_agent_open_and_close_a_tile_through_operations() {
 #[test]
 fn n_and_an_agent_name_a_new_tile_and_left_goes_back_through_operations() {
     let mut app = editor("new_leave");
-    let bay = bay(&app);
 
     tap(&mut app, KeyCode::KeyN);
     assert!(build(&app).naming.is_some(), "N raises the name prompt");
@@ -225,4 +224,72 @@ fn the_page_actions_name_the_operations_they_dispatch() {
     assert_eq!(Action::TileOpen.operation(), Some("tile_open"));
     assert_eq!(Action::CloseTile.operation(), Some("tile_close"));
     assert_eq!(Action::BuildNew.operation(), Some("tile_new"));
+}
+
+/// **A key as the name prompt reads it**: by its logical key, which is what `build::naming_keys` matches on.
+fn press_logical(app: &mut App, logical_key: Key) {
+    app.world_mut().write_message(KeyboardInput {
+        key_code: KeyCode::Unidentified(bevy::input::keyboard::NativeKeyCode::Unidentified),
+        logical_key,
+        state: ButtonState::Pressed,
+        text: None,
+        repeat: false,
+        window: Entity::PLACEHOLDER,
+    });
+    app.update();
+}
+
+fn type_text(app: &mut App, text: &str) {
+    for c in text.chars() {
+        press_logical(app, Key::Character(c.to_string().into()));
+    }
+}
+
+/// **A name the kit already has is refused, for an agent and for the name prompt alike** (E-002, #129 slice 36 review): `tile_new`
+/// says `` `{id}` is already in the kit `` rather than silently replacing somebody's tile, and the prompt stays up for the person to
+/// pick another name. The sentence used to live in the key's own code and was deleted with it, so this pins it where it is now.
+#[test]
+fn a_name_the_kit_already_has_is_refused_and_the_prompt_stays_up() {
+    let mut app = editor("collision");
+    let id = format!("{}/taken", app.world().resource::<Project>().namespace);
+    // A tile saved under that name: `bay`'s definition, renamed, through the operation `Cmd+S` dispatches.
+    let tile = {
+        let project = app.world().resource::<Project>();
+        let bay = project.compositions.compositions.iter().find(|c| c.id == "bay").expect("the fixture's bay");
+        let mut v = serde_json::to_value(bay).expect("a composition serialises");
+        v["id"] = json!(id);
+        v
+    };
+    let made = apply(&mut app, "composition_define", json!({"id": id, "composition": tile}));
+    assert_eq!(made["outcome"], "applied", "the kit gains a tile named `{id}`: {made}");
+    assert!(app.world().resource::<Project>().compositions.compositions.iter().any(|c| c.id == id), "and holds it");
+    let before = logged(&app, "tile_new").len();
+
+    // An agent that names it is refused, and nothing opens.
+    let refused = apply(&mut app, "tile_new", json!({"name": "taken"}));
+    assert_eq!(refused["outcome"], "refused", "{refused}");
+    assert!(refused.to_string().contains("is already in the kit"), "the refusal says why: {refused}");
+    assert_eq!(open_id(&app), None, "nothing opened");
+    assert_eq!(logged(&app, "tile_new").len(), before, "a refusal is not a logged change");
+
+    // The person types the same name into the prompt: a problem, the prompt still up, nothing opened.
+    tap(&mut app, KeyCode::KeyN);
+    assert!(build(&app).naming.is_some(), "N raises the name prompt");
+    type_text(&mut app, "taken");
+    press_logical(&mut app, Key::Enter);
+    assert!(build(&app).naming.is_some(), "the prompt stays up so the name can be fixed");
+    assert_eq!(open_id(&app), None, "nothing opened");
+    let state = app.world().resource::<ImportState>();
+    assert!(state.status.has_problem(), "a refusal is a problem where the author looks");
+    assert!(state.status.problem_text().contains("is already in the kit"), "{}", state.status.problem_text());
+    assert_eq!(logged(&app, "tile_new").len(), before + 1, "only the press of N that raised the prompt was logged");
+
+    // Another name goes through, and takes the prompt down.
+    for _ in 0..5 {
+        press_logical(&mut app, Key::Backspace);
+    }
+    type_text(&mut app, "fresh");
+    press_logical(&mut app, Key::Enter);
+    assert!(build(&app).naming.is_none(), "a name the kit lacks is taken");
+    assert!(open_id(&app).is_some_and(|id| id.ends_with("/fresh")), "{:?}", open_id(&app));
 }

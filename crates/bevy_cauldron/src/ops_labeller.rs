@@ -102,12 +102,17 @@ impl Operation for LabelsSuggest {
     fn changes_view(&self) -> bool {
         true
     }
-    /// **The piece the labels will land on**, when it is in the library; a candidate has no row to show yet.
-    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
-        match params.get("piece").and_then(serde_json::Value::as_str) {
-            Some(id) if !id.contains('/') => Shown::Piece { id: id.to_owned() },
-            _ => Shown::Nowhere,
-        }
+    /// **The piece the labels will land on**; a candidate has no row to show yet. Asked of the library and the candidate list in hand
+    /// and not guessed from the id's shape: a namespaced piece (`site/wall`) has a slash in its id too, and a candidate's mesh path
+    /// is only a path. A name in neither (a call with no view, a piece the call is about to be refused for) is named as a piece, as
+    /// `an_operation_says_where_its_change_is_seen` asks of parameters alone.
+    fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        let Some(id) = params.get("piece").and_then(serde_json::Value::as_str) else {
+            return Shown::Nowhere;
+        };
+        let in_library = ctx.project.as_ref().is_some_and(|p| p.library.get(id).is_some());
+        let a_candidate = !in_library && ctx.view.as_ref().is_some_and(|v| v.labels.candidates.iter().any(|c| c == id));
+        if a_candidate { Shown::Nowhere } else { Shown::Piece { id: id.to_owned() } }
     }
     fn writes(&self) -> &'static [&'static str] {
         &[]
@@ -166,7 +171,7 @@ impl LabelsWalk {
         let relabel = walk_params(params)?.relabel;
         let l = labels(ctx, "walk")?;
         if l.asking {
-            return Err(Refusal::new("a question about which pieces to label is already on screen: answer it first."));
+            return Err(Refusal::new("a question is already on screen (which pieces to label, or another one): answer it first."));
         }
         // **A second call HOLDS the walk; it does not throw it away.** Abandoning is `labels_abandon`.
         if l.running {

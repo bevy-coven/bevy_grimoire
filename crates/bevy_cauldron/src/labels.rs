@@ -456,6 +456,11 @@ pub(crate) fn suggest_labels(
 /// `echo clear > labels.request` runs the clear-all. The mapper is checked by scripts and
 /// measured frames (see `devshot.rs`'s module note) and the labeler is no exception — this is
 /// the handle a test harness holds, since the capture path cannot run headless.
+///
+/// **It is not one of the three label operations, and says so** (E-002, #129 slice 34 review): it calls [`request_photos`] and
+/// [`clear_all_labels`] directly, so a line in `labels.request` logs nothing, unlike `L` and `Shift+Y`, which dispatch `labels_suggest`
+/// and `labels_abandon`. A file in the working directory is a harness's handle and not a front end of the editor: it is no person's
+/// key and no agent's call, so there is no second front end for the operation to be the one path of.
 pub(crate) fn watch_sentinel(
     project: Option<Res<Project>>,
     mut state: ResMut<crate::tiles::ImportState>,
@@ -1057,7 +1062,9 @@ impl Labeller<'_> {
 
         let (done, total) = queue.progress();
         let running = queue.running();
-        let asking = queue.ask.is_some();
+        // **Any question on screen counts**, not only this walk's own: `Confirm::ask` replaces the one that is up, so a walk that
+        // asked its overwrite question over another would take that question away.
+        let asking = queue.ask.is_some() || self.confirm.as_deref().is_some_and(crate::confirm::Confirm::is_open);
         let unreachable = (probe && !running && !asking)
             .then(|| match crate::decide_labels::probe(&endpoint_of(&project.root)) {
                 crate::decide_labels::Reach::Unreachable(remedy) => Some(remedy),

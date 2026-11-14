@@ -189,3 +189,90 @@ fn the_two_bench_history_actions_name_the_operation_they_dispatch() {
     assert_eq!(Action::UndoBench.operation(), Some("rig_history_step"));
     assert_eq!(Action::RedoBench.operation(), Some("rig_history_step"));
 }
+
+/// **A step whose log line cannot be written leaves the manifest, the bench and the history as they were** (E-002, #129 slice 35
+/// review). The step writes `rigs.yaml` first and the log second; with no inverse the take-back had nothing to run, so the file kept
+/// the step while the bench kept the old history, and the watcher then read the file as somebody else's edit: the next Cmd+Z undid
+/// the failed step. A directory where the log goes makes the append fail for the key and for an agent's call alike.
+#[test]
+fn a_step_whose_log_line_cannot_be_written_is_taken_back_with_its_history() {
+    let (mut app, path) = editor("badlog");
+    let original = on_disk(&path);
+    let mut rigs = Rigs::parse(&original).expect("the shipped manifest reads");
+    let copy = rigs.rigs.values().next().expect("a rig").clone();
+    rigs.rigs.insert("aardvark".to_owned(), copy);
+    let edited = rigs.to_yaml().expect("serialises");
+    std::fs::write(&path, &edited).expect("write");
+    until(&mut app, 30.0, "the tab holding the edit", |a| held(a) == edited);
+    settle(&mut app);
+    let history = app.world().resource::<BenchState>().history();
+    assert_eq!(history.undo.len(), 1, "the edit left one manifest to step back to: {history:?}");
+    assert!(history.redo.is_empty(), "{history:?}");
+
+    // **The log cannot be written**: a directory is where its file goes.
+    let log = bevy_cauldron::ops::oplog_path_at(&app.world().resource::<Project>().root);
+    let _ = std::fs::remove_file(&log);
+    std::fs::create_dir_all(&log).expect("a directory where the log goes");
+
+    let mods = [bevy_cauldron::keys::MOD_KEYS[0]];
+    tap(&mut app, &mods, KeyCode::KeyZ);
+    assert!(app.world().resource::<BenchState>().status.has_problem(), "the key says it could not step");
+    let refused = apply(&mut app, "rig_history_step", json!({"by": "back"}));
+    assert_eq!(refused["outcome"], "refused", "an agent's call is refused too: {refused}");
+    settle(&mut app);
+    assert_eq!(on_disk(&path), edited, "a step that could not be logged is taken back: rigs.yaml is as it was");
+    assert_eq!(held(&app), edited, "and the bench still holds it");
+    assert_eq!(app.world().resource::<BenchState>().history(), history, "and the history is exactly what it was, with no entry for the failed step");
+
+    // With the log writable again the one real step is still there to take.
+    std::fs::remove_dir(&log).expect("the directory goes");
+    tap(&mut app, &mods, KeyCode::KeyZ);
+    assert_eq!(on_disk(&path), original, "Cmd+Z takes back the edit, not a step that never happened");
+    assert_eq!(logged(&app, "rig_history_step").len(), 1, "only the step that landed is logged");
+}
+
+/// **A step keeps the rig the author is on selected by name** (E-002, #129 slice 35 review), as an edit under the tab does: a rig the
+/// step adds or removes ahead of it moves its index, and the selection moves with the rig. One the step removed leaves the selection
+/// at the same place in the list.
+#[test]
+fn a_step_keeps_the_selected_rig_by_name_and_clamps_when_it_is_gone() {
+    let (mut app, path) = editor("selection");
+    let original = on_disk(&path);
+    let names = |app: &App| app.world().resource::<BenchState>().names().iter().map(|n| (*n).to_owned()).collect::<Vec<_>>();
+    let on = |app: &App| {
+        let bench = app.world().resource::<BenchState>();
+        bench.names().get(bench.selected).map(|n| (*n).to_owned())
+    };
+    let before = names(&app);
+    assert!(before.len() >= 3, "the shipped manifest has rigs enough to tell an index from a name: {before:?}");
+    app.world_mut().resource_mut::<BenchState>().selected = 1;
+    let chosen = before[1].clone();
+
+    // A rig that sorts first is added on disk: the tab takes the edit, the selection follows its rig by name.
+    let mut rigs = Rigs::parse(&original).expect("the shipped manifest reads");
+    let copy = rigs.rigs.values().next().expect("a rig").clone();
+    rigs.rigs.insert("aaa_first".to_owned(), copy);
+    let edited = rigs.to_yaml().expect("serialises");
+    std::fs::write(&path, &edited).expect("write");
+    until(&mut app, 30.0, "the tab holding the edit", |a| held(a) == edited);
+    settle(&mut app);
+    assert_eq!(on(&app), Some(chosen.clone()), "the edit under the tab keeps the rig selected by name");
+
+    // Cmd+Z removes the added rig, which moves the chosen one back up the list: the selection goes with it.
+    let mods = [bevy_cauldron::keys::MOD_KEYS[0]];
+    tap(&mut app, &mods, KeyCode::KeyZ);
+    assert_eq!(names(&app), before, "the step took the added rig out");
+    assert_eq!(on(&app), Some(chosen.clone()), "the step keeps the rig selected by name, not by index");
+    settle(&mut app);
+    let said = apply(&mut app, "rig_history_step", json!({"by": "forward"}));
+    assert_eq!(said["outcome"], "applied", "{said}");
+    assert_eq!(on(&app), Some(chosen), "and so does an agent's step the other way");
+
+    // The selected rig is the one the step removes: the selection stays at the same place, or on the last rig.
+    app.world_mut().resource_mut::<BenchState>().selected = 0;
+    assert_eq!(on(&app).as_deref(), Some("aaa_first"));
+    settle(&mut app);
+    let said = apply(&mut app, "rig_history_step", json!({"by": "back"}));
+    assert_eq!(said["outcome"], "applied", "{said}");
+    assert_eq!(on(&app), Some(before[0].clone()), "the rig is gone, so the selection stays at the top of the list");
+}

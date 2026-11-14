@@ -23,12 +23,28 @@ use crate::fixtures;
 /// An editor on the Meshes tab over a kit with one library piece that has a mesh and every label. The decision endpoint is a
 /// socket that listens and says nothing, so a walk's reachability probe passes and no model is ever asked.
 fn editor(tag: &str) -> App {
-    let root = fixtures::Fixture::new(&format!("labeller_{tag}_{}", std::process::id()))
-        .descriptor("floor", "alpha")
-        .build("m");
+    editor_with(tag, true)
+}
+
+/// The same editor, with the endpoint listening (`true`) or a port nothing listens on (`false`), where a walk's probe fails.
+fn editor_with(tag: &str, listening: bool) -> App {
+    editor_over(tag, listening, &["floor"])
+}
+
+/// The same, over the library pieces named (each with a mesh and every label).
+fn editor_over(tag: &str, listening: bool, pieces: &[&str]) -> App {
+    let fixture = pieces
+        .iter()
+        .fold(fixtures::Fixture::new(&format!("labeller_{tag}_{}", std::process::id())), |f, id| f.descriptor(id, "alpha"));
+    let root = fixture.build("m");
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a port to listen on");
     let port = listener.local_addr().expect("its address").port();
-    std::thread::spawn(move || for _connection in listener.incoming() {});
+    if listening {
+        std::thread::spawn(move || for _connection in listener.incoming() {});
+    } else {
+        // Closed again at once: the port is one nothing listens on, so a connect is refused.
+        drop(listener);
+    }
     std::fs::write(root.join(".env"), format!("GRIMOIRE_DECIDE_ENDPOINT=http://127.0.0.1:{port}\n")).expect(".env");
     let mut app = bevy_cauldron::harness::build_headless_at(&root, "m", None, Mode::Meshes).unwrap_or_else(|e| panic!("{e}"));
     app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());
@@ -196,4 +212,57 @@ fn the_label_actions_name_the_operations_they_dispatch() {
     assert_eq!(Action::SuggestLabels.operation(), Some("labels_suggest"));
     assert_eq!(Action::SuggestAll.operation(), Some("labels_walk"));
     assert_eq!(Action::DiscardAllSuggestions.operation(), Some("labels_abandon"));
+}
+
+/// **A walk with nobody home is refused, for the key and for an agent** (E-002, #129 slice 34 review): `no batch: {remedy}`, the
+/// sentence `labels_walk` carries, is the problem the author reads, nothing is queued and no line is logged as applied. The old key
+/// said it in `labels.rs`; this pins it where the operation says it now, and the slot it is filed in.
+#[test]
+fn a_walk_with_no_endpoint_is_refused_as_no_batch_for_the_key_and_for_an_agent() {
+    let mut app = editor_with("no_batch", false);
+
+    tap(&mut app, &[KeyCode::ShiftLeft], KeyCode::KeyL);
+    {
+        let status = &app.world().resource::<ImportState>().status;
+        assert!(status.has_problem(), "a refused walk is a problem where the author looks, not a note: {:?}", status.note_text());
+        assert!(status.problem_text().starts_with("no batch:"), "the problem is the operation's own sentence: {}", status.problem_text());
+    }
+    assert!(!running(&app), "nothing was queued");
+    assert!(!app.world().resource::<Confirm>().is_open(), "and no question was raised");
+    let applied = |app: &App| logged(app, "labels_walk").into_iter().filter(|(_, l)| l["outcome"] == "applied").count();
+    assert_eq!(applied(&app), 0, "a refused walk is not a logged change: {:?}", logged(&app, "labels_walk"));
+
+    let refused = apply(&mut app, "labels_walk", json!({"relabel": true}));
+    assert_eq!(refused["outcome"], "refused", "an agent's walk is refused for the same reason: {refused}");
+    assert!(refused.to_string().contains("no batch:"), "{refused}");
+    assert!(!running(&app));
+    assert_eq!(applied(&app), 0, "{:?}", logged(&app, "labels_walk"));
+}
+
+/// **A walk does not ask its question over somebody else's** (E-002, #129 slice 34 review): `labels_walk` answering `Ask` raised the
+/// overwrite question without looking whether another was up, and the second `Confirm::ask` replaced the first. It is refused now,
+/// the question already on screen is still the one, and nothing is logged.
+#[test]
+fn a_walk_is_refused_while_another_question_is_on_screen() {
+    let mut app = editor("other_question");
+    app.world_mut().resource_mut::<Confirm>().ask(bevy_cauldron::confirm::Asked::QuitApp, "Quit?", "There is a map with unsaved edits.", "Quit", "Stay");
+    assert!(app.world().resource::<Confirm>().is_open());
+
+    // No `relabel`: the scope holds a labelled piece, which is the case that asks.
+    let refused = apply(&mut app, "labels_walk", json!({}));
+    assert_eq!(refused["outcome"], "refused", "a question is on screen: {refused}");
+    assert!(!app.world().resource::<LabelQueue>().running());
+    assert!(app.world().resource::<Confirm>().is_open(), "the question that was up is still up");
+    assert!(logged(&app, "labels_walk").is_empty(), "{:?}", logged(&app, "labels_walk"));
+}
+
+/// **`labels_suggest` says where a namespaced library piece is** (E-002, #129 slice 34 review): it guessed library piece against
+/// candidate with `!id.contains('/')`, so `kit/rug` was shown nowhere. A candidate's mesh path is a path; a piece is what the library holds.
+#[test]
+fn labels_suggest_shows_a_library_piece_whatever_its_id_looks_like() {
+    let mut app = editor_over("shows", true, &["floor", "kit/rug"]);
+    let said = apply(&mut app, "labels_suggest", json!({"piece": "kit/rug"}));
+    assert_eq!(said["outcome"], "applied", "{said}");
+    assert_eq!(said["shown"]["kind"], "piece", "a library piece with a slash in its id is still a library piece: {said}");
+    assert_eq!(said["shown"]["id"], "kit/rug", "{said}");
 }

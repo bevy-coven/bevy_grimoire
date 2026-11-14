@@ -200,7 +200,7 @@ pub struct LabelsCursor {
     pub running: bool,
     #[serde(default)]
     pub paused: bool,
-    /// Whether the question "re-label what is already labelled?" is on screen.
+    /// Whether a question is on screen: the one "re-label what is already labelled?" raises, or any other the editor asked.
     #[serde(default)]
     pub asking: bool,
     /// How many of the walk's pieces are done, and how many it began with.

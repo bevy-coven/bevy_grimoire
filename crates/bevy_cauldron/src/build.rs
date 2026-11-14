@@ -2137,9 +2137,10 @@ pub fn landing_row(project: &crate::project::Project, build: &Build) -> usize {
 ///
 /// # The refusal is here because this is the one writer
 ///
-/// `build.open` is written by exactly two functions — [`open_named`], which makes a [`blank`], and
-/// this one, which takes whatever it is handed. So this is where *"an anchored composition cannot
-/// enter `build.open`"* is enforceable rather than merely observed: both key paths used to check
+/// `build.open` is set by exactly one function, [`Build::begin`], which two callers share: this one, which takes whatever it is
+/// handed, and [`Build::take_page`], which carries out what `tile_open`, `tile_page_enter` and `tile_new` answered (the first two
+/// refuse a tile with no box by the same [`claims_no_tile`] before they answer, and `tile_new` makes a [`blank`]). So this is where
+/// *"an anchored composition cannot enter `build.open`"* is enforceable rather than merely observed: both key paths used to check
 /// nothing, and one `Enter` on a composition captured with the Map's `M` left the tab holding a
 /// group with no box, where the size guard refused every verb and no key could put it down (the
 /// 2026-09-03 review's T2).
@@ -2167,7 +2168,6 @@ impl Build {
         self.focus = 0;
         self.placing = placing;
         self.browsing = None;
-        self.naming = None;
         self.opened = self.opened.wrapping_add(1);
     }
 
@@ -2180,7 +2180,12 @@ impl Build {
         }
         match &answer.tile {
             TileAnswer::Keep => {}
-            TileAnswer::Open { tile, placing } => self.begin(tile.clone(), *placing),
+            // **A tile named or opened takes the name prompt down**: it is the answer the prompt was waiting for (`tile_new` with a
+            // name), or a tile now in hand that the prompt's name no longer applies to. `open_saved` leaves the prompt alone, as it did.
+            TileAnswer::Open { tile, placing } => {
+                self.begin(tile.clone(), *placing);
+                self.naming = None;
+            }
             TileAnswer::Close => {
                 self.open = None;
                 self.focus = 0;

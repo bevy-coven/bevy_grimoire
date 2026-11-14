@@ -841,14 +841,15 @@ impl BenchState {
         self.view = if cursor.all { View::All } else { View::One };
     }
 
-    /// **The bench's own history as a value**, for `rig_history_step` to step (E-002, #129 slice 35).
-    pub(crate) fn history(&self) -> crate::ops_view::RigHistory {
+    /// **The bench's own history as a value**, for `rig_history_step` to step (E-002, #129 slice 35), and for a test to read.
+    pub fn history(&self) -> crate::ops_view::RigHistory {
         crate::ops_view::RigHistory { text: self.text.clone(), undo: self.undo.clone(), redo: self.redo.clone(), stepped: None }
     }
 
     /// **Take what `rig_history_step` answered**: the manifest it wrote, the stacks it moved and its sentence. The reports are
     /// measured again and the trial exclusions go, because both were about the text that was just replaced. A history that did
-    /// not step is left alone, and the selection stays on the same place in the list (or on the last rig, if the list shrank).
+    /// not step is left alone, and the selection stays on the same rig by NAME, as an edit under the tab keeps it (a rig added ahead of
+    /// it moves its index): a rig the step removed leaves it at the same place in the list, or on the last rig if the list shrank.
     pub(crate) fn take_step(
         &mut self,
         history: &crate::ops_view::RigHistory,
@@ -867,11 +868,15 @@ impl BenchState {
                 return;
             }
         };
+        let was = self.names().get(self.selected).map(|n| (*n).to_owned());
         self.rigs = Some(rigs);
         self.text = Some(text.clone());
         self.undo = history.undo.clone();
         self.redo = history.redo.clone();
-        self.selected = self.selected.min(self.names().len().saturating_sub(1));
+        self.selected = {
+            let names = self.names();
+            was.and_then(|name| names.iter().position(|n| *n == name)).unwrap_or_else(|| self.selected.min(names.len().saturating_sub(1)))
+        };
         crate::anim_watch::invalidate(reports, generation);
         exclude.clear();
         self.status.note(crate::ops::rig_history_step::says(back));
