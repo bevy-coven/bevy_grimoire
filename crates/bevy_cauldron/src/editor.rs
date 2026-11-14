@@ -3794,35 +3794,22 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                     if field == Field::Edges {
                         history_block(s);
                     }
-                    let mut spawned = s.spawn(Node {
-                        flex_direction: FlexDirection::Row,
-                        // The receipt starts under the row above it, not floating mid-box when it
-                        // is one line inside its two-line room.
-                        align_items: match field {
-                            Field::Last => AlignItems::FlexStart,
-                            _ => AlignItems::Center,
+                    // A row of a gooey `sized` box (it keeps its automatic least width). **The receipt starts under the row above it**, not floating mid-box when it is one line inside
+                    // its two-line room (`FlexStart`). **The receipt row keeps its room when it is empty** (B-009): it was zero tall until a note arrived and then grew to the note, so every
+                    // receipt moved MAP SIZE, the size fields and the composition list down two lines and back, often under the pointer that had just typed into a field. Two lines,
+                    // because 165 of the editor's 174 receipt sites are 80 characters or fewer and the value column holds about 42 per line. A longer receipt still grows rather than
+                    // being cut short. `LinesCeil` is rounded up to a whole pixel (an exact reserve laid out one pixel short of a two-line receipt) and follows the text size.
+                    let mut spawned = s.spawn((
+                        bevy_gooey::sized(bevy_gooey::Sizing {
+                            min_height: (field == Field::Last).then_some(bevy_gooey::Extent::LinesCeil(RECEIPT_LINES)),
+                            ..default()
+                        }),
+                        bevy_gooey::RowLayout {
+                            direction: Some(FlexDirection::Row),
+                            align: Some(if field == Field::Last { AlignItems::FlexStart } else { AlignItems::Center }),
+                            ..default()
                         },
-                        // **The receipt row keeps its room when it is empty** (B-009). It was zero
-                        // tall until a note arrived and then grew to the note, so every receipt
-                        // moved MAP SIZE, the size fields and the composition list down two lines
-                        // and back, often under the pointer that had just typed into a field.
-                        // Two lines, because 165 of the editor's 174 receipt sites are 80
-                        // characters or fewer and the value column holds about 42 per line. A
-                        // longer receipt still grows rather than being cut short: the words matter
-                        // more than the stillness.
-                        // Rounded up to a whole pixel: the text's measured box is rounded up, and
-                        // an exact reserve laid out one pixel short of a two-line receipt.
-                        min_height: match field {
-                            Field::Last => Val::Px(crate::chrome::LinesRoom { lines: RECEIPT_LINES, pad: 0.0, fixed: false }.at(crate::chrome::text_scale())),
-                            _ => Val::Auto,
-                        },
-                        ..default()
-                    });
-                    if field == Field::Last {
-                        // The receipt's two-line room follows the text size, or a receipt at 200%
-                        // is clipped by the reserve that did not grow (UI-73, #251).
-                        spawned.insert(crate::chrome::LinesRoom { lines: RECEIPT_LINES, pad: 0.0, fixed: false });
-                    }
+                    ));
                     if let Some(id) = field.control() {
                         spawned.insert(crate::chrome::Control(id));
                     }

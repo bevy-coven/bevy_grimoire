@@ -967,11 +967,6 @@ pub const NUM_FIELD_W: f32 = 62.0;
 /// which was which was to press one.
 pub const BUTTON_PAD: UiRect = UiRect::axes(Val::Px(10.0), Val::Px(GAP_ROW));
 
-/// **A modal card's inset.** Roomier than a panel's [`PAD`], because a card is one question with
-/// nothing else on it and the air is what makes it read as lifted rather than as a small panel.
-/// Stated once so the three modals stop disagreeing — they ran 20 / 18 / 18 with gaps of 12 / 10 / 10.
-pub const MODAL_PAD: f32 = 20.0;
-
 /// **The label column of a `LABEL  value` row.**
 ///
 /// It was six unnamed literals — 76, 62, 56, 48, 40 and 14 — one per author, which is why no two
@@ -1592,15 +1587,11 @@ pub fn spawn_frame(
     // 1280-px body; with the adoption it measures 724. The zero basis below is the same shape every
     // other centre in this frame uses — a flex item's basis is its content when it is `Auto`, so the
     // split would otherwise take a width of its own rather than the room the docks leave.
-    commands.entity(split).insert(Node {
-        flex_direction: FlexDirection::Row,
-        flex_grow: 1.0,
-        width: Val::Auto,
-        height: Val::Percent(100.0),
-        min_width: Val::Px(0.0),
-        min_height: Val::Px(0.0),
-        ..default()
-    });
+    // A filling split (G-88): as tall as the body, as wide as what the right dock leaves (`Extent::Auto` + `grow`), with no least size of its own.
+    commands.entity(split).insert((
+        bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Auto), height: Some(bevy_gooey::Extent::Percent(100.0)), min_height: Some(bevy_gooey::Extent::Px(0.0)), ..default() },
+        bevy_gooey::TextFlow { grow: Some(1.0), min_width: Some(bevy_gooey::Extent::Px(0.0)), ..default() },
+    ));
     commands.entity(body).add_children(&[split, right]);
     let _ = (left, viewport);
 
@@ -3325,60 +3316,6 @@ pub fn button<'a>(
     b
 }
 
-/// **One card for every question this application asks.**
-///
-/// Three modals shipped three contracts — the confirm dialog with real buttons, a `TabGroup`, z 900,
-/// a border and `padding: 20`; the token prompt with none of those at z 400 and `padding: 18`; the
-/// name box with a fourth scrim written inline at `srgba(0, 0, 0, 0.72)` next to a constant whose own
-/// doc says it exists so *"a second modal cannot dim by a different amount"*. This is that amount,
-/// that z, that padding, and that card, stated once.
-///
-/// Returns the **card**, not the scrim: the caller fills the card and never sees the layer.
-pub fn modal_card<'a>(commands: &'a mut Commands, root: impl Bundle) -> EntityCommands<'a> {
-    let layer = commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                // **Hidden until something shows it, and that is the shell's decision.** Every modal
-                // here is spawned once at `OnEnter` and revealed on demand, so all three callers
-                // used to state this themselves — and a caller cannot state it now, because `root`
-                // may not contain a `Node` (two of one component is a spawn panic in Bevy 0.19) and
-                // this builder returns the *card*, which leaves the layer unreachable.
-                //
-                // `Display::None`, never `Visibility`: a visibility-hidden node still lays out and
-                // still answers hover, and the card carries `Hovered` — so the world would stop
-                // taking clicks for a modal nobody had opened. To show it, flip `Node::display` on
-                // the entity carrying your own `root` marker, which is this layer.
-                display: Display::None,
-                ..default()
-            },
-            BackgroundColor(ink().scrim),
-            GlobalZIndex(MODAL_Z),
-            root,
-        ))
-        .id();
-    let card = commands
-        .spawn((
-            // The card: a gooey column a group step between its parts, `MODAL_PAD` all round (not a step of the scale, so a literal), a 1 px edge and a panel radius.
-            bevy_gooey::column(GAP_GROUP_STEPS),
-            bevy_gooey::Sizing { min_width: Some(bevy_gooey::Extent::Px(MODAL_MIN_W)), max_width: Some(bevy_gooey::Extent::Px(MODAL_MAX_W)), ..default() },
-            bevy_gooey::Spacing { padding: bevy_gooey::Sides::all(bevy_gooey::Space::Px(MODAL_PAD)), ..default() },
-            bevy_gooey::BorderPx(bevy_gooey::Sides::all(EDGE_W)),
-            bevy_gooey::InkOverride { edge: Some(ink().panel_edge), ..default() },
-            bevy_gooey::Shape { radius: Some(bevy_gooey::Radius::Step(1)), ..default() },
-            BackgroundColor(ink().overlay_bg),
-            BorderColor::all(ink().panel_edge),
-            Hovered::default(),
-        ))
-        .id();
-    commands.entity(layer).add_child(card);
-    commands.entity(card)
-}
-
 // ── the overlay stack, in one place ──────────────────────────────────────────────────────────────
 //
 // Eight overlays shipped with five z-values and **two with none at all** — the session journal and
@@ -3406,11 +3343,6 @@ pub const NOTICE_Z: i32 = 300;
 /// **The compass**, a persistent readout in the corner of the viewport. Lowest, because it is the
 /// one overlay that is never the thing you are looking at.
 pub const COMPASS_Z: i32 = 100;
-/// A card is at least this wide, so a one-word question does not render as a one-word box.
-pub const MODAL_MIN_W: f32 = 360.0;
-/// And at most this wide, so a refusal naming three descriptors stays a paragraph rather than a line.
-pub const MODAL_MAX_W: f32 = 560.0;
-
 /// **A text field's box** — [`MIN_FIELD_H`] floor, [`FIELD_PAD`] inset, `Ink::row_bg` fill, with its
 /// readout text spawned inside. The audit found this shape six times with three paddings.
 pub fn text_field<'a>(

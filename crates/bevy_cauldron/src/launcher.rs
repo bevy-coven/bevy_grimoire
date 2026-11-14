@@ -609,17 +609,12 @@ pub(crate) fn spawn_shell(commands: &mut Commands, screen_of: Screen) -> Entity 
                 SplitFraction(0.0),
                 SplitMin::new(SIDEBAR_PX, PAGE_MIN_PX),
             ))
-            // **The split takes what the terminal leaves**, not the whole window: gooey's split is 100% tall, and beside a
-            // docked pane that would push the pane off the bottom. Its own `Node` with a growing basis instead, the way
-            // `loading.rs` inserts after a widget's `Node`.
-            .insert(Node {
-                flex_direction: FlexDirection::Row,
-                width: Val::Percent(100.0),
-                flex_grow: 1.0,
-                flex_basis: Val::Px(0.0),
-                min_height: Val::Px(0.0),
-                ..default()
-            });
+            // **The split takes what the terminal leaves**, not the whole window: gooey's split is 100% tall, and beside a docked pane that would push the pane off the
+            // bottom. A filling split (G-88): the window wide, as tall as its content asks and growing into what the pane leaves, with no least height.
+            .insert((
+                bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(100.0)), height: Some(bevy_gooey::Extent::Auto), min_height: Some(bevy_gooey::Extent::Px(0.0)), ..default() },
+                bevy_gooey::TextFlow { grow: Some(1.0), ..default() },
+            ));
         })
         .insert(crate::terminal_pane::TerminalDock)
         .id()

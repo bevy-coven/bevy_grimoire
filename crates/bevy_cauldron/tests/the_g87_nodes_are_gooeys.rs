@@ -197,7 +197,8 @@ fn the_chips_buttons_and_rows_keep_their_drawn_heights() {
     let world = app.world_mut();
     let mut drawn: Vec<f32> = world.query_filtered::<&ComputedNode, With<RowRest>>().iter(world).map(|c| c.size().y * c.inverse_scale_factor()).collect();
     drawn.sort_by(f32::total_cmp);
-    let was = [0.0, 0.0, 0.0, 20.0, 20.0, 20.0, 20.0, 24.17, 24.17, 36.67];
+    // The terminal's own chips (two of the 20 px ones at 4a12b153) are laid out to nothing now: the pane is collapsed by default (#421), merged from fleet/seams. The rest are as they were.
+    let was = [0.0, 0.0, 0.0, 0.0, 0.0, 20.0, 20.0, 24.17, 24.17, 36.67];
     assert_eq!(drawn.len(), was.len(), "the Map door carries ten chips, buttons and rows: {drawn:?}");
     for (got, want) in drawn.iter().zip(was) {
         assert!((got - want).abs() < 0.1, "a box is {got} tall, it was {want}: {drawn:?}");
@@ -218,4 +219,21 @@ fn the_back_button_is_a_row_and_the_bars_spacers_are_gooeys() {
     let bar = frame.chrome_bar;
     let spacers = world.get::<Children>(bar).into_iter().flat_map(|k| k.iter()).filter(|k| world.get::<Role>(*k) == Some(&Role::Spacer)).count();
     assert_eq!(spacers, 1, "the bar's one spacer pushes the subject to the far end");
+}
+
+/// **The receipt row keeps its two lines of room, rounded up, at the editor's text size** (G-88 `Extent::LinesCeil`): the reserve `chrome::LinesRoom` computed (`2 x BODY_LINE_H x scale`, rounded up) is what the row asks for.
+#[test]
+fn the_receipt_row_reserves_its_two_lines_rounded_up() {
+    let mut app = editor("receipt");
+    let want = chrome::LinesRoom { lines: 2.0, pad: 0.0, fixed: false }.at(chrome::text_scale());
+    let world = app.world_mut();
+    let mut found = Vec::new();
+    for (sizing, node) in world.query::<(&bevy_gooey::Sizing, &Node)>().iter(world) {
+        if sizing.min_height == Some(bevy_gooey::Extent::LinesCeil(2.0)) {
+            found.push(px(node.min_height));
+        }
+    }
+    assert_eq!(found.len(), 1, "one receipt row in the Map door: {found:?}");
+    // `LinesRoom` rounded up to a whole logical px (27); `LinesCeil` rounds up to a whole device px (26.67 at the editor's 1.2 scale = 32 physical), which is never short of the text's own box.
+    assert!((found[0] - want).abs() < 1.0 && found[0] >= want - 0.5, "the row reserves about {want} px (two lines rounded up), not {}", found[0]);
 }

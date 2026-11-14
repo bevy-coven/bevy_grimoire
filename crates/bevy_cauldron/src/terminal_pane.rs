@@ -1397,20 +1397,15 @@ fn open_find_on_its_chord(
 fn spawn_the_find_box(commands: &mut Commands, body: Entity) {
     let frame = commands
         .spawn((
-            Node {
-                // PLACES-ITSELF-OK: the find box floats over the scrollback it searches, as VS Code's
-                // terminal find does; it is not a panel `chrome::Frame` places.
-                position_type: PositionType::Absolute,
-                top: Val::Px(crate::terminal_view::BODY_INSET.y),
-                right: Val::Px(chrome::MARGIN),
-                width: Val::Px(FIND_BOX_W),
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                column_gap: Val::Px(chrome::GAP_TIGHT),
-                padding: UiRect::all(Val::Px(chrome::GAP_TIGHT)),
-                border: UiRect::all(Val::Px(chrome::EDGE_W)),
-                ..default()
-            },
+            // The find box floats over the scrollback it searches, as VS Code's terminal find does; it is not a panel `chrome::Frame` places: placed in the body's top right
+            // (`BODY_INSET.y` down, a margin in), `FIND_BOX_W` wide, its parts a tight step apart and a tight step in, a 1 px edge, in the editor's own colours (`InkFollow`).
+            bevy_gooey::placed(UiRect { top: Val::Px(crate::terminal_view::BODY_INSET.y), right: Val::Px(chrome::MARGIN), ..UiRect::all(Val::Auto) }),
+            bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Px(FIND_BOX_W)), ..default() },
+            bevy_gooey::RowLayout { direction: Some(FlexDirection::Row), align: Some(AlignItems::Center), ..default() },
+            bevy_gooey::GapPx(chrome::GAP_TIGHT),
+            bevy_gooey::Spacing { padding: bevy_gooey::Sides::all(chrome::STEP_TIGHT), ..default() },
+            bevy_gooey::BorderPx(bevy_gooey::Sides::all(chrome::EDGE_W)),
+            bevy_gooey::InkFollow,
             BackgroundColor(chrome::ink().bar_bg),
             BorderColor::all(chrome::ink().panel_edge),
             // Above the rows and the caret, which are its siblings.
@@ -1506,24 +1501,18 @@ fn quiet_the_row_leds(rows: Query<&Children, Added<TerminalCardRowLed>>, mut wor
 fn spawn_the_invitation(commands: &mut Commands, body: Entity) {
     let invite = commands
         .spawn((
-            Node {
-                // PLACES-ITSELF-OK: the invitation floats over the empty body it stands in, as the
-                // self-test card floats over a full one; it is not a panel `chrome::Frame` places.
-                position_type: PositionType::Absolute,
-                left: Val::Px(0.0),
-                right: Val::Px(0.0),
-                top: Val::Px(0.0),
-                bottom: Val::Px(0.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                ..default()
-            },
+            // The invitation floats over the empty body it stands in, as the self-test card floats over a full one; it is not a panel `chrome::Frame` places: gooey's `cover`
+            // (placed on every side), its button centred in it. **Not `Pickable::IGNORE`** (which `cover` is): it skips an entity and everything below it, and the button is below
+            // it; `Pickable::default()` below puts that back, and a click beside the button bubbles to the pane, which takes the keyboard.
+            bevy_gooey::cover(),
+            bevy_gooey::RowLayout { align: Some(AlignItems::Center), justify: Some(JustifyContent::Center), ..default() },
             ZIndex(2),
             // **Not `Pickable::IGNORE`**: it skips an entity and everything below it, and the button is
             // below it. A click beside the button bubbles to the pane, which takes the keyboard.
             TerminalInvite,
             Name::new("terminal invitation"),
         ))
+        .insert(Pickable::default())
         .with_children(|invite| {
             chrome::chip(
                 invite,

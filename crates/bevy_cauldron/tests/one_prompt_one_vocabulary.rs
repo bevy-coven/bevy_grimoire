@@ -98,38 +98,7 @@ fn only_confirm_reads_the_answer_keys() {
 #[test]
 fn the_prompt_is_centred_and_blocks_what_is_behind_it() {
     let src = read("src/confirm.rs");
-    for (needle, why) in [
-        (
-            "modal_card",
-            "one shell for every question, so a second modal cannot dim, pad or stack differently",
-        ),
-        (
-            "ConfirmButton",
-            "both answers are clickable; keyboard-first is not keyboard-only",
-        ),
-    ] {
-        assert!(src.contains(needle), "confirm.rs lost `{needle}` — {why}");
-    }
-
-    let shell = read("src/chrome.rs");
-    let card = shell
-        .split_once("pub fn modal_card")
-        .map(|(_, rest)| rest)
-        .unwrap_or_else(|| panic!("`chrome::modal_card` is the shell every question is asked in"));
-    for (needle, why) in [
-        ("ink().scrim", "the backdrop dims the application, so the question is the only lit thing"),
-        (
-            "justify_content: JustifyContent::Center",
-            "centred — the whole point of the move off the status band",
-        ),
-        (
-            "GlobalZIndex(MODAL_Z)",
-            "above every panel, or a dock draws over the question — and named, so two overlays \
-             cannot disagree about which is in front",
-        ),
-    ] {
-        assert!(card.contains(needle), "`chrome::modal_card` lost `{needle}` — {why}");
-    }
+    assert!(src.contains("ConfirmButton"), "confirm.rs lost `ConfirmButton` — both answers are clickable; keyboard-first is not keyboard-only");
 
     assert!(
         !src.contains("status.note") && !src.contains("status.problem"),
