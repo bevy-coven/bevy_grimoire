@@ -587,6 +587,23 @@ impl StyleEdit {
         let full = crate::files::project_path(&root, &p.path).map_err(|e| Refusal::new(format!("{e}. Nothing was changed.")))?;
         let old = std::fs::read_to_string(&full).ok();
         if let Some(back) = &p.put_back {
+            // **An undo's put-back is data from the log, and a cloned project writes its own log**: so it is judged as a change is. Its page must be one
+            // an agent may write (never the game's or a region's, for an agent's undo), and the text it puts back must be text the person has ALREADY allowed
+            // (an honest inverse is the text the edit started from, which the edit required to be allowed). Taking a created page away needs no text.
+            let place = folder_of_page(&p.path);
+            let kind = design::kind_of_folder(place).ok_or_else(|| Refusal::new(format!("`{place}` is not a place of the design tree. Nothing was changed.")))?;
+            if ctx.source == crate::ops::Source::Agent && matches!(kind, design::PlaceKind::Game | design::PlaceKind::Region) {
+                return Err(Refusal::new(format!(
+                    "`{}` is a {} page, and an agent changes it only by proposing the change (`grimoire_style_propose`), so an agent's undo does not write it either. Nothing was changed.",
+                    p.path,
+                    kind.word()
+                )));
+            }
+            if let Some(text) = &back.text
+                && !allowed(ctx, &root, &p.path, text)?
+            {
+                return Err(Refusal::new(format!("the text that would be put back into `{}` is not text the person has allowed, so it was not written, and nothing is allowed by an undo. Nothing was changed.", p.path)));
+            }
             return Ok(Edited { root, old, new: back.text.clone() });
         }
         let place = folder_of_page(&p.path);
@@ -716,13 +733,15 @@ impl Operation for StyleEdit {
         let full = root.join(&p.path);
         match &new {
             Some(text) => {
-                // **The person's own editor is where this was made, in front of them, and it can be undone**, so the new text is allowed:
-                // granted before it is written, so a store that will not take the grant leaves the page as it was.
-                let store_file = crate::trusted::store_path(ctx.trust_file.as_deref()).map_err(Refusal::new)?;
-                let mut store = bevy_grimoire_core::trust::TrustStore::load(&store_file)
-                    .map_err(|e| Refusal::new(format!("the person's trust store would not read ({e}), so nothing was written.")))?;
-                store.trust_text(&root, &p.path, text).map_err(Refusal::new)?;
-                store.save(&store_file).map_err(|e| Refusal::new(format!("the person's trust store would not take the grant ({e}), so nothing was written.")))?;
+                // **A change made through the editor in front of the person that can be undone allows its new text**, granted before it is written, so a store that
+                // will not take the grant leaves the page as it was. **An undo grants nothing**: the text it puts back was checked as allowed before it is written.
+                if p.put_back.is_none() {
+                    let store_file = crate::trusted::store_path(ctx.trust_file.as_deref()).map_err(Refusal::new)?;
+                    let mut store = bevy_grimoire_core::trust::TrustStore::load(&store_file)
+                        .map_err(|e| Refusal::new(format!("the person's trust store would not read ({e}), so nothing was written.")))?;
+                    store.trust_text(&root, &p.path, text).map_err(Refusal::new)?;
+                    store.save(&store_file).map_err(|e| Refusal::new(format!("the person's trust store would not take the grant ({e}), so nothing was written.")))?;
+                }
                 if let Some(folder) = full.parent() {
                     std::fs::create_dir_all(folder).map_err(|e| Refusal::new(format!("{} cannot be made ({e}), so nothing was written.", folder.display())))?;
                 }

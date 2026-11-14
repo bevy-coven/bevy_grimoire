@@ -50,6 +50,8 @@ fn ready(name: &str) -> (App, PathBuf, PathBuf) {
     app.add_plugins(bevy_cauldron::ops_brp::OpsBridgePlugin);
     app.add_plugins(bevy_cauldron::launcher::LauncherPlugin);
     app.world_mut().resource_mut::<bevy_cauldron::editor::EditorState>().trust.file = Some(store.clone());
+    // **The follow crosses to the Design door and the door's state is rebuilt**, so the store is also named by the resource that outlives a door (its file is `trusted.yaml` in it).
+    app.insert_resource(bevy_cauldron::trusted::StoreRoot(root.clone()));
     app.world_mut().spawn((Window::default(), bevy::window::PrimaryWindow));
     updates(&mut app, 8);
     show_the_block(&mut app);
