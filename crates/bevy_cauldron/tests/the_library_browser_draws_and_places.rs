@@ -5,6 +5,9 @@
 //! viewport places it." The palette is the list-shaped view of the same library; this is the picture-shaped
 //! one, drawn with gooey's `card_grid`.
 //!
+//! **Owner exception (2026-11-13, NV-08 #385)**: the library browser moved from the Map's inspector to the Kit workspace, so `show_the_library` opens the
+//! Kit workspace first (every check below is kept; only the route moved).
+//!
 //! The acceptance lines this file holds:
 //!
 //! - **A card dragged from the browser onto the map is placed there**, through the same payload the
@@ -18,9 +21,13 @@ use std::path::PathBuf;
 use bevy::prelude::*;
 use bevy::window::{PrimaryWindow, Window};
 use bevy_cauldron::editor::{EditorState, PieceDrag};
+use bevy_cauldron::command_run::Chords;
+use bevy_cauldron::commands;
+use bevy_cauldron::keys::Live;
 use bevy_cauldron::library_browser::{LibraryBrowser, LibraryItem, LibrarySearch};
 use bevy_cauldron::project::OpenMap;
 use bevy_cauldron::view::MainCamera;
+use bevy_cauldron::workspace::Workspace;
 use bevy_gooey::{CardGrid, CardRef, Dock, DragPayload, DropTarget, Dropped, ValueChange};
 
 use crate::fixtures;
@@ -56,7 +63,21 @@ fn rig(tag: &str) -> App {
     app
 }
 
+/// **Open the Kit workspace first, the way a person does since NV-08 (#385)**: its command (the route the chord, the palette and the activity
+/// bar take). The View ▸ Show library row is offered only there, so the library is asked for from the workspace that holds it.
+fn in_the_kit_workspace(app: &mut App) {
+    if *app.world().resource::<Workspace>() == Workspace::Kit {
+        return;
+    }
+    let command = commands::by_id("workspace.kit").unwrap_or_else(|| panic!("no command opens the Kit workspace"));
+    let live = *app.world().resource::<Live>();
+    app.world_mut().resource_mut::<Chords>().queue(&command, live);
+    updates(app, 12);
+    assert_eq!(app.world().resource::<Workspace>(), &Workspace::Kit, "the workspace command did not open Kit");
+}
+
 fn show_the_library(app: &mut App, on: bool) {
+    in_the_kit_workspace(app);
     let row = {
         let world = app.world_mut();
         world

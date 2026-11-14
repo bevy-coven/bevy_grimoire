@@ -58,6 +58,8 @@ crate::keys::enumerated! {
         Agent,
         /// **The project's files and the editor for them** (GD-11, #373): the file tree and a code editor.
         Files,
+        /// **The project's page** (NV-08, #385): its maps, its kits and the agent guide, inside the workbench.
+        Project,
     }
     /// **Every panel there is**, in strip order — for the ratchets that have to visit all of them.
     ///
@@ -101,6 +103,7 @@ impl Mode {
             Mode::Game => "GAME",
             Mode::Agent => "AGENT",
             Mode::Files => "FILES",
+            Mode::Project => "PROJECT",
         }
     }
 
@@ -119,6 +122,7 @@ impl Mode {
             Mode::Game => crate::keys::Context::Game,
             Mode::Agent => crate::keys::Context::Agent,
             Mode::Files => crate::keys::Context::Files,
+            Mode::Project => crate::keys::Context::Project,
         }
     }
 }
@@ -484,7 +488,7 @@ fn stage_camera(
                 crate::compose::carousel_height(&carousel.0).min(crate::view::MAX_ZOOM);
             rig.elevation = crate::view::ISO_ELEVATION;
         }
-        Mode::Map | Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files => {
+        Mode::Map | Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files | Mode::Project => {
             if let Some(was) = saved.0.take() {
                 rig.focus = was.focus;
                 rig.height = was.height;
@@ -4392,11 +4396,11 @@ fn focus_filter(
             Mode::Compose => crate::filter::Pane::Candidates,
             // **No list of their own** (NV-08, #385; NV-09, #386): the World, Sound and Game panels are fields, so the
             // key has no box to take; the Map's is the nearest honest answer and focusing it is harmless.
-            Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files => crate::filter::Pane::Palette,
+            Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files | Mode::Project => crate::filter::Pane::Palette,
         };
-        // **The Files workspace has no filter box at all** (GD-11, #373): the key takes nothing there, rather than focusing a
-        // box of the Map's that is not on screen.
-        if *mode != Mode::Files {
+        // **The Files and Project workspaces have no filter box at all** (GD-11, #373; NV-08, #385): the key takes nothing there, rather than
+        // focusing a box of the Map's that is not on screen.
+        if !matches!(*mode, Mode::Files | Mode::Project) {
             focus_through_operation(project.as_deref(), &mut filters, pane);
         }
     }
@@ -7839,7 +7843,7 @@ fn apply_mode(
             Mode::Meshes | Mode::Tiles => is_tiles,
             Mode::Anim => is_anim,
             Mode::Compose => is_compose,
-            Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files => false,
+            Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files | Mode::Project => false,
         };
         // A panel belonging to no tab is not ours to touch — the tab strip and the cost readout are
         // both unmarked and must stay visible in every mode.
@@ -8992,23 +8996,20 @@ fn draw_ink(
                     // The severity mark first, so a list of 300 can be skimmed for the ones that
                     // need attention rather than read. The tint comes from the one severity map,
                     // so the mark here and the rail in the detail pane cannot disagree.
-                    row.spawn((
-                        Node {
-                            width: Val::Px(crate::chrome::COL_TIGHT),
-                            flex_shrink: 0.0,
-                            ..default()
-                        },
-                        Text::new(match mark {
+                    crate::chrome::text_cell(
+                        row,
+                        crate::chrome::COL_TIGHT,
+                        match mark {
                             Some(Severity::Blocking) => "x",
                             Some(Severity::Warn) => "!",
                             _ => "",
-                        }),
-                        TextColor(match mark {
+                        },
+                        match mark {
                             Some(s) => crate::chrome::severity_style(*s).0,
                             None => crate::chrome::ink().label,
-                        }),
-                        crate::chrome::typed(crate::chrome::text::BODY),
-                    ));
+                        },
+                        crate::chrome::text::BODY,
+                    );
                     // The file's own name, not the full path — the pack heading already said where it came from, and
                     // repeating it on 145 rows is the same word 145 times. A long mesh name wraps inside its own column
                     // rather than widening the row (see [`count_cell`]).
@@ -9156,16 +9157,7 @@ fn draw_pack_band(
         BackgroundColor(crate::chrome::ink().header_bg),
     ))
     .with_children(|row| {
-        row.spawn((
-            Node {
-                width: Val::Px(crate::chrome::COL_TIGHT),
-                flex_shrink: 0.0,
-                ..default()
-            },
-            Text::new(if folded { ">" } else { "v" }),
-            TextColor(crate::chrome::ink().label),
-            crate::chrome::typed(crate::chrome::text::LABEL),
-        ));
+        crate::chrome::text_cell(row, crate::chrome::COL_TIGHT, if folded { ">" } else { "v" }, crate::chrome::ink().label, crate::chrome::text::LABEL);
         // **The pack's name, and — when it is excluded — the way back.**
         //
         // An excluded pack keeps its words because it names a state the chevron does NOT show,
@@ -9216,16 +9208,7 @@ fn draw_excluded_band(p: &mut ChildSpawnerCommands, packs: usize, meshes: usize,
         BackgroundColor(crate::chrome::ink().header_bg),
     ))
     .with_children(|row| {
-        row.spawn((
-            Node {
-                width: Val::Px(crate::chrome::COL_TIGHT),
-                flex_shrink: 0.0,
-                ..default()
-            },
-            Text::new(if open { "v" } else { ">" }),
-            TextColor(crate::chrome::ink().muted),
-            crate::chrome::typed(crate::chrome::text::LABEL),
-        ));
+        crate::chrome::text_cell(row, crate::chrome::COL_TIGHT, if open { "v" } else { ">" }, crate::chrome::ink().muted, crate::chrome::text::LABEL);
         // **The name column wraps within itself; the tally does not.** The state and the way
         // out of it both stay on the band (`docs/ui.md` §1.4) — what changed is that they now
         // share the *growing* column, so the count can hold a column of its own rather than
@@ -10199,11 +10182,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 );
                 // The second pair, spaced off the first by a group gap so the line reads as two
                 // label/value pairs rather than four words.
-                row.spawn(Node {
-                    width: Val::Px(crate::chrome::GAP_GROUP),
-                    flex_shrink: 0.0,
-                    ..default()
-                });
+                crate::chrome::gap_cell(row, crate::chrome::GAP_GROUP);
                 crate::chrome::row_label(row, crate::chrome::COL_LABEL, "front");
                 crate::chrome::row_value(row, front_text, front_ink, ());
             });

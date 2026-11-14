@@ -2911,6 +2911,20 @@ pub fn fill_text<'a>(row: &'a mut ChildSpawnerCommands, text: impl Into<String>,
     ))
 }
 
+/// **A fixed-width column holding one text** (UI-59, #245): gooey's `cell`, whose width is in body text sizes, so the px it stands for is
+/// divided by the body type size and the column grows with the person's text size instead of falling short of it. A glyph column
+/// ([`COL_TIGHT`]: a severity mark, a fold chevron) is the case. The cell cuts what does not fit rather than running onto its neighbour.
+pub fn text_cell(row: &mut ChildSpawnerCommands, width_px: f32, text: impl Into<String>, ink: Color, role: text::Role) {
+    row.spawn(bevy_gooey::cell(width_px / text::BODY.px())).with_children(|cell| {
+        cell.spawn((Text::new(text.into()), TextColor(ink), typed(role)));
+    });
+}
+
+/// **An empty fixed-width gap between two cells of a row** (UI-59, #245): a gooey `cell` holding nothing, sized like [`text_cell`].
+pub fn gap_cell(row: &mut ChildSpawnerCommands, width_px: f32) {
+    row.spawn(bevy_gooey::cell(width_px / text::BODY.px()));
+}
+
 /// **A chip** — one small clickable word. [`CHIP_PAD`] and a permanent 1 px border whose COLOUR
 /// asks the questions (a ghost proposal lights it `Ink::suggest`; everything else runs [`Color::NONE`]),
 /// so a chip never changes size when its state does.

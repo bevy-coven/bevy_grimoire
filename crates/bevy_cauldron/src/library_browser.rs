@@ -21,10 +21,11 @@
 //!
 //! # Where it is
 //!
-//! A LIBRARY section at the top of the Map door's INSPECTOR, shown by View ▸ Show library. **Not there until
-//! it is asked for**, for the reason the outliner records: a text box and a grid of cards are entities, and
-//! the screens that count every button or look for "the" empty text input in the world (the settings search,
-//! the dialogs' answers) would find them.
+//! The Kit workspace's LIBRARY panel (NV-08, #385), in the right dock, shown by View ▸ Show library. **It was a section of the Map's
+//! INSPECTOR, and that route is gone**: the Map holds no library browser, and the row is offered only while the Kit workspace is open
+//! (it is disabled, with its reason, anywhere else), so the library is reached one way. **Not there until it is asked for**, for the
+//! reason the outliner records: a text box and a grid of cards are entities, and the screens that count every button or look for "the"
+//! empty text input in the world (the settings search, the dialogs' answers, the Kit's own screens) would find them.
 //!
 //! # The grid is respawned, and that is gooey's rule
 //!
@@ -38,9 +39,11 @@ use std::collections::BTreeSet;
 use bevy::prelude::*;
 use bevy_gooey::{Card, CardRef, ValueChange, observe, text_input};
 
-use crate::editor::{MapControlsPane, PieceDrag};
+use crate::chrome::{self, Frame, Side};
+use crate::editor::PieceDrag;
 use crate::project::Project;
 use crate::screen::Screen;
+use crate::workspace::Workspace;
 
 /// **The browser's state**, on its section: the search, what it keeps, and the cards it drew.
 #[derive(Component, Default)]
@@ -137,6 +140,10 @@ pub struct LibraryTag(pub String);
 #[derive(Component)]
 pub struct LibraryItem;
 
+/// The root of the Kit workspace's library panel, so a test and the layout can name it.
+#[derive(Component)]
+pub struct LibraryRoot;
+
 pub struct LibraryBrowserPlugin;
 
 impl Plugin for LibraryBrowserPlugin {
@@ -152,12 +159,14 @@ impl Plugin for LibraryBrowserPlugin {
     }
 }
 
-/// **View ▸ Show library puts the section into the Map door's INSPECTOR, first among its rows, and takes it
-/// out again.** Not there until it is asked for, for the reason the module docs give.
+/// **View ▸ Show library puts the LIBRARY panel into the Kit workspace's right dock, and takes it out again** (NV-08, #385). Not there
+/// until it is asked for, for the reason the module docs give. Asked outside the Kit workspace it does nothing: the row is disabled there
+/// ([`tick_the_menu_row`]), and this is the second guard for a toggle sent by something that is not the menu.
 pub fn toggle_the_library(
     change: On<ValueChange<bool>>,
-    panes: Query<Entity, With<MapControlsPane>>,
-    blocks: Query<Entity, With<LibraryBrowser>>,
+    workspace: Option<Res<Workspace>>,
+    frame: Option<Res<Frame>>,
+    blocks: Query<Entity, With<LibraryRoot>>,
     mut commands: Commands,
 ) {
     if !change.value {
@@ -166,18 +175,19 @@ pub fn toggle_the_library(
         }
         return;
     }
-    if !blocks.is_empty() {
+    if !blocks.is_empty() || !workspace.is_some_and(|w| *w == Workspace::Kit) {
         return;
     }
-    let Ok(pane) = panes.single() else { return };
-    let block = commands
-        .spawn((
+    let Some(frame) = frame else { return };
+    let root = chrome::panel_root(&mut commands, &frame, Side::Right, chrome::LIST_W, true, false, "LIBRARY").insert(LibraryRoot).id();
+    commands.entity(root).with_children(|p| {
+        p.spawn((
             LibraryBrowser::default(),
             Name::new("library_browser"),
-            Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+            Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(chrome::GAP_TIGHT), ..default() },
         ))
         .with_children(|block| {
-            crate::chrome::list_heading(block, "LIBRARY");
+            chrome::list_heading(block, "LIBRARY");
             block.spawn((
                 text_input("Find a piece", ""),
                 LibrarySearch,
@@ -195,30 +205,31 @@ pub fn toggle_the_library(
                 Node {
                     flex_direction: FlexDirection::Row,
                     flex_wrap: FlexWrap::Wrap,
-                    column_gap: Val::Px(crate::chrome::GAP_TIGHT),
+                    column_gap: Val::Px(chrome::GAP_TIGHT),
                     ..default()
                 },
                 LibraryTags,
             ));
             block.spawn((Node { ..default() }, LibraryGridMarker));
-        })
-        .id();
-    commands.entity(pane).insert_children(0, &[block]);
+        });
+    });
 }
 
 /// **Where the grid goes**, so a redraw can put one in the same place without knowing the section's shape.
 #[derive(Component)]
 struct LibraryGridMarker;
 
-/// **The tick on the menu row says whether the section is there**, whichever way it came or went (a door
-/// change respawns the panel and takes it with it).
+/// **The tick on the menu row says whether the panel is there**, whichever way it came or went (a workspace change respawns the frame and
+/// takes it with it), and **the row is offered only in the Kit workspace**: anywhere else it is disabled and says why.
 fn tick_the_menu_row(
-    items: Query<(Entity, Has<bevy_gooey::Checked>), With<LibraryItem>>,
-    blocks: Query<(), With<LibraryBrowser>>,
+    items: Query<(Entity, Has<bevy_gooey::Checked>, Has<bevy_gooey::Disabled>), With<LibraryItem>>,
+    blocks: Query<(), With<LibraryRoot>>,
+    workspace: Option<Res<Workspace>>,
     mut commands: Commands,
 ) {
     let present = !blocks.is_empty();
-    for (item, ticked) in &items {
+    let offered = workspace.is_some_and(|w| *w == Workspace::Kit);
+    for (item, ticked, refused) in &items {
         match (present, ticked) {
             (true, false) => {
                 commands.entity(item).insert(bevy_gooey::Checked);
@@ -228,8 +239,20 @@ fn tick_the_menu_row(
             }
             _ => {}
         }
+        match (offered, refused) {
+            (false, false) => {
+                commands.entity(item).insert(bevy_gooey::Disabled::new(NOT_OFFERED));
+            }
+            (true, true) => {
+                commands.entity(item).remove::<bevy_gooey::Disabled>();
+            }
+            _ => {}
+        }
     }
 }
+
+/// What the View ▸ Show library row says outside the Kit workspace, where it is disabled.
+pub const NOT_OFFERED: &str = "The library browser is in the Kit workspace";
 
 /// **Whether the cards need drawing again**, as a fingerprint of the search, the kept tags and every descriptor's
 /// identity and kinds.

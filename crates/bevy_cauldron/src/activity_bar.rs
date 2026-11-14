@@ -94,7 +94,13 @@ pub fn badge(workspace: Workspace, problems: usize, waiting: usize) -> usize {
 
 /// **The workspaces the bar draws**: the registered ones, in the order the keys follow.
 pub fn registered() -> Vec<Workspace> {
-    Workspace::ALL.into_iter().filter(|w| w.is_built()).collect()
+    registered_in(&crate::workspace::WAITING)
+}
+
+/// **[`registered`] against a table of unbuilt workspaces** — the seam a test fills (every real workspace is built), so the bar's filter is
+/// proved to leave a waiting workspace out.
+pub fn registered_in(waiting: &[(Workspace, &'static str)]) -> Vec<Workspace> {
+    Workspace::ALL.into_iter().filter(|w| crate::workspace::waiting_reason(waiting, *w).is_none()).collect()
 }
 
 /// **The reloads a file's edit did not take**: refused ones and ones that need a restart. The one count

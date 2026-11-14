@@ -211,47 +211,24 @@ fn each_workspace_keeps_its_own_arrangement() {
     assert_eq!(shown(&mut again), moved, "the restart lost the arrangement Map was left in");
 }
 
-/// **An unbuilt workspace is refused with the reason, and its chord does not move the screen.**
+/// **Every workspace is built, none is waiting for an issue, and every chord answers** (NV-08, #385).
 ///
-/// The vision's *"no placeholder screens"*: a workspace whose part is not built is not in the
-/// registry, and its command says which issue brings it rather than doing nothing.
+/// Until the Project workspace landed this test held the vision's *"no placeholder screens"* rule on the one workspace left unbuilt: its
+/// command said which issue brought it and its chord did not move the screen. With the last workspace registered there is none to
+/// refuse, so it holds the state that follows: nine built, none waiting, nine enabled commands. **The refusal mechanism itself is still
+/// proved**, on a table that is not empty, by `an_unbuilt_workspace_is_refused_with_its_reason.rs`.
+///
+/// Owner exception (2026-11-13): the `!unbuilt.is_empty()` check and the placeholder-press section are replaced, as the owner grant
+/// for the Project workspace says, by the assertions below.
 #[test]
-fn an_unbuilt_workspace_says_which_issue_brings_it() {
-    let unbuilt: Vec<Workspace> = Workspace::ALL.into_iter().filter(|w| !w.is_built()).collect();
-    assert!(!unbuilt.is_empty(), "at least one workspace is not built yet, or this test checks nothing");
-
-    for workspace in &unbuilt {
+fn every_workspace_is_built_and_every_command_is_enabled() {
+    for workspace in Workspace::ALL {
+        assert!(workspace.is_built(), "the {} workspace is not built", workspace.title());
+        assert_eq!(workspace.missing(), None, "the {} workspace is built and still says it is waiting", workspace.title());
         let id = format!("workspace.{}", workspace.id());
-        let command = commands::by_id(&id).unwrap_or_else(|| panic!("`{id}` must still be a command, so its chord answers"));
-        let why = command
-            .enabled(Live::default())
-            .expect_err("an unbuilt workspace must be disabled, so nothing opens a placeholder");
-        assert!(
-            why.contains('#') || why.contains("GD-"),
-            "the refusal for `{id}` names no issue, so a person pressing the chord learns nothing: {why}"
-        );
+        let command = commands::by_id(&id).unwrap_or_else(|| panic!("`{id}` must be a command, so its chord answers"));
+        assert!(command.enabled(Live::default()).is_ok(), "`{id}` is refused: {:?}", command.enabled(Live::default()));
     }
-
-    // **And on screen**: pressing it leaves the workspace where it was.
-    let mut app = editor("unbuilt");
-    let before = *app.world().resource::<Workspace>();
-    for workspace in &unbuilt {
-        let action = Action::ALL
-            .into_iter()
-            .find(|a| a.workspace() == Some(*workspace))
-            .unwrap_or_else(|| panic!("no chord goes to the {} workspace", workspace.title()));
-        press(&mut app, action);
-        assert_eq!(
-            app.world().resource::<Workspace>(),
-            &before,
-            "the {} workspace is not built, and its key moved the screen onto a placeholder",
-            workspace.title()
-        );
-    }
-
-    // A built one is enabled.
-    let id = format!("workspace.{}", Workspace::Map.id());
-    assert!(commands::by_id(&id).expect("Map is a command").enabled(Live::default()).is_ok());
 }
 
 /// **`tiles::Door` no longer exists**, and no source file names it.

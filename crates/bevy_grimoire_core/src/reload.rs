@@ -211,7 +211,7 @@ pub const KINDS: &[FileKind] = &[
     kind("guide", Root, crate::agent_guide::PROJECT_PATH, "Markdown for an agent", Live, Global, "by hand",
         "**The project's layer of the agent's guide** (#347): read again on each `grimoire/agent_guide` call, so an edit reaches the next agent that asks, and nothing holds it. A file the guide refuses (not UTF-8, over `GUIDE_MAX_BYTES`, not a regular file) is left out whole and is `refused` in `grimoire_state.reloads`, naming the file and why. The project page saves it atomically; no operation writes it."),
     kind("design", Root, "design/<file>", "the game's style tree", Live, Global, "by hand",
-        "**The game's style** (SG-01, #400): `design/` is a tree of places — the whole game, each region, each level (its folder is named after its map) and each area of a level — and each place's files are its topics. **Nothing holds it**: `design::Tree::read` walks the whole folder — its regions, levels and areas included — on every `grimoire_state` and every `grimoire_style` call, so an edit is in the next answer with no restart, which is why this row is `Live`. **This row names the game's own files** (`design/style.md`, `design/dialogue.md`); a nested place's files are the same kind of file and are read by the same walk, and a row cannot say `design/**` because a pattern is matched one segment at a time and `matches_pattern` has no tail wildcard. A file over `STYLE_FILE_MAX_BYTES`, a chain over `STYLE_CHAIN_MAX_BYTES`, a topic below the game with no game-level file, a level folder whose map does not exist, a map with a folder in two places, two areas that overlap, an area outside its map and a picture that is not there are each reported by that one reader, with the path they are about."),
+        "**The game's style** (SG-01, #400): `design/` is a tree of places — the whole game, each region, each level (its folder is named after its map) and each area of a level — and each place's files are its topics. **Nothing holds it**: `design::Tree::read` walks the whole folder — its regions, levels and areas included — on every `grimoire_state` and every `grimoire_style` call, so an edit is in the next answer with no restart, which is why this row is `Live`. **This row names the game's own files** (`design/style.md`, `design/dialogue.md`); a nested place's files are the same kind of file and are read by the same walk, and a row cannot say `design/**` because a pattern is matched one segment at a time and `matches_pattern` has no tail wildcard; `kind_of` classifies a nested place's Markdown page (`design/<place>/<topic>.md`) as this kind by the shape of the place around it, as it does a board's files. A file over `STYLE_FILE_MAX_BYTES`, a chain over `STYLE_CHAIN_MAX_BYTES`, a topic below the game with no game-level file, a level folder whose map does not exist, a map with a folder in two places, two areas that overlap, an area outside its map and a picture that is not there are each reported by that one reader, with the path they are about."),
     kind("board", Root, "design/board/board.yaml", "Board", Live, Global, "",
         "**A place's dream board** (SG-03, #402): the pictures that show how the place should feel, each with a caption saying what to take from it. This row names the game's own board; a region's, a level's and an area's are the same kind of file in their own folder (`design/levels/<map>/board/board.yaml`), and a row cannot say `design/**` because a pattern is matched one segment at a time. `kind_of` classifies every place's `board/board.yaml` as this kind. The level's board is the open map's: it replaced `maps/<name>.references.yaml`. Read on demand by `board_set`, `grimoire_state.board` and the header check; nothing holds it, so an edit is in the next answer."),
     kind("play", Root, "play.yaml", "PlayConfig", Live, Global, "by hand",
@@ -281,19 +281,25 @@ impl FileKind {
 /// one of ours. Patterns are unambiguous (a test proves it), so at most one kind answers.
 pub fn kind_of(base: Base, path: &str) -> Option<&'static FileKind> {
     if base == Base::Root
-        && let Some(id) = place_board_kind(path)
+        && let Some(id) = place_file_kind(path)
     {
         return kind_by_id(id);
     }
     KINDS.iter().find(|k| k.base == base && k.matches(path))
 }
 
-/// **The kind of a file in a place's `board/`** (SG-03, #402): `board` for its `board.yaml`, `reference_images` for a picture.
+/// **The kind of a file the shape of a place gives it** (SG-03, #402; #420): in a place's `board/`, `board` for its
+/// `board.yaml` and `reference_images` for a picture; beside the place's own files, `design` for a Markdown page (a topic).
 ///
 /// A row's path is matched one segment at a time and a place is as deep as a region's level's area, so no row can say
-/// `design/**/board/<file>`; the shape of a place is [`crate::board::is_place`]'s, and this is the one place that asks it.
-fn place_board_kind(path: &str) -> Option<&'static str> {
+/// `design/**/board/<file>` or `design/**/<topic>.md`; the shape of a place is [`crate::board::is_place`]'s, and this is the
+/// one place that asks it.
+fn place_file_kind(path: &str) -> Option<&'static str> {
     let (inside, file) = path.rsplit_once('/')?;
+    if crate::board::is_place(inside) {
+        let ext = file.rsplit_once('.')?.1;
+        return ext.eq_ignore_ascii_case(crate::design::MARKDOWN_EXT).then_some("design");
+    }
     let (place, folder) = inside.rsplit_once('/')?;
     if folder != crate::board::BOARD_DIR || !crate::board::is_place(place) {
         return None;
@@ -303,6 +309,13 @@ fn place_board_kind(path: &str) -> Option<&'static str> {
     }
     let ext = file.rsplit_once('.')?.1.to_ascii_lowercase();
     crate::board::IMAGE_EXTS.contains(&ext.as_str()).then_some("reference_images")
+}
+
+/// **Whether a folder of the game's root can hold a file [`place_file_kind`] classifies**, so a walk of the project
+/// knows where to look without a depth of its own: a place, a folder a place is in (`design/levels`), or a place's `board/`.
+pub fn holds_place_files(dir: &str) -> bool {
+    let board_of = |d: &str| d.rsplit_once('/').is_some_and(|(place, folder)| folder == crate::board::BOARD_DIR && crate::board::is_place(place));
+    crate::board::is_place(dir) || crate::board::is_place(&format!("{dir}/x")) || board_of(dir)
 }
 
 /// **What a running program does about a change to a kind.**

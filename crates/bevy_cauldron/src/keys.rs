@@ -94,6 +94,9 @@ pub enum Context {
     /// `Global` ones are live there, which is the point of its being a context at all: a Map verb must not
     /// fire on a tab that is not the Map, and the code editor's own keys are gooey's (it holds `TextEditing`).
     Files,
+    /// **The Project tab** (NV-08, #385): the project's page — its maps, its kits and the agent guide. It has no key of its own, like
+    /// [`Context::World`]: a Map verb must not fire on the page, and the page's actions are buttons and the commands they already are.
+    Project,
     /// A text field is taking raw keys. Overlaps everything, and suppresses everything.
     ///
     /// **A filter box sets this too**, and says so a second way: `Live.2` carries
@@ -106,7 +109,7 @@ impl Context {
     /// **Every context a binding could be judged against**, in one place for the same reason
     /// [`Stance::ALL`] is: the badge tests sweep it, and a seventh context therefore costs one
     /// edit here rather than a hand-written list in each test that silently stops reaching it.
-    pub const ALL: [Context; 12] = [
+    pub const ALL: [Context; 13] = [
         Context::Global,
         Context::Map,
         Context::Meshes,
@@ -118,6 +121,7 @@ impl Context {
         Context::Game,
         Context::Agent,
         Context::Files,
+        Context::Project,
         Context::Typing,
     ];
 
@@ -140,7 +144,8 @@ impl Context {
             | (Sound, Sound)
             | (Game, Game)
             | (Agent, Agent)
-            | (Files, Files) => true,
+            | (Files, Files)
+            | (Project, Project) => true,
             // **The tabs are never live together**, which is what lets them reuse each other's
             // letters freely: the Tiles tab walks a lattice with `T`/`F`/`G`/`H` and so does Meshes,
             // one tab over. `the_key_space_has_no_collisions` polices that they only do so here.
@@ -960,7 +965,12 @@ impl Action {
     /// `Context::Global` and the thing they acted on was per workspace; those keys are gone (#379), so
     /// the panel count no longer decides anything.
     pub fn is_offered(self) -> bool {
-        self.workspace().is_none_or(|w| w.is_built())
+        self.is_offered_in(&crate::workspace::WAITING)
+    }
+
+    /// **[`Self::is_offered`] against a table of unbuilt workspaces** — the seam a test fills (every real workspace is built).
+    pub fn is_offered_in(self, waiting: &[(crate::workspace::Workspace, &'static str)]) -> bool {
+        self.workspace().is_none_or(|w| crate::workspace::waiting_reason(waiting, w).is_none())
     }
 
     /// **The workspace this chord goes to**, or `None` for every other verb.
