@@ -101,6 +101,30 @@ fn lingering(mark: &str) -> Vec<String> {
     found
 }
 
+/// **The operations the suite's own task files use**, read from `bench/tasks/*/task.yaml` (every `op:` but the
+/// hand-back), sorted and without repeats. A stand-in editor answers `--print-operations` with these, so the list is
+/// never a second copy that goes stale when a task starts using another operation (#433).
+fn suite_operations() -> Vec<String> {
+    let mut found = std::collections::BTreeSet::new();
+    let tasks = repo().join("bench/tasks");
+    for entry in std::fs::read_dir(&tasks).unwrap_or_else(|e| panic!("{}: {e}", tasks.display())).flatten() {
+        let Ok(text) = std::fs::read_to_string(entry.path().join("task.yaml")) else {
+            continue;
+        };
+        for line in text.lines() {
+            let line = line.trim_start().trim_start_matches("- ");
+            if let Some(op) = line.strip_prefix("op:") {
+                let op = op.trim().trim_matches('"').trim_matches('\'');
+                if !op.is_empty() && op != "grimoire_present" {
+                    found.insert(op.to_owned());
+                }
+            }
+        }
+    }
+    assert!(found.contains("placement_remove"), "the suite's task files name `placement_remove`, so the scan found them: {found:?}");
+    found.into_iter().collect()
+}
+
 /// **The repository root**, which is what a run measures by default.
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -260,17 +284,40 @@ fn offered(dir: &Path, ran: &Ran, task: &str) -> Vec<String> {
     list
 }
 
-/// **The tool a task's own solution reaches the editor with**, by its task id.
-///
-/// Not discovered from the file: the three examples are the acceptance, and naming the call each one makes is
-/// what makes "the oracle called the editor" a claim about the task rather than about any call at all.
+/// **The tool a task's own solution reaches the editor with**: `grimoire_apply_operation` when the solution applies an
+/// operation, `grimoire_present` when it only answers in words. Read from the task's `solution:` block (#433): the
+/// suite grew from the three examples to twenty tasks, and a list of names written here went stale with it.
 fn suite_answer(task: &str) -> String {
-    match task {
-        // The placement goes through the tool an agent applies a change with.
-        "bed-against-the-north-wall" => "grimoire_apply_operation".to_owned(),
-        // Both others change nothing and answer in words.
-        _ => "grimoire_present".to_owned(),
+    let path = repo().join("bench/tasks").join(task).join("task.yaml");
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let mut in_solution = false;
+    for line in text.lines() {
+        if line.starts_with("solution:") {
+            in_solution = true;
+        } else if in_solution && !line.starts_with(' ') && !line.starts_with('-') && !line.starts_with('#') && !line.trim().is_empty() {
+            break;
+        } else if in_solution && line.trim_start().trim_start_matches("- ").starts_with("op:") {
+            let op = line.trim_start().trim_start_matches("- ").trim_start_matches("op:").trim();
+            if op != "grimoire_present" {
+                return "grimoire_apply_operation".to_owned();
+            }
+        }
     }
+    "grimoire_present".to_owned()
+}
+
+/// **Every dev task of the shipped suite**, by id (the directory's name), sorted: what the oracle must pass and
+/// `nothing` must fail.
+fn suite_tasks() -> Vec<String> {
+    let tasks = repo().join("bench/tasks");
+    let mut ids: Vec<String> = std::fs::read_dir(&tasks)
+        .unwrap_or_else(|e| panic!("{}: {e}", tasks.display()))
+        .flatten()
+        .filter(|e| std::fs::read_to_string(e.path().join("task.yaml")).is_ok_and(|t| t.lines().any(|l| l.trim() == "split: dev")))
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    ids.sort();
+    ids
 }
 
 /// **One field of a record**, with the record quoted when it is missing: a `trial.json` that lost a field
@@ -309,16 +356,16 @@ fn the_oracle_passes_every_task_and_nothing_passes_none() {
     let passed = records(&oracle_dir);
     assert_eq!(
         passed.len(),
-        EXAMPLES.len(),
-        "the oracle's run wrote one trial per example task, at {}:\n{}",
+        suite_tasks().len(),
+        "the oracle's run wrote one trial per dev task of the suite, at {}:\n{}",
         oracle_dir.display(),
         oracle.quote()
     );
     for record in &passed {
         let task = field(record, "task").as_str().unwrap_or_default().to_owned();
         assert!(
-            EXAMPLES.contains(&task.as_str()),
-            "the oracle's run measured `{task}`, which is not one of the suite's examples"
+            suite_tasks().contains(&task),
+            "the oracle's run measured `{task}`, which is not one of the suite's dev tasks"
         );
         assert_eq!(
             outcome(record),
@@ -369,8 +416,8 @@ fn the_oracle_passes_every_task_and_nothing_passes_none() {
     let failed = records(&nothing_dir);
     assert_eq!(
         failed.len(),
-        EXAMPLES.len(),
-        "the do-nothing run wrote one trial per example task, at {}:\n{}",
+        suite_tasks().len(),
+        "the do-nothing run wrote one trial per dev task of the suite, at {}:\n{}",
         nothing_dir.display(),
         nothing.quote()
     );
@@ -416,16 +463,24 @@ fn an_editor_that_exits_at_start_up_is_a_harness_error() {
     // **It answers `--print-operations`, because that is not the editor starting**: a run asks the binary
     // which operations it has before any trial, and a stand-in that refused that question would fail the
     // run at its door and write no `trial.json` at all — which is a different case from the one here.
-    let text = "#!/bin/sh\n\
+    // **The operations are the ones the suite's own task files use** ([`suite_operations`]), never a list
+    // written here: a hard-coded `placement_add` went stale the day a task needed `placement_remove`, and the
+    // run was refused at its door (#433).
+    let operations = scratch.join("operations.txt");
+    std::fs::write(&operations, suite_operations().join("\n") + "\n").unwrap_or_else(|e| panic!("{}: {e}", operations.display()));
+    let text = format!(
+        "#!/bin/sh\n\
          case \"$*\" in\n\
          *--print-operations*)\n\
-         \x20 printf 'placement_add\\n'\n\
+         \x20 cat '{}'\n\
          \x20 exit 0;;\n\
          esac\n\
          # Stands in for the editor under test: it never answers `grimoire/state`, and says why in its own\n\
          # log, which is what a harness error has to quote (BM-02, #412).\n\
          echo 'dying-editor: exiting on purpose, so a trial has no editor' >&2\n\
-         exit 7\n";
+         exit 7\n",
+        operations.display()
+    );
     std::fs::write(&dying, text).unwrap_or_else(|e| panic!("{}: {e}", dying.display()));
     let made = Command::new("chmod")
         .arg("+x")
@@ -768,12 +823,17 @@ fn run_with_stand_in_agent(test: &str, run_name: &str) -> Standing {
     let script = format!(
         "#!/bin/sh\n\
          case \"$1\" in\n\
+         --version) echo 'omp/0.0.0-stand-in'; exit 0;;\n\
          models) echo \"$3\"; exit 0;;\n\
          auth)\n\
          \x20 case \"$2\" in\n\
          \x20 export) echo '{{\"version\":1,\"credentials\":[{{\"provider\":\"stand-in\"}}]}}'; exit 0;;\n\
          \x20 import) exit 0;;\n\
          \x20 esac;;\n\
+         esac\n\
+         # The pre-flight turn (one word, no extension): the provider answers.\n\
+         case \"$*\" in\n\
+         *'reply ok'*) echo '{{\"type\":\"message_end\",\"message\":{{\"role\":\"assistant\",\"content\":[{{\"type\":\"text\",\"text\":\"ok\"}}],\"stopReason\":\"stop\"}}}}'; exit 0;;\n\
          esac\n\
          # The agent run: launched once the editor answered, so the editor is up. It waits for the test.\n\
          : > '{}'\n\
@@ -788,7 +848,7 @@ fn run_with_stand_in_agent(test: &str, run_name: &str) -> Standing {
     let mark = format!("{test}-{}", std::process::id());
     let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
     let child = Command::new(bench_bin())
-        .args(["run", "--agent", "omp", "--run", run_name, "--trials", "1", "--task", EXAMPLES[0]])
+        .args(["run", "--agent", "omp", "--model", "stand-in/model", "--run", run_name, "--trials", "1", "--task", EXAMPLES[0]])
         .arg("--editor")
         .arg(&editor)
         .arg("--server")
