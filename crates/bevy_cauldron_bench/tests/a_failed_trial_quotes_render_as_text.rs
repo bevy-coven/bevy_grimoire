@@ -6,8 +6,6 @@
 //! [`quoted`] like every other quoted text, and the check's name cannot break out of its code span.
 //! Built from a recorded `trial.json`: no model, no editor.
 
-use std::path::PathBuf;
-
 use bevy_cauldron_bench::report::{Header, Report, RunData, REPORT_VERSION, RUN_FILE};
 use serde_json::json;
 
