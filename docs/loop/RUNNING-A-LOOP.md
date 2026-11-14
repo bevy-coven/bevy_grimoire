@@ -389,6 +389,14 @@ turn's output is not scrubbed; and a credential the agent copies into the projec
 `bench/README.md`, "What the agent inside a trial can read". A model name without a
 provider (`--model sonnet`) is refused for `--agent omp`: write `provider/model`.
 
+**An omp agent may reach the editor through its `eval` tool**, whose calls the transcript names but does not give arguments
+for. The runner counts each (and each against the task's tool-call budget) and takes a hand-back's words from the editor's
+`grimoire/state`; a trial that called `grimoire_present` that way and cannot be confirmed by the editor is a harness error
+("tool calls the transcript did not show"), never a "no hand-back was made". The report's cost total includes the one
+paid pre-flight turn, and the run prints once which environment variables it withheld from the agent (names only).
+Runs from before the credential guard kept every trial's `home`: `cauldron-bench clean --dry-run` lists what it would
+remove under `~/.local/state/cauldron-bench` (marker-checked, default at least one day old) and `cauldron-bench clean` removes it.
+
 (`--label` publishes `docs/bench/runs/<date>-release-<version>.md` and `.json`.) **The first run on this
 repository is the baseline**: with no `*-baseline` report committed, `--label release-<version>` is refused
 (there is nothing to compare it with), so that run is made with `--label baseline` (BM-04) and committed first;

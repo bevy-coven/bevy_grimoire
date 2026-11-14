@@ -390,8 +390,13 @@ impl TrialRecord {
 /// project under test. Putting them under the state directory is what keeps a benchmarked project's
 /// `git status` empty.
 pub fn state_dir(run: &str) -> Result<PathBuf, String> {
+    Ok(state_root()?.join(run))
+}
+
+/// **The directory every run's directory is under**: `~/.local/state/cauldron-bench`.
+pub fn state_root() -> Result<PathBuf, String> {
     let home = std::env::var_os("HOME").ok_or("there is no HOME, so a run has nowhere to write")?;
-    Ok(PathBuf::from(home).join(".local/state/cauldron-bench").join(run))
+    Ok(PathBuf::from(home).join(".local/state/cauldron-bench"))
 }
 
 /// **A trial's one line in a report**, as a person reads it.
@@ -1009,7 +1014,13 @@ pub fn run(options: &Options, held_out: Option<&Path>) -> Result<Vec<TrialRecord
     // quota left or a key that is refused, and finding that out trial by trial costs 35 s each, for every
     // trial of the run. The turn runs in the same kind of isolated HOME a trial uses, with the same credential.
     if options.agent == Agent::Omp {
-        preflight_turn(OMP_PROGRAM, &options.model, &options.out.join(PREFLIGHT_DIR))?;
+        // **Said once per run**: which of the runner's environment variables the omp agent is NOT given (names only), so the
+        // filter's effect is visible to whoever reads the run's output (#434).
+        eprintln!("{}", withheld_line(&credential_variables(std::env::vars_os().map(|(name, _)| name))));
+        let usage = preflight_turn(OMP_PROGRAM, &options.model, &options.out.join(PREFLIGHT_DIR))?;
+        // **The pre-flight turn is a paid turn no trial counts**: its tokens are kept beside the run so the report's total has it.
+        bevy_grimoire_core::atomic_file::write(&options.out.join(crate::report::PREFLIGHT_FILE), preflight_usage_json(usage).to_string() + "\n")
+            .map_err(|e| format!("{}: {e}", options.out.display()))?;
     }
     // **A model is only scored on held-out tasks that are valid** (BM-04): the scripted agents are the proof
     // themselves, so they skip it.
@@ -1312,7 +1323,16 @@ impl ToolBudget {
 
 /// **omp's call count for one event**: a `tool_execution_end` is a call that finished.
 pub fn omp_calls(event: &Value) -> u32 {
-    u32::from(event.get("type").and_then(Value::as_str) == Some("tool_execution_end"))
+    // **A call made through omp's `eval` tool is each editor tool it called** (`result.details.cells[*].statusEvents[*].op`,
+    // #434), not the one `eval`: three calls in a cell are three against a task's budget. An `eval` that called no editor
+    // tool is one call, as any tool is.
+    if event.get("type").and_then(Value::as_str) != Some("tool_execution_end") {
+        return 0;
+    }
+    match eval_ops(event) {
+        Some(ops) => (ops.len() as u32).max(1),
+        None => 1,
+    }
 }
 
 /// **Claude Code's call count for one stream-json event**: every `tool_use` block of an assistant message.
@@ -1454,7 +1474,7 @@ pub fn check_model(omp: &str, model: &str) -> Result<(), String> {
 /// provider with no quota left (HTTP 429), a refused key or a model that does not answer is an error naming
 /// the model and quoting the provider; a run that would have found it out 35 s at a time, trial by trial,
 /// finds it out here, once.
-pub fn preflight_turn(omp: &str, model: &str, scratch: &Path) -> Result<(), String> {
+pub fn preflight_turn(omp: &str, model: &str, scratch: &Path) -> Result<Tokens, String> {
     let home = scratch.join("home");
     // A pre-flight directory a killed run left is this one's to replace.
     let _ = std::fs::remove_dir_all(scratch);
@@ -1500,7 +1520,8 @@ pub fn preflight_turn(omp: &str, model: &str, scratch: &Path) -> Result<(), Stri
 /// **What a one-turn run printed, read as omp's JSON events**: `Ok` when an assistant message came back and the
 /// provider did not refuse it (a refusal omp retried and recovered from, `auto_retry_end{success: true}`, is not
 /// one), and otherwise the reason, in the provider's own words when it gave them.
-fn turn_verdict(stdout: &str, stderr: &str) -> Result<(), String> {
+fn turn_verdict(stdout: &str, stderr: &str) -> Result<Tokens, String> {
+    let mut tokens = Tokens::default();
     let mut spoke = false;
     let mut standing_refusal: Option<String> = None;
     for line in stdout.lines() {
@@ -1519,14 +1540,26 @@ fn turn_verdict(stdout: &str, stderr: &str) -> Result<(), String> {
         };
         match provider_words(message) {
             Some(why) => standing_refusal = Some(why),
-            None => spoke = true,
+            None => {
+                spoke = true;
+                if let Some(usage) = message.get("usage") {
+                    let count = |key: &str| usage.get(key).and_then(Value::as_u64).unwrap_or(0);
+                    tokens.add(Tokens {
+                        input: count("input"),
+                        output: count("output"),
+                        cache_read: count("cacheRead"),
+                        cache_write: count("cacheWrite"),
+                        total: count("totalTokens"),
+                    });
+                }
+            }
         }
     }
     if let Some(why) = standing_refusal {
         return Err(format!("the provider refused the turn: {why}"));
     }
     if spoke {
-        return Ok(());
+        return Ok(tokens);
     }
     let lines: Vec<&str> = stderr.lines().filter(|l| !l.trim().is_empty()).collect();
     let from = lines.len().saturating_sub(4);
@@ -1808,6 +1841,12 @@ pub struct AgentRun {
     pub handbacks: Vec<Handback>,
     /// The wishes it made.
     pub wishes: Vec<Value>,
+    /// **The editor tools this agent called through a route whose arguments the transcript does not show** (omp's `eval`,
+    /// #434), by the tool's own name, in order. A call listed here is counted and logged, but what it was given is not
+    /// known to the runner: [`reconcile_with_editor`] takes a hand-back's words from the editor instead.
+    pub blind_calls: Vec<String>,
+    /// **Whether a hand-back was taken from the editor's state** because the transcript showed none (#434).
+    pub handbacks_from_editor: bool,
     /// What its harness reported for tokens, in total.
     pub tokens: Option<u64>,
     /// **The same, by kind** (fresh input, output, cached read and written), which is what a price is applied to.
@@ -1988,6 +2027,10 @@ fn run_omp(
         .ok_or("the editor's MCP config names no server")?;
     let mut run = read_transcript(&transcript, dir, &server)?;
     run.call_budget_exhausted = end == WaitEnd::CallBudget;
+    // **Ask the editor what it was handed** (#434): a hand-back the transcript did not show (an `eval` call shows no
+    // arguments) is taken from the editor's own state, and a trial in which the runner cannot tell is a harness error,
+    // never "no hand-back was made".
+    reconcile_with_editor(&mut run, brp_call(editor.port, "grimoire/state", json!({})))?;
     Ok(run)
 }
 
@@ -2313,6 +2356,25 @@ pub fn read_transcript(path: &Path, dir: &Path, server: &str) -> Result<AgentRun
         if kind == "auto_retry_end" && event.get("success").and_then(Value::as_bool) == Some(true) {
             standing_refusal = None;
         }
+        // **A call through omp's `eval` tool** (#434): a `tool_execution_end` whose `result.details.cells[*].statusEvents[*].op`
+        // names each editor tool the cell called (`mcp__<server>_<tool>`), and which carries no arguments. Each is a call in
+        // the list and the log; the transcript cannot say what it was given or what it answered, so a hand-back's words and
+        // a wish's content are not here (see `reconcile_with_editor`) and a refusal is not known.
+        if kind == "tool_execution_end"
+            && let Some(ops) = eval_ops(&event)
+        {
+            let prefix = format!("mcp__{server}_");
+            for op in ops {
+                let name = op.strip_prefix(&prefix).unwrap_or(&op).to_owned();
+                run.tool_calls.push(name.clone());
+                run.tool_log.push(CallLog::new(&name, &Value::Null, false));
+                if name == "grimoire_wish" {
+                    run.wishes.push(json!({"tool": EVAL_WISH_TOOL}));
+                }
+                run.blind_calls.push(name);
+            }
+            continue;
+        }
         // **`tool_execution_end` is where omp reports a tool finishing**, and `details.xdev` names the
         // editor tool it ran.
         //
@@ -2536,17 +2598,26 @@ pub const STALE_SECRETS_AGE_S: u64 = 3600;
 /// `<state>/<run>/<task>/trial-<n>/{home,claude-config}`, that were last modified `older_than` ago or earlier, and
 /// answer how many were removed (#433). `kill -KILL` never runs the [`TrialSecrets`] guards; the next run does this.
 pub fn sweep_stale_secrets(state: &Path, older_than: Duration) -> usize {
-    let Ok(runs) = std::fs::read_dir(state) else {
-        return 0;
-    };
-    runs.flatten().filter(|run| run.path().is_dir()).map(|run| sweep_run_dir(&run.path(), older_than)).sum()
+    stale_secret_dirs(state, older_than).iter().filter(|path| std::fs::remove_dir_all(path).is_ok()).count()
 }
 
-/// **[`sweep_stale_secrets`] for one run's directory.**
-fn sweep_run_dir(run: &Path, older_than: Duration) -> usize {
+/// **The credential directories under a state directory that [`sweep_stale_secrets`] would remove**, without removing
+/// them: every run directory the runner made (it carries `run.json`), its `preflight` directory and each trial's `home`
+/// and `claude-config`, last modified `older_than` ago or earlier (any age for a zero `older_than`).
+pub fn stale_secret_dirs(state: &Path, older_than: Duration) -> Vec<PathBuf> {
+    let Ok(runs) = std::fs::read_dir(state) else {
+        return Vec::new();
+    };
+    let mut found: Vec<PathBuf> = runs.flatten().filter(|run| run.path().is_dir()).flat_map(|run| stale_in_run(&run.path(), older_than)).collect();
+    found.sort();
+    found
+}
+
+/// **[`stale_secret_dirs`] for one run's directory.**
+fn stale_in_run(run: &Path, older_than: Duration) -> Vec<PathBuf> {
     // **Only a directory the runner made**: it writes `run.json` before any trial or pre-flight turn.
     if !run.join(crate::report::RUN_FILE).is_file() {
-        return 0;
+        return Vec::new();
     }
     let stale = |path: &Path| {
         path.is_dir()
@@ -2564,7 +2635,20 @@ fn sweep_run_dir(run: &Path, older_than: Duration) -> usize {
             }
         }
     }
-    candidates.iter().filter(|path| stale(path) && std::fs::remove_dir_all(path).is_ok()).count()
+    candidates.into_iter().filter(|path| stale(path)).collect()
+}
+
+/// **`cauldron-bench clean`: remove the stale credential directories under a state directory** (#434), or only list them.
+///
+/// Older runs kept their trials' `home` trees, which hold the provider keys they imported (the guard protects new runs
+/// only). Answers what was removed, or with `dry_run` what would be. Marker-checked like the sweep: only inside run
+/// directories the runner made.
+pub fn clean_state(state: &Path, older_than: Duration, dry_run: bool) -> Vec<PathBuf> {
+    let found = stale_secret_dirs(state, older_than);
+    if dry_run {
+        return found;
+    }
+    found.into_iter().filter(|path| std::fs::remove_dir_all(path).is_ok()).collect()
 }
 
 /// **Whether SIGINT or SIGTERM has arrived** since [`install_interrupt_handler`] (#433).
@@ -2635,4 +2719,99 @@ pub fn withhold_from(command: &mut Command, names: impl IntoIterator<Item = std:
 /// and is carried and scrubbed instead.)
 pub fn withhold_credentials(command: &mut Command) {
     withhold_from(command, credential_variables(std::env::vars_os().map(|(name, _)| name)));
+}
+
+/// **What a wish made through omp's `eval` is recorded as**: its arguments are not in the transcript, so the tool it asked
+/// for is unknown, and a report counts it under this name.
+pub const EVAL_WISH_TOOL: &str = "(a wish made through eval: its tool is not in the transcript)";
+
+/// **The editor tools one omp `eval` call used**, as `mcp__<server>_<tool>` names, or `None` for any other tool end.
+///
+/// omp's `eval` ends with `result.details.cells[*].statusEvents[*]`, each `{op, chars}`; `op` is the name of a tool the
+/// cell called, and nothing in it carries an argument or an answer. Only the editor's (`mcp__`) are listed: omp's own
+/// tools a cell used are not editor calls.
+pub fn eval_ops(event: &Value) -> Option<Vec<String>> {
+    let cells = event.get("result")?.get("details")?.get("cells")?.as_array()?;
+    Some(
+        cells
+            .iter()
+            .flat_map(|cell| cell.get("statusEvents").and_then(Value::as_array).into_iter().flatten())
+            .filter_map(|status| status.get("op").and_then(Value::as_str))
+            .filter(|op| op.starts_with("mcp__"))
+            .map(str::to_owned)
+            .collect(),
+    )
+}
+
+/// **Settle what the runner could not read from the transcript with what the editor holds** (#434).
+///
+/// `state` is the editor's `grimoire/state` answer, or why it could not be had.
+///
+/// - A hand-back the transcript showed is left alone.
+/// - None shown and the editor's `presentation` holds one: it is the agent's hand-back (the call is counted if the
+///   transcript did not), graded from the editor's words.
+/// - None shown, none held, and a `grimoire_present` was made through a route that shows no arguments
+///   ([`AgentRun::blind_calls`]): the runner cannot tell what was said, so the trial is a harness error naming
+///   "tool calls the transcript did not show". It is never scored "no hand-back was made".
+/// - Otherwise the agent made no hand-back, which is its answer.
+pub fn reconcile_with_editor(run: &mut AgentRun, state: Result<Value, String>) -> Result<(), String> {
+    if !run.handbacks.is_empty() {
+        return Ok(());
+    }
+    let held = state.as_ref().ok().and_then(|s| s.get("presentation")).filter(|p| p.is_object());
+    if let Some(presentation) = held {
+        run.handbacks.push(handback_from_state(presentation));
+        run.handbacks_from_editor = true;
+        if !run.tool_calls.iter().any(|c| c == "grimoire_present") {
+            run.tool_calls.push("grimoire_present".to_owned());
+            run.tool_log.push(CallLog::new("grimoire_present", &Value::Null, false));
+        }
+        return Ok(());
+    }
+    if run.blind_calls.iter().any(|c| c == "grimoire_present") {
+        let why = match &state {
+            Ok(_) => "the editor holds no hand-back".to_owned(),
+            Err(e) => format!("the editor could not be asked: {e}"),
+        };
+        return Err(format!(
+            "tool calls the transcript did not show: the agent called `grimoire_present` through a route that shows no \
+             arguments, and {why}, so what it handed back is unknown and this trial says nothing about the agent"
+        ));
+    }
+    Ok(())
+}
+
+/// **A hand-back as the editor's state holds it**: the title, the summary and the three lists.
+fn handback_from_state(presentation: &Value) -> Handback {
+    let text = |key: &str| presentation.get(key).and_then(Value::as_str).unwrap_or_default().to_owned();
+    let list = |key: &str| -> Vec<String> {
+        presentation
+            .get(key)
+            .and_then(Value::as_array)
+            .map(|items| items.iter().filter_map(|i| i.as_str().map(str::to_owned)).collect())
+            .unwrap_or_default()
+    };
+    Handback {
+        id: text("id"),
+        title: text("title"),
+        summary: text("summary"),
+        specified: list("specified"),
+        inferred: list("inferred"),
+        check: list("check"),
+    }
+}
+
+/// **The line a run says once about the environment variables the omp agent is not given**: names only, never values.
+pub fn withheld_line(names: &[std::ffi::OsString]) -> String {
+    if names.is_empty() {
+        return "cauldron-bench: no environment variable is withheld from the omp agent (none of the runner's looks like a credential)".to_owned();
+    }
+    let mut listed: Vec<String> = names.iter().map(|n| n.to_string_lossy().into_owned()).collect();
+    listed.sort();
+    format!("cauldron-bench: withheld from the omp agent's environment ({}): {}", listed.len(), listed.join(", "))
+}
+
+/// **The pre-flight turn's tokens as `preflight-usage.json` keeps them.**
+pub fn preflight_usage_json(tokens: Tokens) -> Value {
+    json!({"input": tokens.input, "output": tokens.output, "cache_read": tokens.cache_read, "cache_write": tokens.cache_write, "total": tokens.total})
 }

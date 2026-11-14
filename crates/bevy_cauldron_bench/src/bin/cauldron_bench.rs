@@ -39,6 +39,7 @@ usage: cauldron-bench run [options]
        cauldron-bench report <run directory> [--label <name>] [--publish <docs/bench>]
        cauldron-bench compare <a> <b> [--across] [--json]
        cauldron-bench matrix --pairs <agent:model,agent:model,...> [run options]
+       cauldron-bench clean [--older-than <days>] [--dry-run]
 
   --suite <dir>       the task directory (default: bench/tasks). A game's own is .dark_factory/bench
   --project <root>    the project the tasks run against (default: this repository's root)
@@ -84,8 +85,9 @@ fn main() -> std::process::ExitCode {
         Some("report") => return report_command(&argv[1..]),
         Some("compare") => return compare_command(&argv[1..]),
         Some("matrix") => return matrix_command(&argv[1..]),
+        Some("clean") => return clean_command(&argv[1..]),
         Some(other) => {
-            eprintln!("cauldron-bench: `{other}` is not a command. The commands are: run, report, compare, matrix.");
+            eprintln!("cauldron-bench: `{other}` is not a command. The commands are: run, report, compare, matrix, clean.");
             eprintln!("Try `cauldron-bench --help`.");
             return std::process::ExitCode::FAILURE;
         }
@@ -383,4 +385,57 @@ fn repository_root() -> Option<PathBuf> {
     // benchmark wants: `cauldron-bench run` measures the checkout it came from.
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     manifest.join("../..").canonicalize().ok()
+}
+
+/// **How old a credential directory must be for `clean` to remove it, in days, unless `--older-than` says otherwise.**
+const CLEAN_DEFAULT_DAYS: u64 = 1;
+
+/// **`cauldron-bench clean [--older-than <days>] [--dry-run]`**: remove the credential directories (a trial's `home`,
+/// `claude-config` and a run's `preflight`) that runs left under `~/.local/state/cauldron-bench` (#434).
+///
+/// Runs before the credential guard (#432) kept every trial's `home`, with the provider keys it imported. Only inside run
+/// directories the runner made (those carrying `run.json`), and only those last modified that long ago. `--older-than 0`
+/// removes every one, including a run in progress's: do not use it while a run is going. `--dry-run` prints what would go.
+fn clean_command(argv: &[String]) -> std::process::ExitCode {
+    let mut days = CLEAN_DEFAULT_DAYS;
+    let mut dry_run = false;
+    let mut it = argv.iter();
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "--dry-run" => dry_run = true,
+            "--older-than" => match it.next().and_then(|v| v.parse::<u64>().ok()) {
+                Some(n) => days = n,
+                None => {
+                    eprintln!("cauldron-bench: `--older-than` needs a number of days, like `--older-than 7`");
+                    return std::process::ExitCode::FAILURE;
+                }
+            },
+            other => {
+                eprintln!("cauldron-bench: `{other}` is not an argument `clean` takes (`--older-than <days>`, `--dry-run`)");
+                return std::process::ExitCode::FAILURE;
+            }
+        }
+    }
+    let state = match run::state_root() {
+        Ok(state) => state,
+        Err(e) => {
+            eprintln!("cauldron-bench: {e}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    let older = std::time::Duration::from_secs(days * 86_400);
+    let paths = run::clean_state(&state, older, dry_run);
+    if paths.is_empty() {
+        println!("nothing to remove under {} (nothing there is {days} day(s) old or more)", state.display());
+        return std::process::ExitCode::SUCCESS;
+    }
+    for path in &paths {
+        println!("{} {}", if dry_run { "would remove:" } else { "removed:" }, path.display());
+    }
+    if dry_run {
+        println!("would remove {} credential director{}", paths.len(), if paths.len() == 1 { "y" } else { "ies" });
+    } else {
+        println!("removed {} credential director{}", paths.len(), if paths.len() == 1 { "y" } else { "ies" });
+    }
+    std::process::ExitCode::SUCCESS
 }

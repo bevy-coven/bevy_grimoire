@@ -216,6 +216,12 @@ project. The repository's own suite is the default, and so is this checkout's ed
 agent's transcript and its `trial.json`. **Never the repository**: a benchmark is not the project it
 measures, and its raw output must not appear in the project's `git status`.
 
+`cauldron-bench clean [--older-than <days>] [--dry-run]` removes the credential directories (a trial's `home` and
+`claude-config`, a run's `preflight`) that older runs left there: runs from before the credential guard kept every
+trial's `home`, with the provider key it imported. It only touches run directories the runner made (those carrying
+`run.json`) and only directories at least `--older-than` days old (default 1); `--dry-run` prints what it would
+remove. `--older-than 0` removes every one, a run in progress's included.
+
 ## What it refuses before any trial runs
 
 An editor or server binary that is not there, an `--agent` this build does not have, a `--variant` the suite
@@ -224,7 +230,21 @@ not list (`omp models find`), a model name with no provider in front (`sonnet`: 
 `anthropic/claude-sonnet-5-5`), and a provider that refuses one real turn (`omp -p "reply ok"`, run once before the
 first trial; a spent quota or a refused key is found there, in the provider's own words). Each of those would
 otherwise become a run of harness errors that says nothing about the editor. A run also stops itself after three
-provider refusals in a row, and the report's "Harness errors" section says why.
+provider refusals in a row, and the report's "Harness errors" section says why. The run prints, once, the names (never
+the values) of the environment variables it withholds from the omp agent. The pre-flight turn is a paid turn no
+trial's cost holds: its tokens are kept in `preflight-usage.json` and the report prices them and states a run total that
+includes them.
+
+## How an omp agent's calls are read
+
+omp reaches an editor tool two ways, and the runner reads both. `write xd://mcp__<server>_<tool>` carries the tool
+and its arguments in the transcript. **`eval`** (`await tool.mcp__<server>_<tool>(...)`) carries only the names of the
+tools a cell called (`result.details.cells[*].statusEvents[*].op`): each is a call in the trial's call list, its tool-call
+budget counts each, and what it was given is not in the transcript. So after the agent is done the runner asks the
+editor (`grimoire/state`'s `presentation` holds the hand-back's title, summary and lists): a hand-back the transcript
+did not show is graded from the editor's, and a trial in which the agent called `grimoire_present` through `eval`
+and the editor holds none, or cannot be asked, is a **harness error naming "tool calls the transcript did not show"**,
+never "no hand-back was made". A wish made through `eval` is counted, with its content unknown.
 
 ## What the agent inside a trial can read
 

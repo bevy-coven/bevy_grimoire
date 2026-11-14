@@ -54,6 +54,9 @@ pub const TOP_TOOLS_SHOWN: usize = 8;
 /// **The file a run's header is written to**, beside its trials.
 pub const RUN_FILE: &str = "run.json";
 
+/// **The file the pre-flight turn's tokens are kept in**, beside a run's trials (#434). Written only for an `omp` run.
+pub const PREFLIGHT_FILE: &str = "preflight-usage.json";
+
 /// **What a model costs per million tokens**, in US dollars, as `omp models find --json` lists it.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Price {
@@ -250,6 +253,8 @@ pub struct RunData {
     pub header: Header,
     /// The trials, in task and trial order.
     pub trials: Vec<TrialData>,
+    /// **The pre-flight turn's tokens**, when the run made one (#434): a paid turn no trial's cost holds.
+    pub preflight: Option<PreflightUsage>,
 }
 
 impl RunData {
@@ -299,7 +304,10 @@ impl RunData {
         if trials.is_empty() {
             return Err(format!("{} holds no trial.json, so there is nothing to report", dir.display()));
         }
-        Ok(RunData { header, trials })
+        let preflight = std::fs::read_to_string(dir.join(PREFLIGHT_FILE))
+            .ok()
+            .and_then(|text| serde_json::from_str::<PreflightUsage>(&text).ok());
+        Ok(RunData { header, trials, preflight })
     }
 }
 
@@ -450,6 +458,13 @@ pub struct Report {
     /// the field existed, which then reads as none.
     #[serde(default)]
     pub harness_error_reasons: Vec<HarnessErrorReason>,
+    /// **The pre-flight turn, priced** (#434), or `None` for a run that made none. Absent from an older report.
+    #[serde(default)]
+    pub preflight: Option<PreflightCost>,
+    /// **What the whole run cost, in dollars**: every trial and the pre-flight turn, or `None` when any part is unknown
+    /// (never `0` for unknown). Absent from an older report.
+    #[serde(default)]
+    pub cost_total_usd: Option<f64>,
 }
 
 /// **The sum of the counts that were reported**, or `None` when none was: a trial that reported no tokens
@@ -655,14 +670,33 @@ impl Report {
                 HARNESS_ERROR_MAX_FRACTION * 100.0
             )
         });
+        let dev = Aggregate::of("dev", &dev_refs, &dev_trials, price);
+        let held_out = (!held_trials.is_empty()).then(|| Aggregate::of("held-out", &held_refs, &held_trials, price));
+        let preflight = run.preflight.map(|usage| PreflightCost {
+            tokens_in: usage.input,
+            tokens_out: usage.output,
+            tokens_cache_read: usage.cache_read,
+            tokens_cache_write: usage.cache_write,
+            cost_usd: price.map(|p| {
+                (usage.input as f64 * p.input
+                    + usage.output as f64 * p.output
+                    + usage.cache_read as f64 * p.cache_read
+                    + usage.cache_write as f64 * p.cache_write)
+                    / TOKENS_PER_PRICE
+            }),
+        });
+        let cost_total_usd = sum_costs(
+            std::iter::once(dev.cost_usd)
+                .chain(held_out.as_ref().map(|h| h.cost_usd))
+                .chain(preflight.as_ref().map(|p| p.cost_usd)),
+        );
         Report {
             header: run.header.clone(),
             unfit,
             trials_total,
             harness_errors,
-            dev: Aggregate::of("dev", &dev_refs, &dev_trials, price),
-            held_out: (!held_trials.is_empty())
-                .then(|| Aggregate::of("held-out", &held_refs, &held_trials, price)),
+            dev,
+            held_out,
             tags,
             tasks: dev_tasks,
             tool_counts,
@@ -674,6 +708,8 @@ impl Report {
                 .filter(|t| t.harness_error())
                 .map(|t| HarnessErrorReason { task: t.task.clone(), trial: t.trial, reason: t.reason.clone() })
                 .collect(),
+            preflight,
+            cost_total_usd,
         }
     }
 
@@ -879,6 +915,18 @@ impl Report {
             "\n{} trial(s), {} harness error(s). A harness error is never scored as a pass or a fail.\n\n",
             self.trials_total, self.harness_errors
         ));
+        if let Some(p) = &self.preflight {
+            out.push_str(&format!(
+                "Pre-flight turn (one real model turn before any trial, in no trial's cost): {} fresh in, {} out, {} cache read, {} cache written, {}. \
+                 **Cost of the run, trials and pre-flight turn: {}.**\n\n",
+                p.tokens_in,
+                p.tokens_out,
+                p.tokens_cache_read,
+                p.tokens_cache_write,
+                usd(p.cost_usd),
+                usd(self.cost_total_usd)
+            ));
+        }
         out.push_str(&self.budget_markdown());
         out.push_str(&self.harness_errors_markdown());
 
@@ -981,4 +1029,36 @@ impl Report {
         out.push_str(&format!("- wishes, by the tool wished for: {}\n", top(&self.wishes_by_tool, TOP_TOOLS_SHOWN)));
         out
     }
+}
+
+/// **The pre-flight turn's tokens, as `preflight-usage.json` holds them** (#434).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
+pub struct PreflightUsage {
+    /// Fresh input tokens.
+    #[serde(default)]
+    pub input: u64,
+    /// Output tokens.
+    #[serde(default)]
+    pub output: u64,
+    /// Input tokens served from the provider's cache.
+    #[serde(default)]
+    pub cache_read: u64,
+    /// Input tokens written to the provider's cache.
+    #[serde(default)]
+    pub cache_write: u64,
+}
+
+/// **The pre-flight turn in a report**: its tokens and what they cost at the model's listed price (#434).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PreflightCost {
+    /// Fresh input tokens.
+    pub tokens_in: u64,
+    /// Output tokens.
+    pub tokens_out: u64,
+    /// Input tokens read from the cache.
+    pub tokens_cache_read: u64,
+    /// Input tokens written to the cache.
+    pub tokens_cache_write: u64,
+    /// **Dollars**, or `None` when the model has no listed price (never `0` for unknown).
+    pub cost_usd: Option<f64>,
 }
