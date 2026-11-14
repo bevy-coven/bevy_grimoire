@@ -58,7 +58,7 @@ derivation with its subject would pass on the subject's bug.
 | `decide` | `{check: bed_centred, want: true, min_confidence: 0.8}` | a calibrated decision the harness was given answers as the task wants |
 | `placement_total` | `{count: 3}` | the map holds exactly that many placements — the other half of "remove both crates and nothing else" |
 | `placements_within` | `{piece: plant_a, count: 6, x: [-4, 4], z: [2.2, 3]}` | exactly that many of a piece, every one centred in a region (a hedge, a corner) |
-| `file_value` | `{file: furniture/data/game.yaml, path: gate.health, equals: 40}` | a scalar in a project file, by a path through its YAML (`bounds[0]`, `lakes[1].level_m`), is the value or inside `min`/`max` |
+| `file_value` | `{file: furniture/data/game.yaml, path: gate.health, equals: 40}` | a scalar in a project file, by a path through its YAML (`bounds[0]`, `lakes[1].level_m`), is the value or inside `min`/`max`; a string leaf is checked by the words it holds with `contains: toll` or `lacks: welcome` (a substring, without case, never empty) |
 | `terrain_height` | `{map: bench_meadow, at: [8, -8], min_m: 1.7}` | the saved ground is at least or at most a height at a point (the core's own sampling) |
 | `water_lake` | `{map: bench_yard, x: [-10, -4], z: [4, 10], min_radius_m: 1.5}` | the map's water plan holds that many lakes (one), each centred in the region and wide enough |
 

@@ -408,8 +408,9 @@ pub struct PlacementsWithin {
 ///
 /// For what leaves no placement: a number in the game's data, a new map's size. `file` is relative to
 /// `assets/grimoire/`; `path` is dotted with list indices (`gate.health`, `bounds[0]`, `lakes[1].level_m`).
-/// At least one of `equals`, `min` and `max` is required, because a check that asks nothing passes on any
-/// file.
+/// At least one of `equals`, `min`, `max`, `contains` and `lacks` is required, because a check that asks nothing passes on any
+/// file. `contains` and `lacks` read a string leaf by the words it holds (a substring, without case), so a task that asks for a
+/// sentence is scored on the sentence the agent saved and not on what it said about it.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FileValue {
@@ -426,6 +427,12 @@ pub struct FileValue {
     /// The most a number may be.
     #[serde(default)]
     pub max: Option<f64>,
+    /// **A word a string leaf must hold**, a substring matched without case: what a greeting says. Never empty.
+    #[serde(default)]
+    pub contains: Option<String>,
+    /// **A word a string leaf must not hold**, a substring matched without case. Never empty.
+    #[serde(default)]
+    pub lacks: Option<String>,
 }
 
 /// **The ground is within a height at a point**, from the map's terrain file.
@@ -876,6 +883,12 @@ impl Check {
                 }
                 if let Some(m) = f.max {
                     wants.push(format!("≤ {m}"));
+                }
+                if let Some(w) = &f.contains {
+                    wants.push(format!("contains `{w}`"));
+                }
+                if let Some(w) = &f.lacks {
+                    wants.push(format!("lacks `{w}`"));
                 }
                 format!("`{}` in `{}` {}", f.path, f.file, wants.join(" and "))
             }
@@ -1405,11 +1418,15 @@ fn grade_file_value(
     left: &Snapshot,
     verdict: &impl Fn(bool, String) -> Verdict,
 ) -> Verdict {
-    if f.equals.is_none() && f.min.is_none() && f.max.is_none() {
+    if f.equals.is_none() && f.min.is_none() && f.max.is_none() && f.contains.is_none() && f.lacks.is_none() {
         return verdict(
             false,
-            "the check states no value, `min` or `max`, so it would pass on any file".to_owned(),
+            "the check states no value, `min`, `max`, `contains` or `lacks`, so it would pass on any file".to_owned(),
         );
+    }
+    // **An empty word is in every string**, so a `contains` of it would pass on any leaf and a `lacks` of it on none.
+    if f.contains.as_deref().is_some_and(str::is_empty) || f.lacks.as_deref().is_some_and(str::is_empty) {
+        return verdict(false, "the check's `contains` or `lacks` is an empty word, which every string holds".to_owned());
     }
     let Some(text) = left.text(&f.file) else {
         return verdict(false, format!("`{}` is not in the project, so nothing could be read from it", f.file));
@@ -1456,6 +1473,24 @@ fn grade_file_value(
                 }
             }
             None => fails.push("it is not a number".to_owned()),
+        }
+    }
+    if f.contains.is_some() || f.lacks.is_some() {
+        match at.as_str() {
+            Some(string) => {
+                let lower = string.to_lowercase();
+                if let Some(word) = &f.contains
+                    && !lower.contains(&word.to_lowercase())
+                {
+                    fails.push(format!("it should contain `{word}`"));
+                }
+                if let Some(word) = &f.lacks
+                    && lower.contains(&word.to_lowercase())
+                {
+                    fails.push(format!("it should lack `{word}`"));
+                }
+            }
+            None => fails.push("it is not a string".to_owned()),
         }
     }
     let says = format!("`{}` in `{}` is {at}", f.path, f.file);
