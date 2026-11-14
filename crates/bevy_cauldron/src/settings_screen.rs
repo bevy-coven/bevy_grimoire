@@ -258,6 +258,12 @@ fn clamp_the_scroll(
 ) {
     let Ok(dialog) = dialogs.single() else { return };
     for (list, mut scroll, node) in &mut lists {
+        // **A list that is not shown has no layout to be held to** (#429): a tab's page that is `Display::None` has a zero-size node,
+        // whose drawn offset is clamped to 0, and pulling the stored offset down to it would send the list to the top when the
+        // tab is shown again.
+        if node.size().y <= 0.0 {
+            continue;
+        }
         let drawn = node.scroll_position.y * node.inverse_scale_factor();
         // **Stale means nobody moved it this frame**: a wheel or a glide writes the offset before layout has seen it, and
         // would be cut back to last frame's if it were looked at here.
@@ -426,6 +432,7 @@ fn refresh(
     unreadable: Query<(), With<SettingUnreadable>>,
     mut since: Local<f32>,
     mut focus: Option<ResMut<InputFocus>>,
+    parents: Query<&ChildOf>,
     mut commands: Commands,
 ) {
     let Ok((dialog, mut built)) = dialogs.single_mut() else { return };
@@ -586,7 +593,11 @@ fn refresh(
                     && focus.get().is_some_and(|held| going.contains(&held))
                 {
                     let key = line.key;
-                    match controls.iter().find(|(_, control, ..)| control.key == key) {
+                    // **The control under this row**, not the first with the key: every tab's page is built, and the All page and a
+                    // category page share keys, so a global find could land the focus on a control on a tab that is not shown.
+                    let row = parents.get(entity).ok().map(ChildOf::parent);
+                    let mine = controls.iter().find(|(control, held, ..)| held.key == key && parents.get(*control).ok().map(ChildOf::parent) == row);
+                    match mine {
                         Some((control, ..)) => focus.set(control, FocusCause::Navigated),
                         None => focus.clear(),
                     }

@@ -346,3 +346,87 @@ fn no_setting_is_built_as_an_unreadable_row_in_either_scope_so_a_change_never_bu
         assert!(unreadable.is_empty(), "{scope:?}: rows built as unreadable: {unreadable:?}");
     }
 }
+
+/// The tab button named `name`: its label is not unique (the terminal pane has a heading of the same word).
+fn tab_named(app: &mut App, name: &str) -> Entity {
+    let world = app.world_mut();
+    let tabs: Vec<Entity> = world.query::<(Entity, &bevy_gooey::Role)>().iter(world).filter(|(_, role)| **role == bevy_gooey::Role::Tab).map(|(e, _)| e).collect();
+    for tab in tabs {
+        let mut pending = vec![tab];
+        while let Some(entity) = pending.pop() {
+            if world.get::<Text>(entity).is_some_and(|t| t.0 == name) {
+                return tab;
+            }
+            if let Some(children) = world.get::<Children>(entity) {
+                pending.extend(children.iter());
+            }
+        }
+    }
+    panic!("no tab is named `{name}`");
+}
+
+/// Shows the tab named `name`, the way a click on it does.
+fn show_the_tab(app: &mut App, name: &str) {
+    let tab = tab_named(app, name);
+    click(app, tab);
+    for _ in 0..10 {
+        app.update();
+    }
+}
+
+#[test]
+fn a_tabs_scroll_is_kept_while_another_tab_is_shown() {
+    let mut r = rig("settings_change_tab_scroll");
+    let before = scrolled_to_the_end(&mut r.app);
+    show_the_tab(&mut r.app, "Terminal");
+    // Frames more, with the All page hidden: the offset it was left at is not to be pulled down.
+    for _ in 0..20 {
+        r.app.update();
+    }
+    show_the_tab(&mut r.app, "All");
+    let after = record(&mut r.app, before.list);
+    assert!(before.stored > 0.0, "the All list was scrolled ({})", before.stored);
+    assert_eq!(after.stored, before.stored, "the All list's stored offset was pulled to the hidden layout's");
+    assert_eq!(after.scroll, before.scroll, "so the list is back at the top instead of where the person left it");
+}
+
+#[test]
+fn a_keyboard_reset_on_a_category_tab_puts_the_focus_on_that_tabs_own_control() {
+    let mut r = rig("settings_change_tab_focus");
+    std::fs::write(&r.user, "{version: 1, terminal_agent: OhMyPi}").unwrap();
+    for _ in 0..30 {
+        r.app.update();
+        std::thread::sleep(std::time::Duration::from_millis(15));
+    }
+    show_the_tab(&mut r.app, "Terminal");
+    let reset = find_by_label(&mut r.app, "Reset Terminal agent").expect("the Terminal tab shows a Reset for the set key");
+    focus(&mut r.app, reset);
+    r.app.world_mut().commands().trigger(bevy_gooey::Activate { entity: reset });
+    for _ in 0..FRAMES_AFTER {
+        r.app.update();
+    }
+    let shown = find_by_label(&mut r.app, "Terminal agent").expect("the Terminal tab shows the control");
+    assert_eq!(r.app.world().resource::<InputFocus>().get(), Some(shown), "the focus is on the control of the tab that is shown, not on the same setting's control on a page that is not");
+}
+
+#[test]
+fn a_list_hidden_with_no_layout_keeps_its_scroll_for_when_it_is_shown_again() {
+    // The pinned gooey hides a tab's page by `Visibility`, which keeps its layout; a page hidden by `Display::None` has a zero-size
+    // node, whose drawn offset layout clamps to 0, and the stored offset must not be pulled down to that.
+    let mut r = rig("settings_change_hidden_scroll");
+    let before = scrolled_to_the_end(&mut r.app);
+    let page = r.app.world().get::<ChildOf>(before.list).expect("the list is on a page").parent();
+    let hide = |app: &mut App, display: Display| {
+        app.world_mut().get_mut::<Node>(page).expect("the page is a node").display = display;
+        for _ in 0..20 {
+            app.update();
+        }
+    };
+    hide(&mut r.app, Display::None);
+    let hidden = r.app.world().get::<ComputedNode>(before.list).map(|n| n.size().y);
+    assert_eq!(hidden, Some(0.0), "the page is hidden with no layout");
+    hide(&mut r.app, Display::Flex);
+    let after = record(&mut r.app, before.list);
+    assert_eq!(after.stored, before.stored, "the stored offset was pulled to the hidden layout's");
+    assert_eq!(after.scroll, before.scroll, "so the list is back at the top instead of where the person left it");
+}
