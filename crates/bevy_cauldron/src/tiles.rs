@@ -3000,9 +3000,10 @@ fn refresh_cells(
     for (button_entity, button, layer, lit) in &cells {
         let selected = cell_edit.at == Some((button.0, layer.0, button.1));
         if selected && !lit {
-            commands.entity(button_entity).insert(bevy_gooey::PrimaryButton);
+            // `try_`: the cell may be despawned by a rebuild in this same frame, which the default error handler would turn into a panic.
+            commands.entity(button_entity).try_insert(bevy_gooey::PrimaryButton);
         } else if !selected && lit {
-            commands.entity(button_entity).remove::<bevy_gooey::PrimaryButton>();
+            commands.entity(button_entity).try_remove::<bevy_gooey::PrimaryButton>();
         }
     }
     for (g, layer, mut text) in &mut glyphs {
@@ -9257,9 +9258,9 @@ fn arm_list_rows(
             _ => false,
         };
         if armed && !lit {
-            commands.entity(band).insert(bevy_gooey::PrimaryButton);
+            commands.entity(band).try_insert(bevy_gooey::PrimaryButton);
         } else if !armed && lit {
-            commands.entity(band).remove::<bevy_gooey::PrimaryButton>();
+            commands.entity(band).try_remove::<bevy_gooey::PrimaryButton>();
         }
     }
 }
