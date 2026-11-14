@@ -341,6 +341,45 @@ is `.github/workflows/release-macos.yml` on mac_air: a `bevy_cauldron-v<version>
 notarizes, drives the fresh app through its own MCP, and publishes the DMG, the update zip and
 `SHA256SUMS` the in-app updater reads.
 
+### A release needs a benchmark run, and a regression stops it (BM-05, #415)
+
+The release workflow's first step after the version check is `python3 tools/release/bench_gate.py check`.
+It reads the benchmark report committed under `docs/bench/runs/` and refuses to publish unless:
+
+- **a report is for the code being released**: its header's commit is the commit being released, or an
+  ancestor whose `crates/` tree is identical, so a docs-only commit needs no rerun (the `release: <version>`
+  bump is judged as its parent, the code it bumps; a report run on a `+dirty` tree is for no commit);
+- **it is the release's run**: the default agent (`omp`) at five trials (`RELEASE_TRIALS`), on the dev suite
+  and the held-out tasks;
+- **it is not `worse`** than the previous release's report: the dev suite by `cauldron-bench compare`'s
+  paired 95% interval, naming the tasks that fell, and the held-out total as two totals and never by task. A
+  report that is `no measurable change` or `better` lets the release through. The first release after this
+  rule is compared with the BM-04 baseline (`docs/bench/runs/*-baseline.json`), which is also what is used
+  whenever no report is for the previous release.
+
+**The run is not part of the release.** It happens where an editor can open a window: **big** (each trial
+starts its own Xvfb; the held-out tasks are on its codex_fs share) or a **Mac**. **A pass that is about to
+release runs this first, at the commit it will release, and commits the report:**
+
+```sh
+cargo build --release -p bevy_cauldron -p bevy_cauldron_mcp -p bevy_cauldron_bench   # the editor, its MCP server, and the runner, side by side
+target/release/cauldron-bench run --agent omp --trials 5 \
+    --held-out /mnt/codex_fs/bench/dark_factory/held_out --label release-<version>
+python3 tools/release/bench_gate.py check --version "$(python3 tools/loop/version.py next)" --bench target/release/cauldron-bench   # what the release step will say
+git add docs/bench && git commit -m "docs(bench): the benchmark run for <version>"
+```
+
+(`--label` publishes `docs/bench/runs/<date>-release-<version>.md` and `.json`.) Run it on a clean tree at
+the commit to be released, so the header names a commit and not `+dirty`; the bump commit that follows
+changes only the manifest and `Cargo.lock`. A held-out directory that is missing is a refusal, not a
+shorter run.
+
+**When the check refuses on `worse`**, the pass does not release and does not retry the run until it is
+better: it **files a `bug` issue** with the comparison attached (the check's output, or
+`cauldron-bench compare <previous>.json <this>.json`), naming the tasks that fell, and **the next release
+waits for that bug's fix**. A rerun that happens to land inside the noise is not a fix: the interval is what
+the release rule reads, and a second run chosen because the first one failed is choosing the answer.
+
 ## Templates
 
 ### systemd (`~/.config/systemd/user/wiggum@<name>.service`)
