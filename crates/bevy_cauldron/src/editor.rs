@@ -4787,11 +4787,17 @@ pub fn apply_selected(import: &mut crate::tiles::ImportState, after: Option<&ser
 /// so a click and an agent cannot disagree about what selecting a piece does. The note names the
 /// removal chord, because the row is where a person goes to remove a piece.
 pub fn select_piece(import: &mut crate::tiles::ImportState, project: &Project, id: &str) {
+    select_piece_as(import, project, id, crate::ops::Source::Human);
+}
+
+/// **[`select_piece`], for whoever made the selection** (E-002, #129 slice 37): a walk an agent asked for through `shelf_walk` leaves its
+/// `piece_select` line under the agent's name, as a person's walk leaves it under theirs.
+pub fn select_piece_as(import: &mut crate::tiles::ImportState, project: &Project, id: &str, source: crate::ops::Source) {
     let mut ctx = crate::ops::Ctx {
         view: None, trust_file: None,
         project: Some(project.clone()),
         open: None,
-        source: crate::ops::Source::Human,
+        source,
         root: None,
         session: crate::ops::session_id(),
         proposal: None,

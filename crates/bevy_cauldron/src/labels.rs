@@ -1006,6 +1006,11 @@ impl Labeller<'_> {
         self.queue.as_deref().is_some_and(|q| q.ask.is_some())
     }
 
+    /// **The proposals waiting on a human**, which decide what a tile can be composed from (the shelf's walk reads them).
+    pub(crate) fn suggestions(&self) -> Option<&Suggestions> {
+        self.suggestions.as_deref()
+    }
+
     /// **The labeller as the operations read it**, and the pieces a walk would take. `probe` asks whether the endpoint is
     /// reachable (a walk wants to know; a single piece's request lets the request judge it). `None` in a world without the
     /// labeller.

@@ -230,10 +230,8 @@ const UNMIGRATED: &[Action] = &[
     // **Why the verbs that are left stay here (E-002, #129 slices 23 to 25).** `EditTile` and `CycleTarget` read the pointer's
     // position (the piece under the cursor), so an agent has no equivalent of the verb. `MainMenu` raises the unsaved-work
     // question and leaves for the menu screen: a modal conversation with a person. `CopyInfo` reads the drawn screen into the
-    // system clipboard. `PrevCandidate`, `NextCandidate`, `TileListPrev`, `TileListNext`, `FocusLibrary` and `FocusCandidates`
-    // walk the shelf's drawn rows, which depend on the filter, the folds, the excluded policy and the cursor's own heading
-    // state, and the Meshes shelf's selection already goes through `piece_select`; a walk operation needs the drawn row list
-    // in the view, which is its own slice.
+    // system clipboard. (`PrevCandidate`, `NextCandidate`, `TileListPrev`, `TileListNext`, `FocusLibrary` and `FocusCandidates` left this
+    // list for `shelf_walk` and `shelf_focus` in #129 slice 37: the view carries the drawn row lists.)
     Action::MainMenu,
     Action::Undo,
     Action::Redo,
@@ -247,17 +245,11 @@ const UNMIGRATED: &[Action] = &[
     // 87, re-pinned in the same commit rather than left to fail.
     Action::LookAtAgentChange,
     Action::Cancel,
-    Action::PrevCandidate,
-    Action::NextCandidate,
     Action::TypeId,
     Action::Accept,
     Action::UndoTile,
     Action::RedoTile,
-    Action::TileListPrev,
-    Action::TileListNext,
-    Action::FocusCandidates,
     Action::CopyInfo,
-    Action::FocusLibrary,
 ];
 
 /// **The ratchet.** It is lowered in the same commit that migrates an action, and it is the only
@@ -307,7 +299,8 @@ const UNMIGRATED: &[Action] = &[
 // 30 -> 27: `SuggestLabels`, `SuggestAll` and `DiscardAllSuggestions` -> `labels_suggest`, `labels_walk` and `labels_abandon` (E-002, #129 slice 34): `L` photographs the focused piece, `Shift+L` walks, holds or resumes the batch and `Shift+Y` drops everything the labeller holds, through the operations an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the three from the `World` set for the same reason; nothing is skipped.
 // 27 -> 25: `UndoBench` and `RedoBench` -> `rig_history_step` (E-002, #129 slice 35): `Cmd+Z` and `Cmd+Shift+Z` on the Anim tab step the bench's record of `rigs.yaml` back and forward through the operation an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the two from the `World` set for the same reason; nothing is skipped.
 // 25 -> 20: `PageEnter`, `PageLeave`, `TileOpen`, `CloseTile` and `BuildNew` -> `tile_page_enter`, `tile_page_leave`, `tile_open`, `tile_close` and `tile_new` (E-002, #129 slice 36): `right` opens the tile under the Tiles page's cursor and drills to the Meshes page, `left` comes back, `Enter` opens a tile or raises the name prompt, `C` puts the tile in hand down and `N` names a new one, through the operations an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the five from the `Camera` set for the same reason; nothing is skipped.
-const UNMIGRATED_MAX: usize = 20;
+// 20 -> 14: `PrevCandidate`, `NextCandidate`, `TileListPrev`, `TileListNext`, `FocusCandidates` and `FocusLibrary` -> `shelf_walk` and `shelf_focus` (E-002, #129 slice 37): up and down walk the shelf's list (the Meshes tab's library or candidates, the Tiles tab's library) and left, right and the two chips choose which, through the operations an agent calls. Assumed owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `PrevCandidate`, `NextCandidate`, `FocusCandidates` and `FocusLibrary` from the `View` set for the same reason (as slices 24 and 25 did for theirs); nothing is skipped.
+const UNMIGRATED_MAX: usize = 14;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///
@@ -670,8 +663,7 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     assert_eq!(
         view,
         [
-            "MainMenu", "CycleTarget", "PrevCandidate", "NextCandidate", "FocusCandidates", "CopyInfo",
-            "FocusLibrary",
+            "MainMenu", "CycleTarget", "CopyInfo",
         ],
         "the `View` set changed. That is allowed — but it is a deliberate act: a verb moves here only \
          when its whole effect is what a person is looking through, and it is then a candidate for a \

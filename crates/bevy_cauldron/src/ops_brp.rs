@@ -791,9 +791,34 @@ struct Gates<'w, 's> {
     /// trial exclusions, carried by the same view.
     generation: Option<ResMut<'w, crate::anim_watch::BenchGeneration>>,
     exclude: Option<ResMut<'w, crate::anim_tab::AdoptExclude>>,
+    /// **Where `right` lands** (E-002, #129 slice 37), read for `shelf_walk` and `shelf_focus` with the suggestions the labeller holds, as a
+    /// key reads them.
+    library_cursor: Option<Res<'w, crate::tiles::LibraryCursor>>,
 }
 
 impl Gates<'_, '_> {
+    /// **The shelf as `shelf_walk` and `shelf_focus` read it** (E-002, #129 slice 37), for a call and a preview alike: the library and
+    /// candidate lists as the Meshes or Tiles tab draws them. `None` on any other tab, so the operation is refused there.
+    fn shelf_in(
+        &self,
+        mode: Option<crate::tiles::Mode>,
+        project: Option<&crate::project::Project>,
+        import: Option<&crate::tiles::ImportState>,
+        filters: Option<&crate::filter::Filters>,
+    ) -> Option<crate::ops_view::ShelfCursor> {
+        use crate::tiles::Mode;
+        let mode = mode.filter(|m| matches!(m, Mode::Meshes | Mode::Tiles))?;
+        crate::tiles::shelf_cursor(
+            project?,
+            import?,
+            filters?,
+            self.labeller.suggestions()?,
+            self.library_cursor.as_deref()?,
+            mode == Mode::Tiles,
+        )
+        .into()
+    }
+
     /// **The view an agent's call to a view operation changes**, as the editor holds it now: the tool from
     /// the editor's state, the rest from the resources a person's key reads.
     /// **The candidate list's folds and the filter box that has the keyboard** (E-002, #129 slice 25) are read from
@@ -2227,6 +2252,12 @@ fn operation_apply(
         {
             view.labels = cursor;
         }
+        if p.operation.starts_with("shelf_")
+            && let Some(view) = view.as_mut()
+            && let Some(shelf) = gates.shelf_in(mode.as_deref().copied(), read_project, import.as_deref(), filters.as_deref())
+        {
+            view.shelf = shelf;
+        }
         // **A step of the bench's history reads the history** (E-002, #129 slice 35), for a preview and a call alike.
         if p.operation == "rig_history_step"
             && let (Some(view), Some(bench)) = (view.as_mut(), gates.bench.as_deref())
@@ -2276,6 +2307,13 @@ fn operation_apply(
         view.labels = cursor;
         gathered = Some(taken);
     }
+    // **A shelf operation reads the shelf, and its answer is carried out below** (E-002, #129 slice 37), by the body a key's request uses.
+    if p.operation.starts_with("shelf_")
+        && let Some(view) = ctx.view.as_mut()
+        && let Some(shelf) = gates.shelf_in(mode.as_deref().copied(), ctx.project.as_ref(), import.as_deref(), filters.as_deref())
+    {
+        view.shelf = shelf;
+    }
     if p.operation == "rig_history_step"
         && let (Some(view), Some(bench)) = (ctx.view.as_mut(), gates.bench.as_deref())
     {
@@ -2314,6 +2352,8 @@ fn operation_apply(
         // Meshes tab's own, run against the project the operation held.
         let rescan = view.rescan;
         let labels_answer = std::mem::take(&mut view.labels.answer);
+        let shelf_answer = std::mem::take(&mut view.shelf.answer);
+        let tiles_tab = view.shelf.tiles_tab;
         gates.apply_view(view, state.as_deref_mut(), import.as_deref_mut(), filters.as_deref_mut());
         if rescan
             && let (Some(import), Some(project)) = (import.as_deref_mut(), ctx.project.as_ref())
@@ -2325,6 +2365,13 @@ fn operation_apply(
             (gathered, &applied, import.as_deref_mut(), ctx.project.as_ref())
         {
             gates.labeller.take(labels_answer, &outcome.summary, taken, project, import);
+        }
+        // **A shelf request is carried out** (E-002, #129 slice 37): the answer and the operation's own sentence, by the body a key's
+        // request uses, under the agent's name.
+        if p.operation.starts_with("shelf_")
+            && let (Ok(ops::Applied::Done { outcome, .. }), Some(import), Some(project)) = (&applied, import.as_deref_mut(), ctx.project.as_ref())
+        {
+            crate::tiles::take_shelf(import, project, &shelf_answer, &outcome.summary, tiles_tab, ops::Source::Agent);
         }
     }
     // **A project the operation LOADED is installed here, before the map goes back.** `map_open` can

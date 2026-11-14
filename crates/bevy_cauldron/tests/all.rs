@@ -367,6 +367,7 @@ mod kit_create_and_authoring_are_operations;
 mod kit_rescan_is_an_operation;
 mod labeller_requests_are_operations;
 mod rig_history_is_an_operation;
+mod shelf_is_an_operation;
 mod tile_page_is_an_operation;
 mod piece_set_cells_is_an_operation;
 mod piece_set_mount_is_an_operation;

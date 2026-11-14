@@ -138,6 +138,90 @@ pub struct View {
     /// where a session opens (no answer).
     #[serde(default, skip_serializing_if = "PageAnswer::is_default")]
     pub page: PageAnswer,
+    /// **The shelf's rows and where its cursor is, and what a walk of it answered** (E-002, #129 slice 37): the library list and the
+    /// candidate list as the Meshes and Tiles tabs draw them, read by `shelf_walk` and `shelf_focus`. Gathered by the front end only
+    /// for those two; not serialised while it is where a session opens (no shelf in hand).
+    #[serde(default, skip_serializing_if = "ShelfCursor::is_default")]
+    pub shelf: ShelfCursor,
+}
+
+/// **One row of the candidate list as it is drawn** (E-002, #129 slice 37): a pack's heading, a mesh under an open heading (by
+/// index into the tab's candidates), or the `EXCLUDED` band. The wire form of `tiles::ListRow`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShelfRow {
+    /// A pack's heading, by the folder it spells.
+    Header { pack: String },
+    /// A mesh, by its index in the candidate list.
+    Mesh { index: usize },
+    /// The `EXCLUDED` band's own heading.
+    Excluded,
+}
+
+/// **The shelf, as `shelf_walk` and `shelf_focus` read it and answer it** (E-002, #129 slice 37).
+///
+/// The Meshes tab has two lists and one pair of arrows (the library shelf and the candidates, `left` and `right` choosing which the
+/// arrows walk) and the Tiles tab has the library alone, as a tile's source. What a walk lands on depends on what is drawn (the
+/// filter, the folds, the excluded band) and where the cursor is, so the front end reads the drawn lists in and takes the answer
+/// out ([`ShelfAnswer`]): a key, a chip and an agent's call read the same facts and carry out the same answer.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ShelfCursor {
+    /// Whether a shelf is on screen at all (the Meshes or the Tiles tab): a walk or a focus anywhere else is refused.
+    #[serde(default)]
+    pub up: bool,
+    /// Whether this is the Tiles tab's one list (a tile's source) and not the Meshes tab's two.
+    #[serde(default)]
+    pub tiles_tab: bool,
+    /// The library shelf's ids, in the order it draws them (the filter applied).
+    #[serde(default)]
+    pub library: Vec<String>,
+    /// The library row the arrows have, or `None` when the candidates have them.
+    #[serde(default)]
+    pub selected: Option<String>,
+    /// The library row the cursor last stood on, where `right` lands when it is still on the shelf.
+    #[serde(default)]
+    pub remembered: Option<String>,
+    /// The candidate list's rows in the order they are drawn, headings included.
+    #[serde(default)]
+    pub rows: Vec<ShelfRow>,
+    /// Where the candidate cursor stands in `rows`, or `None` when it is not on a row that is drawn.
+    #[serde(default)]
+    pub here: Option<usize>,
+    /// What to say when the candidate list has no rows to walk: the reason it is empty.
+    #[serde(default)]
+    pub empty: String,
+    /// **The answer**: what the front end is asked to do. Nothing for every other operation.
+    #[serde(default)]
+    pub answer: ShelfAnswer,
+}
+
+impl ShelfCursor {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// **What a shelf operation answers** (E-002, #129 slice 37), carried out by `tiles::take_shelf` for a key, a chip and an agent.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ShelfAnswer {
+    /// Whether an operation answered with a change at all.
+    #[serde(default)]
+    pub made: bool,
+    /// Which list has the arrows after it: `Some(None)` the candidates, `Some(Some(id))` the library with this piece selected.
+    #[serde(default)]
+    pub library: Option<Option<String>>,
+    /// The candidate row the cursor goes to.
+    #[serde(default)]
+    pub row: Option<ShelfRow>,
+    /// Whether the pack heading's cursor goes (the library takes over from it).
+    #[serde(default)]
+    pub clear_pack: bool,
+    /// Whether the operation's summary is the status line's sentence. A walk that selects a Meshes piece does not say it: the
+    /// selection says it itself.
+    #[serde(default)]
+    pub say: bool,
 }
 
 /// **What a Tiles-page operation answers** (E-002, #129 slice 36): `tile_page_enter`, `tile_page_leave`, `tile_open`, `tile_close` and
@@ -720,6 +804,8 @@ mod tests {
             labels: LabelsCursor::default(),
             // Owner exception (2026-11-13): the literal names the field #129 slice 36 adds (its default); the round trip is unchanged.
             page: PageAnswer::default(),
+            // Owner exception (2026-11-13): the literal names the field #129 slice 37 adds (its default); the round trip is unchanged.
+            shelf: ShelfCursor::default(),
         };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);

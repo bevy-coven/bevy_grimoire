@@ -1233,6 +1233,11 @@ impl Action {
             Action::TileOpen => Some("tile_open"),
             Action::CloseTile => Some("tile_close"),
             Action::BuildNew => Some("tile_new"),
+            // **The shelf's arrows and its two lists** (E-002, #129 slice 37): `up` and `down` walk the list that has the arrows (the
+            // Meshes tab's library or candidates, the Tiles tab's library) and `left` and `right` choose which, through the operations
+            // an agent calls.
+            Action::PrevCandidate | Action::NextCandidate | Action::TileListPrev | Action::TileListNext => Some("shelf_walk"),
+            Action::FocusCandidates | Action::FocusLibrary => Some("shelf_focus"),
             // **The tool keys** (E-002, #129): `B`, `Shift+B` and the run chord arm a tool through `tool_arm`.
             // **`Remove` and `NoteTool` arm a tool, so they name the arming operation** (E-002,
             // #129). They named `placement_remove` and `note_add`: a write neither key makes — its

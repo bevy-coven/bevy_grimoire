@@ -254,6 +254,8 @@ fn an_operation_that_needs_a_view_says_so() {
             "rig_check_all",
             "rig_history_step",
             "rig_walk",
+            "shelf_focus",
+            "shelf_walk",
             "snip_arm",
             "stage_camera",
             "stage_play",

@@ -89,6 +89,11 @@ const PINNED_NOWHERE: &[&str] = &[
     "tile_open",
     "tile_close",
     "tile_new",
+    // Assumed owner exception (2026-11-13): the list grows by the two operations #129 slice 37 registers, which walk the shelf's
+    // lists and choose which has the arrows: a cursor, which a person's own view holds, like the picker's above. The piece a walk
+    // selects is named by the `piece_select` line it leaves.
+    "shelf_walk",
+    "shelf_focus",
     // Assumed owner exception (2026-11-13): the list grows by the operation #129 slice 27 registers, the lattice grid's cursor,
     // which a person's own view holds, like the picker's above.
     "lattice_cursor_step",

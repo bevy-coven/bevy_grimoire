@@ -3713,6 +3713,273 @@ pub mod shelf_cursors {
             }
         }
     }
+
+    /// **What the two shelf operations share** (E-002, #129 slice 37): the cursor read off the view, the sentences, and the one reading
+    /// of where `right` lands.
+    pub mod shelf {
+        use super::*;
+        use crate::ops_view::{ShelfAnswer, ShelfCursor};
+
+        /// **What a walk says when the library has nothing to land on**, as a note: guidance, not a refusal.
+        pub const LIBRARY_EMPTY_NOTE: &str = "the library is empty";
+
+        /// **What the Tiles tab says when its one list is empty**, as a problem: nothing can be built from no library.
+        pub const LIBRARY_EMPTY_PROBLEM: &str = "the library is empty — import a mesh on the Meshes tab before building";
+
+        /// **What a walk says when the candidate list has no rows and the front end gave no reason.**
+        pub const NOTHING_TO_WALK: &str = "nothing to walk";
+
+        /// **The shelf in hand**, or the refusal that says no shelf is up.
+        pub fn shelf_in<'a>(ctx: &'a Ctx, what: &str) -> Result<&'a ShelfCursor, Refusal> {
+            let shelf = &need_view(ctx, what)?.shelf;
+            if !shelf.up {
+                return Err(Refusal::new(format!(
+                    "no shelf is up, so there is nothing to {what}. The library and candidate lists are on the Meshes tab, and the Tiles tab has the library."
+                )));
+            }
+            Ok(shelf)
+        }
+
+        /// **The sentence for a selection**: which piece, and the key that removes it.
+        pub fn selected_says(id: &str) -> String {
+            format!("`{id}` selected — {} removes it", crate::keys::chord(crate::keys::Action::RemoveTile))
+        }
+
+        /// **Where entering the library shelf lands**: the row the cursor last stood on when the shelf still holds it, and otherwise the
+        /// first row.
+        pub fn landing(shelf: &ShelfCursor) -> Option<String> {
+            shelf
+                .remembered
+                .as_deref()
+                .filter(|id| shelf.library.iter().any(|had| had == id))
+                .map(str::to_owned)
+                .or_else(|| shelf.library.first().cloned())
+        }
+
+        /// **An answer that changes nothing and says why.**
+        pub fn nothing(said: impl Into<String>) -> (ShelfAnswer, String) {
+            (ShelfAnswer { say: true, ..ShelfAnswer::default() }, said.into())
+        }
+
+        /// **An answer that selects a library piece**: the Tiles tab says it (it writes the selection itself), and the Meshes tab's
+        /// selection says it through `piece_select`.
+        pub fn selects(shelf: &ShelfCursor, id: &str) -> (ShelfAnswer, String) {
+            (
+                ShelfAnswer { made: true, library: Some(Some(id.to_owned())), say: shelf.tiles_tab, ..ShelfAnswer::default() },
+                selected_says(id),
+            )
+        }
+
+        /// **The outcome of an answer**, written into the view the operation was handed.
+        pub fn settle(ctx: &mut Ctx, answer: ShelfAnswer, summary: String) -> Result<Outcome, Refusal> {
+            let Some(view) = ctx.view.as_mut() else {
+                return Err(Refusal::new("no view is in hand, so there is no shelf to change."));
+            };
+            let after = json!({ "selected": answer.library.clone().flatten(), "row": answer.row.clone() });
+            view.shelf.answer = answer;
+            Ok(Outcome { summary, affected: 0, saved: false, inverse: None, after: Some(after) })
+        }
+    }
+
+    /// **Choose which shelf list the arrows walk**, as `left` and `right` do and as the `CANDIDATES` and `LIBRARY` chips do.
+    pub mod shelf_focus {
+        use super::shelf::{LIBRARY_EMPTY_NOTE, NOTHING_TO_WALK, landing, nothing, settle, shelf_in};
+        use super::*;
+        use crate::ops_view::ShelfAnswer;
+
+        /// The two lists an agent names, beside the schema so the parse and the schema cannot disagree.
+        pub const LISTS: &[&str] = &["candidates", "library"];
+
+        #[derive(Debug, Clone, PartialEq, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `candidates` or `library`.
+            pub to: String,
+        }
+
+        pub struct ShelfFocus;
+
+        impl ShelfFocus {
+            fn decide(ctx: &Ctx, params: &serde_json::Value) -> Result<(ShelfAnswer, String), Refusal> {
+                let p: Params = serde_json::from_value(params.clone())
+                    .map_err(|e| Refusal::new(format!("this is not a list: {e}. The only field is `to`: {}.", LISTS.join(" or "))))?;
+                let shelf = shelf_in(ctx, "focus")?;
+                match p.to.as_str() {
+                    "candidates" => {
+                        let said = if shelf.rows.is_empty() {
+                            if shelf.empty.is_empty() { NOTHING_TO_WALK.to_owned() } else { shelf.empty.clone() }
+                        } else {
+                            "candidates".to_owned()
+                        };
+                        Ok((ShelfAnswer { made: true, library: Some(None), say: true, ..ShelfAnswer::default() }, said))
+                    }
+                    "library" => match landing(shelf) {
+                        // **Arriving on the library is a selection only when none is made**: the seed is the arrival, and a selection
+                        // that is already made is left alone.
+                        Some(land) => Ok((
+                            ShelfAnswer {
+                                made: true,
+                                library: shelf.selected.is_none().then_some(Some(land)),
+                                clear_pack: true,
+                                say: true,
+                                ..ShelfAnswer::default()
+                            },
+                            "library".to_owned(),
+                        )),
+                        None => Ok(nothing(LIBRARY_EMPTY_NOTE)),
+                    },
+                    other => Err(Refusal::new(format!("`{other}` is not a list; say one of {}", LISTS.join(", ")))),
+                }
+            }
+        }
+
+        impl Operation for ShelfFocus {
+            fn name(&self) -> &'static str {
+                "shelf_focus"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["to"],
+                    "properties": {
+                        "to": {"type": "string", "enum": LISTS, "description": "Which list the arrows walk on the Meshes tab: the candidates (meshes not in the library yet) or the library shelf. Choosing the library selects the row the cursor last stood on (or the first) when none is selected."}
+                    }
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let (answer, said) = Self::decide(ctx, params)?;
+                Ok(json!({ "says": said, "selects": answer.library.clone().flatten() }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let (answer, said) = Self::decide(ctx, params)?;
+                settle(ctx, answer, said)
+            }
+        }
+    }
+
+    /// **Walk the shelf one step or a stride**, as `up` and `down` do on the Meshes tab (the library or the candidates, whichever has the
+    /// arrows) and on the Tiles tab (its one list, a tile's source).
+    pub mod shelf_walk {
+        use super::list_walk::{check_rows, direction, one_row};
+        use super::shelf::{LIBRARY_EMPTY_NOTE, LIBRARY_EMPTY_PROBLEM, NOTHING_TO_WALK, landing, nothing, selects, settle, shelf_in};
+        use super::*;
+        use crate::ops_view::ShelfAnswer;
+
+        #[derive(Debug, Clone, PartialEq, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `prev` or `next`.
+            pub by: String,
+            /// How many rows one step is: one, or the long stride a held Shift walks.
+            #[serde(default = "one_row")]
+            pub rows: usize,
+        }
+
+        pub struct ShelfWalk;
+
+        impl ShelfWalk {
+            fn decide(ctx: &Ctx, params: &serde_json::Value) -> Result<(ShelfAnswer, String), Refusal> {
+                let p: Params = serde_json::from_value(params.clone())
+                    .map_err(|e| Refusal::new(format!("this is not a walk: {e}. The fields are `by` (prev or next) and `rows`, which is optional.")))?;
+                let step = direction(&p.by)?;
+                let stride = check_rows(p.rows)?;
+                let shelf = shelf_in(ctx, "walk")?;
+                // **On the Tiles tab there is only one list**: a tile member must name a library descriptor, and a candidate is not a
+                // legal source, so walking it there would move a focus the tile author cannot spend.
+                if shelf.tiles_tab && shelf.selected.is_none() {
+                    // **The press that establishes the selection lands ON the first row, and stops there**: a seed is not a step.
+                    return match shelf.library.first() {
+                        Some(first) => Ok(selects(shelf, first)),
+                        None => Err(Refusal::new(LIBRARY_EMPTY_PROBLEM)),
+                    };
+                }
+                match &shelf.selected {
+                    Some(id) => {
+                        let Some(at) = shelf.library.iter().position(|d| d == id) else {
+                            // **The selection was filtered out of the list: land on the row the cursor would land on** and keep going,
+                            // rather than going dead.
+                            return Ok(match landing(shelf) {
+                                Some(land) => selects(shelf, &land),
+                                None => nothing(LIBRARY_EMPTY_NOTE),
+                            });
+                        };
+                        let want = if step > 0 { at.saturating_add(stride) } else { at.saturating_sub(stride) };
+                        let last = shelf.library.len().saturating_sub(1);
+                        match shelf.library.get(want.min(last)) {
+                            Some(next) => Ok(selects(shelf, next)),
+                            None => Ok(nothing(LIBRARY_EMPTY_NOTE)),
+                        }
+                    }
+                    None => {
+                        // **Every row on screen, headings included**, so nothing visible is unreachable.
+                        let Some(top) = shelf.rows.first() else {
+                            return Ok(nothing(if shelf.empty.is_empty() { NOTHING_TO_WALK } else { shelf.empty.as_str() }));
+                        };
+                        let (row, said) = match shelf.here {
+                            Some(at) => {
+                                let want = if step > 0 { at.saturating_add(stride).min(shelf.rows.len() - 1) } else { at.saturating_sub(stride) };
+                                (shelf.rows[want].clone(), format!("row {} of {}", want + 1, shelf.rows.len()))
+                            }
+                            // **Not on screen at all** (a filter or a fold moved out from under the cursor): start from the top of what
+                            // can be seen, which is where the eye already is.
+                            None => (top.clone(), "back at the top of the list".to_owned()),
+                        };
+                        Ok((ShelfAnswer { made: true, row: Some(row), ..ShelfAnswer::default() }, said))
+                    }
+                }
+            }
+        }
+
+        impl Operation for ShelfWalk {
+            fn name(&self) -> &'static str {
+                "shelf_walk"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["by"],
+                    "properties": {
+                        "by": {"type": "string", "enum": list_walk::DIRECTIONS, "description": "The direction along the list the arrows have: the library shelf or the candidate list on the Meshes tab, the library on the Tiles tab."},
+                        "rows": {"type": "integer", "minimum": 1, "maximum": list_walk::MAX_ROWS, "description": "How many rows the step is; one by default. Five is the long stride a held Shift walks."}
+                    }
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let (answer, said) = Self::decide(ctx, params)?;
+                Ok(json!({ "says": said, "selects": answer.library.clone().flatten() }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let (answer, said) = Self::decide(ctx, params)?;
+                settle(ctx, answer, said)
+            }
+        }
+    }
 }
 
 /// **The rig bench's stage** (E-002, #129 slice 26): whether the figure plays, the phase a scrub holds while it is
@@ -7525,6 +7792,8 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(list_cursors::tile_page_walk::TilePageWalk),
         Box::new(shelf_cursors::pack_fold::PackFold),
         Box::new(shelf_cursors::filter_focus::FilterFocus),
+        Box::new(shelf_cursors::shelf_walk::ShelfWalk),
+        Box::new(shelf_cursors::shelf_focus::ShelfFocus),
         Box::new(stage::stage_play::StagePlay),
         Box::new(stage::stage_scrub::StageScrub),
         Box::new(stage::stage_camera::StageCamera),
@@ -7831,6 +8100,10 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // and the heading clicks), and `F` and `/` dispatch `filter_focus` (`tiles::focus_filter`).
     ("pack_fold", "\"pack_fold\""),
     ("filter_focus", "\"filter_focus\""),
+    // **The shelf's arrows and its two lists** (E-002, #129 slice 37): `up` and `down` (and Shift for the long stride) dispatch `shelf_walk`,
+    // and `left`, `right` and the `CANDIDATES` and `LIBRARY` chips dispatch `shelf_focus`, through `tiles::shelf_through_operation`.
+    ("shelf_walk", "\"shelf_walk\""),
+    ("shelf_focus", "\"shelf_focus\""),
     // **The bench's stage keys** (E-002, #129 slice 26): `Space` dispatches `stage_play`, the held left and right arrows
     // `stage_scrub`, and `V` `stage_camera`, through `anim_stage`'s `drive_bench_scrub` and `cycle_cam_preset`.
     ("stage_play", "\"stage_play\""),
