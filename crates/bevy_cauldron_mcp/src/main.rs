@@ -294,6 +294,16 @@ pub struct StyleParams {
     pub topic: Option<String>,
 }
 
+/// **One style line a hand-back cites**: the page, relative to the project root, and the line, counted from 1.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FollowedParam {
+    /// The page, as `grimoire_style` headed it.
+    pub path: String,
+    /// The line, counted from 1 as an editor shows it.
+    pub line: u32,
+}
+
 /// **One small edit of a style page**: the exact span and what replaces it.
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -509,6 +519,10 @@ pub struct PresentParams {
     /// them newest first, so an id the log does not hold is refused.
     #[serde(default)]
     pub operation_ids: Vec<String>,
+    /// **The style lines the work followed** (SG-09, #408): `[{path, line}]`, taken from a chain `grimoire_style` returned in this session. Each must be a
+    /// non-empty line a page still says; one that is not is refused with the entry and the reason. Optional: a hand-back with no style involved cites nothing.
+    #[serde(default)]
+    pub followed: Vec<FollowedParam>,
 }
 
 /// **One place worth a look**, as the agent states it.
@@ -1141,7 +1155,12 @@ impl Grimoire {
                        (which undoes every listed operation, newest first). This call returns at \
                        once; read the person's answer from grimoire_state's presentation.answer \
                        (\"kept\", \"undone\", or why the undo stopped). It does not change the map by \
-                       itself.",
+                       itself. If you called grimoire_style, also cite the style lines you worked to: \
+                       followed, a list of {path, line} taken from a chain grimoire_style returned in \
+                       this session. The person's card lists each line's text with a link that opens it; \
+                       a line from a page you were never served, past a page's end, blank, or on a page \
+                       that has changed since is refused with the entry and the reason. A hand-back with \
+                       no style involved cites nothing.",
         annotations(
             title = "Present a result for review",
             read_only_hint = false,
@@ -1165,6 +1184,7 @@ impl Grimoire {
             "inferred": p.inferred,
             "check": p.check.iter().map(|c| json!({"what": c.what, "placements": c.placements})).collect::<Vec<_>>(),
             "operation_ids": p.operation_ids,
+            "followed": p.followed.iter().map(|f| json!({"path": f.path, "line": f.line})).collect::<Vec<_>>(),
         });
         match self.editor.call("grimoire/present", body).await {
             Ok(v) => Ok(CallToolResult::structured(v)),

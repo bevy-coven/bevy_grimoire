@@ -24,7 +24,9 @@ The server speaks the Model Context Protocol over **stdio**, and reaches the run
 
 **The game's pages and a region's are the person's to decide.** Call `grimoire_style_propose` with `path`, `edits` and `why` instead: the editor queues the change as a row in the AGENT block, shown as the change to the page, and the person's **Keep** writes it and **Discard** drops it. The call returns at once with the proposal's id; read `grimoire_state.style_proposals` for `kept` or `discarded`, and do not propose the same page again while one waits. A page that was changed after your proposal cannot be kept against, so propose again from the page as it is.
 
-**Say in your wish what the style did not tell you.** After the hand-back, `grimoire_wish` is where a question about the place that the style left unanswered belongs: it tells the person which file to write next.
+**Cite the style lines you followed.** If you called `grimoire_style`, give `grimoire_present` a `followed` list of `{path, line}`: the lines of the chain it returned that you worked to, a few and not the whole style. The person's hand-back card lists each line's text with a link that opens it on the Design page, so they can see whether the style was used and argue with a specific line. Each entry must be a non-empty line of a page `grimoire_style` served you in this session, and the page must still say it; a line from a page you were never served, past a page's end, blank, or on a page that has changed since is refused with the entry and the reason, and nothing is handed back. A hand-back with no style involved (a terrain fix, a test run) cites nothing.
+
+**Say in your wish what the style did not tell you.** After the hand-back, `grimoire_wish` is where a question about the place that the style left unanswered belongs: it tells the person which file to write next. Name what the style left you guessing, so the lines you cited and the lines you wished for are the two halves of one answer.
 
 ## Change
 
@@ -121,7 +123,7 @@ How to work in Cauldron, in the order a task goes: orient, change, what to do wh
 
 ### `grimoire_present`
 
-Put a result in front of the person: a title, a one-paragraph summary, what they specified, what you inferred, up to three places worth checking, and the operation ids it covers. The editor shows it as a question: Keep, or Undo all (which undoes every listed operation, newest first). This call returns at once; read the person's answer from grimoire_state's presentation.answer ("kept", "undone", or why the undo stopped). It does not change the map by itself.
+Put a result in front of the person: a title, a one-paragraph summary, what they specified, what you inferred, up to three places worth checking, and the operation ids it covers. The editor shows it as a question: Keep, or Undo all (which undoes every listed operation, newest first). This call returns at once; read the person's answer from grimoire_state's presentation.answer ("kept", "undone", or why the undo stopped). It does not change the map by itself. If you called grimoire_style, also cite the style lines you worked to: followed, a list of {path, line} taken from a chain grimoire_style returned in this session. The person's card lists each line's text with a link that opens it; a line from a page you were never served, past a page's end, blank, or on a page that has changed since is refused with the entry and the reason. A hand-back with no style involved cites nothing.
 
 | annotation | value |
 |---|---|

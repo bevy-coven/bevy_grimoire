@@ -210,6 +210,11 @@ impl DesignView {
         self.selected.as_deref()
     }
 
+    /// **The line a reveal asked for**, counted from 1, until the page has been scrolled there (SG-09, #408: a followed line's link asks for it).
+    pub fn line_asked(&self) -> Option<usize> {
+        self.line
+    }
+
     /// The page the file editor holds, while Edit is pressed.
     pub fn editing_file(&self) -> Option<&str> {
         self.selected.as_deref().filter(|_| self.editing)

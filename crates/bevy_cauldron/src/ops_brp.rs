@@ -158,6 +158,7 @@ fn style(
     project: Option<Res<crate::project::Project>>,
     store_root: Option<Res<crate::trusted::StoreRoot>>,
     state: Option<ResMut<crate::editor::EditorState>>,
+    mut served: Option<ResMut<crate::style_followed::StyleServed>>,
 ) -> Result<Value, String> {
     let Some(project) = project else {
         return Err("no project is open, so there is no style to read.".to_owned());
@@ -169,6 +170,14 @@ fn style(
     let answer = crate::agent_guide::serve_style(&mut state, &project, store_root.as_deref(), &request)?;
     if let Some(trouble) = &answer.trouble {
         state.status.problem(format!("style: {trouble}"));
+    }
+    // **What was served is what a hand-back may cite** (SG-09, #408): each page whose text the answer carries, as it reads now.
+    if let Some(served) = served.as_mut() {
+        for file in answer.files.iter().filter(|f| f.state == bevy_grimoire_core::style::FileState::Served) {
+            if let Ok(text) = std::fs::read_to_string(project.root.join(&file.path)) {
+                served.record(&project.root, &file.path, text);
+            }
+        }
     }
     Ok(answer.json())
 }
@@ -1215,6 +1224,8 @@ fn editor_state(
             "id": p.id,
             "title": p.title,
             "answer": p.answer,
+            // **The style lines the hand-back followed**: path and line only, never the line's text (a page is a prompt, and the state is the agent's).
+            "followed": p.followed.iter().map(|f| json!({"path": f.path, "line": f.line})).collect::<Vec<_>>(),
         })
     });
     // **The pins, named by id and reason.** A pin is the one thing an agent cannot see in the state
@@ -3618,6 +3629,7 @@ fn editor_present(
     // switching. A presentation that framed through a mechanism of its own would fight the follow for
     // the camera the moment an agent placed something and then handed back.
     mut following: Option<ResMut<crate::follow::Following>>,
+    served: Option<Res<crate::style_followed::StyleServed>>,
 ) -> Result<Value, String> {
     if let (Some(mut activity), Some(time)) = (activity, time) {
         activity.hear("present", time.elapsed_secs_f64());
@@ -3666,6 +3678,15 @@ fn editor_present(
                 .and_then(|e| e.result.clone())
         })
         .collect();
+    // **A cited style line must be one the agent was served, and still says it** (SG-09, #408): refused with the entry and the reason, before anything is asked.
+    let followed = match (p.followed.is_empty(), project.as_deref()) {
+        (true, _) => Vec::new(),
+        (false, Some(record)) => {
+            let empty = crate::style_followed::StyleServed::default();
+            crate::style_followed::check(served.as_deref().unwrap_or(&empty), &record.root, &p.followed)?
+        }
+        (false, None) => return Err("no project is open, so there are no served style lines to cite".to_owned()),
+    };
     let body = crate::present::body(&p, &steps);
     // **With the AGENT block open and "Answer hand-backs here" on, the question is asked there**, beside the rest of what the
     // agent did; otherwise in the modal, as it always was. A block closed on a waiting question hands it to the modal.
@@ -3726,6 +3747,7 @@ fn editor_present(
         check: p.check.iter().map(|item| item.what.clone()).collect(),
         body,
         inline,
+        followed,
     });
     // **The turn is one undo step from here on (E-071).** Done at presentation rather than at the
     // answer, so Cmd+Z during the conversation takes the turn back — a person who does not want the

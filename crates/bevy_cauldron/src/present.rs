@@ -56,6 +56,9 @@ pub struct Presented {
     /// **Asked in the AGENT block, not in the modal.** With the block open the hand-back is answered there, where the
     /// agent's other work is (Accept, Undo, Dismiss); with it closed the modal asks as it always did.
     pub inline: bool,
+    /// **The style lines the agent says it followed** (SG-09, #408), each checked against what `grimoire_style` served it. The text of a line is for the card;
+    /// `grimoire_state` carries the path and the line number only.
+    pub followed: Vec<crate::style_followed::Followed>,
 }
 
 /// **How the person answered a hand-back in the AGENT block.** Set by its buttons, taken by [`answer_presentation`].
@@ -106,6 +109,9 @@ pub struct PresentParams {
     /// The operations this covers, in log order. Undo all walks them newest first.
     #[serde(default)]
     pub operation_ids: Vec<String>,
+    /// **The style lines the work followed** (SG-09, #408): `[{path, line}]`, each a non-empty line of a page `grimoire_style` served this session.
+    #[serde(default)]
+    pub followed: Vec<crate::style_followed::FollowedParam>,
 }
 
 /// **How many places to check is still a short list.** Three, and the refusal says why.
@@ -157,6 +163,7 @@ impl Plugin for PresentPlugin {
             .init_resource::<Wishes>()
             .init_resource::<Lessons>()
             .init_resource::<crate::style_proposals::StyleProposals>()
+            .init_resource::<crate::style_followed::StyleServed>()
             .init_resource::<AgentClient>()
             .add_systems(
                 Update,

@@ -64,7 +64,13 @@ pub const TOOLS: &[ToolDoc] = &[
                       ids it covers. The editor shows it as a question: Keep, or Undo all (which undoes \
                       every listed operation, newest first). This call returns at once; read the person's \
                       answer from grimoire_state's presentation.answer (\"kept\", \"undone\", or why the undo \
-                      stopped). It does not change the map by itself.",
+                      stopped). It does not change the map by itself. If you called grimoire_style, also \
+                      cite the style lines you worked to: \
+                      followed, a list of {path, line} taken from a chain grimoire_style returned in \
+                      this session. The person's card lists each line's text with a link that opens it; \
+                      a line from a page you were never served, past a page's end, blank, or on a page \
+                      that has changed since is refused with the entry and the reason. A hand-back with \
+                      no style involved cites nothing.",
         read_only: false,
         destructive: false,
         idempotent: false,
@@ -649,6 +655,19 @@ pub fn schemas() -> Value {
                     },
                 },
                 "operation_ids": {"type": "array", "items": {"type": "string"}},
+                "followed": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["path", "line"],
+                        "properties": {
+                            "path": {"type": "string", "description": "The page, as grimoire_style headed it."},
+                            "line": {"type": "integer", "minimum": 1, "description": "The line, counted from 1."},
+                        },
+                    },
+                    "description": "The style lines the work followed, from a chain grimoire_style returned in this session. Each must be a non-empty line a page still says.",
+                },
             },
         },
         "grimoire_wish": {

@@ -186,6 +186,20 @@ pub struct HandBackCard;
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HandBackAnswer(pub crate::present::Reply);
 
+/// **A followed style line's link on the hand-back card** (SG-09, #408): a press opens the page on the Design workspace, on that line.
+#[derive(Component, Clone, Debug, PartialEq, Eq)]
+pub struct FollowedLink {
+    pub path: String,
+    pub line: u32,
+}
+
+/// **Open the followed line's page** in the Design workspace on its line, the one way a page is selected (`design_view::show_file`).
+fn open_the_followed_line(activate: On<Activate>, links: Query<&FollowedLink>, mut commands: Commands) {
+    let Ok(link) = links.get(activate.entity) else { return };
+    let (path, line) = (link.path.clone(), link.line as usize);
+    commands.queue(move |world: &mut World| crate::design_view::show_file(world, &path, Some(line)));
+}
+
 /// **View ▸ Show agent puts the AGENT block into the Map door's INSPECTOR panel, first among its rows, and takes it
 /// out again.**
 pub fn toggle_the_familiar(
@@ -588,6 +602,31 @@ fn follow_the_hand_back(
                                     row.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() })
                                         .with_children(|col| {
                                             crate::chrome::row_value(col, text, crate::chrome::ink().text, ());
+                                        });
+                                });
+                        }
+                        // **The style lines the work followed** (SG-09, #408): at most `FOLLOWED_SHOWN_MAX` with each line's text and a link that opens it on the
+                        // Design page, and a count of the rest. The text is the person's to read here; the state carries only the entries.
+                        if !presented.followed.is_empty() {
+                            card.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::FlexStart, flex_shrink: 0.0, ..default() })
+                                .with_children(|row| {
+                                    crate::chrome::row_label(row, crate::editor::READOUT_LABEL_W, "FOLLOWED");
+                                    row.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() })
+                                        .with_children(|col| {
+                                            for followed in presented.followed.iter().take(crate::style_followed::FOLLOWED_SHOWN_MAX) {
+                                                col.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_TIGHT), flex_wrap: FlexWrap::Wrap, ..default() })
+                                                    .with_children(|line| {
+                                                        line.spawn((
+                                                            button(format!("{}:{}", followed.path, followed.line)),
+                                                            FollowedLink { path: followed.path.clone(), line: followed.line },
+                                                            observe(open_the_followed_line),
+                                                        ));
+                                                        crate::chrome::row_value(line, followed.text.trim().to_owned(), crate::chrome::ink().text, ());
+                                                    });
+                                            }
+                                            if let Some(more) = crate::style_followed::more_says(presented.followed.len()) {
+                                                crate::chrome::row_value(col, more, crate::chrome::ink().dim, ());
+                                            }
                                         });
                                 });
                         }
