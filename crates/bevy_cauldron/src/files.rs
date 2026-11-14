@@ -1361,6 +1361,7 @@ fn keep_the_tree(
         }
     }
 }
+
 /// **How many frames the active file's row must stay inside the tree's viewport before the reveal lets go of it.** Layout
 /// reads the rows of the frame before, so a row that fits once may be moved by the scroll bounds the next.
 const REVEAL_STEADY_FRAMES: u8 = 2;
@@ -1369,7 +1370,8 @@ const REVEAL_STEADY_FRAMES: u8 = 2;
 /// the tree may not have: a file in a shut folder has none, and a long tree keeps the one it has below its fold. gooey
 /// scrolls a table to its cursor for a key or a click only, so this puts the viewport where the row is the way the
 /// DATA table's reveal does (`reveal::table_row_geometry` and `chrome::scroll_to_reveal`, the editor's one pair of
-/// scroll sums), once per file made active, and stops when the row has been inside for [`REVEAL_STEADY_FRAMES`].
+/// scroll sums, whose own threshold says when a row is already where it should be), once per file made active, and
+/// stops when the row has been inside for [`REVEAL_STEADY_FRAMES`]. The table is touched only when a folder has to open.
 fn reveal_the_active_row(
     mut trees: Query<(Entity, &mut bevy_gooey::Table, &mut TreeNames), With<FilesTree>>,
     children: Query<&Children>,
@@ -1377,34 +1379,42 @@ fn reveal_the_active_row(
 ) {
     for (entity, mut table, mut names) in &mut trees {
         let Some(key) = names.selected else {
-            names.revealed = None;
+            if names.revealed.is_some() {
+                names.revealed = None;
+            }
             continue;
         };
         if names.revealed == Some(key) {
             continue;
         }
         let Some(rel) = names.names.get(&key).map(|(rel, _)| rel.clone()) else { continue };
-        let Some(tree) = table.source_mut::<Tree>() else { continue };
-        // Every folder above the file: the prefixes before each `/`.
-        for (at, _) in rel.match_indices('/') {
-            tree.set_open(key_of(&rel[..at]), true);
-        }
-        let Some(row) = (0..RowSource::len(tree)).find(|row| RowSource::key(tree, *row) == key) else { continue };
-        // The viewport is the nearest descendant of the tree that is a `ListView`.
+        // The viewport is the nearest descendant of the tree that is a `ListView`; one with no height has nothing to show yet.
         let Some(viewport) = children.iter_descendants(entity).find(|e| viewports.contains(*e)) else { continue };
         let Ok((node, at, view, mut scroll)) = viewports.get_mut(viewport) else { continue };
         if view.rows <= 0.0 || node.size().y <= 0.0 {
             continue;
         }
+        // Every folder above the file: the prefixes before each `/`. The table is written only for one that is shut.
+        let shut: Vec<u64> = match table.source::<Tree>() {
+            Some(tree) => rel.match_indices('/').map(|(at, _)| key_of(&rel[..at])).filter(|folder| tree.is_open(*folder) == Some(false)).collect(),
+            None => continue,
+        };
+        if !shut.is_empty()
+            && let Some(tree) = table.source_mut::<Tree>()
+        {
+            for folder in shut {
+                tree.set_open(folder, true);
+            }
+        }
+        let Some(tree) = table.source::<Tree>() else { continue };
+        let Some(row) = (0..RowSource::len(tree)).find(|row| RowSource::key(tree, *row) == key) else { continue };
         let (scroll_y, max) = chrome::scroll_bounds(node);
         let inv = node.inverse_scale_factor();
         let Some((row_mid, pitch)) = crate::reveal::table_row_geometry((at.translation.y, node.size().y), view.rows, row, scroll_y, inv) else { continue };
-        match chrome::scroll_to_reveal((row_mid, pitch * 0.5), (at.translation.y, node.size().y * 0.5), scroll_y, max, inv) {
+        match chrome::scroll_to_reveal((row_mid, pitch / 2.0), (at.translation.y, node.size().y / 2.0), scroll_y, max, inv) {
             Some(want) => {
                 names.steady = 0;
-                if (scroll.0.y - want).abs() > 0.5 {
-                    scroll.0.y = want;
-                }
+                scroll.0.y = want;
             }
             None => {
                 names.steady += 1;
