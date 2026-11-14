@@ -113,34 +113,55 @@ fn editor(root: &std::path::Path) -> App {
     app
 }
 
-/// **Click the one visible widget that reads `label`** with the pointer, where it is drawn: a button, a toggle.
+/// **The row of the design tree that reads `label`**, when one does: the box a pointer is over when it is on that row.
 ///
-/// **A tree row is chosen by the event a click on it sends** (`ValueChange<TableSelection>` on the tree): the pointer lands on a neighbouring row of the
-/// virtualized tree in the headless frame (a click on `m` selected `dialogue`), while every button and toggle takes the real click.
-fn click(app: &mut App, label: &str) {
-    if label == "m" || label.starts_with("m  (") {
-        let root = app.world().resource::<bevy_cauldron::project::Project>().root.clone();
-        let place = if root.join("design/levels/m").exists() { "design/levels/m" } else { "design/regions/north/levels/m" };
-        let tree = {
-            let world = app.world_mut();
-            world.query_filtered::<Entity, With<bevy_cauldron::design_view::DesignTree>>().single(world).unwrap_or_else(|e| panic!("one tree: {e}"))
-        };
-        let key = bevy_cauldron::files::key_of(place);
-        app.world_mut().commands().trigger(bevy_gooey::ValueChange { source: tree, value: bevy_gooey::TableSelection::of(key), is_final: true });
-        settle(app);
-        return;
-    }
-    let entity = bevy_gooey::testing::find_by_label(app, label).unwrap_or_else(|e| panic!("`{label}`: {e}"));
-    // Once a window has been spawned for typing the pointer helper maps to it and misses the surface, so a press is then the `Activate` a click sends.
-    let windowed = {
+/// **Why a tree row is not found by `find_by_label`** (measured, #404 follow-up): that helper answers with the nearest ancestor of the words that takes focus
+/// (`TabIndex`), and the table's *rows* do not take focus, the table does. So `find_by_label("m")` is the whole tree (329 x 87 px, three rows), and a click
+/// at its centre lands on the middle row, `dialogue`, which is where the click "on `m`" went. A click on the row itself selects `m`.
+fn tree_row(app: &mut App, label: &str) -> Option<Entity> {
+    let texts: Vec<Entity> = {
         let world = app.world_mut();
-        world.query_filtered::<Entity, With<bevy::window::PrimaryWindow>>().iter(world).next().is_some()
+        world.query::<(Entity, &Text, &InheritedVisibility)>().iter(world).filter(|(_, text, shown)| text.0.trim() == label.trim() && shown.get()).map(|(e, ..)| e).collect()
     };
-    if windowed {
-        app.world_mut().commands().trigger(bevy::ui_widgets::Activate { entity });
-    } else {
-        bevy_gooey::testing::click(app, entity);
+    let mut rows: Vec<Entity> = texts
+        .into_iter()
+        .filter_map(|text| std::iter::successors(Some(text), |e| app.world().get::<ChildOf>(*e).map(ChildOf::parent)).find(|e| app.world().get::<bevy_gooey::TableRow>(*e).is_some()))
+        .collect();
+    rows.sort();
+    rows.dedup();
+    match rows.as_slice() {
+        [] => None,
+        [one] => Some(*one),
+        many => panic!("{} tree rows read `{label}`: {many:?}", many.len()),
     }
+}
+
+/// **Put the pointer over `entity`, as a mouse does**, when the app has a window.
+///
+/// With no window `bevy_gooey::testing::click` moves the pointer itself. Once one has been spawned (typing needs it), `surface::retarget_pointer` takes the pointer's
+/// place from the window's cursor (`view::sense_pointer`) every frame and overwrites the helper's move, so the press lands where the *cursor* is and misses the widget
+/// (measured: a click on `Done` hit nothing and the editor stayed open; a `CursorMoved` message does not move it, for it is not the window's state). The window's cursor
+/// is set to the widget's centre, in physical pixels, which is what the helper's own move would have been.
+fn put_the_pointer_over(app: &mut App, entity: Entity) {
+    let window = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<bevy::window::PrimaryWindow>>().iter(world).next()
+    };
+    let Some(window) = window else { return };
+    let centre = app.world().get::<bevy::ui::UiGlobalTransform>(entity).unwrap_or_else(|| panic!("{entity} is laid out")).translation;
+    app.world_mut().get_mut::<Window>(window).unwrap_or_else(|| panic!("the primary window")).set_physical_cursor_position(Some(centre.as_dvec2()));
+    app.update();
+}
+
+/// **Click the one visible widget that reads `label`** with the pointer, where it is drawn: a tree row, a button, a toggle. Every click is a real one: the pointer
+/// goes to the widget's centre and presses there, so a row that is laid out under another, or a button that is clipped, fails the test as it would fail a person.
+fn click(app: &mut App, label: &str) {
+    let entity = match tree_row(app, label) {
+        Some(row) => row,
+        None => bevy_gooey::testing::find_by_label(app, label).unwrap_or_else(|e| panic!("`{label}`: {e}")),
+    };
+    put_the_pointer_over(app, entity);
+    bevy_gooey::testing::click(app, entity);
     settle(app);
 }
 
@@ -224,7 +245,7 @@ fn edit_typing_and_done_write_the_file_and_render_the_new_text() {
         world.resource_mut::<InputFocus>().set(editor, FocusCause::Navigated);
     }
     settle(&mut app);
-    // Typing needs a window to name; one is spawned after the clicks, because a window makes the pointer helper map to it instead of the surface.
+    // Typing needs a window to name; one is spawned after the first clicks. (A click after it puts the cursor over the widget first: see `put_the_pointer_over`.)
     app.world_mut().spawn((Window::default(), bevy::window::PrimaryWindow));
     bevy_gooey::testing::type_text(&mut app, "Dusk first. ");
     settle(&mut app);
