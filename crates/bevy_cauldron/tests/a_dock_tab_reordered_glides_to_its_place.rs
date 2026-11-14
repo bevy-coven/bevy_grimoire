@@ -8,13 +8,11 @@
 //! tabs stand at two points and a reorder can be measured frame by frame:
 //!
 //! - **the premise**: two tabs stand at two points, in the layout's order;
-//! - **the tab whose corner stays put glides**: several frames, one direction, no frame more than half the way (the reordered strip's
-//!   first tab);
-//! - **the tab behind it lands in two frames, and the cause is measured**: a tab spawned by the rebuild is laid out unskinned and
-//!   skinned a frame later (font 11 px to 11.7 px, border 1 px to 0.83 px at the editor's `UiScale` of 1.2), which widens the first tab
-//!   by 3 px and moves the second's corner inside gooey's `LAYOUT_QUIET_FRAMES`, where a move lands instead of travelling. That is gooey's
-//!   (the skin pass, and the quiet window reading it as settling; filed as `dark-incorporated/bevy_gooey#94`, G-83), so it is pinned here as measured: the day gooey skins a new tab on its
-//!   first frame this test fails and says to tighten the glide test to both tabs;
+//! - **every tab that moved glides**: several frames, one direction, no frame more than half the way, for the reordered strip's first tab
+//!   (whose corner stays put) and for the tab behind it (whose corner moves with the first's width). The second used to land in two frames,
+//!   because a tab spawned by the rebuild was laid out unskinned and skinned a frame later, which moved its neighbour's corner inside
+//!   gooey's `LAYOUT_QUIET_FRAMES`, where a move lands instead of travelling; gooey skins a node at the target it is about to have since
+//!   `dark-incorporated/bevy_gooey#94` (G-83, at the editor's pin 424d37b), so both glide;
 //! - **the control**: with motion off the reorder lands in the frame it is made, so the measurements tell a glide from a jump.
 
 use std::time::Duration;
@@ -42,7 +40,7 @@ const START_ORDER: [&str; 2] = ["reload", "status"];
 const TITLES: (&str, &str) = ("RELOAD", "STATUS");
 /// Frames a glide must be seen moving in, so a spring that is two frames long is not called a glide.
 const LEAST_GLIDE_FRAMES: usize = 6;
-/// The most frames a tab that lands may take to be where it is going (it lands on the frame after the skin is applied).
+/// The most frames a tab that lands may take to be where it is going (the control, with motion off, lands on the frame it is made).
 const LANDED_WITHIN_FRAMES: usize = 3;
 /// The least distance, logical px, two tabs stand apart for them to be at two points and not one.
 const LEAST_TAB_GAP_PX: f32 = 20.0;
@@ -58,10 +56,6 @@ const WARM_FRAMES: usize = 12;
 const DOCK_BUILD_FRAMES: usize = 30;
 /// How many frames of a track a failure message prints.
 const TRACK_SHOWN_FRAMES: usize = 8;
-/// How much wider, logical px, a tab must be between its first frame and its last for "skinned a frame late" to be what was measured.
-const LEAST_SKIN_WIDENING_PX: f32 = 1.0;
-/// The gooey issue that owns the late skin: `dark-incorporated/bevy_gooey#94` (G-83).
-const GOOEY_ISSUE: &str = "dark-incorporated/bevy_gooey#94";
 
 fn editor(tag: &str, motion: MotionSettings) -> App {
     let root = fixtures::Fixture::new(&format!("dock_tab_glide_{tag}_{}", std::process::id())).descriptor("site/wall", "alpha").build("m");
@@ -108,19 +102,11 @@ fn centre_x(app: &App, tab: Entity) -> f32 {
     at.x * node.inverse_scale_factor()
 }
 
-/// A tab's laid-out width, logical px.
-fn width(app: &App, tab: Entity) -> f32 {
-    let node = app.world().get::<ComputedNode>(tab).expect("a laid-out tab");
-    node.size().x * node.inverse_scale_factor()
-}
-
 /// **What the reorder did, frame by frame**: where each tab started, and where it was drawn on every frame after.
 struct Reorder {
     start: (f32, f32),
     first: Vec<f32>,
     second: Vec<f32>,
-    /// The first recorded frame's width of each tab, and the last's.
-    widths: ((f32, f32), (f32, f32)),
 }
 
 fn reorder(app: &mut App) -> Reorder {
@@ -128,19 +114,14 @@ fn reorder(app: &mut App) -> Reorder {
     let start = (centre_x(app, a), centre_x(app, b));
     set_the_order(app, [START_ORDER[1], START_ORDER[0]]);
     let (mut first, mut second) = (Vec::new(), Vec::new());
-    let mut widths = ((0.0, 0.0), (0.0, 0.0));
-    for frame in 0..SETTLE_FRAMES {
+    for _ in 0..SETTLE_FRAMES {
         app.update();
         // The strip is rebuilt on the reorder, so the tabs are looked up again each frame.
         let (a, b) = (tab(app, TITLES.0), tab(app, TITLES.1));
         first.push(centre_x(app, a));
         second.push(centre_x(app, b));
-        if frame == 0 {
-            widths.0 = (width(app, a), width(app, b));
-        }
-        widths.1 = (width(app, a), width(app, b));
     }
-    Reorder { start, first, second, widths }
+    Reorder { start, first, second }
 }
 
 /// **How many frames a tab was seen moving in, and its biggest single step along the way** (toward `to`, from `from`).
@@ -168,7 +149,7 @@ fn the_bottom_docks_two_tabs_stand_at_two_points() {
     assert!(x_second - x_first > LEAST_TAB_GAP_PX, "the two tabs land at one point: `{}` at {x_first}, `{}` at {x_second}", TITLES.0, TITLES.1);
 }
 
-/// **A reordered tab glides to its place**: the tab that leads the new strip moves over many frames, one way, and no frame covers most of it.
+/// **A reordered tab glides to its place**: every tab that moved travels over many frames, one way, and no frame covers most of its way.
 #[test]
 fn a_reordered_tab_glides_to_its_place_with_motion_on() {
     let mut app = editor("glide", MotionSettings::default());
@@ -177,29 +158,15 @@ fn a_reordered_tab_glides_to_its_place_with_motion_on() {
     assert!(end.1 < end.0, "the strip is in the new order: `{}` at {}, `{}` at {}", TITLES.1, end.1, TITLES.0, end.0);
     assert!(r.start.0 < r.start.1, "and it started in the old one");
 
-    // The reordered strip's first tab is `STATUS`, and it is the tab whose corner stays where the strip starts.
-    let whole = (end.1 - r.start.1).abs();
-    assert!(whole > LEAST_TRAVEL_PX, "`{}` did not move: {} to {}", TITLES.1, r.start.1, end.1);
-    let (moving, biggest) = motion_of(&r.second, r.start.1, end.1);
-    assert!(moving >= LEAST_GLIDE_FRAMES, "`{}` moved in only {moving} frame(s): that is a jump, not a glide: {:?}", TITLES.1, &r.second[..TRACK_SHOWN_FRAMES]);
-    assert!(biggest <= whole * MOST_OF_THE_WAY_IN_ONE_FRAME + SLACK_PX, "`{}` covered {biggest} of {whole} px in one frame: that is a jump", TITLES.1);
-}
-
-/// **The tab behind it lands in two frames, and why** (measured; gooey's to fix). The strip rebuilt by the reorder is laid out before its
-/// tabs are skinned and again after, at the editor's `UiScale`, so the leading tab is wider on the second frame; the tab behind has its
-/// corner moved by that inside gooey's quiet window and lands. When gooey skins a new tab on its first frame this fails: then both tabs glide,
-/// and `a_reordered_tab_glides_to_its_place_with_motion_on` should hold both.
-#[test]
-fn the_tab_behind_the_glide_lands_at_once_because_the_strip_is_skinned_a_frame_late() {
-    let mut app = editor("landed", MotionSettings::default());
-    let r = reorder(&mut app);
-    let end = *r.first.last().expect("frames");
-    assert!((r.first[LANDED_WITHIN_FRAMES] - end).abs() <= SLACK_PX, "`{}` was still travelling after {LANDED_WITHIN_FRAMES} frames: gooey now glides it too ({:?}) — {GOOEY_ISSUE} is fixed: hold both tabs to the glide test and delete this one", TITLES.0, &r.first[..TRACK_SHOWN_FRAMES]);
-    let ((first_a, first_b), (last_a, last_b)) = r.widths;
-    assert!(
-        (last_a - first_a).abs() > LEAST_SKIN_WIDENING_PX || (last_b - first_b).abs() > LEAST_SKIN_WIDENING_PX,
-        "the tabs were the same width on the first frame ({first_a}, {first_b}) and the last ({last_a}, {last_b}): the cause named here ({GOOEY_ISSUE}) is gone"
-    );
+    // **Both tabs**, the strip's first (`STATUS`, whose corner stays where the strip starts) and the one behind it (`RELOAD`, whose corner
+    // moves with the first's width).
+    for (title, track, from, to) in [(TITLES.1, &r.second, r.start.1, end.1), (TITLES.0, &r.first, r.start.0, end.0)] {
+        let whole = (to - from).abs();
+        assert!(whole > LEAST_TRAVEL_PX, "`{title}` did not move: {from} to {to}");
+        let (moving, biggest) = motion_of(track, from, to);
+        assert!(moving >= LEAST_GLIDE_FRAMES, "`{title}` moved in only {moving} frame(s): that is a jump, not a glide: {:?}", &track[..TRACK_SHOWN_FRAMES]);
+        assert!(biggest <= whole * MOST_OF_THE_WAY_IN_ONE_FRAME + SLACK_PX, "`{title}` covered {biggest} of {whole} px in one frame: that is a jump");
+    }
 }
 
 /// **The control**: with motion off the reorder lands in the frame it is made, so the measurements above can tell a glide from a jump.
