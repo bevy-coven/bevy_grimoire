@@ -86,12 +86,12 @@ pub struct Terminal {
     /// **The open project's root** (#324): `CAULDRON_PROJECT` in every shell opened while a project is open, so
     /// a script or an agent run in the terminal knows which project the editor holds. `None` is no project.
     project_root: Option<PathBuf>,
-    /// **The person collapsed the pane** (Primary+J, or the chord that lowers it), and every screen's
-    /// pane is built and kept collapsed until they restore it (#315). `false` at launch: the terminal is
-    /// open on every screen from the application's first frame (#314, the owner's ask of 2026-11-06).
-    /// Kept here, on the session's one resource, because a pane is rebuilt on every screen and the
-    /// person's choice must outlive it.
-    collapsed: bool,
+    /// **The person has raised the pane** (Primary+J, the status bar's `Terminal` label, or the chord that raises it), and every
+    /// screen's pane is built and kept as they left it (#315). `false` at launch: the pane is on every screen but **starts
+    /// collapsed** (the owner, 2026-11-11, replacing #314's raised default), and a raise is kept across a relaunch
+    /// (`settings::EditorSettings::terminal_collapsed`). Kept here, on the session's one resource, because a pane is rebuilt on
+    /// every screen and the person's choice must outlive it. Stored as *raised* so `Terminal::default()` is the collapsed one.
+    raised: bool,
     /// **The caret a shell gets when its program asks for none** (#324): the person's
     /// `terminal_cursor` setting, given to every open screen and to each one spawned after.
     default_caret: CaretShape,
@@ -110,12 +110,21 @@ pub struct Terminal {
     /// **The projects whose agent tab was closed or whose shell left**, until `terminal_agent::keep_the_resume_record`
     /// takes them: the person ended that agent, so its resume record goes. Quitting the editor adds nothing here.
     ended_agents: Vec<PathBuf>,
+    /// **How wide the bar is drawn**, logical px, as the pane last measured it (#423): what [`crate::terminal_pane::bar_plan`] decides a
+    /// narrow bar holds from. `None` until a bar has been laid out, which holds everything.
+    bar_room: Option<f32>,
+    /// **The pane covers the whole window below the menu bar** (#426): `Shift+Primary+J` toggles it. A collapsed pane is never maximised, so
+    /// lowering a full pane and raising it again gives back its normal height.
+    maximised: bool,
 }
 
 /// One shell, its screen, and what is drawn about it.
 pub struct TerminalTab {
     /// The title a program asked for (`OSC 2`), or the shell's own name. The bar shows it.
     title: String,
+    /// **The program this tab's shell runs**, by its own name (`zsh`, `bash`, `sh`): what the bar's tab is called (#423). A tab is
+    /// named for what runs in it, not for the folder it started in, which the person already knows.
+    program: String,
     /// **The directory this tab's shell has been told to move to**, when the `cd` chip was taken.
     ///
     /// A terminal cannot know where a shell *is*: `cd` is the shell's own state, and reading it back
@@ -145,6 +154,7 @@ impl TerminalTab {
     fn refused(cols: u16, rows: u16, why: String) -> TerminalTab {
         TerminalTab {
             title: "terminal".to_owned(),
+            program: PROGRAM_UNKNOWN.to_owned(),
             cd_offered: None,
             session: None,
             screen: grid::TerminalScreen::new(cols, rows),
@@ -231,6 +241,7 @@ impl Terminal {
                 screen.set_scrollback(self.scrollback.unwrap_or(SCROLLBACK));
                 self.open.push(TerminalTab {
                     title,
+                    program: program_name(self.shell.as_ref()),
                     cd_offered: None,
                     session: Some(session),
                     screen,
@@ -443,14 +454,44 @@ impl Terminal {
         self.height = px.clamp(crate::terminal_pane::TERMINAL_MIN_H, crate::terminal_pane::TERMINAL_MAX_H);
     }
 
-    /// Has the person collapsed the pane? Every screen's pane is drawn collapsed while this holds.
+    /// Is the pane collapsed? Every screen's pane is drawn collapsed while this holds, which is the state it starts in (#424).
     pub fn is_collapsed(&self) -> bool {
-        self.collapsed
+        !self.raised
     }
 
     /// Collapse the pane, or restore it, for this screen and every one after it.
     pub fn set_collapsed(&mut self, collapsed: bool) {
-        self.collapsed = collapsed;
+        self.raised = !collapsed;
+        if collapsed {
+            self.maximised = false;
+        }
+    }
+
+    /// Does the pane cover the whole window below the menu bar?
+    pub fn is_maximised(&self) -> bool {
+        self.maximised && self.raised
+    }
+
+    /// **Toggle the pane between its normal height and the whole window below the menu bar** (#426). A collapsed pane is raised straight to
+    /// full; a full one goes back to the height it had. Returns the new state.
+    pub fn toggle_maximised(&mut self) -> bool {
+        if !self.raised {
+            self.raised = true;
+            self.maximised = true;
+        } else {
+            self.maximised = !self.maximised;
+        }
+        self.maximised
+    }
+
+    /// How wide the pane's bar was last drawn, when it has been laid out.
+    pub fn bar_room(&self) -> Option<f32> {
+        self.bar_room
+    }
+
+    /// Record how wide the pane's bar is drawn.
+    pub fn set_bar_room(&mut self, room: f32) {
+        self.bar_room = Some(room);
     }
 
     /// **The project the editor holds** (#324): `CAULDRON_PROJECT` in each shell opened from now on.
@@ -623,6 +664,16 @@ impl TerminalTab {
         &self.title
     }
 
+    /// **What this tab is called in the bar** (#423): the agent's own word (`omp`, or a custom command's program) for an agent tab,
+    /// and the shell's program (`zsh`) for a shell. Never the folder the shell started in, and never the word `agent` for a tab
+    /// that is also called by its program.
+    pub fn label(&self) -> &str {
+        match &self.agent {
+            Some(post) => &post.first_word,
+            None => &self.program,
+        }
+    }
+
     /// Why this tab has no shell, if it has none.
     pub fn problem(&self) -> Option<&str> {
         self.problem.as_deref()
@@ -668,6 +719,21 @@ fn shell_title(cwd: &Path) -> String {
     cwd.file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| cwd.display().to_string())
+}
+
+/// What a tab is called when its shell never started and nothing says which program it would have run.
+const PROGRAM_UNKNOWN: &str = "shell";
+
+/// **The name of the program a new tab runs** (#423): the person's `terminal_shell`, else `$SHELL`, as the last segment of its path
+/// (`/bin/zsh` is `zsh`). The one question [`pty`] already answers for starting it, so the bar and the process cannot disagree.
+fn program_name(choice: Option<&ShellChoice>) -> String {
+    let program = match choice {
+        Some(choice) => Some(choice.program.clone()),
+        None => shell_program_of_environment().ok(),
+    };
+    program
+        .and_then(|program| Path::new(&program).file_name().map(|name| name.to_string_lossy().into_owned()))
+        .unwrap_or_else(|| PROGRAM_UNKNOWN.to_owned())
 }
 
 /// **The shell's directory follows the project**, without restarting anything.

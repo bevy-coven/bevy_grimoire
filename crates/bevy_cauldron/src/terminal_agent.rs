@@ -197,14 +197,14 @@ pub enum CheckStatus {
 }
 
 impl CheckStatus {
-    /// The word the card starts the check's row with. Words, not symbols: the terminal's face lacks
-    /// some, and `⌘` once drew as a missing-glyph box.
-    pub fn mark(&self) -> &'static str {
+    /// **The state a check's row lights its LED in** (#421): a check that passed is live, one that failed is failed, one that was
+    /// skipped is off, and one still waiting is busy. The row carries no word for it: the LED keeps its accessible state name.
+    pub fn led(&self) -> bevy_gooey::LedState {
         match self {
-            CheckStatus::Pending => "…",
-            CheckStatus::Passed(_) => "OK",
-            CheckStatus::Failed(_) => "FAIL",
-            CheckStatus::Skipped(_) => "SKIP",
+            CheckStatus::Pending => bevy_gooey::LedState::Busy,
+            CheckStatus::Passed(_) => bevy_gooey::LedState::Live,
+            CheckStatus::Failed(_) => bevy_gooey::LedState::Failed,
+            CheckStatus::Skipped(_) => bevy_gooey::LedState::Off,
         }
     }
 
@@ -417,6 +417,24 @@ impl AgentPost {
         } else {
             format!("{name} connected · {} tools", self.tools.unwrap_or(0))
         }
+    }
+
+    /// **The first check that failed, in a sentence** (`Agent connected: omp did not reach the editor…`), or `None` when none has.
+    /// A failure's reason belongs on the card and in the LED's tooltip, never in a chip of the bar (#423).
+    pub fn failure(&self) -> Option<String> {
+        self.checks.iter().zip(CHECK_LABELS).find_map(|(check, label)| match check {
+            CheckStatus::Failed(why) => Some(format!("{label}: {why}")),
+            _ => None,
+        })
+    }
+
+    /// **What the bar's LED says when it is hovered**: the state in a sentence, the reason when a check failed, and what a click does.
+    pub fn led_tooltip(&self) -> String {
+        let state = match self.failure() {
+            Some(why) => format!("{} ({why})", self.chip_words()),
+            None => self.chip_words(),
+        };
+        format!("{state}. Click to show the self test again")
     }
 
     /// **The agent's LED** (feedback-1794230412409: *"where are the LEDs?"*): what the status chip says in words, in light. A

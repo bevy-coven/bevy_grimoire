@@ -57,6 +57,7 @@ fn editor_sized(tag: &str, width: u32, height: u32) -> App {
         .build("m");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None)
         .unwrap_or_else(|e| panic!("{e}"));
+    app.world_mut().resource_mut::<bevy_cauldron::terminal::Terminal>().set_collapsed(false); // #424: the pane starts collapsed; this test needs it raised
     app.world_mut().spawn((
         Window {
             resolution: bevy::window::WindowResolution::new(width, height),

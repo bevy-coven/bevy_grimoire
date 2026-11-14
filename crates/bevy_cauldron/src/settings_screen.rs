@@ -31,6 +31,7 @@ use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::ui::{Checked, ComputedNode, ScrollPosition};
 use bevy::ecs::relationship::RelatedSpawner;
 use bevy::ecs::system::SystemParam;
+use bevy::input_focus::AutoFocus;
 use bevy::prelude::*;
 use bevy::picking::events::PointerRelease;
 use bevy::ui_widgets::{SliderPrecision, SliderStep, SliderValue};
@@ -41,7 +42,7 @@ use bevy_gooey::{
 
 use crate::project::Project;
 use crate::setting_catalogue::{self, CATEGORIES, Kind, SCALE_STEP, Setting, Value};
-use crate::settings::{PROJECT_FILE, SettingsLayer, TerminalAgent, UserSettingsFile};
+use crate::settings::{AgentFile, PROJECT_FILE, SettingsLayer, TerminalAgent, UserSettingsFile};
 
 /// How often the open screen looks at the two files, in seconds.
 const LOOK_EVERY: f32 = 0.25;
@@ -74,6 +75,9 @@ pub struct SettingsDialog {
     pub problem: Option<String>,
     /// How many writes the screen has made, so the rows are built again at once and not at the next look at the files.
     pub writes: u32,
+    /// **The Terminal agent row is asking for a command** (#425): `Custom command` is not a choice until one is set, so the row spawns
+    /// a field for it on demand and a final value saves the command and the choice together.
+    pub command_editing: bool,
 }
 
 /// What the rows were last built from, so they are brought up to date only when it changes.
@@ -119,6 +123,22 @@ impl Layer {
     pub(crate) fn get(&self, key: &str) -> Option<Value> {
         match self {
             Layer::Read(layer) => layer.get(key),
+            _ => None,
+        }
+    }
+
+    /// The shell line this file gives `TerminalAgent::Custom`, when it gives one.
+    pub(crate) fn command(&self) -> Option<&str> {
+        match self {
+            Layer::Read(layer) => layer.terminal_agent_command.as_deref(),
+            _ => None,
+        }
+    }
+
+    /// The layer this file read as, when it read.
+    pub(crate) fn layer(&self) -> Option<&SettingsLayer> {
+        match self {
+            Layer::Read(layer) => Some(layer),
             _ => None,
         }
     }
@@ -233,6 +253,46 @@ impl Writer<'_, '_> {
         };
         dialog.problem = outcome.err();
         dialog.writes += 1;
+    }
+
+    /// **Sets `key` in the file of `scope`**, whichever one the screen is editing (#425): the fix for a file that chose Custom with
+    /// no command is written to that file, not to the one on screen.
+    fn set_in(&mut self, scope: Scope, key: &'static str, value: Option<Value>) {
+        let Ok(mut dialog) = self.dialog.single_mut() else { return };
+        let outcome = match self.files.path(scope) {
+            Some(path) => setting_catalogue::write_key(&path, key, value),
+            None => Err("there is no file to write this to".to_owned()),
+        };
+        dialog.problem = outcome.err();
+        dialog.writes += 1;
+    }
+
+    /// **Opens or closes the row's command field** (#425).
+    fn edit_command(&mut self, editing: bool) {
+        let Ok(mut dialog) = self.dialog.single_mut() else { return };
+        dialog.command_editing = editing;
+        dialog.writes += 1;
+    }
+
+    /// **A command typed into the Terminal agent row**: saved with `terminal_agent: Custom` in one write, so a file never holds the
+    /// choice without it. A blank command saves nothing and closes the field.
+    fn finish_command(&mut self, typed: &str) {
+        let command = typed.trim().to_owned();
+        let Ok(mut dialog) = self.dialog.single_mut() else { return };
+        dialog.command_editing = false;
+        dialog.writes += 1;
+        if command.is_empty() {
+            return;
+        }
+        let outcome = match self.files.path(dialog.scope) {
+            Some(path) => setting_catalogue::edit_layer(&path, |layer| {
+                layer.terminal_agent_command = Some(command);
+                layer.terminal_agent = Some(TerminalAgent::Custom);
+                Ok(())
+            }),
+            None => Err("there is no file to write this to".to_owned()),
+        };
+        dialog.problem = outcome.err();
     }
 }
 
@@ -491,6 +551,27 @@ fn refresh(
         (own, below.unwrap_or(Value::On(false)), overridden, default_of(setting.key))
     };
 
+    // **The Terminal agent row's extras** (#425): a problem line, a `Use Oh My Pi` button, the command and its field, and a choice
+    // list that offers `Custom command` only with a command set. They are spawned with the row and nowhere else, so what they are
+    // built from decides the rebuild below, next to the search.
+    let agent_problem = crate::settings::custom_agent_without_command(snapshot.user.layer(), snapshot.project.layer()).map(|file| match file {
+        AgentFile::User => (Scope::User, "your settings file".to_owned()),
+        AgentFile::Project => (Scope::Project, "this project's settings file".to_owned()),
+    });
+    let agent_of = |setting: &'static Setting| {
+        (setting.key == "terminal_agent").then(|| {
+            let (own, below, ..) = view(setting);
+            AgentRow {
+                has_command: edited.command().is_some(),
+                command: edited.command().map(str::to_owned),
+                editing: dialog.command_editing,
+                problem: agent_problem.clone(),
+                omp_installed: files.machine_agent() == TerminalAgent::OhMyPi,
+                current_custom: own.unwrap_or(below) == Value::Option(setting_catalogue::agent_index(TerminalAgent::Custom)),
+            }
+        })
+    };
+
     // The rows stand when the same settings are listed; they are built again when a search lists others, or
     // when a control cannot show what its row now holds (a row built as "unreadable value", or a kind that
     // does not match).
@@ -551,7 +632,7 @@ fn refresh(
                 .into_iter()
                 .map(|setting| {
                     let (own, below, overridden, default_value) = view(setting);
-                    setting_row(setting, own, below, overridden, default_value)
+                    setting_row(setting, own, below, overridden, default_value, agent_of(setting))
                 })
                 .collect();
             // A list, so a tab with more settings than the window is tall scrolls instead of running off it.
@@ -642,12 +723,70 @@ fn say_the_percentage(
     }
 }
 
+/// **What the Terminal agent row shows beyond its choice** (#425).
+#[derive(Clone, Debug, PartialEq)]
+struct AgentRow {
+    /// The file being edited sets a command, so `Custom command` is a choice.
+    has_command: bool,
+    /// That command, shown so it can be read and changed.
+    command: Option<String>,
+    /// The row's command field is open.
+    editing: bool,
+    /// The scope and the words for a file that chose Custom with no command.
+    problem: Option<(Scope, String)>,
+    /// The agent is installed on this machine, so the problem has a one-press fix.
+    omp_installed: bool,
+    /// The choice shown is `Custom command`, which stays offered whatever the command says (it is what the file holds).
+    current_custom: bool,
+}
+
+/// **The Terminal agent row's extras**: the problem with its one-press fix, the command and the way to set it.
+fn spawn_agent_extras(row: &mut RelatedSpawner<ChildOf>, agent: &AgentRow) {
+    if let Some((scope, file)) = &agent.problem {
+        row.spawn(label(format!("Problem: {file} chooses a Custom agent but sets no terminal_agent_command, so no agent can start.")));
+        if agent.omp_installed {
+            let scope = *scope;
+            row.spawn((
+                button("Use Oh My Pi, which is installed"),
+                observe(move |_: On<Activate>, mut w: Writer| {
+                    w.set_in(scope, "terminal_agent", Some(Value::Option(setting_catalogue::agent_index(TerminalAgent::OhMyPi))));
+                }),
+            ));
+        }
+    }
+    if agent.editing {
+        row.spawn((
+            text_input("Custom command", agent.command.clone().unwrap_or_default()),
+            TextHint("a program, like claude --mcp-config $CAULDRON_MCP_CONFIG".into()),
+            AutoFocus,
+            observe(|c: On<ValueChange<String>>, mut w: Writer| {
+                if c.is_final {
+                    w.finish_command(&c.value);
+                }
+            }),
+        ));
+    } else {
+        if let Some(command) = &agent.command {
+            row.spawn(label(format!("Command: {command}")));
+        }
+        let words = if agent.has_command { "Change command" } else { "Custom command…" };
+        row.spawn((button(words), observe(|_: On<Activate>, mut w: Writer| w.edit_command(true))));
+    }
+}
+
 /// One setting: its control, what it does, its default, whether it is modified and the Reset.
 ///
 /// **The row is built once and then kept up to date in place** ([`refresh`]): the control carries
 /// [`SettingControl`] and the line under the description [`SettingLine`], so a change to the file moves the
 /// control's value and swaps the line's marks without the list being built again (#429).
-fn setting_row(setting: &'static Setting, own: Option<Value>, below: Value, overridden: Option<Value>, default_value: Option<Value>) -> impl Bundle {
+fn setting_row(
+    setting: &'static Setting,
+    own: Option<Value>,
+    below: Value,
+    overridden: Option<Value>,
+    default_value: Option<Value>,
+    agent: Option<AgentRow>,
+) -> impl Bundle {
     let shown = own.unwrap_or(below);
     let key = setting.key;
     (
@@ -695,8 +834,16 @@ fn setting_row(setting: &'static Setting, own: Option<Value>, below: Value, over
                     control.insert((SliderStep(SCALE_STEP), SliderPrecision(SLIDER_DECIMALS)));
                 }
                 (Kind::Options(names), Value::Option(i)) => {
+                    // **`Custom command` is a choice only once a command is set** (#425), so no step of the row can save it without one.
+                    let offered: Vec<&str> = match &agent {
+                        Some(agent) => {
+                            let current = if agent.current_custom { TerminalAgent::Custom } else { TerminalAgent::Off };
+                            setting_catalogue::agent_choices(agent.has_command, current).to_vec()
+                        }
+                        None => names.to_vec(),
+                    };
                     row.spawn((
-                        choice(setting.label, names.iter().copied(), i),
+                        choice(setting.label, offered, i),
                         SettingControl { key, shown },
                         observe(move |c: On<ValueChange<usize>>, mut w: Writer| w.set(key, Some(Value::Option(c.value)))),
                     ));
@@ -704,6 +851,9 @@ fn setting_row(setting: &'static Setting, own: Option<Value>, below: Value, over
                 _ => {
                     row.spawn((label(format!("{}: unreadable value", setting.label)), SettingUnreadable));
                 }
+            }
+            if let Some(agent) = &agent {
+                spawn_agent_extras(row, agent);
             }
             row.spawn(label(setting.description));
             row.spawn((

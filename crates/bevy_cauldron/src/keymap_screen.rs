@@ -92,6 +92,16 @@ pub struct Taker {
     pub title: &'static str,
 }
 
+/// **The terminal's own chords** (#426): `terminal.collapse` (Cmd/Ctrl+J) and `terminal.maximise` (Shift+Cmd/Ctrl+J). They are read by the
+/// pane before the shell hears anything, so they are not rows of the key census; they are listed under the commands, fixed, and a command
+/// cannot be rebound onto either.
+pub fn terminal_chords() -> Vec<(Taker, Shortcut)> {
+    vec![
+        (Taker { id: "terminal.collapse", title: "Collapse or raise the terminal" }, crate::terminal_pane::COLLAPSE_CHORD),
+        (Taker { id: "terminal.maximise", title: "Maximise the terminal" }, crate::terminal_pane::maximise_chord()),
+    ]
+}
+
 /// **The chords the editor answers to outside the command registry**: the settings screen's and the
 /// command palette's (`command_palette.rs`), which are modals over every tab and so clash with a command
 /// anywhere.
@@ -104,6 +114,7 @@ fn reserved() -> Vec<(Taker, Shortcut)> {
         };
         (taker, chord)
     }));
+    out.extend(terminal_chords());
     out
 }
 
@@ -333,6 +344,17 @@ fn refresh(
             c.spawn(list(LIST_ROWS, Children::spawn(SpawnIter(items.into_iter()))));
         });
     }
+    // **The terminal's own chords are listed under the commands** (#426), fixed, and found by the same words.
+    let fixed: Vec<String> = terminal_chords()
+        .into_iter()
+        .map(|(taker, chord)| format!("{} ({}): {}, fixed", taker.title, taker.id, chord.label()))
+        .filter(|words| query.split_whitespace().all(|w| words.to_lowercase().contains(w)))
+        .collect();
+    commands.entity(column).with_children(|c| {
+        for words in fixed {
+            c.spawn(label(words));
+        }
+    });
     built.0 = Some(snapshot);
 }
 
