@@ -391,10 +391,9 @@ fn a_wish_with_no_draft_names_none() {
     );
     let wish = made["id"].as_str().unwrap_or_default().to_owned();
     switch_to(&mut app, Workspace::Agent);
-    let (unfold, open) = {
+    let unfold = {
         let world = app.world_mut();
-        let unfold = world.query::<(Entity, &WishUnfold, &WishOf)>().iter(world).find(|(_, _, o)| o.0 == wish).map(|(e, _, _)| e);
-        (unfold, ())
+        world.query::<(Entity, &WishUnfold, &WishOf)>().iter(world).find(|(_, _, o)| o.0 == wish).map(|(e, _, _)| e)
     };
     let unfold = unfold.unwrap_or_else(|| panic!("no wish row"));
     press(&mut app, unfold);
@@ -403,7 +402,6 @@ fn a_wish_with_no_draft_names_none() {
         world.query::<(Entity, &WishOpen, &WishOf)>().iter(world).find(|(_, _, o)| o.0 == wish).map(|(e, _, _)| e)
     }
     .unwrap_or_else(|| panic!("no Open on GitHub"));
-    let _ = open;
     press(&mut app, open_button);
     let links = bevy_cauldron::harness::opened_links(&app);
     assert_eq!(links.len(), 1);
