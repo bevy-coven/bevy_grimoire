@@ -7868,6 +7868,7 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(crate::ops_kit::KitSetAuthoring),
         Box::new(crate::ops_piece::PieceSetNote),
         Box::new(crate::ops_piece::PieceSetWidth),
+        Box::new(crate::ops_piece::PieceEdit),
         Box::new(pack_set_excluded::PackSetExcluded),
         Box::new(crate::ops_label_vlm::LabelSuggest),
         Box::new(crate::ops_label_vlm::LabelApply),
@@ -8242,6 +8243,8 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // piece.
     ("piece_set_note", "set_note("),
     ("piece_set_width", "set_width("),
+    // **The define key** (E-002, #129 slice 38): `Cmd+Delete` on the Map dispatches `piece_edit` through `send_to_tiles`.
+    ("piece_edit", "\"piece_edit\""),
     // **The pack key (E-002, #129 slice 7)** — `Shift+R` on the Meshes tab calls `set_pack_excluded`
     // and dispatches `pack_set_excluded`, the same policy write an agent's `apply` makes.
     ("pack_set_excluded", "set_pack_excluded("),

@@ -2133,7 +2133,7 @@ fn operation_apply(
     mut state: Option<ResMut<crate::editor::EditorState>>,
     mut gates: Gates,
     door: Option<Res<crate::workspace::Workspace>>,
-    mode: Option<Res<crate::tiles::Mode>>,
+    mut mode: Option<ResMut<crate::tiles::Mode>>,
     mut filters: Option<ResMut<crate::filter::Filters>>,
     mut import: Option<ResMut<crate::tiles::ImportState>>,
     menu: Option<Res<crate::project_assets::PointedAt>>,
@@ -2351,6 +2351,7 @@ fn operation_apply(
         // **A rescan is a request** (E-002, #129 slice 33): the operation says the directory is wanted and the scan is the
         // Meshes tab's own, run against the project the operation held.
         let rescan = view.rescan;
+        let edit = view.edit.take();
         let labels_answer = std::mem::take(&mut view.labels.answer);
         let shelf_answer = std::mem::take(&mut view.shelf.answer);
         let tiles_tab = view.shelf.tiles_tab;
@@ -2372,6 +2373,13 @@ fn operation_apply(
             && let (Ok(ops::Applied::Done { outcome, .. }), Some(import), Some(project)) = (&applied, import.as_deref_mut(), ctx.project.as_ref())
         {
             crate::tiles::take_shelf(import, project, &shelf_answer, &outcome.summary, tiles_tab, ops::Source::Agent);
+        }
+        // **A piece sent to the Meshes tab** (E-002, #129 slice 38): the answer and the operation's own sentence, written by the
+        // body a key's `piece_edit` uses.
+        if let (Some(id), Ok(ops::Applied::Done { outcome, .. }), Some(state), Some(mode), Some(import)) =
+            (edit, &applied, state.as_deref_mut(), mode.as_deref_mut(), import.as_deref_mut())
+        {
+            crate::editor::take_edit(&id, &outcome.summary, state, mode, import);
         }
     }
     // **A project the operation LOADED is installed here, before the map goes back.** `map_open` can

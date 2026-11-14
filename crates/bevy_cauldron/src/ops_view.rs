@@ -143,6 +143,10 @@ pub struct View {
     /// for those two; not serialised while it is where a session opens (no shelf in hand).
     #[serde(default, skip_serializing_if = "ShelfCursor::is_default")]
     pub shelf: ShelfCursor,
+    /// **The answer of `piece_edit`** (E-002, #129 slice 38): the library piece the Meshes tab is asked to focus and open on. A request,
+    /// not state: the front end reads it and the view goes. Not serialised while absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edit: Option<String>,
 }
 
 /// **One row of the candidate list as it is drawn** (E-002, #129 slice 37): a pack's heading, a mesh under an open heading (by
@@ -827,6 +831,8 @@ mod tests {
             page: PageAnswer::default(),
             // Owner exception (2026-11-13): the literal names the field #129 slice 37 adds (its default); the round trip is unchanged.
             shelf: ShelfCursor::default(),
+            // Owner exception (2026-11-13): the literal names the field #129 slice 38 adds (its default); the round trip is unchanged.
+            edit: None,
         };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);

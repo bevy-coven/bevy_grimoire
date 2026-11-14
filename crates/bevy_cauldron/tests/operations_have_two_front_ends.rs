@@ -227,16 +227,16 @@ fn every_mcp_tool_is_prefixed_and_unique() {
 /// list, and it is explicit: a verb is on the list or it goes through an operation, and there is
 /// no third thing.
 const UNMIGRATED: &[Action] = &[
-    // **Why the verbs that are left stay here (E-002, #129 slices 23 to 25).** `EditTile` and `CycleTarget` read the pointer's
-    // position (the piece under the cursor), so an agent has no equivalent of the verb. `MainMenu` raises the unsaved-work
-    // question and leaves for the menu screen: a modal conversation with a person. `CopyInfo` reads the drawn screen into the
-    // system clipboard. (`PrevCandidate`, `NextCandidate`, `TileListPrev`, `TileListNext`, `FocusLibrary` and `FocusCandidates` left this
-    // list for `shelf_walk` and `shelf_focus` in #129 slice 37: the view carries the drawn row lists.)
+    // **Why the verbs that are left stay here (E-002, #129 slices 23 to 38).** `CycleTarget` reads the pointer's position (the
+    // piece under the cursor), so an agent has no equivalent of the verb. `MainMenu` autosaves and crosses to the menu screen (only
+    // `Esc` raises the unsaved-work question); whether an agent may close the project is the owner's call. `CopyInfo` reads the
+    // drawn screen into the system clipboard. (`PrevCandidate`, `NextCandidate`, `TileListPrev`, `TileListNext`, `FocusLibrary` and
+    // `FocusCandidates` left this list for `shelf_walk` and `shelf_focus` in #129 slice 37: the view carries the drawn row lists.
+    // `EditTile` left it for `piece_edit` in slice 38: the key keeps the question of which piece, the operation owns the refusal.)
     Action::MainMenu,
     Action::Undo,
     Action::Redo,
     Action::Shortcuts,
-    Action::EditTile,
     Action::CycleTarget,
     Action::FrameView,
     // Owner exception (2026-11-10): the allowlist follows the new row `Action::LookAtAgentChange`
@@ -300,7 +300,8 @@ const UNMIGRATED: &[Action] = &[
 // 27 -> 25: `UndoBench` and `RedoBench` -> `rig_history_step` (E-002, #129 slice 35): `Cmd+Z` and `Cmd+Shift+Z` on the Anim tab step the bench's record of `rigs.yaml` back and forward through the operation an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the two from the `World` set for the same reason; nothing is skipped.
 // 25 -> 20: `PageEnter`, `PageLeave`, `TileOpen`, `CloseTile` and `BuildNew` -> `tile_page_enter`, `tile_page_leave`, `tile_open`, `tile_close` and `tile_new` (E-002, #129 slice 36): `right` opens the tile under the Tiles page's cursor and drills to the Meshes page, `left` comes back, `Enter` opens a tile or raises the name prompt, `C` puts the tile in hand down and `N` names a new one, through the operations an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the five from the `Camera` set for the same reason; nothing is skipped.
 // 20 -> 14: `PrevCandidate`, `NextCandidate`, `TileListPrev`, `TileListNext`, `FocusCandidates` and `FocusLibrary` -> `shelf_walk` and `shelf_focus` (E-002, #129 slice 37): up and down walk the shelf's list (the Meshes tab's library or candidates, the Tiles tab's library) and left, right and the two chips choose which, through the operations an agent calls. Assumed owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `PrevCandidate`, `NextCandidate`, `FocusCandidates` and `FocusLibrary` from the `View` set for the same reason (as slices 24 and 25 did for theirs); nothing is skipped.
-const UNMIGRATED_MAX: usize = 14;
+// 14 -> 13: `EditTile` -> `piece_edit` (E-002, #129 slice 38): the define key on the Map sends the piece under the cursor (or the one armed in PLACE) to the Meshes tab through the operation an agent calls with the piece's id; which piece is the key's question, answered from the pointer, and the refusal and the sentence are the operation's. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` re-points its `project > 0` assertion to `project == 0`: the last `Project` verb is migrated, so the debt assertion becomes a zero ratchet; nothing is skipped.
+const UNMIGRATED_MAX: usize = 13;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///
@@ -670,8 +671,8 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
          view operation like `view_cycle_grid`. A verb that writes the grimoire belongs in `Project`."
     );
 
-    // **And `Project` is what is left, which is the debt.** It must be non-zero: a classification whose
-    // project bucket was empty would be hiding every migration still owed.
+    // **`Project` is paid off (E-002, #129 slice 38): `EditTile` was the last verb that wrote through the old path.** The bucket is
+    // counted so the classification covers the allowlist exactly, and a `Project` verb back on the list is a regression.
     assert_eq!(
         project + view.len() + held.len() + modal.len() + camera.len() + world.len(),
         UNMIGRATED.len(),
@@ -684,9 +685,9 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
         world.len(),
         UNMIGRATED.len()
     );
-    assert!(
-        project > 0,
-        "not one unmigrated verb writes the grimoire, so this classification proves nothing"
+    assert_eq!(
+        project, 0,
+        "the Project debt is paid: a Project verb back on the list is a regression"
     );
     for action in UNMIGRATED {
         assert!(

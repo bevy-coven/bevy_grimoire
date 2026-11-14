@@ -249,6 +249,7 @@ fn an_operation_that_needs_a_view_says_so() {
             "lattice_cursor_step",
             "layer_set_visible",
             "pack_fold",
+            "piece_edit",
             "placement_set_hidden",
             "placement_set_locked",
             "rig_check_all",

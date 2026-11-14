@@ -1238,6 +1238,8 @@ impl Action {
             // an agent calls.
             Action::PrevCandidate | Action::NextCandidate | Action::TileListPrev | Action::TileListNext => Some("shelf_walk"),
             Action::FocusCandidates | Action::FocusLibrary => Some("shelf_focus"),
+            // **The define key** (E-002, #129 slice 38): `Cmd+Delete` on the Map sends a piece to the Meshes tab through `piece_edit`.
+            Action::EditTile => Some("piece_edit"),
             // **The tool keys** (E-002, #129): `B`, `Shift+B` and the run chord arm a tool through `tool_arm`.
             // **`Remove` and `NoteTool` arm a tool, so they name the arming operation** (E-002,
             // #129). They named `placement_remove` and `note_add`: a write neither key makes — its
