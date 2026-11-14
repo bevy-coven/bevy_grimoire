@@ -78,7 +78,7 @@ pub fn toggle_the_outline(change: On<ValueChange<bool>>, panels: Query<Entity, W
         .spawn((OutlineBlock::default(), Name::new("file_outline"), bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS)))
         .with_children(|block| {
             crate::chrome::list_heading(block, "OUTLINE");
-            block.spawn(Node { height: Val::Px(OUTLINE_HEIGHT_PX), flex_direction: FlexDirection::Column, ..default() }).with_children(|column| {
+            block.spawn(bevy_gooey::sized(bevy_gooey::Sizing { height: Some(bevy_gooey::Extent::Px(OUTLINE_HEIGHT_PX)), ..default() })).with_children(|column| {
                 column.spawn((tree(Vec::<TreeNode>::new()), OutlineTree, SelectMode::Single, observe(jump_to_the_picked_heading)));
             });
         })

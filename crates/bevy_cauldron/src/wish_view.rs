@@ -454,7 +454,7 @@ fn spawn_a_row(
                         Text::new(title_of(queued, client)),
                         TextColor(crate::chrome::ink().text),
                         crate::chrome::typed(crate::chrome::text::BODY),
-                        Node { flex_grow: 1.0, min_width: Val::Px(0.0), ..default() },
+                        crate::chrome::text_narrows(),
                         TextLayout::new(Justify::Left, LineBreak::WordBoundary),
                     ));
                 });
@@ -494,7 +494,7 @@ fn spawn_a_row(
                 Text::new(queued.search.sentence()),
                 TextColor(crate::chrome::ink().dim),
                 crate::chrome::typed(crate::chrome::text::LABEL),
-                Node { flex_shrink: 0.0, ..default() },
+                crate::chrome::text_keeps_its_width(),
                 TextLayout::new(Justify::Left, LineBreak::WordBoundary),
             ));
             if let Some(note) = &queued.note {
@@ -502,7 +502,7 @@ fn spawn_a_row(
                     Text::new(format!("GitHub did not open: {note}")),
                     TextColor(crate::chrome::ink().danger),
                     crate::chrome::typed(crate::chrome::text::LABEL),
-                    Node { flex_shrink: 0.0, ..default() },
+                    crate::chrome::text_keeps_its_width(),
                     TextLayout::new(Justify::Left, LineBreak::WordBoundary),
                 ));
             }
@@ -561,7 +561,7 @@ fn spawn_a_lesson_row(list: &mut ChildSpawnerCommands, queued: &crate::present::
                         Text::new(lesson_title(queued)),
                         TextColor(crate::chrome::ink().text),
                         crate::chrome::typed(crate::chrome::text::BODY),
-                        Node { flex_grow: 1.0, min_width: Val::Px(0.0), ..default() },
+                        crate::chrome::text_narrows(),
                         TextLayout::new(Justify::Left, LineBreak::WordBoundary),
                     ));
                 });
@@ -593,7 +593,7 @@ fn spawn_a_lesson_row(list: &mut ChildSpawnerCommands, queued: &crate::present::
                     Text::new(note.clone()),
                     TextColor(crate::chrome::ink().danger),
                     crate::chrome::typed(crate::chrome::text::LABEL),
-                    Node { flex_shrink: 0.0, ..default() },
+                    crate::chrome::text_keeps_its_width(),
                     TextLayout::new(Justify::Left, LineBreak::WordBoundary),
                 ));
             }

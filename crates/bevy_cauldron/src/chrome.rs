@@ -2304,12 +2304,9 @@ pub struct JournalList;
 pub fn problem_log_line(parent: &mut ChildSpawnerCommands, text: &str, colour: Color) {
     parent
         .spawn((
-            Node {
-                flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(4.0),
-                width: Val::Percent(100.0),
-                ..default()
-            },
+            // A bullet and the line, 4 px apart (0.8 of the skin's 5 px gap), as wide as the list.
+            bevy_gooey::row(PROBLEM_LOG_GAP_STEPS),
+            bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(100.0)), ..default() },
             ProblemLogLine,
         ))
         .with_children(|row| {
@@ -2324,17 +2321,16 @@ pub fn problem_log_line(parent: &mut ChildSpawnerCommands, text: &str, colour: C
                 // without it a wrapping text item's flex base can resolve to zero width and lay
                 // out one glyph per line, clipped to nothing (measured live in the Compose pane,
                 // 2026-08-17). `min_width: 0` is what then lets it shrink below its longest word.
-                Node {
-                    flex_grow: 1.0,
-                    min_width: Val::Px(0.0),
-                    ..default()
-                },
+                text_narrows(),
                 Text::new(text.to_owned()),
                 TextColor(colour),
                 typed(text::LABEL),
             ));
         });
 }
+
+/// The gap between a problem line's bullet and its words, in steps of the skin's gap: 4 px of the editor skin's 5.
+const PROBLEM_LOG_GAP_STEPS: f32 = 0.8;
 
 
 /// **A scrolling list that fills what is left of its panel.**
@@ -2778,12 +2774,10 @@ pub fn row_label_wrapping(row: &mut ChildSpawnerCommands, width: f32, label: &st
     let id = row_label_with(row, width, label, ());
     row.commands()
         .entity(id)
-        .insert(TextLayout::new(Justify::Left, LineBreak::WordBoundary))
-        .queue(move |mut label: EntityWorldMut| {
-            if let Some(mut node) = label.get_mut::<Node>() {
-                node.width = Val::Px(width);
-            }
-        });
+        .insert((
+            TextLayout::new(Justify::Left, LineBreak::WordBoundary),
+            bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Px(width)), ..default() },
+        ));
 }
 
 /// [`row_label`] with a marker on its label, for a label that changes while the row is on screen.
@@ -2794,30 +2788,14 @@ pub fn row_label_with(
     marker: impl Bundle,
 ) -> Entity {
     row.spawn((
-        Node {
-            min_width: Val::Px(width),
-            flex_shrink: 0.0,
-            // **And a gap of its own, so the value never starts at the label's last glyph.**
-            //
-            // The row's `column_gap` is a **flex** gap: it is the space between two flex items, and
-            // a flex item's box is its `min_width` **at least**. So a label *shorter* than its
-            // column gets the gap — its box is the column, and the value starts one gap later. But
-            // a label *longer* than its column **pushes its own box wider**, and the value starts
-            // immediately at the label's last glyph, with **no gap at all**.
-            //
-            // Measured on the menu's KIT INFO panel, in the capture: the row `new work lands here`
-            // / `no` had a **5 px** gap between the label and the value, and the rows above it —
-            // `pieces` / `166` and `excluded` / `4 pack(s)` — had **133 px**. So the one row whose
-            // label is longer than its column read as a single phrase, *"new work lands here no"*,
-            // while the others read as two things.
-            //
-            // **The gap is the label's, not the row's**, because the row's gap only applies between
-            // items and this is the space a *long* label would otherwise swallow. It is a `margin`,
-            // so it is outside the label's box and the value starts after it however wide the
-            // label turned out to be.
-            margin: UiRect::right(Val::Px(GAP_ROW)),
-            ..default()
-        },
+        // **The value never starts at the label's last glyph**: the label keeps its words' width and is at least the column wide, and a margin of its own
+        // (outside its box) stands the value off however wide a long label turned out, because the row's `column_gap` only applies between boxes, and a label
+        // longer than its column pushes its own box wider (measured on the KIT INFO panel: 5 px against 133 px).
+        (
+            bevy_gooey::Role::Sized,
+            bevy_gooey::TextFlow { grow: None, shrink: Some(0.0), min_width: Some(bevy_gooey::Extent::Px(width)), align: None },
+            spacing(margin_right(STEP_ROW)),
+        ),
         Text::new(label.to_owned()),
         TextColor(ink().label),
         typed(text::LABEL),
@@ -2877,6 +2855,20 @@ pub fn spaced(margin: bevy_gooey::Sides<bevy_gooey::Space>) -> impl Bundle {
     (bevy_gooey::Role::Sized, bevy_gooey::Spacing { margin, padding: default() })
 }
 
+/// **A text that takes the room its row leaves and may narrow to nothing** (#260): gooey's `TextFlow` on a bare text, with the layout role `TextFlow` is written on
+/// (`Role::Sized`, which draws nothing and leaves the text's ink and font as the host set them). A long name wraps in its own column and never pushes its row wider.
+pub fn text_narrows() -> impl Bundle {
+    (
+        bevy_gooey::Role::Sized,
+        bevy_gooey::TextFlow { grow: Some(1.0), shrink: None, min_width: Some(bevy_gooey::Extent::Px(0.0)), align: None },
+    )
+}
+
+/// **A text that keeps its words' width** (#260): `TextFlow { shrink: 0 }` on a bare text, so a tally or a mark keeps a column of its own when its row is squeezed.
+pub fn text_keeps_its_width() -> impl Bundle {
+    (bevy_gooey::Role::Sized, bevy_gooey::TextFlow { grow: None, shrink: Some(0.0), min_width: None, align: None })
+}
+
 /// **A margin for a gooey widget** (it has a `Role` already, which `Spacing` needs): the same margin as [`spaced`], without the layout role a bare text needs.
 pub fn spacing(margin: bevy_gooey::Sides<bevy_gooey::Space>) -> bevy_gooey::Spacing {
     bevy_gooey::Spacing { margin, padding: default() }
@@ -2925,12 +2917,7 @@ pub fn end_row<'a>(parent: &'a mut ChildSpawnerCommands, gap: f32) -> EntityComm
 /// row's last cell is clipped by the panel's edge (the 2026-09-03 audit's F7). Returns the commands so a caller can mark it.
 pub fn fill_text<'a>(row: &'a mut ChildSpawnerCommands, text: impl Into<String>, ink: Color, role: text::Role) -> EntityCommands<'a> {
     row.spawn((
-        Node {
-            flex_grow: 1.0,
-            // CHROME-OK: zero is not a spacing step.
-            min_width: Val::Px(0.0),
-            ..default()
-        },
+        text_narrows(),
         Text::new(text.into()),
         TextColor(ink),
         typed(role),

@@ -139,3 +139,31 @@ fn a_wish_row_and_its_header_fill_the_width_they_stand_in() {
     assert!((row_w - list_room).abs() < 1.0, "the wish row is {row_w} px wide in a list with {list_room} px of room");
     assert!((header_w - row_room).abs() < 1.0, "the header is {header_w} px wide in a row with {row_room} px of room");
 }
+
+/// **A wish row's title takes the room its line leaves and keeps its ink**: gooey's `TextFlow` (grow 1, no least width) on the text, whose colour and font are the host's.
+#[test]
+fn a_wish_titles_flow_is_gooeys_and_keeps_its_ink() {
+    let (mut app, id) = editor_with_a_wish("flow");
+    let title = of_wish::<WishTitle>(&mut app, &id);
+    assert_eq!(app.world().get::<Role>(title), Some(&Role::Sized), "the title carries gooey's layout role, which `TextFlow` is written on");
+    let node = app.world().get::<Node>(title).expect("a title has a Node");
+    assert_eq!(node.flex_grow, 1.0, "the title takes what its line leaves");
+    assert_eq!(node.min_width, Val::Px(0.0), "and may narrow to nothing");
+    assert_eq!(app.world().get::<TextColor>(title).map(|c| c.0), Some(bevy_cauldron::chrome::ink().text), "its ink is the host's");
+}
+
+/// **A readout's label keeps its column**: at least the 58 px readout label column wide, never shrunk, and a 5 px margin of its own so the value never starts at its last glyph.
+#[test]
+fn a_readouts_label_keeps_its_column_through_textflow() {
+    let (mut app, _) = editor_with_a_wish("label");
+    let label = {
+        let world = app.world_mut();
+        let mut q = world.query::<(Entity, &Text)>();
+        q.iter(world).find(|(_, text)| text.0 == "HEARD").map(|(e, _)| e).expect("the Familiar block has its HEARD label")
+    };
+    let node = app.world().get::<Node>(label).expect("a label has a Node");
+    assert_eq!(node.min_width, Val::Px(58.0), "at least the readout label column (58 px) wide");
+    assert_eq!(node.flex_shrink, 0.0, "never shrunk");
+    assert_eq!(node.margin.right, Val::Px(bevy_cauldron::chrome::GAP_ROW), "and a 5 px margin of its own");
+    assert_eq!(app.world().get::<TextColor>(label).map(|c| c.0), Some(bevy_cauldron::chrome::ink().label), "in the label ink");
+}

@@ -4212,22 +4212,14 @@ fn rebuild_palette(
                     // A caret, so folded and unfolded differ by shape and not only by what is below
                     // them — an encoding that survives being glanced at.
                     row.spawn((
-                        Node {
-                            width: Val::Px(crate::chrome::COL_TIGHT),
-                            flex_shrink: 0.0,
-                            ..default()
-                        },
+                        crate::chrome::text_keeps_its_width(),
+                        bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Px(crate::chrome::COL_TIGHT)), ..default() },
                         Text::new(if folded { ">" } else { "v" }),
                         TextColor(crate::chrome::ink().label),
                         crate::chrome::typed(crate::chrome::text::LABEL),
                     ));
                     row.spawn((
-                        Node {
-                            flex_grow: 1.0,
-                            // CHROME-OK: zero, not a spacing step — see `tiles::count_cell`.
-                            min_width: Val::Px(0.0),
-                            ..default()
-                        },
+                        crate::chrome::text_narrows(),
                         Text::new(category.to_uppercase()),
                         TextColor(crate::chrome::ink().label),
                         crate::chrome::typed(crate::chrome::text::LABEL),
@@ -4273,13 +4265,13 @@ fn rebuild_palette(
                     palette_row.insert(bevy_gooey::DragPayload(PieceDrag(d.id.clone())));
                     palette_row.with_children(|row| {
                             let mut slot = row.spawn((
-                                Node {
-                                    width: Val::Px(crate::chrome::THUMB_SLOT),
-                                    height: Val::Px(crate::chrome::THUMB_SLOT),
-                                    margin: UiRect::right(Val::Px(crate::chrome::GAP_ROW)),
-                                    flex_shrink: 0.0,
+                                bevy_gooey::sized(bevy_gooey::Sizing {
+                                    width: Some(bevy_gooey::Extent::Px(crate::chrome::THUMB_SLOT)),
+                                    height: Some(bevy_gooey::Extent::Px(crate::chrome::THUMB_SLOT)),
                                     ..default()
-                                },
+                                }),
+                                bevy_gooey::RowLayout { shrink: Some(0.0), ..default() },
+                                crate::chrome::spacing(crate::chrome::margin_right(crate::chrome::STEP_ROW)),
                                 BackgroundColor(crate::chrome::ink().slot_bg),
                             ));
                             // **By id, not by index.** The library grows on Accept and shrinks on
@@ -4314,11 +4306,8 @@ fn rebuild_palette(
                             // **The triangle cost keeps its own ink** (`cost_tint`: the accent past a busy piece, the danger past the
                             // importer's limit), which gooey's `count_text` would not: the skin writes that text's colour.
                             row.spawn((
-                                Node {
-                                    flex_shrink: 0.0,
-                                    margin: UiRect::left(Val::Px(crate::chrome::GAP_ROW)),
-                                    ..default()
-                                },
+                                crate::chrome::text_keeps_its_width(),
+                                crate::chrome::spacing(crate::chrome::margin_left(crate::chrome::STEP_ROW)),
                                 Text::new(brief_count(tris)),
                                 TextColor(cost_tint(tris)),
                                 crate::chrome::typed(crate::chrome::text::LABEL),
