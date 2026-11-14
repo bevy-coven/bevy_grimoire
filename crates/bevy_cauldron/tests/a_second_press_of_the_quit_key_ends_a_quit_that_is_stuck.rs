@@ -12,7 +12,11 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use bevy::prelude::*;
-use bevy_cauldron::exit_watchdog::{Cut, ExitWatchdog, ExitWatchdogPlugin, SecondPress, arm_exit, last_cut, overdue_waits, quit_chord_is_down, waiting, waits_now};
+use bevy::window::WindowCloseRequested;
+use bevy_cauldron::app_verbs::QuitRequested;
+use bevy_cauldron::exit_watchdog::{
+    Cut, ExitWatchdog, ExitWatchdogPlugin, FROZEN_AFTER_MS, SecondPress, arm_exit, end_process_with, last_cut, overdue_waits, quit_chord_is_down, waiting, waits_now,
+};
 
 /// The deadline the tests give a quit: short enough to wait for, long enough to tell "not yet" from "done".
 const DEADLINE: Duration = Duration::from_millis(900);
@@ -150,4 +154,122 @@ fn a_wait_is_listed_while_it_is_held_and_is_past_its_bound_only_after_it() {
 fn the_machines_quit_chord_probe_answers_without_a_key_down() {
     // The probe links and answers; nobody is holding Cmd+Q in a test run.
     assert!(!quit_chord_is_down());
+}
+
+/// An editor that watches for a quit with a stub chord, as the binary does with the machine's: its thread runs from the first frame.
+fn watched_app(grace: Duration, then: fn(), down: fn() -> bool) -> App {
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .add_plugins(ExitWatchdogPlugin { watchdog: ExitWatchdog { grace, then } })
+        .insert_resource(SecondPress { debounce: DEBOUNCE, poll: Duration::from_millis(10), down });
+    app.update();
+    app
+}
+
+fn never_down() -> bool {
+    false
+}
+
+static FROZEN_ENDED: AtomicUsize = AtomicUsize::new(0);
+
+fn frozen_ended() {
+    FROZEN_ENDED.fetch_add(1, Ordering::SeqCst);
+}
+
+#[test]
+fn a_quit_request_on_an_app_that_then_stops_drawing_is_ended_by_the_deadline_though_no_exit_was_written() {
+    let mut app = watched_app(DEADLINE, frozen_ended, never_down);
+    // The chord, File -> Quit and the window's close button are each a request; this is the menu's and the chord's.
+    app.world_mut().write_message(QuitRequested);
+    app.update();
+    let stopped = Instant::now();
+    // The main thread is stuck: no frame, and no AppExit was ever written.
+    wait_for(&FROZEN_ENDED);
+    let took = stopped.elapsed();
+    assert!(took >= DEADLINE * 8 / 10 && took <= DEADLINE + SLACK, "ended {took:?} after the app stopped drawing; the deadline is {DEADLINE:?}");
+    assert_eq!(last_cut().expect("recorded").why, Cut::Deadline);
+}
+
+static CLOSE_ENDED: AtomicUsize = AtomicUsize::new(0);
+
+fn close_ended() {
+    CLOSE_ENDED.fetch_add(1, Ordering::SeqCst);
+}
+
+#[test]
+fn a_window_close_request_arms_it_too() {
+    let mut app = watched_app(DEADLINE, close_ended, never_down);
+    app.world_mut().write_message(WindowCloseRequested { window: Entity::PLACEHOLDER });
+    app.update();
+    wait_for(&CLOSE_ENDED);
+}
+
+static ALIVE_ENDED: AtomicUsize = AtomicUsize::new(0);
+
+fn alive_ended() {
+    ALIVE_ENDED.fetch_add(1, Ordering::SeqCst);
+}
+
+#[test]
+fn an_app_that_keeps_drawing_is_left_alone_while_a_question_waits_for_its_answer() {
+    let mut app = watched_app(DEADLINE, alive_ended, never_down);
+    app.world_mut().write_message(QuitRequested);
+    // The unsaved-edits question is up: frames go on, nobody has answered, no AppExit is written.
+    let started = Instant::now();
+    while started.elapsed() < DEADLINE * 2 {
+        app.update();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(ALIVE_ENDED.load(Ordering::SeqCst), 0, "a request that is being answered is not a hang");
+}
+
+static FROZEN_CHORD: AtomicBool = AtomicBool::new(false);
+static FROZEN_PRESS_ENDED: AtomicUsize = AtomicUsize::new(0);
+
+fn frozen_chord_is_down() -> bool {
+    FROZEN_CHORD.load(Ordering::SeqCst)
+}
+
+fn frozen_press_ended() {
+    FROZEN_PRESS_ENDED.fetch_add(1, Ordering::SeqCst);
+}
+
+#[test]
+fn two_presses_on_an_app_that_froze_before_it_could_read_the_first_end_it() {
+    // A deadline far past the test: only the second press can end this.
+    let app = watched_app(Duration::from_secs(60), frozen_press_ended, frozen_chord_is_down);
+    // The main thread freezes: no more frames (the app is kept, not dropped, so nothing else changes).
+    std::thread::sleep(Duration::from_millis(FROZEN_AFTER_MS + 200));
+    FROZEN_CHORD.store(true, Ordering::SeqCst);
+    std::thread::sleep(Duration::from_millis(60));
+    FROZEN_CHORD.store(false, Ordering::SeqCst);
+    // The first press was a request the frozen app could not read; one inside the debounce does not end it.
+    std::thread::sleep(Duration::from_millis(60));
+    FROZEN_CHORD.store(true, Ordering::SeqCst);
+    std::thread::sleep(Duration::from_millis(60));
+    FROZEN_CHORD.store(false, Ordering::SeqCst);
+    assert_eq!(FROZEN_PRESS_ENDED.load(Ordering::SeqCst), 0, "a press inside the debounce is not the second");
+    std::thread::sleep(DEBOUNCE);
+    FROZEN_CHORD.store(true, Ordering::SeqCst);
+    wait_for(&FROZEN_PRESS_ENDED);
+    FROZEN_CHORD.store(false, Ordering::SeqCst);
+    assert_eq!(last_cut().expect("recorded").why, Cut::SecondPress);
+    drop(app);
+}
+
+static ORDER: std::sync::Mutex<Vec<&str>> = std::sync::Mutex::new(Vec::new());
+
+fn sampled() {
+    ORDER.lock().unwrap().push("sample");
+}
+
+fn killed() {
+    ORDER.lock().unwrap().push("kill");
+}
+
+#[test]
+fn a_deadline_records_where_it_is_stuck_before_it_ends_the_process_and_a_second_press_does_not_wait_for_it() {
+    end_process_with(Some(Cut::Deadline), sampled, killed);
+    end_process_with(Some(Cut::SecondPress), sampled, killed);
+    assert_eq!(*ORDER.lock().unwrap(), ["sample", "kill", "kill"], "the record of where it is stuck comes first (a dead process cannot be sampled), and only a deadline takes it");
 }
