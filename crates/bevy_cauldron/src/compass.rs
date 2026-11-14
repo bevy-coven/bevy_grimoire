@@ -201,8 +201,11 @@ fn follow_the_camera(
             Val::Px(centre + dir.x * length * 0.5 - length * 0.5),
             Val::Px(centre + dir.y * length * 0.5 - ARM * 0.5),
         );
-        if node.width != w || node.left != l || node.top != t {
+        // `HostGeometry` leaves every `Sizing` length to this system, so the arm's thickness is written here too (it never changes, so it costs nothing after the first frame).
+        let h = Val::Px(ARM);
+        if node.width != w || node.height != h || node.left != l || node.top != t {
             node.width = w;
+            node.height = h;
             node.left = l;
             node.top = t;
         }
@@ -226,7 +229,11 @@ fn follow_the_camera(
             Val::Px(centre + reach.x - DOT * 0.5),
             Val::Px(centre + reach.y - DOT * 0.5),
         );
-        if node.left != l || node.top != t {
+        // `HostGeometry` leaves every `Sizing` length to this system, so the dot's size is written here too (it never changes).
+        let d = Val::Px(DOT);
+        if node.width != d || node.height != d || node.left != l || node.top != t {
+            node.width = d;
+            node.height = d;
             node.left = l;
             node.top = t;
         }
