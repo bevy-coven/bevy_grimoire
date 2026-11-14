@@ -2,6 +2,14 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-14
+
+- **ui-99-gooey-sections** `daedd101` The Map inspector's section blocks, the wish and lesson lines, the problem lines and the report note's answers are laid out with bevy_gooey's rows and columns instead of hand-built nodes (UI-99, #260 part) *No clip: nobody can see this change; proved by the_editor_keeps_its_raw_nodes_counted, the_small_files_are_built_from_gooey_widgets and the_agent_blocks_lines_are_gooey_rows*
+- **ui-99-gooey-notes** `74c7ffd1` The notes and data editors' columns and the review thumbnail are laid out with bevy_gooey's column, row and image_box instead of hand-built nodes (UI-99, #260 part) *No clip: nobody can see this change; proved by the_editor_keeps_its_raw_nodes_counted and the whole editor binary*
+- **ui-99-gooey-readouts** `13346151` The Familiar's readout lines, the launcher's button lines and the project page's dialog answers are laid out with bevy_gooey's rows instead of hand-built nodes (UI-99, #260 part) *No clip: nobody can see this change; proved by the_editor_keeps_its_raw_nodes_counted and the_small_files_are_built_from_gooey_widgets*
+- **ui-99-gooey-rows** `260734cd` The library browser, the agent history, the panel heading and the dialogs' button lines are laid out with bevy_gooey's rows and columns (UI-99, #260 part) *No clip: nobody can see this change; proved by the_editor_keeps_its_raw_nodes_counted and the_small_files_are_built_from_gooey_widgets*
+- **ui-99-gooey-blocks** `fb6222ae` The World, Sound and Game panels, the outliner and the inspector's blocks are laid out with bevy_gooey's rows and columns instead of hand-built nodes (UI-99, #260 part) *No clip: nobody can see this change; proved by the_editor_keeps_its_raw_nodes_counted and the_small_files_are_built_from_gooey_widgets*
+
 ## 2026-11-13
 
 - **sg-05-design-workspace** `edb097b97` The Design workspace (Cmd/Ctrl+0): the game style as a tree, a rendered page with its pictures, and the place board as cards *No clip: visible, not yet recorded: fleet worker*

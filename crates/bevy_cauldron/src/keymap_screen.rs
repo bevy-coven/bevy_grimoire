@@ -255,7 +255,7 @@ fn open(mut asks: MessageReader<OpenKeymap>, existing: Query<(), With<KeymapDial
                         }),
                     ));
                     card.spawn((label(""), ProblemLine));
-                    card.spawn((Node { flex_direction: FlexDirection::Column, ..default() }, Rows));
+                    card.spawn((bevy_gooey::column(0.0), Rows));
                     card.spawn(menu()).with_children(|actions| {
                         actions.spawn((
                             button("Close"),
@@ -341,7 +341,7 @@ fn refresh(
 fn command_row(command: Command, chord: Shortcut, modified: bool, default_chord: Shortcut) -> impl Bundle {
     let id = command.id;
     (
-        Node { flex_direction: FlexDirection::Column, ..default() },
+        bevy_gooey::column(0.0),
         Children::spawn(SpawnWith(move |row: &mut RelatedSpawner<ChildOf>| {
             row.spawn((
                 binding(command.title, Binding::Chord(chord)),

@@ -474,7 +474,7 @@ fn draw_body(commands: &mut Commands, body: Entity, page: &ProjectPage, map_menu
             // **No breadcrumb inside the workbench**: the project is open, and leaving it is Close project, which asks about unsaved work.
             body.spawn(heading(page.name()));
         } else {
-            body.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_ROW), ..default() }).with_children(|crumbs| {
+            crate::chrome::gapped_row(body, crate::chrome::GAP_ROW_STEPS, UiRect::ZERO, AlignItems::Center).with_children(|crumbs| {
                 crumbs.spawn((button("Projects"), observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::Back); })));
                 crumbs.spawn(label("›"));
                 crumbs.spawn(heading(page.name()));
@@ -1532,7 +1532,7 @@ fn open_dialog(commands: &mut Commands, page: &ProjectPage, form: Form, existing
         if kind == FormKind::NewKit {
             card.spawn((toggle("Make it the default for new pieces", make_default), observe(|change: On<ValueChange<bool>>, mut form: ResMut<Form>| form.default = change.value)));
         }
-        card.spawn(Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::FlexEnd, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|row| {
+        crate::chrome::end_row(card, crate::chrome::GAP_GROUP_STEPS).with_children(|row| {
             row.spawn((button("Cancel"), observe(|_: On<Activate>, mut commands: Commands, dialogs: Query<Entity, With<PageDialog>>| close(&mut commands, &dialogs))));
             row.spawn((submit_button(accent), bevy_gooey::DefaultButton, CreateButton, observe(create_clicked)));
         });
@@ -1555,7 +1555,7 @@ fn open_policy_dialog(commands: &mut Commands, kit_label: &str, entries: Vec<Pol
                 row.spawn((button("Remove"), observe(move |_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::RemovePolicy { kit: kit.clone(), entry: entry.clone() }); })));
             });
         }
-        card.spawn(Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::FlexEnd, ..default() }).with_children(|row| {
+        crate::chrome::end_row(card, 0.0).with_children(|row| {
             row.spawn((submit_button("Close"), observe(|_: On<Activate>, mut commands: Commands, dialogs: Query<Entity, With<PageDialog>>| close(&mut commands, &dialogs))));
         });
     });

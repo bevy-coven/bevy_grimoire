@@ -2892,6 +2892,23 @@ pub fn wrapping_row<'a>(
     row
 }
 
+/// **A [`gapped_row`] that is never squeezed** (#260): the cells stand `gap` steps apart on `align` across, and the row keeps its height when
+/// the panel is shorter than its rows (a flex item that may shrink is made shorter than its text, which draws one line over the next). gooey's
+/// row says nothing about shrinking, so it is set over the bundle here, once, and not at each call.
+pub fn rigid_row<'a>(parent: &'a mut ChildSpawnerCommands, gap: f32, align: AlignItems) -> EntityCommands<'a> {
+    let mut row = gapped_row(parent, gap, UiRect::ZERO, align);
+    row.entry::<Node>().and_modify(|mut node| node.flex_shrink = 0.0);
+    row
+}
+
+/// **A [`gapped_row`] whose cells gather at the right edge** (#260): a dialog's answers. gooey's row says nothing about where its cells gather,
+/// so `justify_content` is set over the bundle here, once, and not at each call.
+pub fn end_row<'a>(parent: &'a mut ChildSpawnerCommands, gap: f32) -> EntityCommands<'a> {
+    let mut row = gapped_row(parent, gap, UiRect::ZERO, AlignItems::Stretch);
+    row.entry::<Node>().and_modify(|mut node| node.justify_content = JustifyContent::FlexEnd);
+    row
+}
+
 /// **A text that takes the rest of its row and wraps inside it** (UI-59, #245): a label column that grows with the row and
 /// may narrow below its words, so a long name wraps in its own column instead of widening the row past the panel.
 ///

@@ -65,11 +65,7 @@ impl Plugin for WorkspacePanelsPlugin {
 /// **One section's column**: the block every section is spawned into, so the rows of one belong to each other. The terrain section is
 /// spawned as its own column.
 fn block<'a>(p: &'a mut ChildSpawnerCommands) -> EntityCommands<'a> {
-    p.spawn(Node {
-        flex_direction: FlexDirection::Column,
-        row_gap: Val::Px(chrome::GAP_TIGHT),
-        ..default()
-    })
+    p.spawn(bevy_gooey::column(chrome::GAP_TIGHT_STEPS))
 }
 
 /// **The World workspace's panel**, in the left dock like every inspector, scrolling like the Map's.

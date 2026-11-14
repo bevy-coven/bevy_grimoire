@@ -1431,12 +1431,7 @@ fn report_box(
                             },
                         ),
                     ));
-                    card.spawn(Node {
-                        flex_direction: FlexDirection::Row,
-                        justify_content: JustifyContent::FlexEnd,
-                        column_gap: Val::Px(chrome::GAP_GROUP),
-                        ..default()
-                    })
+                    chrome::end_row(card, chrome::GAP_GROUP_STEPS)
                     .with_children(|row| {
                         row.spawn((
                             bevy_gooey::button("Cancel"),

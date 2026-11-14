@@ -363,10 +363,9 @@ pub enum PlayButton {
 
 /// The PLAY section of the controls panel.
 pub fn spawn_section(s: &mut bevy::prelude::ChildSpawnerCommands) {
-    use crate::chrome::{GAP_TIGHT, Severity, button, section};
-    use bevy::prelude::*;
+    use crate::chrome::{GAP_TIGHT_STEPS, Severity, button, section};
     section(s, "PLAY");
-    s.spawn(Node { column_gap: Val::Px(GAP_TIGHT), ..default() }).with_children(|r| {
+    s.spawn(bevy_gooey::row(GAP_TIGHT_STEPS)).with_children(|r| {
         button(r, PlayButton::Play, "Play", Severity::Plain);
         button(r, PlayButton::Stop, "Stop", Severity::Plain);
     });

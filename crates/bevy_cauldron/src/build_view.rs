@@ -720,13 +720,12 @@ pub struct BuildLine;
 /// otherwise show a game missing the change: a person who presses Play after a change that needs Rust
 /// finds the rebuild in the one place they are already looking.
 pub fn spawn_section(s: &mut ChildSpawnerCommands) {
-    use crate::chrome::{GAP_TIGHT, Severity, button, section};
+    use crate::chrome::{GAP_TIGHT_STEPS, Severity, button, section};
     section(s, "BUILD");
-    s.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(GAP_TIGHT), flex_shrink: 0.0, ..default() })
-        .with_children(|row| {
-            button(row, BuildButton, "Build", Severity::Plain).observe(on_build_click);
-            crate::chrome::row_value(row, "", crate::chrome::ink().dim, BuildLine);
-        });
+    crate::chrome::rigid_row(s, GAP_TIGHT_STEPS, AlignItems::Center).with_children(|row| {
+        button(row, BuildButton, "Build", Severity::Plain).observe(on_build_click);
+        crate::chrome::row_value(row, "", crate::chrome::ink().dim, BuildLine);
+    });
 }
 
 /// **The Build button asks for a build**, through the same operation an agent calls, so the job, the

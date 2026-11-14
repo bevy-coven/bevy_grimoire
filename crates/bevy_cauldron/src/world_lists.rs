@@ -219,8 +219,8 @@ pub fn spawn_cue_list(p: &mut ChildSpawnerCommands) {
 }
 
 /// A list's column.
-fn list_node() -> Node {
-    Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(chrome::GAP_TIGHT), ..default() }
+fn list_node() -> impl Bundle {
+    bevy_gooey::column(chrome::GAP_TIGHT_STEPS)
 }
 
 /// **The cue names in `family/bevy_siren.yaml`**, read as a plain value rather than as the crate's `CueTable`, so a build without

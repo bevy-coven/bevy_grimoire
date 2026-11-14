@@ -42,6 +42,8 @@ const YAW_STEP: f32 = 15.0;
 /// Where a descriptor with no `kind` goes. Named rather than hidden: an untagged piece is work to do,
 /// and a palette that quietly omitted it would be a palette missing pieces.
 const UNSORTED: &str = "unsorted";
+/// A review thumbnail's box: a fixed 4:3 picture, in logical px.
+const REVIEW_THUMBNAIL_PX: Vec2 = Vec2::new(160.0, 120.0);
 // The bounds wireframe and the grid lines are `chrome::{BOUNDS_LINE, GRID_LINE}` — world ink two
 // tabs state, so the values live with the palette rather than drifting here and in `tiles`.
 
@@ -3761,14 +3763,8 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
             // The readout, in the same two columns as the keys so the whole panel shares one left
             // edge.
             p.spawn((
-                Node {
-                    flex_direction: FlexDirection::Column,
-                    // `GAP_TIGHT`, where this was a bare 1: the rows of one block belong to each
-                    // other, and 1 px is not a step on any scale. The margin that used to sit above
-                    // this block is gone with it — `chrome::title` carries the gap below itself now.
-                    row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                    ..default()
-                },
+                // The rows of one block belong to each other: `GAP_TIGHT` between them, and `chrome::title` carries the gap below itself.
+                    bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS),
                 StatusBlock,
                 crate::notice::CopyPane(&[crate::tiles::Mode::Map]),
                 // The Map's own text pane — where `Cmd+C` copies from, and so where its badge goes.
@@ -3871,22 +3867,13 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
 
             // **Map size.** Stated, adjustable, and drawn in the world — an edge nothing shows is an
             // edge nobody believes. It is also what gives the flood fill somewhere to stop.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
+            p.spawn(bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS))
             .with_children(|s| {
                 // A real `section`, not a hand-rolled 10 px twin — the block's separation now comes
                 // from the heading's own margins (the 2026-08-17 type-role decision).
                 crate::chrome::section(s, "MAP SIZE  (m)");
                 for axis in [Axis::X, Axis::Y, Axis::Z] {
-                    s.spawn(Node {
-                        flex_direction: FlexDirection::Row,
-                        align_items: AlignItems::Center,
-                        column_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                        ..default()
-                    })
+                    crate::chrome::gapped_row(s, crate::chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Center)
                     .with_children(|row| {
                         // `COL_TIGHT`: the label is a single axis letter, which is exactly what that
                         // column is for. It was a bare 14.
@@ -3912,11 +3899,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
 
             // **Family settings (#96).** One line: `<crate> <field> <value>`, e.g.
             // `bevy_elements sun.hour 6.5`. Enter writes it through `family_set`.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
+            p.spawn(bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS))
             .with_children(|s| {
                 crate::chrome::section(s, "FAMILY SETTINGS")
                     .insert(crate::reveal::Section(crate::reveal::InspectorSection::Family));
@@ -3936,11 +3919,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
             // **Crowd (#107).** One line: `<from_x> <from_z> <to_x> <to_z> <walkers>`, e.g. `-8 -8 8 8 40`.
             // Enter walks that many people between two 2 m squares round the open map's solid pieces.
             #[cfg(all(feature = "bevy_orca", feature = "bevy_stigmergy"))]
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
+            p.spawn(bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS))
             .with_children(|s| {
                 crate::chrome::section(s, "CROWD");
                 crate::chrome::text_field(
@@ -3955,11 +3934,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
 
             // **Data files (#86).** One line: `<file> <path> <value>`, e.g. `tuning/mob speed 2.5`.
             // Enter writes it through `data_set`.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
+            p.spawn(bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS))
             .with_children(|s| {
                 crate::chrome::section(s, "DATA")
                     .insert(crate::reveal::Section(crate::reveal::InspectorSection::Data));
@@ -3973,51 +3948,31 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 );
                 s.spawn((
                     DataList,
-                    Node {
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                        ..default()
-                    },
+                    bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS),
                 ));
-                s.spawn((DataCellEditor, Node { flex_direction: FlexDirection::Column, ..default() }));
+                s.spawn((DataCellEditor, bevy_gooey::column(0.0)));
             });
 
             // **Scripts (#105).** Every trigger of the open map; a row opens the terrain line to edit it.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
+            p.spawn(bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS))
             .with_children(|s| {
                 crate::chrome::section(s, "SCRIPTS");
                 s.spawn((
                     ScriptsList,
-                    Node {
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                        ..default()
-                    },
+                    bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS),
                 ));
             });
 
             // **Notes (#90).** Every note of the open map, newest first; a row flies to it.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
+            p.spawn(bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS))
             .with_children(|s| {
                 crate::chrome::section(s, "NOTES")
                     .insert(crate::reveal::Section(crate::reveal::InspectorSection::Notes));
                 s.spawn((
                     NotesList,
-                    Node {
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                        ..default()
-                    },
+                    bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS),
                 ));
-                s.spawn((NotesEditor, Node { flex_direction: FlexDirection::Column, ..default() }));
+                s.spawn((NotesEditor, bevy_gooey::column(0.0)));
             });
 
             // **Reload (#203) has moved to the bottom dock** (UI-61, #247): the panel is
@@ -4027,40 +3982,24 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
 
             // **Plan (E-069).** What the agent means to do on this map and how far it has got: the
             // `.plan.yaml` that `plan_set` writes, read like the notes are.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
+            p.spawn(bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS))
             .with_children(|s| {
                 crate::chrome::section(s, "PLAN");
                 s.spawn((
                     PlanList,
-                    Node {
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                        ..default()
-                    },
+                    bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS),
                 ));
             });
 
             // **Problems (UI-54).** Each relation the open map breaks, from `<map>.relations.yaml`, with a Go to that selects the
             // pieces it names.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
+            p.spawn(bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS))
             .with_children(|s| {
                 // **Named for the reveal** (NV-11, #397): the show-problems chord scrolls this heading on screen, where it was six wheel notches down.
                 crate::chrome::section(s, "PROBLEMS").insert(crate::reveal::Section(crate::reveal::InspectorSection::Problems));
                 s.spawn((
                     crate::problems_view::ProblemsList,
-                    Node {
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                        ..default()
-                    },
+                    bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS),
                 ));
             });
 
@@ -4071,11 +4010,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
             // exactly that: what the next click will put down. Before this, the arm was reachable
             // only from the COMPOSE tab, which is on the Kit door, while the click that stamps is
             // on the Map door; the two never met. See `compose::picker` for the measurement.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
+            p.spawn(bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS))
             .with_children(|s| {
                 crate::chrome::section(s, "COMPOSITIONS");
                 // **No scroll list of its own.** The panel's own body is already a scroll area, and
@@ -4090,11 +4025,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 // the block that has it. The picker's verbs are the panel's verbs; one control, one
                 // badge, one answer to "what can I do here".
                 s.spawn((
-                    Node {
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                        ..default()
-                    },
+                    bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS),
                     crate::compose::picker::PickerBody,
                 ));
             });
@@ -4110,11 +4041,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
 /// only where it is spawned moved. Its function is here because [`TerrainField`] and [`TerrainReadout`] are
 /// this module's.
 pub(crate) fn spawn_terrain_section(p: &mut ChildSpawnerCommands) {
-    p.spawn(Node {
-        flex_direction: FlexDirection::Column,
-        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-        ..default()
-    })
+    p.spawn(bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS))
     .with_children(|s| {
         crate::chrome::section(s, "TERRAIN");
         crate::chrome::text_field(
@@ -7189,7 +7116,7 @@ fn refresh_notes_list(
     for list in &lists {
         commands.entity(list).despawn_related::<Children>();
         commands.entity(list).with_children(|p| {
-            p.spawn(Node { column_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }).with_children(|h| {
+            p.spawn(bevy_gooey::row(crate::chrome::GAP_TIGHT_STEPS)).with_children(|h| {
                 crate::chrome::button(
                     h,
                     NotesFilterButton,
@@ -7261,15 +7188,16 @@ fn refresh_notes_list(
                     })
                     .collect();
                 if !loaded.is_empty() {
-                    p.spawn(Node { column_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }).with_children(|h| {
+                    p.spawn(bevy_gooey::row(crate::chrome::GAP_TIGHT_STEPS)).with_children(|h| {
                         for handle in loaded {
-                            // CHROME-OK: a fixed 4:3 review thumbnail, not spacing
-                            h.spawn((Node { width: Val::Px(160.0), height: Val::Px(120.0), ..default() }, ImageNode::new(handle)));
+                            // CHROME-OK: a fixed 4:3 review thumbnail, kept raw: gooey's `image_box` also forces no-shrink, a clip and a stretched
+                            // image, which changes what a narrow panel shows, and no test pins that (GAP: an image box that keeps `ImageNode`'s own mode).
+                            h.spawn((Node { width: Val::Px(REVIEW_THUMBNAIL_PX.x), height: Val::Px(REVIEW_THUMBNAIL_PX.y), ..default() }, ImageNode::new(handle)));
                         }
                     });
                 }
                 if !review.ops.is_empty() {
-                    p.spawn(Node { column_gap: Val::Px(crate::chrome::GAP_TIGHT), flex_wrap: FlexWrap::Wrap, ..default() }).with_children(|h| {
+                    crate::chrome::wrapping_row(p, crate::chrome::GAP_TIGHT_STEPS, 0.0, UiRect::ZERO, AlignItems::Stretch).with_children(|h| {
                         for op in &review.ops {
                             crate::chrome::button(h, NoteOpButton { op: op.clone() }, op, crate::chrome::Severity::Plain);
                         }
@@ -7288,7 +7216,7 @@ fn refresh_notes_list(
                     _ => &[],
                 };
                 // **Edit is on every note**, whatever its status: the text is the person's to correct.
-                p.spawn(Node { column_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }).with_children(|h| {
+                p.spawn(bevy_gooey::row(crate::chrome::GAP_TIGHT_STEPS)).with_children(|h| {
                     crate::chrome::button(h, NoteEditButton { id: id.clone() }, "Edit", crate::chrome::Severity::Plain);
                     for (op, label, text) in ops {
                         crate::chrome::button(h, NoteLeaseButton { id: id.clone(), op, text }, label, crate::chrome::Severity::Plain);

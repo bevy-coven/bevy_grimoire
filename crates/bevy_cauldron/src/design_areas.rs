@@ -297,7 +297,7 @@ fn mirror_the_link(
     if blocks.is_empty() {
         let Ok(pane) = panes.single() else { return };
         let block = commands
-            .spawn((StyleBlock, Name::new("style block"), Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }))
+            .spawn((StyleBlock, Name::new("style block"), bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS)))
             .with_children(|block| {
                 crate::chrome::list_heading(block, "STYLE");
                 crate::chrome::button(block, StyleLink(page), &label, crate::chrome::Severity::Plain);
