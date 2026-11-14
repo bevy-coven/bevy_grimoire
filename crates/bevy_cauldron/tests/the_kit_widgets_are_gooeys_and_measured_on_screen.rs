@@ -29,13 +29,16 @@ const SLACK_PX: f32 = 1.0;
 /// The narrowest a hand-built lattice button was, logical px (`min_width` of the `Node` it replaces).
 const OLD_CELL_MIN_W_PX: f32 = 20.0;
 
+/// How tall the hand-built tab was, logical px: two 8 px paddings, a 3 px edge and a 16 px line. The strip keeps it, so everything under the strip
+/// (the inspector, the badges' free ground, the history list) stands where it stood.
+const OLD_TAB_H_PX: f32 = 35.0;
+
 /// The fewest logical px a wrapped line of prose may be wide: under it every row lays out one glyph per line.
 const LEAST_LINE_W_PX: f32 = 50.0;
 
-/// A node's laid-out size in logical px: the window's scale and `UiScale` taken out.
-fn size_of(world: &World, node: &ComputedNode) -> Vec2 {
-    let ui = world.get_resource::<UiScale>().map_or(1.0, |u| u.0);
-    node.size() * node.inverse_scale_factor() / ui
+/// A node's laid-out size in the skin's own px (a `Val::Px`): `inverse_scale_factor` takes the window's scale and `UiScale` out together.
+fn size_of(node: &ComputedNode) -> Vec2 {
+    node.size() * node.inverse_scale_factor()
 }
 
 /// Where a node's right edge is, in the window's physical px: its centre and half its width, which are in one space.
@@ -77,14 +80,12 @@ fn the_lattice_buttons_are_glyph_buttons_no_smaller_than_the_hand_built_ones() {
     let mut app = lattice("glyphs");
     let world = app.world_mut();
     // **The skin's own target**, which is what a glyph button's box is on each side whatever its glyph.
-    // It is held in screen px (WCAG 2.2 SC 2.5.8), so the box is compared after the editor's `UiScale`, which the skin's own px do not carry.
     let target = world.get_resource::<GooeySkin>().map_or(OLD_CELL_MIN_W_PX, GooeySkin::target);
-    let ui_scale = world.get_resource::<UiScale>().map_or(1.0, |u| u.0);
     let mut q = world.query::<(Option<&Role>, &ComputedNode, Has<CellButton>, Has<FillHeader>)>();
     let found: Vec<(Option<Role>, Vec2, bool)> = q
         .iter(world)
         .filter(|(_, _, cell, header)| *cell || *header)
-        .map(|(role, node, cell, _)| (role.copied(), size_of(world, node), cell))
+        .map(|(role, node, cell, _)| (role.copied(), size_of(node), cell))
         .collect();
     assert!(found.iter().any(|f| f.2), "the lattice drew no cell buttons: {found:?}");
     assert!(found.iter().any(|f| !f.2), "the lattice drew no header buttons: {found:?}");
@@ -96,8 +97,8 @@ fn the_lattice_buttons_are_glyph_buttons_no_smaller_than_the_hand_built_ones() {
             "a {what} is {size:?} px on screen, smaller than the {OLD_CELL_MIN_W_PX} x {MIN_FIELD_H} px box it replaces"
         );
         assert!(
-            size.x * ui_scale + SLACK_PX >= target && size.y * ui_scale + SLACK_PX >= target,
-            "a {what} is {size:?} px (x {ui_scale} UI scale) on screen, under the skin's {target} px target on a side"
+            size.x + SLACK_PX >= target && size.y + SLACK_PX >= target,
+            "a {what} is {size:?} px on screen, under the skin's {target} px target on a side"
         );
     }
 }
@@ -156,7 +157,7 @@ fn a_pack_heading_is_a_band_as_wide_as_its_list_and_its_tally_stays_inside() {
     let mut headings = world.query::<(Entity, &PackHeader, Option<&Role>, &ComputedNode, &UiGlobalTransform, &ChildOf)>();
     let found: Vec<_> = headings
         .iter(world)
-        .map(|(e, h, role, n, t, parent)| (e, h.pack().to_owned(), role.copied(), size_of(world, n), right_edge(n, t), parent.parent()))
+        .map(|(e, h, role, n, t, parent)| (e, h.pack().to_owned(), role.copied(), size_of(n), right_edge(n, t), parent.parent()))
         .collect();
     assert!(found.len() >= 2, "a heading per pack, aaa and bbb: {found:?}");
     for (band, pack, role, size, band_right, parent) in found {
@@ -167,7 +168,7 @@ fn a_pack_heading_is_a_band_as_wide_as_its_list_and_its_tally_stays_inside() {
             .map(|n| {
                 let (padding, border) = (n.padding(), n.border());
                 let inset = padding.min_inset.x + padding.max_inset.x + border.min_inset.x + border.max_inset.x;
-                size_of(world, n) - Vec2::new(inset * n.inverse_scale_factor(), 0.0)
+                size_of(n) - Vec2::new(inset * n.inverse_scale_factor(), 0.0)
             })
             .unwrap_or_default();
         assert!(size.y > 0.0, "the `{pack}` band has no height on screen");
@@ -221,7 +222,7 @@ fn the_tabs_are_edge_tabs_and_the_active_panel_is_the_selected_one() {
         }
         let world = app.world_mut();
         let mut q = world.query::<(&Tab, Option<&Role>, &ComputedNode, Has<Selected>)>();
-        let tabs: Vec<(Mode, Option<Role>, Vec2, bool)> = q.iter(world).map(|(t, r, n, s)| (t.0, r.copied(), size_of(world, n), s)).collect();
+        let tabs: Vec<(Mode, Option<Role>, Vec2, bool)> = q.iter(world).map(|(t, r, n, s)| (t.0, r.copied(), size_of(n), s)).collect();
         assert!(tabs.len() >= 2, "the Kit door's strip has its panels: {}", tabs.len());
         for (tab, role, size, selected) in &tabs {
             assert_eq!(*role, Some(Role::EdgeTab), "the `{}` tab is gooey's `edge_tab`", tab.label());
@@ -231,6 +232,20 @@ fn the_tabs_are_edge_tabs_and_the_active_panel_is_the_selected_one() {
         let mut labels = world.query::<(&TabLabel, &Text, &ComputedNode)>();
         let drawn = labels.iter(world).filter(|(_, t, n)| !t.0.is_empty() && n.size().x > 0.0).count();
         assert_eq!(drawn, tabs.len(), "each tab's label is drawn");
+    }
+}
+
+/// **The strip is as tall as it was**, so swapping the tab for gooey's `edge_tab` (whose own inset is smaller) moves nothing below it: the
+/// inspector's notches, the badges' free ground and the history list's opening line are all measured from where the panels stand.
+#[test]
+fn the_tab_strip_is_as_tall_as_it_was() {
+    let mut app = packs("strip");
+    let world = app.world_mut();
+    let mut q = world.query::<(&Tab, &ComputedNode)>();
+    let heights: Vec<f32> = q.iter(world).map(|(_, n)| size_of(n).y).collect();
+    assert!(!heights.is_empty(), "the door's strip draws no tab");
+    for h in heights {
+        assert!(h + SLACK_PX >= OLD_TAB_H_PX, "a tab is {h} px tall, under the {OLD_TAB_H_PX} px the strip stood: everything under it has moved up");
     }
 }
 
@@ -251,7 +266,7 @@ fn the_compose_panes_lines_wrap_inside_their_own_column() {
     let long: Vec<(String, Vec2)> = q
         .iter(world)
         .filter(|(t, n)| t.0.chars().count() > 12 && n.size().x > 0.0)
-        .map(|(t, n)| (t.0.clone(), size_of(world, n)))
+        .map(|(t, n)| (t.0.clone(), size_of(n)))
         .collect();
     assert!(!long.is_empty(), "the Compose pane drew no line of prose");
     for (text, size) in long {

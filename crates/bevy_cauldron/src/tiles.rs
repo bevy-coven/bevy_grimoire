@@ -4038,6 +4038,11 @@ impl Plugin for TilesPlugin {
     }
 }
 
+/// The height of the workspace strip, logical px: what the hand-built tab made it (two 8 px paddings, a 3 px edge and a 16 px line).
+/// The tabs are gooey's `edge_tab`s, whose own inset is smaller, so the strip holds this height itself: the panels under it
+/// (the inspector's scroll, the badges' free ground, the history list) are laid out from where the strip ends.
+const TAB_STRIP_H: f32 = 35.0;
+
 /// **The strip of panels this workspace holds** — three on the Kit workspace, one on Map and
 /// Animation, and none on a workspace whose part is not built.
 ///
@@ -4087,6 +4092,9 @@ fn spawn_tab_strip(
         ))
         .id();
     commands.entity(frame.door_strip).add_child(strip);
+    // **The strip keeps the height the hand-built tab gave it** ([`TAB_STRIP_H`]): gooey's `edge_tab` brings a smaller inset of its own, and
+    // everything under the strip (the inspector, the badges' free ground, the history list) is laid out from where it ends.
+    commands.entity(strip).entry::<Node>().and_modify(|mut node| node.min_height = Val::Px(TAB_STRIP_H));
     commands
         .entity(strip)
         .with_children(|p| {
