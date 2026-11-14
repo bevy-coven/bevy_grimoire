@@ -959,9 +959,9 @@ impl Report {
                     out.push_str(&format!("\n### `{}`, trial {}\n\n", t.task, f.trial));
                     out.push_str(&format!(
                         "- first failing check: `{}` — wanted {}; measured {}\n",
-                        f.check,
-                        cell(&f.wanted),
-                        cell(&f.measured)
+                        f.check.replace('`', "'"),
+                        cell(&quoted(&f.wanted)),
+                        cell(&quoted(&f.measured))
                     ));
                     if f.last_calls.is_empty() {
                         out.push_str("- the agent made no tool call\n");
