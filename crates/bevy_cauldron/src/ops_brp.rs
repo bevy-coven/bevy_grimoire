@@ -1227,6 +1227,13 @@ fn editor_state(
             "id": p.id,
             "title": p.title,
             "answer": p.answer,
+            // **What the agent wrote** (#434): the summary and the three lists, as `grimoire_present` was given them. The
+            // benchmark runner reads them when a transcript cannot show a call's arguments (omp's `eval` tool); they
+            // are the agent's own words, back to it.
+            "summary": p.summary,
+            "specified": p.specified,
+            "inferred": p.inferred,
+            "check": p.check,
             // **The style lines the hand-back followed**: path and line only, never the line's text (a page is a prompt, and the state is the agent's).
             "followed": p.followed.iter().map(|f| json!({"path": f.path, "line": f.line})).collect::<Vec<_>>(),
         })
