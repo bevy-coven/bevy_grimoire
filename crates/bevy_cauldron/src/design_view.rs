@@ -773,9 +773,11 @@ fn keep_the_top(
         // **The toggle is a row of its own**: beside the buttons it took the room and squeezed New topic to 24 px, which a click could not hit.
         top.spawn((bevy_gooey::toggle("As an agent reads it", key.as_agent), DesignAgentToggle, observe(on_agent_toggle)));
         if key.topic_menu {
-            top.spawn(bevy_gooey::row(1.0)).with_children(|menu| {
+            // **A wrapping row**: five topic buttons do not fit the middle column of the smallest window (1024 x 640), and a plain row squeezed each to about 23 px.
+            crate::chrome::wrapping_row(top, 1.0, crate::chrome::GAP_TIGHT, UiRect::ZERO, AlignItems::Center).with_children(|menu| {
                 for topic in &key.offered {
-                    menu.spawn((bevy_gooey::button(topic.clone()), DesignAction::NewTopic(topic.clone()), observe(on_action)));
+                    // Padded with two spaces a side, so the shortest name (`ui`) is still a target at least 40 px wide; the label is compared trimmed.
+                    menu.spawn((bevy_gooey::button(format!("  {topic}  ")), DesignAction::NewTopic(topic.clone()), observe(on_action)));
                 }
             });
         }

@@ -60,13 +60,18 @@ fn write(root: &std::path::Path, rel: &str, text: &str) {
 
 /// An editor in the Design workspace on a fresh fixture project, and the person's trust store of the test's own.
 fn designer(tag: &str, files: &[(&str, &str)]) -> (App, std::path::PathBuf, std::path::PathBuf) {
+    designer_at(tag, files, (1536, 1400))
+}
+
+/// **The same, on a surface of `size`**: the editor's smallest window is 1024 x 640 (`window_frame.rs`), and a header that fits a large one is not proven.
+fn designer_at(tag: &str, files: &[(&str, &str)], size: (u32, u32)) -> (App, std::path::PathBuf, std::path::PathBuf) {
     let root = fixtures::Fixture::new(&format!("{tag}_{}", std::process::id())).descriptor("site/wall", "alpha").place("site/wall", (1.5, 1.5)).build("m");
     for (rel, text) in files {
         write(&root, rel, text);
     }
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     // A surface the size of a window, so the workspace's widgets are where a pointer reaches them.
-    harness::resize_surface(&mut app, 1536, 1400).unwrap_or_else(|e| panic!("{e}"));
+    harness::resize_surface(&mut app, size.0, size.1).unwrap_or_else(|e| panic!("{e}"));
     app.insert_resource(TimeUpdateStrategy::ManualDuration(std::time::Duration::from_secs_f32(FRAME_S)));
     let store = root.join("trusted.yaml");
     TrustStore::default().save(&store).unwrap_or_else(|e| panic!("{e}"));
@@ -229,4 +234,32 @@ fn a_game_with_no_topic_yet_shows_its_first_topic_as_a_row_of_the_tree() {
     click(&mut app, "New topic");
     click(&mut app, "dialogue");
     assert!(visible(&mut app, "dialogue"), "the new topic is a visible row under the game, which had no children before it");
+}
+
+#[test]
+fn at_the_smallest_window_every_header_and_topic_button_has_room_and_the_last_topic_takes_a_real_click() {
+    let (w, h) = (1024.0_f32, 640.0_f32);
+    let (mut app, root, _store) = designer_at("smallest", &[("design/style.md", "# The game\n\nGrey.\n")], (1024, 640));
+    // A window of the size for a few frames, because the docks fit themselves to it (`fit_docks_to_the_window`) and without one they keep their full widths; it goes again, because a window makes the pointer helper miss the surface, and the fitted widths stay.
+    let window = app.world_mut().spawn((Window { resolution: bevy::window::WindowResolution::new(1024, 640), ..default() }, bevy::window::PrimaryWindow)).id();
+    settle(&mut app);
+    app.world_mut().despawn(window);
+    settle(&mut app);
+    real_click(&mut app, "New topic");
+    let topics = ["dialogue", "interaction", "sound", "ui", "names"];
+    assert_eq!(offered_topics(&mut app).len(), topics.len(), "all five topics are offered");
+    let labels: Vec<&str> = ["Edit page", "As an agent reads it", "New topic"].into_iter().chain(topics).collect();
+    let rects: Vec<(Vec2, Vec2)> = labels.iter().map(|l| rect_of(&mut app, l)).collect();
+    for (label, (min, max)) in labels.iter().zip(&rects) {
+        assert!(max.x - min.x >= 40.0 && max.y - min.y > 0.0, "`{label}` is squeezed to {min:?} {max:?}: too small to hit");
+        assert!(min.x >= 0.0 && min.y >= 0.0 && max.x <= w && max.y <= h, "`{label}` is outside the {w} x {h} window: {min:?} {max:?}");
+    }
+    for (i, a) in rects.iter().enumerate() {
+        for (j, b) in rects.iter().enumerate().skip(i + 1) {
+            let apart = a.1.x <= b.0.x || b.1.x <= a.0.x || a.1.y <= b.0.y || b.1.y <= a.0.y;
+            assert!(apart, "`{}` and `{}` overlap: {a:?} {b:?}", labels[i], labels[j]);
+        }
+    }
+    real_click(&mut app, "names");
+    assert!(root.join("design/names.md").is_file(), "a real click on the last topic button writes its page");
 }
