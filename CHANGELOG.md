@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-14
 
+- **terminal-maximise** `b8eda9a28` Shift+Cmd+J makes the terminal cover the whole window below the menu bar and again gives back its height; View > Maximise terminal and the keymap list it (#426) *For you: Press Shift+Cmd+J to make the terminal fill the window, and again to put it back.* *No clip: visible, not yet recorded: fleet worker*
 - **terminal-card-rows-carry-leds** `3fba98b20` Each row of the agent's self-test card starts with a small LED in the row's state, and the card no longer says OK, FAIL or SKIP (#421) *For you: The agent's self-test card shows a small light on each line instead of the words OK, FAIL and SKIP.* *No clip: visible, not yet recorded: fleet worker*
 - **terminal-led-word-same-size** `4e772646b` The agent LED's word in the terminal bar and on the self-test card is drawn at the size of the chips and rows beside it, at every text size (#422) *For you: The agent light's word is no longer bigger than the text around it.* *No clip: visible, not yet recorded: fleet worker*
 - **terminal-bar-says-what-each-item-is** `a8c5caf03` The terminal bar names its tabs for the program in them, shows the agent as one LED with one word, says Start agent, and gives items up in a stated order when narrow (#423) *For you: The terminal's bar is easier to read: tabs are named for what runs in them, the agent is one light with one word, and the button says Start agent.* *No clip: visible, not yet recorded: fleet worker*
