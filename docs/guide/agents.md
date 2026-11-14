@@ -115,6 +115,7 @@ Goal: know what an agent can change, and what undoes each change.
 | `map_set_settings` | Sets a map's origin, bounds, axis, bash, or note. `null` clears the bash or the note. | Puts the old settings back |
 | `placement_set_pin` | Pins or unpins a placement. | Puts the old pin back |
 | `placement_set_yaw` | Turns a placement to a new yaw in degrees, wrapped to 0 to 360. | Puts the old yaw back |
+| `design_area_set` | Creates an area of a level's style, or moves or resizes it, from `[x0, z0, x1, z1]` in map metres on the map's floor; with no rectangle it removes the area, keeping a page or board it has in `.dark_factory/removed-areas/`. Refuses an overlap with another area of the level. | Puts the old rectangle back, or the removed folder |
 | `placement_set_tip` | Tips a placement to quarter turns about X and Z, each 0 to 3, as `Y` and `U` do. Refuses a piece something rests on and an unmeasured piece. | Puts the old tip back |
 | `placement_set_lift` | Lifts a placement to a height in metres above the one its mount decides, as `[` and `]` do; negative lowers it, and 0 puts it back on its datum. Anything resting on it rides with it. | Puts the old lift back |
 | `placement_set_pose` | Sets a placement's yaw and tip together, as `V` does with `0` and `[0, 0]`; one change, one undo. Refuses a tip on a piece something rests on and on an unmeasured piece. | Puts the old yaw and tip back |

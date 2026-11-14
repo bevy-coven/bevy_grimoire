@@ -180,7 +180,8 @@ fn a_scripts_name_opens_the_files_workspace_on_it() {
 #[test]
 fn a_files_name_opens_the_files_workspace_on_it() {
     let (mut app, _root) = editor("file");
-    go_to(&mut app, "design");
+    // Owner exception (2026-11-13): the_finder_goes_to_cues_scripts_and_files.rs::a_files_name_opens_the_files_workspace_on_it: the query `design` is now also the name of the Design workspace (#404), which the finder lists first; the query is `design.` (the file's own dot), which only the name `design.md` holds, and every check is kept.
+    go_to(&mut app, "design.");
     assert_eq!(*app.world().resource::<Workspace>(), Workspace::Files);
     assert_eq!(files::active_file(app.world().resource::<Session>()).as_deref(), Some("notes/design.md"));
 }

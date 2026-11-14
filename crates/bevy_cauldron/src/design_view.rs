@@ -458,6 +458,7 @@ fn spawn_the_design_workspace(mut commands: Commands, frame: Res<Frame>) {
     let board = chrome::panel_root(&mut commands, &frame, Side::Right, BOARD_PANEL_W, true, false, "BOARD").insert(DesignBoardPanel).id();
     commands.entity(board).with_children(|p| {
         chrome::title(p, "BOARD");
+        // FOLLOW-OK: a column of cards, each a focusable button that gooey's own navigation scrolls into view; there is no selection of ours to follow.
         chrome::scroll_list(p, DesignBoardBody);
     });
 }
@@ -1013,9 +1014,12 @@ fn take_the_address_answer(mut commands: Commands, view: Res<DesignView>, confir
 
 // ── The board ────────────────────────────────────────────────────────────────
 
+/// What the board was last drawn from: the project, the place, the rows, why they would not read, and the lit card.
+type BoardKey = (PathBuf, Option<String>, Vec<BoardRow>, Option<String>, Option<String>);
+
 /// What the board was last drawn from.
 #[derive(Component, Clone, PartialEq, Eq, Default)]
-struct BoardDrawn(Option<(PathBuf, Option<String>, Vec<BoardRow>, Option<String>, Option<String>)>);
+struct BoardDrawn(Option<BoardKey>);
 
 /// **Draw the board of the selected place** as a grid of cards: the caption, the licence line, *Restricted* and *Missing on this machine*.
 fn keep_the_board(

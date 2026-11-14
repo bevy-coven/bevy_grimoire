@@ -55,6 +55,9 @@ fn press(app: &mut App, action: Action) {
         app.update();
         app.update();
     }
+    // The editor's state is rebuilt by a workspace switch, so the person's store of this test is named again once Design is open.
+    let store = app.world().resource::<bevy_cauldron::project::Project>().root.join("trusted.yaml");
+    app.world_mut().resource_mut::<EditorState>().trust.file = Some(store);
     settle(app);
 }
 
@@ -274,7 +277,9 @@ fn as_an_agent_reads_it_shows_the_chain_exactly_as_grimoire_style_returns_it() {
     press(&mut app, Action::WorkspaceDesign);
     click(&mut app, "m");
     assert_eq!(selected(&app).as_deref(), Some("design/regions/north/levels/m/style.md"));
-    click(&mut app, "As an agent reads it");
+    let toggle = bevy_gooey::testing::find_by_label(&mut app, "As an agent reads it").unwrap_or_else(|e| panic!("{e}"));
+    app.world_mut().commands().trigger(bevy_gooey::ValueChange { source: toggle, value: true, is_final: true });
+    settle(&mut app);
     assert!(app.world().resource::<DesignView>().as_agent());
 
     let tree = Tree::read(&root);

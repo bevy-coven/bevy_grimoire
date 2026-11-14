@@ -74,7 +74,22 @@ fn designer(tag: &str, files: &[(&str, &str)]) -> (App, std::path::PathBuf, std:
     settle(&mut app);
     press(&mut app, Action::WorkspaceDesign);
     assert_eq!(*app.world().resource::<Workspace>(), Workspace::Design);
+    // The editor's state is rebuilt by a workspace switch, so the test's store is named again once Design is open.
+    app.world_mut().resource_mut::<EditorState>().trust.file = Some(store.clone());
     (app, root, store)
+}
+
+/// The topics the New topic row offers, read off its buttons (a topic's name is also a row of the tree, so a label would be ambiguous).
+fn offered_topics(app: &mut App) -> Vec<String> {
+    let world = app.world_mut();
+    world
+        .query::<&bevy_cauldron::design_view::DesignAction>()
+        .iter(world)
+        .filter_map(|a| match a {
+            bevy_cauldron::design_view::DesignAction::NewTopic(t) => Some(t.clone()),
+            _ => None,
+        })
+        .collect()
 }
 
 fn click(app: &mut App, label: &str) {
@@ -119,9 +134,9 @@ fn opening_the_workspace_on_a_project_with_no_style_writes_no_file_and_create_st
 fn new_topic_dialogue_on_the_game_writes_design_dialogue_md_from_its_template() {
     let (mut app, root, store) = designer("new_topic_game", &[("design/style.md", "# The game\n\nGrey.\n")]);
     click(&mut app, "New topic");
-    for topic in ["dialogue", "interaction", "sound", "ui", "names"] {
-        assert!(visible(&mut app, topic), "the game offers `{topic}`");
-    }
+    let mut offered = offered_topics(&mut app);
+    offered.sort();
+    assert_eq!(offered, ["dialogue", "interaction", "names", "sound", "ui"], "the game offers its five topics");
     click(&mut app, "dialogue");
     let written = std::fs::read_to_string(root.join("design/dialogue.md")).unwrap_or_else(|e| panic!("New topic wrote nothing: {e}"));
     assert_eq!(written, design_templates::topic_text("dialogue", "The game").expect("a template"), "the file is the topic's template");
@@ -147,8 +162,7 @@ fn new_topic_on_a_level_lists_only_the_games_topics() {
     );
     click(&mut app, "m");
     click(&mut app, "New topic");
-    assert!(visible(&mut app, "dialogue") && visible(&mut app, "sound"), "the level is offered the game's topics");
-    for topic in ["interaction", "ui", "names"] {
-        assert!(!visible(&mut app, topic), "`{topic}` is not a topic of the game, so a level is not offered it");
-    }
+    let mut offered = offered_topics(&mut app);
+    offered.sort();
+    assert_eq!(offered, ["dialogue", "sound"], "a level is offered only the game's topics, and not the three the game has no file for");
 }

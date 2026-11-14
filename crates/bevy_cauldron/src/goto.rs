@@ -477,7 +477,7 @@ fn collect_the_design(project: &Project) -> Vec<Entry> {
             kind: Kind::Design,
             key: style_file.clone(),
             title: name.clone(),
-            lives: format!("Design ▸ {kind_word}"),
+            lives: format!("Style ▸ {kind_word}"),
             shown: Shown::File { path: style_file, lines: None },
             opens: None,
         });
@@ -486,7 +486,7 @@ fn collect_the_design(project: &Project) -> Vec<Entry> {
                 kind: Kind::Design,
                 key: topic.file.clone(),
                 title: topic.name.clone(),
-                lives: format!("Design ▸ {name}"),
+                lives: format!("Style ▸ {name}"),
                 shown: Shown::File { path: topic.file.clone(), lines: None },
                 opens: None,
             });
