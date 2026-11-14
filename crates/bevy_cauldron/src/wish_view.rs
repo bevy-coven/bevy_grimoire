@@ -678,8 +678,7 @@ pub fn lesson_answer_says(state: crate::present::LessonState) -> String {
 
 /// One `NAME  words` line of a lesson row, its own name on it so a test can ask for it.
 fn lesson_line_of(parent: &mut ChildSpawnerCommands, name: &'static str, id: &str, words: &str) {
-    parent
-        .spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::FlexStart, flex_shrink: 0.0, ..default() })
+    crate::chrome::rigid_row(parent, 0.0, AlignItems::FlexStart)
         .with_children(|line| {
             crate::chrome::row_label(line, crate::editor::READOUT_LABEL_W, name);
             line.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() })
@@ -698,8 +697,7 @@ fn lesson_line_of(parent: &mut ChildSpawnerCommands, name: &'static str, id: &st
 
 /// One `NAME  words` line of a row, carrying the field's own name so a test can ask for it.
 fn line_of(parent: &mut ChildSpawnerCommands, name: &'static str, id: &str, words: &str) {
-    parent
-        .spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::FlexStart, flex_shrink: 0.0, ..default() })
+    crate::chrome::rigid_row(parent, 0.0, AlignItems::FlexStart)
         .with_children(|line| {
             crate::chrome::row_label(line, crate::editor::READOUT_LABEL_W, name);
             line.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() })

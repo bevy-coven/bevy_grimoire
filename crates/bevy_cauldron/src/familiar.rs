@@ -235,14 +235,14 @@ pub fn spawn_the_block(commands: &mut Commands, pause: bool, here: bool) -> Enti
             // drawn over it (found in a capture; the headless layout does not show it); the rows beside this block are the
             // builders that have been drawn at this width since the readout began, so these are theirs.
             for (line, name) in [(FamiliarLine::Heard, "HEARD"), (FamiliarLine::Newest, "NEWEST"), (FamiliarLine::HandBack, "HAND-BACK")] {
-                block.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::FlexStart, flex_shrink: 0.0, ..default() }).with_children(|row| {
+                crate::chrome::rigid_row(block, 0.0, AlignItems::FlexStart).with_children(|row| {
                     crate::chrome::row_label(row, crate::editor::READOUT_LABEL_W, name);
                     row.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() }).with_children(|col| {
                         crate::chrome::row_value(col, "", crate::chrome::ink().text, line);
                     });
                 });
             }
-            block.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::FlexStart, flex_shrink: 0.0, ..default() }).with_children(|row| {
+            crate::chrome::rigid_row(block, 0.0, AlignItems::FlexStart).with_children(|row| {
                 crate::chrome::row_label(row, crate::editor::READOUT_LABEL_W, "PLAN");
                 row.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() }).with_children(|col| {
                     crate::chrome::row_value(col, "", crate::chrome::ink().text, FamiliarPlanLine);
@@ -557,7 +557,7 @@ fn follow_the_hand_back(
                         Node { flex_direction: FlexDirection::Column, flex_shrink: 0.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
                     ))
                     .with_children(|card| {
-                        card.spawn(Node { flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, column_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() })
+                        crate::chrome::wrapping_row(card, crate::chrome::GAP_TIGHT_STEPS, 0.0, UiRect::ZERO, AlignItems::Stretch)
                             .with_children(|answers| {
                                 for (text, reply) in [
                                     ("Accept".to_owned(), crate::present::Reply::Accept),
@@ -582,7 +582,7 @@ fn follow_the_hand_back(
                             if text.is_empty() {
                                 continue;
                             }
-                            card.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::FlexStart, flex_shrink: 0.0, ..default() })
+                            crate::chrome::rigid_row(card, 0.0, AlignItems::FlexStart)
                                 .with_children(|row| {
                                     crate::chrome::row_label(row, crate::editor::READOUT_LABEL_W, name);
                                     row.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() })

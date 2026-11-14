@@ -375,10 +375,7 @@ fn spawn_the_card(
                 ));
                 card.spawn((crate::launcher::quiet(start.template.describe()), TemplateNote));
                 card.spawn((label(""), ReasonLine));
-                let mut answers = crate::chrome::gapped_row(card, crate::chrome::GAP_GROUP_STEPS, UiRect::ZERO, AlignItems::Stretch);
-                // The answers stand at the right edge: a gooey row says nothing about where its cells gather.
-                answers.entry::<Node>().and_modify(|mut node| node.justify_content = JustifyContent::FlexEnd);
-                answers.with_children(|row| {
+                crate::chrome::end_row(card, crate::chrome::GAP_GROUP_STEPS).with_children(|row| {
                     row.spawn((
                         button("Cancel"),
                         observe(|_: On<bevy_gooey::Activate>, mut launcher: ResMut<Launcher>| launcher.new_project_done = true),

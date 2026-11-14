@@ -165,3 +165,20 @@ fn every_panel_headings_row_is_a_gooey_row_level_with_its_words() {
         assert_eq!(node.align_items, AlignItems::Center, "the \"?\" stands level with the heading's words");
     }
 }
+
+/// **The Familiar's readout lines** (HEARD, NEWEST, HAND-BACK, PLAN) are gooey rows that keep their height and start their cells at the top.
+#[test]
+fn the_familiars_readout_lines_are_gooey_rows_that_are_never_squeezed() {
+    use bevy_cauldron::familiar::FamiliarLine;
+    let mut app = editor("familiar", Mode::Agent);
+    let lines: Vec<Entity> = app.world_mut().query_filtered::<Entity, With<FamiliarLine>>().iter(app.world()).collect();
+    assert_eq!(lines.len(), 3, "the HEARD, NEWEST and HAND-BACK values are on screen");
+    for value in lines {
+        // The value's text sits in a growing column, and that column in the line's row.
+        let line = parent(&app, parent(&app, value));
+        assert_eq!(app.world().get::<Role>(line), Some(&Role::Row), "a readout line is a gooey `row`, not a raw `Node`");
+        let node = app.world().get::<Node>(line).expect("the readout line has a Node");
+        assert_eq!(node.flex_shrink, 0.0, "a readout line keeps its height when the panel is short");
+        assert_eq!(node.align_items, AlignItems::FlexStart, "the label and the wrapped value start at the line's top");
+    }
+}

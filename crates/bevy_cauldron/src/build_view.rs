@@ -722,10 +722,7 @@ pub struct BuildLine;
 pub fn spawn_section(s: &mut ChildSpawnerCommands) {
     use crate::chrome::{GAP_TIGHT_STEPS, Severity, button, section};
     section(s, "BUILD");
-    let mut line = crate::chrome::gapped_row(s, GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Center);
-    // The line keeps its height when the panel is short; a gooey row says nothing about shrinking.
-    line.entry::<Node>().and_modify(|mut node| node.flex_shrink = 0.0);
-    line.with_children(|row| {
+    crate::chrome::rigid_row(s, GAP_TIGHT_STEPS, AlignItems::Center).with_children(|row| {
         button(row, BuildButton, "Build", Severity::Plain).observe(on_build_click);
         crate::chrome::row_value(row, "", crate::chrome::ink().dim, BuildLine);
     });
