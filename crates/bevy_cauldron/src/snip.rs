@@ -456,6 +456,8 @@ pub fn snip_overlay(
             SnipOverlay,
             Node {
                 // PLACES-ITSELF-OK: the drag rectangle is placed at the pointer over the whole window, so it is not a panel and has no layout to join.
+                // Kept raw (GAP3): gooey's `Shape` border is written in the skin's line weights, which are snapped to whole device pixels, so the 3 px edge
+                // draws 2.5 px at the editor's scale and `the_drag_box_is_plainly_visible` (at least 3 px) fails.
                 position_type: PositionType::Absolute,
                 left: Val::Px(chrome::overlay_px(rect[0], ui_scale.0)),
                 top: Val::Px(chrome::overlay_px(rect[1], ui_scale.0)),

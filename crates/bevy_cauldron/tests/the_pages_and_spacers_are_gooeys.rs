@@ -43,7 +43,7 @@ fn state(app: &App, page: Entity) -> (bool, Display, Visibility) {
 fn the_home_shows_the_chosen_page_and_hides_the_rest_through_shown() {
     let mut app = on_the_home("tabs");
     let (projects, learn, news) = (page(&mut app, HomeTab::Projects), page(&mut app, HomeTab::Learn), page(&mut app, HomeTab::WhatsNew));
-    assert_eq!(state(&app, projects).0, true, "the Projects page shows on opening");
+    assert!(state(&app, projects).0, "the Projects page shows on opening");
     assert_eq!(state(&app, projects).1, Display::Flex);
     for (hidden, name) in [(learn, "Learn"), (news, "What's new")] {
         let (shown, display, visibility) = state(&app, hidden);
