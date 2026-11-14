@@ -915,6 +915,9 @@ pub fn tool_text(answer: &Value) -> String {
 /// dev-only run. It is an argument and not a field of [`Options`] because it is not a property of a run's
 /// settings: it is a place on this host, which no report or header may carry.
 pub fn run(options: &Options, held_out: Option<&Path>) -> Result<Vec<TrialRecord>, String> {
+    if options.agent == Agent::Omp {
+        check_model_form(&options.model)?;
+    }
     let known = operations(&options.editor)?;
     let known_refs: Vec<&str> = known.iter().map(String::as_str).collect();
     let suite = Suite::load(&options.root, &options.tasks, &known_refs)
@@ -1368,6 +1371,7 @@ pub fn stop_group(child: &mut Child) -> bool {
 ///
 /// Listing proves the name and nothing about the provider behind it; [`preflight_turn`] asks the provider.
 pub fn check_model(omp: &str, model: &str) -> Result<(), String> {
+    check_model_form(model)?;
     let out = Command::new(omp)
         .args(["models", "find", model])
         .output()
@@ -1998,12 +2002,32 @@ pub fn model_provider(model: &str) -> Option<&str> {
     model.split_once('/').map(|(provider, _)| provider).filter(|provider| !provider.is_empty())
 }
 
+/// **An example of a model name that names its provider**, for a refusal to quote.
+pub const EXAMPLE_MODEL: &str = "anthropic/claude-sonnet-5-5";
+
+/// **The sentence for a model name that names no provider.**
+fn no_provider_sentence(model: &str) -> String {
+    format!(
+        "`{model}` names no provider, and a trial carries only its model's provider's credential: name the model as \
+         `provider/model`, for example `--model {EXAMPLE_MODEL}`"
+    )
+}
+
+/// **Refuse a model name with no `provider/` in front of it** (#433), before omp is asked anything.
+///
+/// The provider is what the credential is narrowed by ([`credentials_for`]); a bare name used to fall back to
+/// carrying every stored credential into the trial.
+pub fn check_model_form(model: &str) -> Result<(), String> {
+    if model_provider(model).is_some() { Ok(()) } else { Err(no_provider_sentence(model)) }
+}
+
 /// **What a trial keeps from `omp auth export`: the credentials of one provider**, in the export's own shape.
 ///
 /// A trial runs one model, so it needs one provider's login and no other: copying every stored credential
 /// into every trial's `HOME` put the host's whole login (an OAuth refresh token included, which omp itself
 /// warns signs the source machine out once a copy refreshes it) in a directory that outlived the trial (#432,
-/// D6). `provider` is `None` for a bare model name, and then nothing can be narrowed: every credential is kept.
+/// D6). **A bare model name names no provider and is refused** (#433): nothing could be narrowed, and carrying every
+/// stored credential into a trial is what the narrowing is for.
 ///
 /// An export that holds nothing for the provider is an error naming the providers it does hold (a provider's
 /// name is not a secret) and the one to log in to.
@@ -2017,7 +2041,7 @@ pub fn credentials_for(carried: &Value, provider: Option<&str>, model: &str) -> 
         );
     }
     let Some(provider) = provider else {
-        return Ok(carried.clone());
+        return Err(no_provider_sentence(model));
     };
     let own: Vec<Value> = all
         .iter()

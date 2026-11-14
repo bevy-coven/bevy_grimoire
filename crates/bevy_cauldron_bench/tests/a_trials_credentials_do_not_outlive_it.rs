@@ -104,8 +104,9 @@ fn only_the_models_provider_is_kept() {
     let none = credentials_for(&export, Some("ollama-cloud"), "ollama-cloud/x").expect_err("no credential for the provider");
     assert!(none.contains("ollama-cloud") && none.contains("anthropic"), "the refusal names the provider wanted and those held: {none}");
     assert!(!none.contains(OWN_SECRET) && !none.contains(OTHER_SECRET), "and no secret: {none}");
-    let bare = credentials_for(&export, None, "sonnet").unwrap_or_else(|e| panic!("{e}"));
-    assert!(bare.to_string().contains(OTHER_SECRET), "a bare model name cannot be narrowed, so every credential is kept");
+    // A bare model name names no provider, so nothing is carried for it (#433; it used to keep every credential).
+    let bare = credentials_for(&export, None, "sonnet").expect_err("a bare model name is refused");
+    assert!(bare.contains("provider/model") && !bare.contains(OTHER_SECRET), "{bare}");
 }
 
 /// **A trial's directory holds no credential and no natives once its agent is done.**
