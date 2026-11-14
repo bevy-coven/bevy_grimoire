@@ -111,7 +111,10 @@ fn a_signal_stops_the_run_and_a_waiting_agent_without_skipping_a_guard() {
     assert!(started.elapsed().as_secs() < 30, "the pre-flight turn was not waited out: {:?}", started.elapsed());
 
     // **Nor does an editor start**: no display and no editor are started once the run is interrupted.
-    let said = start_editor(&dir.join("no-such-editor"), &dir, "m", &dir).err().expect("interrupted");
+    let said = match start_editor(&dir.join("no-such-editor"), &dir, "m", &dir) {
+        Ok(_) => panic!("an interrupted run starts no editor"),
+        Err(said) => said,
+    };
     assert!(said.contains("interrupted"), "{said}");
 
     // **An interrupted run publishes nothing**: its unstarted trials are harness errors, so a report of them would still
@@ -135,7 +138,7 @@ fn a_signal_stops_the_run_and_a_waiting_agent_without_skipping_a_guard() {
         publish: Some(bench.clone()),
         only: Vec::new(),
     };
-    let said = write_reports(&options).err().expect("an interrupted run writes no report");
+    let said = write_reports(&options).expect_err("an interrupted run writes no report");
     assert!(said.contains("interrupted"), "{said}");
     assert!(!out.join("report.md").exists() && !out.join("report.json").exists() && !bench.exists(), "nothing was written anywhere");
     let _ = std::fs::remove_dir_all(&dir);
