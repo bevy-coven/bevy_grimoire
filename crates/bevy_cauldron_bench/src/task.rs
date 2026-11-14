@@ -81,7 +81,7 @@ pub struct Budget {
     /// Wall-clock seconds an agent is given.
     #[serde(default = "default_wall_s")]
     pub wall_s: u32,
-    /// Tool calls an agent is given.
+    /// **Tool calls an agent is given**: the runner stops an agent that has made this many ([`crate::run::ToolBudget`], #432).
     #[serde(default = "default_tool_calls")]
     pub tool_calls: u32,
 }

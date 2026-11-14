@@ -1180,22 +1180,116 @@ fn check_claude() -> Result<(), String> {
         })
 }
 
-/// **Wait for an agent to finish, or stop it at its wall budget** (`wall_s` seconds), and stop it for good.
+/// **The calls an agent has made so far, counted from the transcript its harness is writing**, against the
+/// number its task gave it (`budget.tool_calls`, #432 D3).
+///
+/// The transcript is read as it grows: each poll reads only the bytes appended since the last, keeps a line
+/// that is not finished yet until it is, and adds up what `count` says each whole event is. omp counts a
+/// `tool_execution_end` ([`omp_calls`]) and Claude Code the `tool_use` blocks of an assistant message
+/// ([`claude_calls`]); every tool counts, the harness's own as well as the editor's.
+pub struct ToolBudget {
+    path: PathBuf,
+    count: fn(&Value) -> u32,
+    limit: u32,
+    offset: u64,
+    pending: Vec<u8>,
+    calls: u32,
+}
+
+impl ToolBudget {
+    /// **A meter over the transcript at `path`**, spent after `limit` calls.
+    pub fn new(path: PathBuf, count: fn(&Value) -> u32, limit: u32) -> ToolBudget {
+        ToolBudget { path, count, limit, offset: 0, pending: Vec::new(), calls: 0 }
+    }
+
+    /// **How many calls the transcript holds**, whole lines only. A transcript that is not there yet holds none.
+    pub fn calls(&mut self) -> u32 {
+        use std::io::{Read, Seek, SeekFrom};
+        let Ok(mut file) = std::fs::File::open(&self.path) else {
+            return self.calls;
+        };
+        if file.seek(SeekFrom::Start(self.offset)).is_err() {
+            return self.calls;
+        }
+        let mut bytes = Vec::new();
+        if file.read_to_end(&mut bytes).is_err() {
+            return self.calls;
+        }
+        self.offset += bytes.len() as u64;
+        self.pending.extend_from_slice(&bytes);
+        while let Some(end) = self.pending.iter().position(|b| *b == b'\n') {
+            let line: Vec<u8> = self.pending.drain(..=end).collect();
+            if let Ok(event) = serde_json::from_slice::<Value>(&line[..line.len() - 1]) {
+                self.calls += (self.count)(&event);
+            }
+        }
+        self.calls
+    }
+
+    /// **Whether the agent has made all the calls it was given.**
+    pub fn spent(&mut self) -> bool {
+        self.calls() >= self.limit
+    }
+}
+
+/// **omp's call count for one event**: a `tool_execution_end` is a call that finished.
+pub fn omp_calls(event: &Value) -> u32 {
+    u32::from(event.get("type").and_then(Value::as_str) == Some("tool_execution_end"))
+}
+
+/// **Claude Code's call count for one stream-json event**: every `tool_use` block of an assistant message.
+pub fn claude_calls(event: &Value) -> u32 {
+    if event.get("type").and_then(Value::as_str) != Some("assistant") {
+        return 0;
+    }
+    event
+        .get("message")
+        .and_then(|m| m.get("content"))
+        .and_then(Value::as_array)
+        .map_or(0, |blocks| {
+            blocks.iter().filter(|b| b.get("type").and_then(Value::as_str) == Some("tool_use")).count() as u32
+        })
+}
+
+/// **Wait for an agent to finish, or stop it at its wall budget** (`wall_s` seconds) or its call budget, and stop it for good.
 ///
 /// A dead editor ends the trial now, not at the budget: the agent is talking to nothing, and the editor's own
 /// exit is the reason to report. **The whole process group is killed**, not only the child: a harness runs
 /// its tools as children of its own, and a `bash` left running after its parent was killed is a process
 /// holding the trial's project (the follow-up #412's review named). The agent leads its own group
 /// ([`detach`]), so the group is the agent's and nothing else's.
-pub fn wait_for_agent(mut child: Child, editor: &mut Editor, wall_s: u32, name: &str) -> Result<(), String> {
+///
+/// **An agent that has made all the calls its task gave it is stopped** as one that ran out of time is
+/// (`budget`, [`ToolBudget`]), and what it left is graded: the call budget is a bound on the run, not a failure of it.
+pub fn wait_for_agent(
+    child: Child,
+    editor: &mut Editor,
+    wall_s: u32,
+    name: &str,
+    budget: Option<&mut ToolBudget>,
+) -> Result<(), String> {
+    wait_within(child, wall_s, name, budget, || editor_exit(editor))
+}
+
+/// **[`wait_for_agent`] with the editor's death passed as a question**, so a stand-in agent needs no editor.
+pub fn wait_within(
+    mut child: Child,
+    wall_s: u32,
+    name: &str,
+    mut budget: Option<&mut ToolBudget>,
+    mut editor_gone: impl FnMut() -> Option<String>,
+) -> Result<(), String> {
     let deadline = Instant::now() + Duration::from_secs(u64::from(wall_s));
     while Instant::now() < deadline {
         match child.try_wait() {
             Ok(Some(_)) => break,
             Ok(None) => {
-                if let Some(reason) = editor_exit(editor) {
+                if let Some(reason) = editor_gone() {
                     stop_group(&mut child);
                     return Err(reason);
+                }
+                if budget.as_mut().is_some_and(|b| b.spent()) {
+                    break;
                 }
                 std::thread::sleep(Duration::from_millis(AGENT_POLL_INTERVAL_MS));
             }
@@ -1525,7 +1619,7 @@ fn one_trial(options: &Options, task: &Task, label: &str, trial: u32, variant: O
         Agent::ClaudeCode => crate::claude::run(
             &options.model,
             &task.prompt,
-            task.budget.wall_s,
+            task.budget,
             &config,
             &project,
             &mut editor,
@@ -1739,8 +1833,10 @@ fn run_omp(
         .map_err(|e| format!("omp did not start: {e}"))?;
     // **Stopped at the budget**: the wall clock is the one bound a model's turns cannot be argued with.
     // `--max-time` is what ends the agent's own turn; the deadline is the outer bound for a harness that
-    // ignores its own flag, and it is the same number so a trial is one budget and not two.
-    wait_for_agent(child, editor, task.budget.wall_s, "omp")?;
+    // ignores its own flag, and it is the same number so a trial is one budget and not two. **The calls it
+    // was given are the other bound** (#432, D3): the transcript is counted while the agent runs.
+    let mut calls = ToolBudget::new(transcript.clone(), omp_calls, task.budget.tool_calls);
+    wait_for_agent(child, editor, task.budget.wall_s, "omp", Some(&mut calls))?;
     let server = config
         .get("mcpServers")
         .and_then(Value::as_object)

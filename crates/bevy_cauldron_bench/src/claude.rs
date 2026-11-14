@@ -86,12 +86,13 @@ pub fn seed_credentials(config: &Path) -> Result<(), String> {
 
 /// **Run Claude Code on the config the editor handed out**, in the trial's directory.
 ///
-/// Stopped at the task's wall budget (Claude Code has no flag for it), and the editor's death ends the
+/// Stopped at the task's budget (Claude Code has no flag for either): its wall clock, and the calls it was
+/// given, counted from the stream it writes ([`crate::run::ToolBudget`]). The editor's death ends the
 /// trial at once. Answers what the transcript says the agent did.
 pub fn run(
     model: &str,
     prompt: &str,
-    wall_s: u32,
+    budget: crate::task::Budget,
     config: &Value,
     project: &Path,
     editor: &mut Editor,
@@ -147,7 +148,8 @@ pub fn run(
     let child = crate::run::detach(&mut claude)
         .spawn()
         .map_err(|e| format!("claude did not start: {e}"))?;
-    crate::run::wait_for_agent(child, editor, wall_s, "claude")?;
+    let mut calls = crate::run::ToolBudget::new(transcript.clone(), crate::run::claude_calls, budget.tool_calls);
+    crate::run::wait_for_agent(child, editor, budget.wall_s, "claude", Some(&mut calls))?;
     read_stream(&transcript, dir, &server)
 }
 
