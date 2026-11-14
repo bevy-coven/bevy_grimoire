@@ -353,6 +353,13 @@ pub struct TaskReport {
     pub tokens_in: Option<u64>,
     /// Output tokens, summed, or `None` when no scored trial reported any.
     pub tokens_out: Option<u64>,
+    /// **Input tokens served from the provider's cache, summed**, or `None` when no scored trial reported any (#432, D8).
+    /// A report written before the field reads as unknown.
+    #[serde(default)]
+    pub tokens_cache_read: Option<u64>,
+    /// **Input tokens written to the provider's cache, summed**, or `None` when no scored trial reported any.
+    #[serde(default)]
+    pub tokens_cache_write: Option<u64>,
     /// **Cost in dollars, or `None` for unknown** (a model with no listed price, or a trial that reported
     /// no tokens).
     pub cost_usd: Option<f64>,
@@ -497,6 +504,8 @@ impl TaskReport {
             trials_with_edits_behind: scored.iter().filter(|t| !t.edits_behind.is_empty()).count() as u32,
             tokens_in: sum_known(scored.iter().map(|t| t.tokens_in)),
             tokens_out: sum_known(scored.iter().map(|t| t.tokens_out)),
+            tokens_cache_read: sum_known(scored.iter().map(|t| t.tokens_cache_read)),
+            tokens_cache_write: sum_known(scored.iter().map(|t| t.tokens_cache_write)),
             cost_usd: if scored.is_empty() { None } else { sum_costs(scored.iter().map(|t| t.cost_usd(price))) },
             wishes: scored.iter().map(|t| t.wishes.len() as u32).sum(),
             failures,
@@ -857,11 +866,11 @@ impl Report {
         }
 
         out.push_str("\n## By task (dev tasks)\n\n");
-        out.push_str("| task | n | c | c/n | pass^k | median s | p90 s | calls | refused | undos | behind the editor's back | tokens in/out | cost | wishes | harness errors |\n");
+        out.push_str("| task | n | c | c/n | pass^k | median s | p90 s | calls | refused | undos | behind the editor's back | tokens in/out (cache read/write) | cost | wishes | harness errors |\n");
         out.push_str("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
         for t in &self.tasks {
             out.push_str(&format!(
-                "| `{}` | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {}/{} | {} | {} | {} |\n",
+                "| `{}` | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {}/{} (cache {}/{}) | {} | {} | {} |\n",
                 t.task,
                 t.trials,
                 t.successes,
@@ -879,6 +888,8 @@ impl Report {
                 },
                 tokens_cell(t.tokens_in),
                 tokens_cell(t.tokens_out),
+                tokens_cell(t.tokens_cache_read),
+                tokens_cell(t.tokens_cache_write),
                 usd(t.cost_usd),
                 t.wishes,
                 t.harness_errors
