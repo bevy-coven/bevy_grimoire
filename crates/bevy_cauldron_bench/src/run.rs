@@ -634,6 +634,9 @@ pub fn free_port() -> Result<u16, String> {
 /// **Start the editor under test on `project`, with its own port and display**, and wait for
 /// `grimoire/state` to answer.
 pub fn start_editor(editor: &Path, project: &Path, map: &str, dir: &Path) -> Result<Editor, String> {
+    if interrupted() {
+        return Err(INTERRUPTED_SENTENCE.to_owned());
+    }
     let port = free_port()?;
     let display = match std::env::consts::OS {
         "linux" => Some(Display::start()?),
@@ -662,6 +665,9 @@ pub fn start_editor(editor: &Path, project: &Path, map: &str, dir: &Path) -> Res
     let mut running = Editor { child, port, display, log: log.clone() };
     let deadline = Instant::now() + Duration::from_secs(EDITOR_START_S);
     while Instant::now() < deadline {
+        if interrupted() {
+            return Err(INTERRUPTED_SENTENCE.to_owned());
+        }
         if brp_call(port, "grimoire/state", json!({})).is_ok() && map_is_open(port) {
             return Ok(running);
         }
@@ -684,11 +690,12 @@ pub fn start_editor(editor: &Path, project: &Path, map: &str, dir: &Path) -> Res
 /// **The operation a started editor is probed with**: a dry run of `note_remove` for a note that does not exist.
 ///
 /// It changes nothing, and its refusal says whether a map is open: "no map is open, ..." before the editor has opened
-/// the map it was pointed at, and "no note ... on this map" after.
-const MAP_PROBE_OP: &str = "note_remove";
+/// the map it was pointed at, and "no note ... on this map" after. **Pinned to the editor's wording** by
+/// `tests/a_map_probe_matches_the_editor.rs`, which reads `bevy_cauldron`'s source for both.
+pub const MAP_PROBE_OP: &str = "note_remove";
 
-/// **What a refusal says when no map is open yet.**
-const NO_MAP_OPEN: &str = "no map is open";
+/// **What a refusal says when no map is open yet** (the start of the editor's own sentence; see [`MAP_PROBE_OP`]).
+pub const NO_MAP_OPEN: &str = "no map is open";
 
 /// **Whether the editor has opened its map**, which `grimoire/state` cannot say: it names the map from the moment the
 /// editor is pointed at it (#433). Under load the BRP server answers many frames before the map is open, and a setup
@@ -986,12 +993,18 @@ pub fn run(options: &Options, held_out: Option<&Path>) -> Result<Vec<TrialRecord
     std::fs::create_dir_all(&options.out)
         .map_err(|e| format!("{}: {e}", options.out.display()))?;
     // **A killed run's credential directories are swept before this one starts** (#433): the guards are `Drop`s, which
-    // `kill -KILL` never runs. Other runs' directories only when they are older than any trial can run (a run in
-    // progress keeps its own), and this run's own directory whatever its age.
+    // `kill -KILL` never runs. Only directories the runner made (a run directory carries its `run.json`) and only those
+    // older than any trial can run, so a run in progress under another `--run` keeps its own. This run's own directory is
+    // not special: nothing here is swept at age zero while another process might share its name.
     if let Some(state) = options.out.parent() {
         sweep_stale_secrets(state, Duration::from_secs(STALE_SECRETS_AGE_S));
     }
-    sweep_run_dir(&options.out, Duration::ZERO);
+    // **The header, before the pre-flight turn and any trial**, so a run killed halfway still says how it was made and
+    // its directory carries the marker the sweep looks for.
+    let header = crate::probe::header(options, &options.label);
+    let header_text = serde_json::to_string_pretty(&header).map_err(|e| format!("{e}"))? + "\n";
+    bevy_grimoire_core::atomic_file::write(&options.out.join(crate::report::RUN_FILE), header_text)
+        .map_err(|e| format!("{}: {e}", options.out.display()))?;
     // **One real turn before any trial** (#432, D2): a model the host lists can still have a provider with no
     // quota left or a key that is refused, and finding that out trial by trial costs 35 s each, for every
     // trial of the run. The turn runs in the same kind of isolated HOME a trial uses, with the same credential.
@@ -1005,11 +1018,7 @@ pub fn run(options: &Options, held_out: Option<&Path>) -> Result<Vec<TrialRecord
         let owned: Vec<Task> = held_selected.into_iter().cloned().collect();
         validate_held_out(options, &owned)?;
     }
-    // **The header, before any trial**, so a run killed halfway still says how it was made.
-    let header = crate::probe::header(options, &options.label);
-    let header_text = serde_json::to_string_pretty(&header).map_err(|e| format!("{e}"))? + "\n";
-    bevy_grimoire_core::atomic_file::write(&options.out.join(crate::report::RUN_FILE), header_text)
-        .map_err(|e| format!("{}: {e}", options.out.display()))?;
+    // (the header was written above)
 
     // **One work list, one worker per `jobs`**, so a `--jobs` of 1 is the same code as a `--jobs` of 4.
     // **A held-out task's trials are filed by ordinal**, never by id: the trial's directory is an ancestor of
@@ -1183,6 +1192,11 @@ pub fn validate_held_out(options: &Options, tasks: &[Task]) -> Result<(), String
 /// Answers the report and the paths written. A run whose `trial.json` files do not read is an error naming
 /// the file: a report of fewer trials than the run made would be a worse number with a better look.
 pub fn write_reports(options: &Options) -> Result<(crate::report::Report, Vec<PathBuf>), String> {
+    // **An interrupted run publishes nothing** (#433 review): the trials it never started are only harness errors, so a
+    // report of them would still read as fit (10% are tolerated) and could be committed under `--label` as a result.
+    if interrupted() {
+        return Err(format!("{INTERRUPTED_SENTENCE}, so no report was written"));
+    }
     let data = crate::report::RunData::read(&options.out)?;
     let report = crate::report::Report::build(&data);
     let md = options.out.join("report.md");
@@ -1442,6 +1456,8 @@ pub fn check_model(omp: &str, model: &str) -> Result<(), String> {
 /// finds it out here, once.
 pub fn preflight_turn(omp: &str, model: &str, scratch: &Path) -> Result<(), String> {
     let home = scratch.join("home");
+    // A pre-flight directory a killed run left is this one's to replace.
+    let _ = std::fs::remove_dir_all(scratch);
     let _secrets = TrialSecrets::new([scratch.to_path_buf()]);
     seed_credentials(omp, &home, model)?;
     let wall = format!("{PREFLIGHT_WALL_S}s");
@@ -1468,6 +1484,7 @@ pub fn preflight_turn(omp: &str, model: &str, scratch: &Path) -> Result<(), Stri
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    withhold_credentials(&mut command);
     let child = detach(&mut command)
         .spawn()
         .map_err(|e| format!("omp did not start for the pre-flight turn: {e}"))?;
@@ -1546,6 +1563,10 @@ fn output_within(mut child: Child, within: Duration) -> Result<(String, String),
     let err = drain(child.stderr.take());
     let deadline = Instant::now() + within;
     loop {
+        if interrupted() {
+            stop_group(&mut child);
+            return Err(INTERRUPTED_SENTENCE.to_owned());
+        }
         match child.try_wait() {
             Ok(Some(_)) => break,
             Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(AGENT_POLL_INTERVAL_MS)),
@@ -1946,6 +1967,7 @@ fn run_omp(
         .stdin(Stdio::null())
         .stdout(stdout)
         .stderr(stderr);
+    withhold_credentials(&mut omp);
     let child = detach(&mut omp)
         .spawn()
         .map_err(|e| format!("omp did not start: {e}"))?;
@@ -2522,6 +2544,10 @@ pub fn sweep_stale_secrets(state: &Path, older_than: Duration) -> usize {
 
 /// **[`sweep_stale_secrets`] for one run's directory.**
 fn sweep_run_dir(run: &Path, older_than: Duration) -> usize {
+    // **Only a directory the runner made**: it writes `run.json` before any trial or pre-flight turn.
+    if !run.join(crate::report::RUN_FILE).is_file() {
+        return 0;
+    }
     let stale = |path: &Path| {
         path.is_dir()
             && (older_than.is_zero()
@@ -2552,8 +2578,13 @@ pub fn interrupted() -> bool {
 
 /// **The handler: it only sets the flag**, which is all a signal handler may safely do.
 #[cfg(unix)]
-extern "C" fn note_interrupt(_signal: libc::c_int) {
+extern "C" fn note_interrupt(signal: libc::c_int) {
     INTERRUPTED.store(true, std::sync::atomic::Ordering::SeqCst);
+    // SAFETY: `signal` is async-signal-safe. **The default is restored after the first signal**, so a second Ctrl-C
+    // kills a run that is stuck instead of being swallowed.
+    unsafe {
+        libc::signal(signal, libc::SIG_DFL);
+    }
 }
 
 /// **Make SIGINT and SIGTERM stop the run through its guards instead of ending the process** (#433).
@@ -2573,3 +2604,35 @@ pub fn install_interrupt_handler() {
 /// **No signal handling off Unix**: the default stands.
 #[cfg(not(unix))]
 pub fn install_interrupt_handler() {}
+
+/// **What an interrupted wait, start or report says.**
+const INTERRUPTED_SENTENCE: &str = "the run was interrupted (SIGINT or SIGTERM)";
+
+/// **The names in an environment that look like a credential** (#433 review): a key, token, secret, password or
+/// credential, an `AWS_` variable, an ssh agent's socket. The omp agent's shell can run `env`, and what it prints lands
+/// in the kept transcript; the runner only scrubs the credential it imported, so the rest is not handed over at all.
+pub fn credential_variables(names: impl IntoIterator<Item = std::ffi::OsString>) -> Vec<std::ffi::OsString> {
+    names
+        .into_iter()
+        .filter(|name| {
+            let upper = name.to_string_lossy().to_uppercase();
+            ["_KEY", "_TOKEN", "_SECRET", "_PASSWORD", "_PASSWD", "_AUTH"].iter().any(|s| upper.ends_with(s))
+                || ["SECRET", "TOKEN", "PASSWORD", "CREDENTIAL", "AUTH_SOCK"].iter().any(|s| upper.contains(s))
+                || upper.starts_with("AWS_")
+        })
+        .collect()
+}
+
+/// **Remove these variables from a command's environment.**
+pub fn withhold_from(command: &mut Command, names: impl IntoIterator<Item = std::ffi::OsString>) {
+    for name in names {
+        command.env_remove(name);
+    }
+}
+
+/// **Start an omp agent without the runner's credential-looking variables** ([`credential_variables`]). Everything else
+/// is inherited: `PATH`, the editor's port, and a test's marker. (Claude Code's `ANTHROPIC_API_KEY` is its credential
+/// and is carried and scrubbed instead.)
+pub fn withhold_credentials(command: &mut Command) {
+    withhold_from(command, credential_variables(std::env::vars_os().map(|(name, _)| name)));
+}

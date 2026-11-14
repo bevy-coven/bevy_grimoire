@@ -10,7 +10,9 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use bevy_cauldron::ops;
-use bevy_cauldron_bench::run::{detach, install_interrupt_handler, interrupted, run_work, wait_within};
+use bevy_cauldron_bench::run::{
+    detach, install_interrupt_handler, interrupted, preflight_turn, run_work, start_editor, wait_within, write_reports, Agent, Options,
+};
 use bevy_cauldron_bench::{Outcome, Task, TrialRecord, TASKS_DIR};
 
 fn task() -> Task {
@@ -85,4 +87,56 @@ fn a_signal_stops_the_run_and_a_waiting_agent_without_skipping_a_guard() {
     let said = wait_within(child, 600, "stand-in", None, || None).expect_err("an interrupted wait is an error");
     assert!(said.contains("interrupted"), "{said}");
     assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists() || std::fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|s| s.contains(") Z")) , "the agent is stopped");
+
+    // **The handler fired once and is gone**: a second Ctrl-C must kill a run that is stuck, so the disposition is back to
+    // the default (`signal` answers the one it replaced).
+    // SAFETY: setting a disposition in this process.
+    let replaced = unsafe { libc::signal(libc::SIGTERM, libc::SIG_DFL) };
+    assert_eq!(replaced, libc::SIG_DFL, "the handler reset itself after the first signal");
+
+    // **An interrupt in the pre-flight turn does not wait out its timeout**: the stand-in `omp` would sleep five minutes.
+    let dir = std::env::temp_dir().join(format!("grimoire-bench-interrupt-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("bin")).unwrap_or_else(|e| panic!("{e}"));
+    let omp = dir.join("bin/omp");
+    std::fs::write(
+        &omp,
+        "#!/bin/sh\ncase \"$1 $2\" in\n \"auth export\") echo '{\"version\":1,\"credentials\":[{\"provider\":\"anthropic\",\"credential\":{\"k\":\"x\"}}]}'; exit 0;;\n \"auth import\") exit 0;;\nesac\nexec sleep 300\n",
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    std::fs::set_permissions(&omp, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap_or_else(|e| panic!("{e}"));
+    let started = std::time::Instant::now();
+    let said = preflight_turn(&omp.to_string_lossy(), "anthropic/claude-sonnet-5-5", &dir.join("run/preflight")).expect_err("interrupted");
+    assert!(said.contains("interrupted"), "{said}");
+    assert!(started.elapsed().as_secs() < 30, "the pre-flight turn was not waited out: {:?}", started.elapsed());
+
+    // **Nor does an editor start**: no display and no editor are started once the run is interrupted.
+    let said = start_editor(&dir.join("no-such-editor"), &dir, "m", &dir).err().expect("interrupted");
+    assert!(said.contains("interrupted"), "{said}");
+
+    // **An interrupted run publishes nothing**: its unstarted trials are harness errors, so a report of them would still
+    // read as fit (10% tolerated); no report is written, and so none under `--label` either.
+    let out = dir.join("out");
+    let bench = dir.join("docs-bench");
+    std::fs::create_dir_all(&out).unwrap_or_else(|e| panic!("{e}"));
+    let options = Options {
+        root: dir.clone(),
+        tasks: dir.clone(),
+        agent: Agent::Oracle,
+        trials: 1,
+        jobs: 1,
+        model: String::new(),
+        variant: None,
+        out: out.clone(),
+        editor: dir.clone(),
+        server: dir.clone(),
+        repo: dir.clone(),
+        label: "interrupted".to_owned(),
+        publish: Some(bench.clone()),
+        only: Vec::new(),
+    };
+    let said = write_reports(&options).err().expect("an interrupted run writes no report");
+    assert!(said.contains("interrupted"), "{said}");
+    assert!(!out.join("report.md").exists() && !out.join("report.json").exists() && !bench.exists(), "nothing was written anywhere");
+    let _ = std::fs::remove_dir_all(&dir);
 }

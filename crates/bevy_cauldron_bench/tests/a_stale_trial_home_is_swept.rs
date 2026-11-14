@@ -3,11 +3,14 @@
 //! The credential guard is a `Drop`, which `kill -KILL` and the default SIGINT never run. A later run sweeps the
 //! directories a dead run leaves: `<state>/<run>/<task>/trial-<n>/home` and `<state>/<run>/preflight`. It removes only
 //! those older than the longest a trial can run, so a run in progress on the same host (another `--run`) keeps its own.
+//! **Only a directory the runner made is swept**: a run directory carries the `run.json` header, and a directory under the
+//! state root without one is somebody else's and is left alone (#433 review).
 #![cfg(unix)]
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
+use bevy_cauldron_bench::report::RUN_FILE;
 use bevy_cauldron_bench::run::sweep_stale_secrets;
 
 fn scratch(test: &str) -> PathBuf {
@@ -25,10 +28,18 @@ fn dir_aged(path: &Path, age: Duration) {
     file.set_modified(SystemTime::now() - age).unwrap_or_else(|e| panic!("{e}"));
 }
 
+/// **Mark a directory as a run the runner made**, with the header every run writes before its first trial.
+fn marked(run: &Path) {
+    std::fs::create_dir_all(run).unwrap_or_else(|e| panic!("{}: {e}", run.display()));
+    std::fs::write(run.join(RUN_FILE), "{}").unwrap_or_else(|e| panic!("{e}"));
+}
+
 /// **Old homes go, fresh ones and the trial's record stay.**
 #[test]
 fn only_stale_homes_are_swept() {
     let state = scratch("stale");
+    marked(&state.join("dead-run"));
+    marked(&state.join("live-run"));
     let old = state.join("dead-run/some-task/trial-1");
     let fresh = state.join("live-run/some-task/trial-1");
     dir_aged(&old.join("home"), Duration::from_secs(10_000));
@@ -51,9 +62,22 @@ fn only_stale_homes_are_swept() {
 #[test]
 fn no_age_sweeps_all_and_a_missing_root_is_nothing() {
     let state = scratch("all");
+    marked(&state.join("r"));
     dir_aged(&state.join("r/t/trial-1/home"), Duration::from_secs(1));
     dir_aged(&state.join("r/preflight"), Duration::from_secs(1));
     assert_eq!(sweep_stale_secrets(&state, Duration::ZERO), 2);
     assert_eq!(sweep_stale_secrets(&state.join("nowhere"), Duration::ZERO), 0);
+    let _ = std::fs::remove_dir_all(&state);
+}
+
+/// **A directory with no run header is not the runner's, and is left alone**, whatever its age and shape.
+#[test]
+fn a_directory_the_runner_did_not_make_is_left_alone() {
+    let state = scratch("unmarked");
+    dir_aged(&state.join("somebody-elses/t/trial-1/home"), Duration::from_secs(10_000));
+    dir_aged(&state.join("somebody-elses/preflight"), Duration::from_secs(10_000));
+    assert_eq!(sweep_stale_secrets(&state, Duration::ZERO), 0, "nothing without a header is swept");
+    assert!(state.join("somebody-elses/t/trial-1/home/agent.db").is_file());
+    assert!(state.join("somebody-elses/preflight/agent.db").is_file());
     let _ = std::fs::remove_dir_all(&state);
 }
