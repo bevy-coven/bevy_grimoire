@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-13
 
+- **piece-edit-operation** `15ee73f7` Cmd+Delete on the Map, which sends a piece to the Meshes tab to be defined, is an operation an agent calls too (piece_edit) *No clip: an API behind an existing key, no new picture; proved by piece_edit_is_an_operation*
 - **ops-nits-34-37** `a36faeb0` The shelf walk shows the piece it lands on, a shelf answer survives a round trip and the shelf_focus guide row names both tabs (#129 review) *No clip: a test and API fix behind existing keys; proved by shelf_is_an_operation and ops_view::tests::a_shelf_answer_round_trips_through_json*
 - **shelf-operations** `d1e0d10f` The shelf arrows and the left and right keys on the Meshes and Tiles tabs are operations an agent calls too (shelf_walk, shelf_focus) *No clip: an API behind existing keys, no new picture; proved by shelf_is_an_operation*
 - **ops-review-34-36** `4fe4fe1b` A rig history step whose log line fails is taken back whole, the labeller refusals and the kit-name refusal are tested, and the rig step keeps its selection by name (#129 review) *No clip: a test and API fix behind existing keys; proved by rig_history_is_an_operation, labeller_requests_are_operations and tile_page_is_an_operation*
