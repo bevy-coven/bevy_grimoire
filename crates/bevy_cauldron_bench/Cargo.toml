@@ -58,4 +58,4 @@ bevy_debugger_bevy = { package = "bevy_fairy", git = "https://github.com/bevy-co
 # **The editor's own widget library, at the editor's own revision**, so a test reads the tooltip a disabled
 # button carries as the type that put it there (BM-07, #417). The same git revision as `bevy_cauldron`'s, so
 # the lock holds one copy.
-bevy_gooey = { git = "https://github.com/bevy-coven/bevy_gooey", rev = "b81c80b83fca6e6b5bd85e35118e594464211481", features = ["serde", "reflect"] }
+bevy_gooey = { git = "https://github.com/bevy-coven/bevy_gooey", rev = "6a20a12f9c532df59bca75ac4b66f939827bbad9", features = ["serde", "reflect"] }
