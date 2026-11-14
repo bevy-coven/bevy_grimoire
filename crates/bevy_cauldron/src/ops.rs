@@ -4084,6 +4084,295 @@ pub mod lattice_cursor_step {
     }
 }
 
+/// **The tile in hand, shaped** (E-002, #129 slice 28): `Space` takes the piece or puts it back, `,` and `.` walk the focus
+/// through the members, `J` makes the arrow ladder finer, `R` turns the focused member a quarter, the remove key takes it
+/// out and Shift and the remove key empty the tile, on the Tiles tab. Six operations on the rules the keys always had, each
+/// on the tile the view carries.
+///
+/// **The draft is session state, not the project**: the tile is written to `compositions.yaml` only when `Cmd+S` saves it
+/// (`composition_define`), so none of these writes a file or takes an undo step of its own — the tab keeps a tile history of
+/// its own that `Cmd+Z` walks. Every change to the members goes through `build::edit_open`, the one door that re-resolves
+/// the hosts and keeps the result only if it still stands up, so a refusal leaves the tile as it was.
+pub mod tile_hand {
+    use super::list_walk::{DIRECTIONS, direction, need_view};
+    use super::*;
+    use crate::ops_view::TileHand;
+    use bevy_grimoire_core::composition::Envelope;
+    use serde_json::json;
+
+    /// **The tile in hand**, or the refusal that says why there is none: no tile open, or one that claims no tile and so has
+    /// no grid to shape.
+    fn hand_of<'a>(ctx: &'a Ctx, what: &str) -> Result<&'a TileHand, Refusal> {
+        let hand = need_view(ctx, what)?
+            .tile_hand
+            .as_ref()
+            .ok_or_else(|| Refusal::new(crate::build::NO_TILE))?;
+        match hand.open.envelope {
+            Envelope::Bounded { .. } => Ok(hand),
+            _ => Err(Refusal::new(crate::build::claims_no_tile(&hand.open.id))),
+        }
+    }
+
+    fn library_of(ctx: &Ctx) -> Result<&bevy_grimoire_core::library::Library, Refusal> {
+        ctx.project
+            .as_ref()
+            .map(|p| &*p.library)
+            .ok_or_else(|| Refusal::new("no project is open, so the tile has no library to stand its members on."))
+    }
+
+    /// **Put the tile where an operation answered**, and say what happened.
+    fn settle(ctx: &mut Ctx, landed: TileHand, summary: String, after: serde_json::Value) -> Result<Outcome, Refusal> {
+        let Some(view) = ctx.view.as_mut() else {
+            return Err(Refusal::new("no view is in hand, so there is no tile to shape."));
+        };
+        view.tile_hand = Some(landed);
+        Ok(Outcome { summary, affected: 0, saved: false, inverse: None, after: Some(after) })
+    }
+
+    /// **Implement [`Operation`] for a tile-in-hand verb** from its name, its schema and its `landing`: the tile as it stands
+    /// after the call, the sentence for it and the answer. `plan` and `commit` read one `landing`, so a preview and an apply
+    /// cannot disagree.
+    macro_rules! hand_operation {
+        ($ty:ident, $name:literal, $schema:expr, $landing:path) => {
+            pub struct $ty;
+
+            impl Operation for $ty {
+                fn name(&self) -> &'static str {
+                    $name
+                }
+                fn changes_view(&self) -> bool {
+                    true
+                }
+                fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                    Shown::Nowhere
+                }
+                fn writes(&self) -> &'static [&'static str] {
+                    &[]
+                }
+                fn undo(&self) -> Undo {
+                    Undo::None
+                }
+                fn schema(&self) -> serde_json::Value {
+                    $schema
+                }
+                fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                    let (_, _, after) = $landing(ctx, params)?;
+                    Ok(after)
+                }
+                fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                    let (landed, summary, after) = $landing(ctx, params)?;
+                    settle(ctx, landed, summary, after)
+                }
+            }
+        };
+    }
+
+    /// **The one schema of a verb that takes nothing**: the tile in hand is what it acts on.
+    fn no_parameters() -> serde_json::Value {
+        json!({"type": "object", "additionalProperties": false, "properties": {}})
+    }
+
+    /// **A verb that takes nothing refuses anything it is given**, so a field an agent meant is never silently dropped. No
+    /// parameters at all, or an empty object, are both nothing.
+    fn no_fields(params: &serde_json::Value, what: &str) -> Result<(), Refusal> {
+        match params {
+            serde_json::Value::Null => Ok(()),
+            serde_json::Value::Object(o) if o.is_empty() => Ok(()),
+            _ => Err(Refusal::new(format!("these are not {what}: it takes no fields. The tile in hand is what it acts on."))),
+        }
+    }
+
+    /// **Take the piece, or put it back**, as `Space` does: whether the arrows steer the tile or walk the library list.
+    pub mod tile_hand_arm {
+        use super::*;
+
+        #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `true` takes the piece, `false` puts it back; absent toggles, as `Space` does.
+            #[serde(default)]
+            pub placing: Option<bool>,
+        }
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            let p: Params = serde_json::from_value(params.clone())
+                .map_err(|e| Refusal::new(format!("these are not an arm: {e}. The only field is `placing`, true or false.")))?;
+            let hand = hand_of(ctx, "take or put back")?;
+            let placing = p.placing.unwrap_or(!hand.placing);
+            let said = if placing {
+                "placing — arrows move the tile, Enter drops, Esc puts it back"
+            } else {
+                "arrows walk the library"
+            };
+            Ok((TileHand { placing, ..hand.clone() }, said.to_owned(), json!({ "placing": placing })))
+        }
+
+        hand_operation!(
+            TileHandArm,
+            "tile_hand_arm",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "placing": {"type": "boolean", "description": "`true` takes the piece, so the arrows steer the tile in hand; `false` puts it back, so they walk the library list. Absent toggles, as Space does. Refused unless a bounded tile is open."},
+                },
+            }),
+            landing
+        );
+    }
+
+    /// **Walk the focus through the tile's members**, clamped at the ends, as `,` and `.` do.
+    pub mod tile_member_focus {
+        use super::*;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `"prev"` or `"next"`.
+            pub by: String,
+        }
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            let p: Params = serde_json::from_value(params.clone())
+                .map_err(|e| Refusal::new(format!("these are not a walk: {e}. The only field is `by`, `prev` or `next`.")))?;
+            let by = direction(&p.by)?;
+            let hand = hand_of(ctx, "walk")?;
+            let n = hand.open.members.len();
+            let Some(last) = n.checked_sub(1) else {
+                return Err(Refusal::new("nothing in the tile yet — Enter brings the picked mesh in"));
+            };
+            // **Clamped rather than wrapped**: the ends of a short list are somewhere an author can feel, and a focus that
+            // jumps from the last member to the first is the largest possible move on the smallest possible keystroke.
+            let focus = (hand.focus as i64 + by).clamp(0, last as i64) as usize;
+            let id = hand.open.members.get(focus).map(|m| m.id.clone()).unwrap_or_default();
+            Ok((TileHand { focus, ..hand.clone() }, format!("`{id}` — {} of {n}", focus + 1), json!({ "focus": focus, "member": id })))
+        }
+
+        hand_operation!(
+            TileMemberFocus,
+            "tile_member_focus",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["by"],
+                "properties": {
+                    "by": {"type": "string", "enum": DIRECTIONS, "description": "Which way to move the focus through the open tile's members (`,` and `.`). It stops at the ends of the list. Refused when the tile has no members."},
+                },
+            }),
+            landing
+        );
+    }
+
+    /// **Make the arrow ladder finer by thirds, wrapping**, as `J` does: coarse is the span itself, then thirds, then ninths.
+    pub mod tile_grid_deepen {
+        use super::*;
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            no_fields(params, "a deepening")?;
+            let hand = hand_of(ctx, "deepen")?;
+            let project = ctx.project.as_ref().ok_or_else(|| Refusal::new("no project is open, so there is no snap divisor to deepen by."))?;
+            let depth = (hand.depth + 1) % crate::build::DEPTHS;
+            let n = project.lattice.snap_divisor.saturating_pow(depth).max(1);
+            let said = match depth {
+                0 => "grid: centre and flush — one press spans the tile".to_owned(),
+                _ => format!("grid: centre to flush in {n} steps — J deepens, and wraps"),
+            };
+            Ok((TileHand { depth, ..hand.clone() }, said, json!({ "depth": depth, "steps": n })))
+        }
+
+        hand_operation!(TileGridDeepen, "tile_grid_deepen", no_parameters(), landing);
+    }
+
+    /// **Turn the focused member a quarter**, as `R` does: a tile is a quarter-turn object, and anything between is a tile
+    /// the solver cannot reproduce.
+    pub mod tile_member_turn {
+        use super::*;
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            no_fields(params, "a turn")?;
+            let hand = hand_of(ctx, "turn")?;
+            if hand.focus >= hand.open.members.len() {
+                return Err(Refusal::new("nothing to turn yet — Enter brings the picked mesh in"));
+            }
+            let library = library_of(ctx)?;
+            let focus = hand.focus;
+            let mut open = Some(hand.open.clone());
+            // Through the door like every other verb: a quarter turn changes `brush_span`, so it changes what a piece touches
+            // and therefore what is mounted on it.
+            let (said, yaw) = crate::build::edit_open(&mut open, library, |comp| {
+                let Some(m) = comp.members.get_mut(focus) else {
+                    return Err("the focused member went away".to_owned());
+                };
+                m.yaw = (m.yaw + 90.0).rem_euclid(360.0);
+                Ok((format!("`{}` turned to {:.0}", m.id, m.yaw), m.yaw))
+            })
+            .map_err(Refusal::new)?;
+            let open = open.ok_or_else(|| Refusal::new(crate::build::NO_TILE))?;
+            Ok((TileHand { open, ..hand.clone() }, said, json!({ "yaw": yaw })))
+        }
+
+        hand_operation!(TileMemberTurn, "tile_member_turn", no_parameters(), landing);
+    }
+
+    /// **Take the focused member out of the tile**, as the remove key does. A host cannot be removed out from under what
+    /// rests on it: the door refuses, the tile is untouched, and the refusal names the fixture.
+    pub mod tile_member_remove {
+        use super::*;
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            no_fields(params, "a removal")?;
+            let hand = hand_of(ctx, "remove")?;
+            if hand.focus >= hand.open.members.len() {
+                return Err(Refusal::new("nothing to remove"));
+            }
+            let library = library_of(ctx)?;
+            let focus = hand.focus;
+            let mut open = Some(hand.open.clone());
+            let id = crate::build::edit_open(&mut open, library, |comp| {
+                if focus >= comp.members.len() {
+                    return Err("the focused member went away".to_owned());
+                }
+                Ok(comp.members.remove(focus).id)
+            })
+            .map_err(Refusal::new)?;
+            let open = open.ok_or_else(|| Refusal::new(crate::build::NO_TILE))?;
+            // **Clamped to what is left rather than stepped back**: removing the first member should leave the focus on the
+            // new first, not underflow to the last.
+            let left = open.members.len();
+            let focus = hand.focus.min(left.saturating_sub(1));
+            Ok((TileHand { open, focus, ..hand.clone() }, format!("`{id}` removed"), json!({ "removed": id, "members": left })))
+        }
+
+        hand_operation!(TileMemberRemove, "tile_member_remove", no_parameters(), landing);
+    }
+
+    /// **Empty the tile**, as Shift and the remove key do: one door call, so the tab's history records it as one step.
+    pub mod tile_clear {
+        use super::*;
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            no_fields(params, "a clearing")?;
+            let hand = hand_of(ctx, "empty")?;
+            let n = hand.open.members.len();
+            if n == 0 {
+                return Err(Refusal::new("the tile is already empty"));
+            }
+            let library = library_of(ctx)?;
+            let mut open = Some(hand.open.clone());
+            crate::build::edit_open(&mut open, library, |comp| {
+                comp.members.clear();
+                Ok(())
+            })
+            .map_err(Refusal::new)?;
+            let open = open.ok_or_else(|| Refusal::new(crate::build::NO_TILE))?;
+            let said = format!("emptied — {n} taken out, {} puts them back", crate::keys::chord(crate::keys::Action::UndoBuild));
+            Ok((TileHand { open, focus: 0, ..hand.clone() }, said, json!({ "taken_out": n })))
+        }
+
+        hand_operation!(TileClear, "tile_clear", no_parameters(), landing);
+    }
+}
+
 pub mod view_cycle_grid {
     use super::*;
     use serde_json::json;
@@ -6403,6 +6692,12 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(stage::stage_scrub::StageScrub),
         Box::new(stage::stage_camera::StageCamera),
         Box::new(lattice_cursor_step::LatticeCursorStep),
+        Box::new(tile_hand::tile_hand_arm::TileHandArm),
+        Box::new(tile_hand::tile_member_focus::TileMemberFocus),
+        Box::new(tile_hand::tile_grid_deepen::TileGridDeepen),
+        Box::new(tile_hand::tile_member_turn::TileMemberTurn),
+        Box::new(tile_hand::tile_member_remove::TileMemberRemove),
+        Box::new(tile_hand::tile_clear::TileClear),
         Box::new(tool_arm::ToolArm),
         Box::new(snip_arm::SnipArm),
         Box::new(map_create::MapCreate),
@@ -6689,6 +6984,15 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // **The lattice grid's cursor keys** (E-002, #129 slice 27): `F`, `H`, `T`, `G`, `[` and `]` dispatch `lattice_cursor_step`,
     // through `tiles::lattice_keys`.
     ("lattice_cursor_step", "\"lattice_cursor_step\""),
+    // **The tile-in-hand keys** (E-002, #129 slice 28): `Space` dispatches `tile_hand_arm`, `,` and `.` `tile_member_focus`,
+    // `J` `tile_grid_deepen`, `R` `tile_member_turn`, the remove key `tile_member_remove` and Shift with it `tile_clear`,
+    // through `build::build_keys`.
+    ("tile_hand_arm", "\"tile_hand_arm\""),
+    ("tile_member_focus", "\"tile_member_focus\""),
+    ("tile_grid_deepen", "\"tile_grid_deepen\""),
+    ("tile_member_turn", "\"tile_member_turn\""),
+    ("tile_member_remove", "\"tile_member_remove\""),
+    ("tile_clear", "\"tile_clear\""),
     // **The clone and run keys**, which dispatch `tool_arm` through `arm_tool` (E-002, #129). Two keys,
     // one rule: press to arm, press again to return to `Tool::Place`.
     ("tool_arm", "\"tool_arm\""),

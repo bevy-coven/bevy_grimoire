@@ -74,6 +74,15 @@ const PINNED_NOWHERE: &[&str] = &[
     // Assumed owner exception (2026-11-13): the list grows by the operation #129 slice 27 registers, the lattice grid's cursor,
     // which a person's own view holds, like the picker's above.
     "lattice_cursor_step",
+    // Assumed owner exception (2026-11-13): the list grows by the six operations #129 slice 28 registers, which shape the
+    // tile in hand on the Tiles tab (take the piece, walk the members, deepen the ladder, turn, remove, empty): a draft in
+    // the tab's own state until it is saved, which a person's own view holds, like the picker's above.
+    "tile_hand_arm",
+    "tile_member_focus",
+    "tile_grid_deepen",
+    "tile_member_turn",
+    "tile_member_remove",
+    "tile_clear",
     "tool_arm",
     "snip_arm",
     "brush_arm",

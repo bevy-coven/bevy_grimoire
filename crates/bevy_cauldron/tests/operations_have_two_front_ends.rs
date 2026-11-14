@@ -270,13 +270,10 @@ const UNMIGRATED: &[Action] = &[
     Action::BuildLeft,
     Action::BuildRight,
     Action::BuildBack,
-    Action::MemberPrev,
-    Action::MemberNext,
     Action::BuildDown,
     Action::BuildUp,
     Action::BuildDrop,
     Action::BuildSlot,
-    Action::BuildArm,
     Action::UndoBuild,
     Action::RedoBuild,
     Action::AlignForward,
@@ -284,10 +281,6 @@ const UNMIGRATED: &[Action] = &[
     Action::AlignLeft,
     Action::AlignRight,
     Action::BuildNew,
-    Action::BuildDropMember,
-    Action::ClearTile,
-    Action::BuildTurn,
-    Action::BuildRung,
     Action::FocusCandidates,
     Action::CopyInfo,
     Action::FocusLibrary,
@@ -337,7 +330,8 @@ const UNMIGRATED: &[Action] = &[
 // 72 -> 69: `FoldPack`, `FocusFilter` and `FocusTagFilter` -> `pack_fold` and `filter_focus` (E-002, #129 slice 25): `Space` opens or closes a pack heading or the EXCLUDED band, and `F` and `/` take a filter box, through the operations an agent calls. Assumed owner exception (2026-11-12): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `FocusFilter` and `FocusTagFilter` from the `View` set for the same reason; nothing is skipped.
 // 69 -> 65: `PlayPause`, `ScrubBack`, `ScrubFwd` and `CycleCamPreset` -> `stage_play`, `stage_scrub` and `stage_camera` (E-002, #129 slice 26): `Space` plays and pauses the rig bench's figure, the held left and right arrows scrub its phase, and `V` frames the stage camera, through the operations an agent calls. Assumed owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the four from the `Camera` set for the same reason; nothing is skipped.
 // 65 -> 59: `CellLeft`, `CellRight`, `CellForward`, `CellBack`, `LayerDown` and `LayerUp` -> `lattice_cursor_step` (E-002, #129 slice 27): `F`, `H`, `T` and `G` step the lattice grid's selected cell and `[` and `]` the layer it shows, through the operation an agent calls. Assumed owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the six from the `Camera` set for the same reason; nothing is skipped.
-const UNMIGRATED_MAX: usize = 59;
+// 59 -> 52: `BuildArm`, `MemberPrev`, `MemberNext`, `BuildRung`, `BuildTurn`, `BuildDropMember` and `ClearTile` -> `tile_hand_arm`, `tile_member_focus`, `tile_grid_deepen`, `tile_member_turn`, `tile_member_remove` and `tile_clear` (E-002, #129 slice 28): `Space` takes the piece, `,` and `.` walk the tile's members, `J` deepens the ladder, `R` turns, the remove key removes and Shift with it empties the tile in hand, through the operations an agent calls. Assumed owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the seven from the `Camera` set for the same reason; nothing is skipped.
+const UNMIGRATED_MAX: usize = 52;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///
@@ -691,9 +685,9 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
         [
             "FrameView", "LookAtAgentChange", "PageEnter", "PageLeave", "TileOpen", "CloseTile", "PanForward", "PanBack",
             "PanLeft", "PanRight", "TurnViewLeft", "TurnViewRight", "BuildForward", "BuildLeft",
-            "BuildRight", "BuildBack", "MemberPrev", "MemberNext", "BuildDown", "BuildUp",
-            "BuildDrop", "BuildSlot", "BuildArm", "AlignForward", "AlignBack", "AlignLeft",
-            "AlignRight", "BuildNew", "BuildDropMember", "ClearTile", "BuildTurn", "BuildRung",
+            "BuildRight", "BuildBack", "BuildDown", "BuildUp",
+            "BuildDrop", "BuildSlot", "AlignForward", "AlignBack", "AlignLeft",
+            "AlignRight", "BuildNew",
         ],
         "the `Camera` set changed. A verb belongs here when a BRP method already moves the camera \
          (`grimoire/frame_view`) or when a front end reads it every frame; neither can be a `Ctx` \

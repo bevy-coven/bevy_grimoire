@@ -811,6 +811,7 @@ impl Gates<'_, '_> {
             packs: import.map(|i| i.folds()).unwrap_or_default(),
             filter_pane: filters.and_then(|f| f.focus_name()),
             lattice: self.cells.as_deref().zip(import).zip(project).and_then(|((edit, import), project)| crate::tiles::lattice_cursor(edit, import, project)),
+            tile_hand: self.build.as_deref().and_then(|b| b.hand()),
             stage: crate::ops_view::StageCursor {
                 playing: self.scrub.as_deref().is_none_or(|s| s.playing),
                 phase: self.scrub.as_deref().map(|s| s.phase).unwrap_or_default(),
@@ -924,6 +925,14 @@ impl Gates<'_, '_> {
             && let Some(edit) = self.cells.as_deref_mut()
         {
             edit.set_cursor(&cursor);
+        }
+        // **The tile in hand** (E-002, #129 slice 28), written only when it moved: the draft is the tab's own, and the 3-D
+        // stage and the tile history rebuild on a change to it.
+        if let Some(hand) = view.tile_hand
+            && self.build.as_deref().is_some_and(|b| !b.is_hand(&hand))
+            && let Some(build) = self.build.as_deref_mut()
+        {
+            build.set_hand(&hand);
         }
     }
 

@@ -112,6 +112,32 @@ pub struct View {
     /// and where the cursor stands. `None` is no grid to step on, so a step is refused.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lattice: Option<LatticeCursor>,
+    /// **The tile in hand on the Tiles tab** (E-002, #129 slice 28), when one is open: the draft, which member has the focus,
+    /// how deep the arrow ladder is, and whether the piece is taken. `None` is no tile open, so a verb that shapes one is refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tile_hand: Option<TileHand>,
+}
+
+/// **The tile being assembled**, as a value an operation can change (E-002, #129 slice 28).
+///
+/// The same facts `build::Build` holds as `open`, `focus`, `depth` and `placing`. The draft is session state, not the
+/// project: nothing is written to `compositions.yaml` until `Cmd+S` saves it (`composition_define`), so an operation on it
+/// writes no file and takes no undo step of its own. The front end carries it in and applies what comes back, written only
+/// when it moved.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TileHand {
+    /// The tile as it stands: its envelope, its members and their places.
+    pub open: bevy_grimoire_core::composition::Composition,
+    /// Which member has the focus, as an index into `open`'s members. Out of range reads as none.
+    #[serde(default)]
+    pub focus: usize,
+    /// How deep the arrow ladder is, latched: `0` walks centre to flush in one press.
+    #[serde(default)]
+    pub depth: u32,
+    /// Whether the arrows steer the tile rather than the library list: the piece is taken.
+    #[serde(default)]
+    pub placing: bool,
 }
 
 /// **Where the lattice grid's cursor is**, as a value an operation can move (E-002, #129 slice 27).
@@ -422,6 +448,8 @@ mod tests {
             stage: Default::default(),
             // Owner exception (2026-11-13): the literal names the field #129 slice 27 adds (its default); the round trip is unchanged.
             lattice: None,
+            // Owner exception (2026-11-13): the literal names the field #129 slice 28 adds (its default); the round trip is unchanged.
+            tile_hand: None,
         };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);

@@ -1043,7 +1043,16 @@ impl Action {
             | Action::CellForward
             | Action::CellBack
             | Action::LayerDown
-            | Action::LayerUp => Change::View,
+            | Action::LayerUp
+            // **The tile in hand** (E-002, #129 slice 28): the draft on the Tiles tab, its focus, its ladder and whether the
+            // piece is taken are session state until `Cmd+S` saves it; migrated to the `tile_*` operations.
+            | Action::BuildArm
+            | Action::MemberPrev
+            | Action::MemberNext
+            | Action::BuildRung
+            | Action::BuildTurn
+            | Action::BuildDropMember
+            | Action::ClearTile => Change::View,
 
             // **Held, not pressed.** The effect is the hold: things fade, a pick is live, the overlay is
             // up. An operation whose effect reverses when a key is released is not a value an agent can
@@ -1066,23 +1075,16 @@ impl Action {
             | Action::AlignForward
             | Action::AlignLeft
             | Action::AlignRight
-            | Action::BuildArm
             | Action::BuildBack
             | Action::BuildDown
             | Action::BuildDrop
-            | Action::BuildDropMember
             | Action::BuildForward
             | Action::BuildLeft
             | Action::BuildNew
             | Action::BuildRight
-            | Action::BuildRung
             | Action::BuildSlot
-            | Action::BuildTurn
             | Action::BuildUp
-            | Action::ClearTile
             | Action::CloseTile
-            | Action::MemberNext
-            | Action::MemberPrev
             | Action::PageEnter
             | Action::PageLeave
             | Action::TileOpen => Change::Camera,
@@ -1160,6 +1162,15 @@ impl Action {
             | Action::CellBack
             | Action::LayerDown
             | Action::LayerUp => Some("lattice_cursor_step"),
+            // **The tile in hand is session state** (E-002, #129 slice 28): `Space` takes the piece, `,` and `.` walk the
+            // members, `J` deepens the ladder, `R` turns, the remove key removes and Shift with it empties, through the
+            // operations an agent calls.
+            Action::BuildArm => Some("tile_hand_arm"),
+            Action::MemberPrev | Action::MemberNext => Some("tile_member_focus"),
+            Action::BuildRung => Some("tile_grid_deepen"),
+            Action::BuildTurn => Some("tile_member_turn"),
+            Action::BuildDropMember => Some("tile_member_remove"),
+            Action::ClearTile => Some("tile_clear"),
             // **The tool keys** (E-002, #129): `B`, `Shift+B` and the run chord arm a tool through `tool_arm`.
             // **`Remove` and `NoteTool` arm a tool, so they name the arming operation** (E-002,
             // #129). They named `placement_remove` and `note_add`: a write neither key makes — its
