@@ -22,11 +22,17 @@
 //! here needs to know which entity is a heading and which is a chip: if it was drawn in the theme's
 //! `text`, it is drawn in the new theme's `text`.
 //!
+//! # What is not moved
+//!
+//! **An image's tint** ([`ImageNode`]) is the picture's, not the theme's: its default is white, which a
+//! by-value match cannot tell from High contrast's white `text`, so a card's picture would be retinted to
+//! near-black by leaving High contrast. **A `StandardMaterial`'s base colour** is the same case (a model's default is white), so the
+//! animation stage's ghost keeps the tint it was spawned with. And a colour at alpha 0 ([`Color::NONE`]) is nobody's.
+//!
 //! # What is moved
 //!
-//! A UI node's [`BackgroundColor`], [`BorderColor`], [`TextColor`], [`Outline`] and [`ImageNode`] tint;
-//! gooey's [`InkOverride`] (which restyles the node it is on); the tint of a viewport overlay's
-//! [`StandardMaterial`]; the colours the editor's own components
+//! A UI node's [`BackgroundColor`], [`BorderColor`], [`TextColor`], [`Outline`];
+//! gooey's [`InkOverride`] (which restyles the node it is on); the colours the editor's own components
 //! carry so that a painter can put them back ([`Ground`], [`RowRest`], [`BadgeRest`]); the window's
 //! [`ClearColor`] and a camera's custom clear; and the Feathers theme's tokens.
 //!
@@ -51,7 +57,6 @@ pub struct Painted<'w, 's> {
     borders: Query<'w, 's, &'static mut BorderColor>,
     texts: Query<'w, 's, &'static mut TextColor>,
     outlines: Query<'w, 's, &'static mut Outline>,
-    images: Query<'w, 's, &'static mut ImageNode>,
     overrides: Query<'w, 's, &'static mut InkOverride>,
     grounds: Query<'w, 's, &'static mut Ground>,
     rests: Query<'w, 's, &'static mut RowRest>,
@@ -92,11 +97,6 @@ impl Painted<'_, '_> {
         for mut outline in &mut self.outlines {
             if let Some(next) = on(outline.color) {
                 outline.color = next;
-            }
-        }
-        for mut image in &mut self.images {
-            if let Some(next) = on(image.color) {
-                image.color = next;
             }
         }
         for mut ink in &mut self.overrides {
@@ -143,7 +143,6 @@ pub fn follow_the_skin(
     mut painted: Painted,
     clear: Option<ResMut<ClearColor>>,
     feathers: Option<ResMut<bevy::feathers::theme::UiTheme>>,
-    materials: Option<ResMut<Assets<StandardMaterial>>>,
 ) {
     if !skin.is_changed() {
         return;
@@ -155,20 +154,6 @@ pub fn follow_the_skin(
     }
     chrome::swap_ink(next);
     painted.move_onto(&previous, &next);
-    if let Some(mut materials) = materials {
-        // A viewport overlay drawn with a material (the animation stage's ghost) was tinted once, at spawn.
-        // Found first and written second: `Assets::iter_mut` marks every asset it yields as modified, which
-        // would re-upload every model's material for a theme change that touches one.
-        let tinted: Vec<(AssetId<StandardMaterial>, Color)> = materials
-            .iter()
-            .filter_map(|(id, material)| moved(&previous, &next, material.base_color).map(|colour| (id, colour)))
-            .collect();
-        for (id, colour) in tinted {
-            if let Some(mut material) = materials.get_mut(id) {
-                material.base_color = colour;
-            }
-        }
-    }
     if let Some(mut clear) = clear {
         clear.0 = next.void;
     }

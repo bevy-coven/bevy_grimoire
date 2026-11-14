@@ -235,8 +235,12 @@ impl Ink {
     ///
     /// A colour that *is* a field of `from` takes the same field of `to`, alpha and all. One that has the
     /// field's colour at another alpha (a fade, the shortcut key's step back) keeps its own alpha and
-    /// takes the new field's colour. Anything else — a measured colour, a game's, a terminal program's —
-    /// is not the editor's ink and is left alone, which is the point of asking.
+    /// takes the new field's colour. Anything else — a measured colour, a game's, a terminal program's, a
+    /// fully transparent one — is not the editor's ink and is left alone, which is the point of asking.
+    ///
+    /// **It matches by value, so the caller chooses what to ask about.** A component whose default colour is
+    /// white (an `ImageNode`'s tint) cannot be told from High contrast's white `text`, which is why
+    /// `crate::theme_ink` does not ask about images: their tint belongs to the picture, not to the theme.
     pub fn remap(from: &Ink, to: &Ink, colour: Color) -> Option<Color> {
         let (from, to) = (from.fields(), to.fields());
         let same = |a: Color, b: Color| {
@@ -244,6 +248,11 @@ impl Ink {
             [a.red - b.red, a.green - b.green, a.blue - b.blue].iter().all(|d| d.abs() <= INK_MATCH_TOLERANCE)
         };
         let alpha = Srgba::from(colour).alpha;
+        // **Nothing is drawn at alpha 0**, so it is no ink's: `Color::NONE` has the RGB of every black field
+        // (`scrim`, High contrast's `void`) and must stay `NONE` through a theme change.
+        if alpha <= 0.0 {
+            return None;
+        }
         let exact = from.iter().position(|f| same(*f, colour) && (Srgba::from(*f).alpha - alpha).abs() <= INK_MATCH_TOLERANCE);
         if let Some(at) = exact {
             return Some(to[at]);

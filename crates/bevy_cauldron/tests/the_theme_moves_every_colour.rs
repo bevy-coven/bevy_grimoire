@@ -22,6 +22,11 @@
 //!   three, Parchment included.
 //! - `a_theme_applies_in_the_frame_the_setting_lands` — no restart and no second frame.
 //! - `a_theme_chosen_in_the_project_layer_reaches_the_ink` and `text_size_changes_no_colour`.
+//! - `a_pictures_tint_and_a_clear_node_are_not_the_themes` — what is *not* the theme's stays put: an image's
+//!   default white tint (which is also High contrast's `text`), a model's default white material and a
+//!   transparent node, through High contrast -> Parchment -> Tool dark -> High contrast.
+//! - `every_theme_carries_the_tones_the_editor_draws_with` — `Ink::of` answers magenta for a missing tone,
+//!   so every theme file must name exactly the tones the editor's own skin does.
 //!
 //! **Through the file, not the resource**: `sync_settings` re-resolves `EditorSettings` from the files, so a
 //! test that assigned the resource would be overwritten.
@@ -356,6 +361,9 @@ fn every_theme_reads_on_screen() {
         choose(&mut app, &file, theme);
         let ink = expected(theme);
         let on = shown(&mut app);
+        // **What this does not measure**: a word's own alpha, and a translucent layer between a word and the
+        // ground `ground_under` finds (a scrim, a veil, a fade). Both would only lower a ratio, and the
+        // layers are the theme's own `scrim`/`veil` whose RGB is checked against nothing here.
         let mut measured = 0usize;
         let mut failures: Vec<String> = Vec::new();
         for (colour, ground) in &on.words {
@@ -451,4 +459,48 @@ fn text_size_changes_no_colour() {
     }
     let after = (chrome::ink().fields(), shown(&mut app).headings.iter().map(|(c, _)| *c).collect::<Vec<_>>());
     assert_eq!(before, after, "150% text leaves the ink and every heading's colour as they were");
+}
+
+/// **What is not the theme's stays put.** `ImageNode::default()`'s tint and a default `StandardMaterial` are
+/// white, which is also High contrast's `text` (`LinearRgba(1, 1, 1)`); `Color::NONE` has the RGB of every black
+/// field. A by-value repaint that asked about them would turn a picture or a model dark on leaving High contrast
+/// (the owner's saved theme) and leave it so.
+#[test]
+fn a_pictures_tint_and_a_clear_node_are_not_the_themes() {
+    let (mut app, file) = editor("theme_not_the_themes", Theme::HighContrast);
+    let image = app.world_mut().spawn(ImageNode::default()).id();
+    let tinted = app.world_mut().spawn(ImageNode::default().with_color(Color::WHITE)).id();
+    let clear = app.world_mut().spawn((Node::default(), BackgroundColor(Color::NONE), BorderColor::all(Color::NONE))).id();
+    let material = app.world_mut().resource_mut::<Assets<StandardMaterial>>().add(StandardMaterial::default());
+    for theme in [Theme::Parchment, Theme::ToolDark, Theme::HighContrast, Theme::Parchment] {
+        choose(&mut app, &file, theme);
+        for entity in [image, tinted] {
+            let tint = app.world().get::<ImageNode>(entity).expect("the image is still there").color;
+            assert!(same(tint, Color::WHITE), "{theme:?}: a picture's white tint is still white: {tint:?}");
+        }
+        let fill = app.world().get::<BackgroundColor>(clear).expect("the node is still there").0;
+        let edge = app.world().get::<BorderColor>(clear).expect("the node is still there").top;
+        assert_eq!(Srgba::from(fill).alpha, 0.0, "{theme:?}: a node with no fill is still clear: {fill:?}");
+        assert_eq!(Srgba::from(edge).alpha, 0.0, "{theme:?}: and so is its edge: {edge:?}");
+        let base = app.world().resource::<Assets<StandardMaterial>>().get(&material).expect("the material is still there").base_color;
+        assert!(same(base, Color::WHITE), "{theme:?}: a default material is still white: {base:?}");
+    }
+}
+
+/// **Every theme file names the tones the editor's own skin does** — `Ink::of` answers a missing tone in
+/// magenta, so a theme file that dropped one would paint fuchsia only on the screen that used it.
+#[test]
+fn every_theme_carries_the_tones_the_editor_draws_with() {
+    let own: Vec<String> = bevy_cauldron::ui::editor_skin().tones.keys().cloned().collect();
+    assert!(own.len() >= 12, "the editor's own skin names its tones: {own:?}");
+    for theme in THEMES {
+        let skin = bevy_cauldron::ui::skin_for(theme);
+        let named: Vec<String> = skin.tones.keys().cloned().collect();
+        assert_eq!(named, own, "{theme:?}: the theme file names exactly the tones the editor's own skin does");
+        let magenta = Color::srgb(1.0, 0.0, 1.0);
+        assert!(
+            !one_of(magenta, &Ink::of(&skin).fields()),
+            "{theme:?}: no ink is the magenta that answers a missing tone"
+        );
+    }
 }
