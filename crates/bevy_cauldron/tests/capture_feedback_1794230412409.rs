@@ -220,13 +220,14 @@ fn the_agents_led_is_busy_while_it_checks_then_live_in_the_bar_and_on_the_card()
         assert!(glow > 0, "a live LED in {home:?} glows: it has {glow} glow layers");
     }
 
-    // The bar's LED stands on the chip's row, before it: the chip is the tab's state in words, the LED is the same in light.
+    // Owner exception (2026-11-14): the bar's LED stood on the status chip's row, before it; #423 makes the LED the status control itself (one
+    // LED with one word, no chip of words), so the LED now stands inside the control that brings the self test back.
     let (bar, _) = led_in(&mut app, Home::Bar).expect("the bar's LED");
     let chip = chip_entity(&mut app);
     let (led_at, chip_at) = (centre_of(&mut app, bar), centre_of(&mut app, chip));
-    let chip_height = app.world().get::<ComputedNode>(chip).expect("laid out").size().y;
-    assert!(led_at.x < chip_at.x, "the LED {led_at:?} stands before the status chip {chip_at:?}");
-    assert!((led_at.y - chip_at.y).abs() <= chip_height / 2.0, "the LED {led_at:?} stands on the chip's row {chip_at:?} (chip {chip_height} px tall)");
+    let chip_size = app.world().get::<ComputedNode>(chip).expect("laid out").size();
+    assert!((led_at.x - chip_at.x).abs() <= chip_size.x / 2.0, "the LED {led_at:?} stands inside the status control {chip_at:?} ({chip_size:?})");
+    assert!((led_at.y - chip_at.y).abs() <= chip_size.y / 2.0, "the LED {led_at:?} stands on the status control's row {chip_at:?} ({chip_size:?})");
 
     // The card goes after its linger; the bar's LED is what stays.
     until(&mut app, "the card never went after every check passed", |app| {

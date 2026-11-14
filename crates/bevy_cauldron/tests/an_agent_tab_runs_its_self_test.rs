@@ -13,7 +13,6 @@ use serde_json::json;
 use bevy_cauldron::terminal::Terminal;
 use bevy_cauldron::terminal_agent::{self, AgentSetup, CheckStatus};
 use bevy_cauldron::terminal_pane::{TerminalAgentCard, TerminalInvokeButton, TerminalNewTab};
-use bevy_gooey::testing::find_by_label;
 
 use crate::fixtures;
 
@@ -163,8 +162,12 @@ fn an_agent_tab_types_its_command_then_shows_the_connection_and_the_test() {
     ]);
     let known = terminal_agent::self_test_result(&mut app.world_mut().resource_mut::<Terminal>(), &json!({"token": token, "checks": checks}));
     assert_eq!(known, Ok(json!({"known": true})));
-    let chip = format!("agent connected · {TOOLS} tools");
-    until(&mut app, "the bar never showed the connected agent", |app| find_by_label(app, &chip).is_ok());
+    // Owner exception (2026-11-14): this waited for the bar's status chip to read `agent connected · N tools`; #423 replaces that chip with the
+    // agent's LED (one LED, one word), so it waits for the LED in the bar to say `live`, which is the same fact.
+    until(&mut app, "the bar never showed the connected agent", |app| {
+        let world = app.world_mut();
+        world.query::<(&bevy_gooey::LedWord, &Text)>().iter(world).any(|(_, word)| word.0 == "live")
+    });
     assert!(
         card_rows(&mut app).contains(&"OK Agent self test: the editor is on editor · 90 operations · a 1280x720 picture".to_owned()),
         "the card lists the self test's three findings: {:?}",

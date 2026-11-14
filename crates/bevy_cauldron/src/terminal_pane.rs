@@ -490,6 +490,7 @@ impl Plugin for TerminalPanePlugin {
                     step_aside_for_the_key_overlay,
                     count_the_matches,
                     keep_the_agent_on_screen,
+                    measure_the_bar,
                 )
                     .run_if(the_pane_is_up),
             )
@@ -851,11 +852,13 @@ fn clear_the_scrollback(_click: On<bevy_gooey::Activate>, mut terminal: ResMut<T
     }
 }
 
-/// What the status chip's tooltip says: the chip is the agent's self-test, and a click shows it again.
-const TIP_AGENT_STATUS: &str = "The agent's self-test: click to show it again";
-
-/// What the `x` chip's tooltip says.
+/// What the `x` chip's tooltip says, before its chord.
 const TIP_CLOSE_TAB: &str = "Close this session and end its shell";
+
+/// **The chord that closes the tab being drawn**: Primary+Shift+Backquote, the pane's own.
+pub fn close_tab_chord() -> bevy_gooey::Shortcut {
+    bevy_gooey::Shortcut::new(bevy_gooey::Modifiers::PRIMARY | bevy_gooey::Modifiers::SHIFT, KeyCode::Backquote)
+}
 
 /// **The folder a new session starts in, by name**: what the bar's tooltips and the move chip call the open project.
 fn project_folder(terminal: &Terminal) -> String {
@@ -865,71 +868,157 @@ fn project_folder(terminal: &Terminal) -> String {
         .map_or_else(|| "the open project".to_owned(), |name| name.to_string_lossy().into_owned())
 }
 
-/// **The bar**: the pane's name on the left, its sessions and its two controls on the right.
+/// **Each tab's words** (#423): the program that runs in it, and a number from the second of the same name on (`sh`, `sh 2`), so
+/// no two tabs of the bar read alike.
+pub fn tab_names(labels: &[&str]) -> Vec<String> {
+    labels
+        .iter()
+        .enumerate()
+        .map(|(at, label)| match labels[..at].iter().filter(|earlier| *earlier == label).count() {
+            0 => (*label).to_owned(),
+            before => format!("{label} {}", before + 1),
+        })
+        .collect()
+}
+
+/// **What the bar would hold with all the room it wants** (#423), before it is told how much it has: the tabs' words, which one is
+/// drawn, the move chip's words when it is offered, whether the agent's LED stands in it, and whether `Start agent` is offered.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BarWants {
+    pub tabs: Vec<String>,
+    pub active: usize,
+    pub go_to: Option<String>,
+    pub led: bool,
+    pub start_agent: bool,
+}
+
+/// **What the bar holds in the room it has** (#423): the tabs drawn (by index), and which of the optional items stay.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BarPlan {
+    pub tabs: Vec<usize>,
+    pub go_to: bool,
+    pub start_agent: bool,
+    pub led_name: bool,
+}
+
+/// **The order a narrow bar gives things up, first to last** (#423), so a bar that is too narrow loses items by a rule a person can
+/// learn and never clips one in half: the `Go to` chip, then `Start agent`, then the LED's name (its state word stays), then the tabs
+/// that are not the one drawn, last tab first. The heading, the drawn tab, the LED's word, `+` and `x` always stay.
+pub const BAR_GIVES_UP: [&str; 4] = ["the Go to chip", "the Start agent chip", "the LED's name", "the tabs that are not drawn"];
+
+/// A glyph's advance as a share of its font size: the shipped face is monospace, so a word's width is its characters times this.
+const GLYPH_ADVANCE: f32 = 0.6;
+/// The words of the LED's longest state, `failed`, in characters.
+const LED_WORD_CHARS: usize = 6;
+/// How many more logical px of room the bar must measure before it is measured again: a window being dragged is not a redraw a frame.
+const BAR_ROOM_STEP: f32 = 16.0;
+
+/// One word's width at a control's size, logical px.
+fn word_width(chars: usize) -> f32 {
+    chars as f32 * GLYPH_ADVANCE * chrome::text::CONTROL.px() * chrome::text_scale()
+}
+
+/// One chip's width: its word, [`chrome::CHIP_PAD`] and the edge on both sides, and the bar's gap after it.
+fn chip_width(chars: usize) -> f32 {
+    let pad = match chrome::CHIP_PAD.left {
+        Val::Px(px) => px,
+        _ => 0.0,
+    };
+    word_width(chars) + 2.0 * (pad + chrome::EDGE_W) + chrome::GAP_TIGHT
+}
+
+/// **Decide what a bar of `room` logical px holds** (#423); `None` is a bar not yet laid out, which holds everything. The widths are
+/// estimated from the face's advance ([`GLYPH_ADVANCE`]) so the plan is a pure function of what is wanted and how much room there is.
+pub fn bar_plan(room: Option<f32>, wants: &BarWants) -> BarPlan {
+    let mut plan = BarPlan { tabs: (0..wants.tabs.len()).collect(), go_to: wants.go_to.is_some(), start_agent: wants.start_agent, led_name: wants.led };
+    let Some(room) = room else {
+        return plan;
+    };
+    let width = |plan: &BarPlan| -> f32 {
+        let always = 2.0 * chrome::MARGIN + word_width("Terminal".len()) + chrome::GAP_TIGHT + chip_width(1) * 2.0;
+        let led = if wants.led {
+            chrome::GAP_TIGHT + word_width(LED_WORD_CHARS) + word_width(1) * 2.0 + if plan.led_name { word_width(AGENT_LED_LABEL.len()) } else { 0.0 }
+        } else {
+            0.0
+        };
+        let tabs: f32 = plan.tabs.iter().map(|at| chip_width(wants.tabs[*at].chars().count())).sum();
+        let go_to = if plan.go_to { wants.go_to.as_ref().map_or(0.0, |words| chip_width(words.chars().count())) } else { 0.0 };
+        let start = if plan.start_agent { chip_width(START_AGENT.chars().count()) } else { 0.0 };
+        always + led + tabs + go_to + start
+    };
+    // The first three are one step each; the tabs go one at a time.
+    if width(&plan) > room {
+        plan.go_to = false;
+    }
+    if width(&plan) > room {
+        plan.start_agent = false;
+    }
+    if width(&plan) > room {
+        plan.led_name = false;
+    }
+    while width(&plan) > room {
+        match plan.tabs.iter().rposition(|at| *at != wants.active) {
+            Some(last) => {
+                plan.tabs.remove(last);
+            }
+            None => break,
+        }
+    }
+    plan
+}
+
+/// What the bar wants, read from the terminal: the one place the bar's contents are decided.
+fn bar_wants(terminal: &Terminal) -> BarWants {
+    let labels: Vec<&str> = terminal.tabs().iter().map(|tab| tab.label()).collect();
+    let want = terminal.next_cwd();
+    let go_to = terminal
+        .tab()
+        .is_some_and(|tab| tab.agent().is_none() && tab.wants_cd_to(&want))
+        .then(|| format!("Go to {}", project_folder(terminal)));
+    let post = terminal.tab().and_then(|tab| tab.agent());
+    BarWants {
+        tabs: tab_names(&labels),
+        active: terminal.active(),
+        go_to,
+        led: post.is_some() || terminal.agent() != crate::settings::TerminalAgent::Off,
+        start_agent: offers_another_agent(terminal),
+    }
+}
+
+/// What the bar's `Start agent` chip says, and the invitation's button with it: one word for one action.
+const START_AGENT: &str = "Start agent";
+
+/// **The bar** (#423): the pane's name, then its tabs (named for the program in each), then on the right the agent's LED, `Start
+/// agent`, `+` and `x`. Every item says what it is without a hover: a tab is a tab, the LED is one light with one word, a button is
+/// a verb. A failed agent's reason is the LED's tooltip and the card's, never a chip here.
 fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
+    let wants = bar_wants(terminal);
+    let plan = bar_plan(terminal.bar_room(), &wants);
     commands.entity(bar).despawn_children();
     commands.entity(bar).with_children(|bar| {
         chrome::list_heading(bar, "Terminal");
-        // A spacer, so the chips sit on the right the way every other bar in this editor puts them.
-        bar.spawn(Node {
-            flex_grow: 1.0,
-            ..default()
-        });
-        // **The agent's LED** (feedback-1794230412409, and #343's four states): one LED in the bar for as long as the settings
-        // choose an agent. Dark (`off`, a ring) while no agent tab is drawn, and the drawn agent tab's state (`busy`, `live`,
-        // `failed`) once there is one. The chip after it says the same in words, and the LED stays after the card is gone.
-        let post = terminal.tab().and_then(|tab| tab.agent());
-        if post.is_some() || terminal.agent() != crate::settings::TerminalAgent::Off {
-            let state = post.map_or(bevy_gooey::LedState::Off, |post| post.led());
-            bar.spawn((bevy_gooey::led(AGENT_LED_LABEL, state), TerminalAgentLed));
-        }
-        // **Every chip says what it does** (feedback-1794230949329: *"What are the different chips on here for? It's unclear"*):
-        // a tooltip on each, in words, because a chip's own label is only its name (`omp`, `Agent`, `+`, `x`).
         let folder = project_folder(terminal);
-        // **The drawn agent tab's status**, first among the chips, so it reads as the tab's state.
-        if let Some(post) = post {
-            // **The shipped palette at spawn; [`dress_the_agent_tab`] repaints it from the running
-            // skin** (UI-02, #210, slice 6a) before the frame draws, so a project's skin reaches the
-            // bar and a rebuild never flashes the editor's own darks.
-            let (label, ink) = post.chip();
-            chrome::chip(
-                bar,
-                TerminalAgentStatusChip,
-                &label,
-                chrome::text::CONTROL,
-                ink,
-                chrome::ink().bar_bg,
-                chrome::ink().panel_edge,
-            )
-            .insert(bevy_gooey::Tooltip::new(TIP_AGENT_STATUS));
-        }
-        // **A chip per session, and the two controls through the same builder.** `chrome::chip`
-        // carries `RowRest`, so rest / hover / pressed are painted by `style_list_rows` without this
-        // pane knowing what hover looks like — the fourth shape a hand-rolled `Button` would be,
-        // and `chrome_census::a_clickable_is_one_of_the_three_shapes` fails the build on exactly that.
-        for (index, tab) in terminal.tabs().iter().enumerate() {
-            let active = index == terminal.active();
+        // **A tab is a tab, and a button is a button** (#423): the drawn tab is filled and edged in the accent, the others are flat and
+        // edgeless, and every button (`Go to`, `Start agent`, `+`, `x`) keeps its outline, so the two shapes are not mistaken.
+        // `chrome::chip` carries `RowRest`, so rest / hover / pressed are painted by `style_list_rows` without this pane knowing what
+        // hover looks like.
+        for index in &plan.tabs {
+            let tab = &terminal.tabs()[*index];
+            let active = *index == terminal.active();
             let ink = if active { chrome::ink().accent } else { chrome::ink().text };
             let fill = if active { chrome::ink().row_selected } else { chrome::ink().bar_bg };
+            let edge = if active { chrome::ink().accent } else { Color::NONE };
             let kind = if tab.agent().is_some() { "agent" } else { "shell" };
-            chrome::chip(
-                bar,
-                TerminalTabChip(index),
-                tab.title(),
-                chrome::text::CONTROL,
-                ink,
-                fill,
-                chrome::ink().panel_edge,
-            )
-            .insert(bevy_gooey::Tooltip::new(format!("Show this {kind} session")));
+            chrome::chip(bar, TerminalTabChip(*index), &wants.tabs[*index], chrome::text::CONTROL, ink, fill, edge)
+                .insert(bevy_gooey::Tooltip::new(format!("Show this {kind} session: {} is running in it", tab.label())));
         }
         // **The move chip only when it would do something, and only for a shell.** It names the folder it would move to, so a
         // person reads where it goes rather than trusting a verb, and it says "Go to" and not `cd`: what it types is a shell
         // command, and the tooltip shows it. An agent tab is not a shell: `cd '<root>'` typed into the agent's prompt is a message
         // to the agent, so the chip is never offered there (feedback-1794230949329: *"'cd lavender_hills' doesn't make a lot of
         // sense"*). With no open project, or a shell already in it, there is nothing to offer and no chip.
-        let want = terminal.next_cwd();
-        if terminal.tab().is_some_and(|tab| tab.agent().is_none() && tab.wants_cd_to(&want)) {
+        if plan.go_to {
+            let want = terminal.next_cwd();
             chrome::chip(
                 bar,
                 TerminalCdChip,
@@ -944,17 +1033,47 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
                 crate::terminal_agent::shell_quote(&want.to_string_lossy())
             )));
         }
-        if offers_another_agent(terminal) {
+        // A spacer, so the controls sit on the right the way every other bar in this editor puts them.
+        bar.spawn(Node {
+            flex_grow: 1.0,
+            ..default()
+        });
+        // **The agent's LED**: one LED with one word (`off`, `busy`, `live`, `failed`) for as long as the settings choose an agent,
+        // dark while no agent tab is drawn. Once there is a tab the LED is also the control that brings the self test back, and its
+        // tooltip carries the sentence and any failure's reason: no second chip repeats it in words (#423).
+        let post = terminal.tab().and_then(|tab| tab.agent());
+        if wants.led {
+            let state = post.map_or(bevy_gooey::LedState::Off, |post| post.led());
+            let name = if plan.led_name { AGENT_LED_LABEL } else { "" };
+            match post {
+                Some(post) => {
+                    bar.spawn((
+                        bevy_gooey::row_with(chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { align: Some(AlignItems::Center), ..default() }),
+                        Pickable::default(),
+                        TerminalAgentStatusChip,
+                        bevy_gooey::Tooltip::new(post.led_tooltip()),
+                        Name::new("terminal agent status"),
+                    ))
+                    .with_children(|status| {
+                        status.spawn((bevy_gooey::led(name, state), TerminalAgentLed));
+                    });
+                }
+                None => {
+                    bar.spawn((bevy_gooey::led(name, state), TerminalAgentLed));
+                }
+            }
+        }
+        if plan.start_agent {
             chrome::chip(
                 bar,
                 TerminalAgentChip,
-                "Agent",
+                START_AGENT,
                 chrome::text::CONTROL,
                 chrome::ink().accent,
                 chrome::ink().bar_bg,
                 chrome::ink().panel_edge,
             )
-            .insert(bevy_gooey::Tooltip::new(format!("Start another agent session in {folder}")));
+            .insert(bevy_gooey::Tooltip::new(format!("Start another {} session in {folder}", terminal.agent().name())));
         }
         chrome::chip(
             bar,
@@ -975,9 +1094,10 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
             chrome::ink().bar_bg,
             chrome::ink().panel_edge,
         )
-        .insert(bevy_gooey::Tooltip::new(TIP_CLOSE_TAB));
+        .insert(bevy_gooey::Tooltip::new(format!("{TIP_CLOSE_TAB}: {}", chord_words(&close_tab_chord()))));
     });
 }
+
 /// **`Ctrl+\`` raises the pane, or lowers it when it already has the keys.**
 ///
 /// Three cases, and each is what a person means:
@@ -1137,10 +1257,7 @@ fn close_the_tab_on_its_chord(
     bar: Query<Entity, With<TerminalBar>>,
     mut commands: Commands,
 ) {
-    let chord = bevy_gooey::Shortcut::new(
-        bevy_gooey::Modifiers::PRIMARY | bevy_gooey::Modifiers::SHIFT,
-        KeyCode::Backquote,
-    );
+    let chord = close_tab_chord();
     if !chord.just_pressed(&keys) {
         return;
     }
@@ -1298,7 +1415,7 @@ fn spawn_the_invitation(commands: &mut Commands, body: Entity) {
             chrome::chip(
                 invite,
                 TerminalInvokeButton,
-                "Invoke Agent",
+                START_AGENT,
                 chrome::text::CONTROL,
                 chrome::ink().accent,
                 chrome::ink().bar_bg,
@@ -1310,13 +1427,14 @@ fn spawn_the_invitation(commands: &mut Commands, body: Entity) {
 }
 
 /// What [`keep_the_agent_on_screen`] last drew from: the body, the tab count, the drawn tab, its
-/// record's revision, whether its card shows, whether find is open, the chosen agent, and whether the
-/// pane invites the agent.
-type AgentDrawn = (Option<Entity>, usize, usize, u32, bool, bool, crate::settings::TerminalAgent, bool);
+/// record's revision, whether its card shows, whether find is open, the chosen agent, whether the
+/// pane invites the agent, and what the bar holds in the room it has.
+type AgentDrawn = (Option<Entity>, usize, usize, u32, bool, bool, crate::settings::TerminalAgent, bool, BarPlan);
 
 /// **The bar's chips and the self-test card follow the agent tabs.** Redrawn only when something they
 /// show moved: a tab opened or closed, another tab drawn, a check changed, the card's linger ran out,
-/// find opened (the card steps aside for it), the settings chose another agent, or a new pane was built.
+/// find opened (the card steps aside for it), the settings chose another agent, a new pane was built, or the bar's room
+/// changed what it holds (#423).
 #[allow(clippy::too_many_arguments)]
 fn keep_the_agent_on_screen(
     mut drawn: Local<Option<AgentDrawn>>,
@@ -1342,8 +1460,9 @@ fn keep_the_agent_on_screen(
         find.is_open(),
         terminal.agent(),
         terminal.invites_the_agent(),
+        bar_plan(terminal.bar_room(), &bar_wants(&terminal)),
     );
-    if *drawn == Some(key) {
+    if drawn.as_ref() == Some(&key) {
         return;
     }
     *drawn = Some(key);
@@ -1513,25 +1632,11 @@ fn give_the_keyboard_back(mut focus: ResMut<TerminalFocus>) {
 fn dress_the_agent_tab(
     terminal: Res<Terminal>,
     skin: Option<Res<bevy_gooey::GooeySkin>>,
-    chips: Query<Entity, With<TerminalAgentStatusChip>>,
     mut rows: Query<(&TerminalAgentCardRow, &mut TextColor)>,
-    mut chips_text: Query<&mut TextColor, Without<TerminalAgentCardRow>>,
-    children: Query<&Children>,
 ) {
     let ink = crate::terminal_agent::AgentInk::of(skin.as_deref());
     let post = terminal.tab().and_then(|tab| tab.agent());
 
-    // The chip's ink, from the state its words already say.
-    let chip_ink = post.map_or(ink.muted, |post| post.chip_ink(&ink));
-    for chip in &chips {
-        let Ok(kids) = children.get(chip) else { continue };
-        for part in kids.iter() {
-            let Ok(mut colour) = chips_text.get_mut(part) else { continue };
-            if colour.0 != chip_ink {
-                colour.0 = chip_ink;
-            }
-        }
-    }
 
     // The card's rows: the heading, then one per check, each in the ink of its own state.
     for (which, mut colour) in &mut rows {
@@ -1550,6 +1655,21 @@ fn dress_the_agent_tab(
 fn redraw_the_bar(commands: &mut Commands, bar: &Query<Entity, With<TerminalBar>>, terminal: &Terminal) {
     if let Ok(bar) = bar.single() {
         fill_the_bar(commands, bar, terminal);
+    }
+}
+
+/// **The bar's room, measured** (#423): the bar's laid-out width in logical px, given to the [`Terminal`] so [`bar_plan`] can decide what
+/// a narrow bar holds. Taken again only when it moves by [`BAR_ROOM_STEP`], and without marking the terminal changed.
+fn measure_the_bar(bars: Query<&ComputedNode, With<TerminalBar>>, mut terminal: ResMut<Terminal>) {
+    let Some(bar) = bars.iter().next() else {
+        return;
+    };
+    let room = bar.size().x * bar.inverse_scale_factor();
+    if room <= 0.0 {
+        return;
+    }
+    if terminal.bar_room().is_none_or(|known| (known - room).abs() >= BAR_ROOM_STEP) {
+        terminal.bypass_change_detection().set_bar_room(room);
     }
 }
 

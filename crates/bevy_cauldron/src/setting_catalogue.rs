@@ -173,7 +173,7 @@ pub const CATALOGUE: &[Setting] = &[
         key: "terminal_agent",
         label: "Terminal agent",
         category: "Terminal",
-        description: "The agent the terminal's Invoke Agent button starts, connected to the editor's tools and checked with a self test. The terminal starts no agent by itself: a session costs tokens to warm up. Custom command runs terminal_agent_command from settings.yaml.",
+        description: "The agent the terminal's Start agent button starts, connected to the editor's tools and checked with a self test. The terminal starts no agent by itself: a session costs tokens to warm up. Custom command runs terminal_agent_command from settings.yaml, and is offered once a command is set.",
         kind: Kind::Options(TERMINAL_AGENTS),
     },
 ];

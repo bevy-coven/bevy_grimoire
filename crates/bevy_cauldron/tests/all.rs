@@ -36,6 +36,7 @@ mod fixtures;
 mod new_topics_start_from_templates_in_the_design_workspace;
 mod the_agent_workspace_takes_a_change_back_from_its_row;
 mod the_finder_goes_to_cues_scripts_and_files;
+mod the_terminal_bar_says_what_each_item_is;
 mod the_terminal_starts_collapsed_with_a_label_in_the_status_bar;
 
 mod a_badge_draws_in_the_skins_ink;

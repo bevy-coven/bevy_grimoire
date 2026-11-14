@@ -419,6 +419,24 @@ impl AgentPost {
         }
     }
 
+    /// **The first check that failed, in a sentence** (`Agent connected: omp did not reach the editor…`), or `None` when none has.
+    /// A failure's reason belongs on the card and in the LED's tooltip, never in a chip of the bar (#423).
+    pub fn failure(&self) -> Option<String> {
+        self.checks.iter().zip(CHECK_LABELS).find_map(|(check, label)| match check {
+            CheckStatus::Failed(why) => Some(format!("{label}: {why}")),
+            _ => None,
+        })
+    }
+
+    /// **What the bar's LED says when it is hovered**: the state in a sentence, the reason when a check failed, and what a click does.
+    pub fn led_tooltip(&self) -> String {
+        let state = match self.failure() {
+            Some(why) => format!("{} ({why})", self.chip_words()),
+            None => self.chip_words(),
+        };
+        format!("{state}. Click to show the self test again")
+    }
+
     /// **The agent's LED** (feedback-1794230412409: *"where are the LEDs?"*): what the status chip says in words, in light. A
     /// failed check is [`bevy_gooey::LedState::Failed`], a check still waiting is [`bevy_gooey::LedState::Busy`], and every check
     /// passed or skipped is [`bevy_gooey::LedState::Live`]; the order is the chip's, so the two never disagree. `bevy_gooey` draws

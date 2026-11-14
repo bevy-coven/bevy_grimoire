@@ -176,16 +176,6 @@ fn drawn_card(app: &mut App) -> Vec<(String, Color)> {
         .collect()
 }
 
-/// **The bar's status chip's ink**, read from the text the chip draws.
-fn drawn_chip(app: &mut App) -> Option<Color> {
-    let world = app.world_mut();
-    let chip = world
-        .query_filtered::<Entity, With<bevy_cauldron::terminal_pane::TerminalAgentStatusChip>>()
-        .iter(world)
-        .next()?;
-    let children: Vec<Entity> = world.get::<Children>(chip)?.to_vec();
-    children.iter().find_map(|child| world.get::<TextColor>(*child).map(|ink| ink.0))
-}
 
 /// **`dress_the_agent_tab` is what puts the skin's ink on the card and the chip** (UI-02, #210).
 ///
@@ -230,13 +220,10 @@ fn the_card_and_the_chip_are_repainted_from_the_running_skin() {
             row.0
         );
     }
-    let chip = drawn_chip(&mut app).expect("the bar draws the agent's status chip");
-    assert_eq!(
-        chip,
-        post.chip_ink(&expect),
-        "the bar's chip is the running skin's ink for the post's state: {:?}",
-        post.chip_words()
-    );
+    // Owner exception (2026-11-14): the bar's status chip drew `post.chip_words()` in `post.chip_ink`; #423 replaces it with the agent's LED
+    // (one LED, one word), whose colours are bevy_gooey's own, so the chip's half of this check is gone. The skin-ink checks go on holding of
+    // the card's heading and rows above, and of the card's heading below.
+    let chip = heading.1;
     // **And it is the skin's, not the palette's**, whatever state the post is in — the two palettes
     // disagree on every one of the four inks `a_skin_of_its_own` sets, so this cannot pass by luck.
     let palette = AgentInk::of(None);
