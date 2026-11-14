@@ -71,10 +71,15 @@ fn problem(app: &mut App) -> Vec<String> {
     texts_starting(app, "Problem:").into_iter().filter(|words| words.contains("terminal_agent_command")).collect()
 }
 
-/// The field the row opens for the command, if it is open.
+/// The field the row opens for the command, if it is open **and shown**: the All page and the Terminal page each have the row, and
+/// the page that is not shown has its own field, which is not the one a person types in.
 fn command_field(app: &mut App) -> Option<Entity> {
     let world = app.world_mut();
-    world.query::<(Entity, &TextHint)>().iter(world).find(|(_, hint)| hint.0.starts_with("a program")).map(|(entity, _)| entity)
+    world
+        .query::<(Entity, &TextHint, &InheritedVisibility)>()
+        .iter(world)
+        .find(|(_, hint, shown)| hint.0.starts_with("a program") && shown.get())
+        .map(|(entity, ..)| entity)
 }
 
 /// How many `Custom command` options the agent choice draws now.
@@ -229,7 +234,15 @@ fn the_agent_row_follows_its_state_without_moving_the_list_or_losing_the_focus()
         }
         false
     });
-    assert!(under_the_field, "the command field has the keyboard focus: it is {held:?}, the field {field:?}");
+    let world = r.app.world();
+    assert!(
+        under_the_field,
+        "the command field has the keyboard focus: it is {held:?} ({:?}, {:?}), the field {field:?} (size {:?}, shown {:?})",
+        world.get::<bevy_gooey::Role>(held),
+        world.get::<Text>(held).map(|t| t.0.clone()),
+        world.get::<ComputedNode>(field).map(|n| n.size()),
+        world.get::<InheritedVisibility>(field).map(|v| v.get())
+    );
     assert_eq!(choice_under(&mut r.app, agent_row), choice, "the choice is the control that was there: no command is set, so its options did not change");
 
     // Typing is not an end; Enter is.
