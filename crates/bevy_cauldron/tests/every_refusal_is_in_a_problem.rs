@@ -122,9 +122,11 @@ const REFUSALS: &[Site] = &[
         marker: "Bring the decision endpoint up (GRIMOIRE_DECIDE_ENDPOINT) and press Shift+L again",
     },
     // Owner exception (2026-11-13): re-pointed, because #129 slice 29 moved the refusal "a hole has no width to put flush" into
-    // `tile_member_flush`, the operation the Shift+arrow key now dispatches. The key files whatever the operation refuses
-    // through `hand_through_operation`'s `Err`, and this row pins that every such `Err` arm in `build.rs` is filed in the
-    // problem slot; `shift_and_an_arrow_and_an_agent_put_the_member_flush` holds the hole's own refusal as a problem.
+    // `tile_member_flush`, the operation the Shift+arrow key now dispatches. **This row is weak, and says so**: its marker is
+    // the problem call itself, so the scan finds a `problem` slot for it wherever `build.rs` has the text at all, and it would
+    // not notice one particular `Err` arm being changed to a note. The protection of the hole's refusal is the assertion in
+    // `tile_pieces_are_operations::shift_and_an_arrow_and_an_agent_put_the_member_flush`, which reads the problem slot of the
+    // status after the refused key.
     Site {
         file: "build.rs",
         marker: "Err(e) => state.status.problem(e),",

@@ -4674,6 +4674,12 @@ pub mod tile_hand {
             pub by: String,
         }
 
+        /// What a step back is refused with when the history holds nothing before the tile. The key says it as a note: it is
+        /// guidance, and every other refusal is a problem.
+        pub const NOTHING_TO_UNDO: &str = "nothing to undo";
+        /// What a step forward is refused with when nothing was taken back.
+        pub const NOTHING_TO_REDO: &str = "nothing to redo";
+
         /// The history after the step, the sentence for it and the answer.
         fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHistoryCursor, String, serde_json::Value), Refusal> {
             let p: Params = serde_json::from_value(params.clone())
@@ -4689,7 +4695,7 @@ pub mod tile_hand {
                 .ok_or_else(|| Refusal::new("no tile history is in hand, so there is nothing to step."))?;
             let (mut past, mut future) = (now.past.clone(), now.future.clone());
             let Some(to) = (if back { past.pop() } else { future.pop() }) else {
-                return Err(Refusal::new(if back { "nothing to undo" } else { "nothing to redo" }));
+                return Err(Refusal::new(if back { NOTHING_TO_UNDO } else { NOTHING_TO_REDO }));
             };
             // The description is made from copies: the stacks take the value.
             let said = crate::build::step_says(&now.open, &to);

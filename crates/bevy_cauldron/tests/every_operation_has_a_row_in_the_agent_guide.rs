@@ -81,6 +81,11 @@ const NO_ROW_YET: &[&str] = &[
     "water_run",
 ];
 
+/// **The ratchet on [`NO_ROW_YET`]**, a literal and not `NO_ROW_YET.len()`: a list compared with its own length cannot fail.
+/// Lower it in the commit that gives an operation its row. It is never raised: a new operation gets its row, it does not join
+/// the list.
+const NO_ROW_YET_MAX: usize = 70;
+
 fn has_row(guide: &str, name: &str) -> bool {
     guide.lines().any(|l| l.starts_with(&format!("| `{name}` |")))
 }
@@ -96,6 +101,18 @@ fn every_registered_operation_has_a_row_in_the_agent_guide() {
     assert!(
         missing.is_empty(),
         "operations with no row in docs/guide/agents.md: {missing:?}. Add a row with what it does and how it is undone."
+    );
+}
+
+/// **The work list only shrinks.** Without this, appending a new operation's name to [`NO_ROW_YET`] would satisfy the test above
+/// and "a new operation is documented in the commit that registers it" would be a hope.
+#[test]
+fn the_work_list_only_shrinks() {
+    assert!(
+        NO_ROW_YET.len() <= NO_ROW_YET_MAX,
+        "NO_ROW_YET has {} names and the ratchet says {NO_ROW_YET_MAX}. The list only shrinks: a new operation gets its row in \
+         docs/guide/agents.md in the commit that registers it, and is never added here.",
+        NO_ROW_YET.len()
     );
 }
 

@@ -348,11 +348,20 @@ fn cmd_z_and_an_agent_step_the_tab_history_through_one_operation() {
     assert_eq!(lines.len(), 2, "{lines:?}");
     assert_eq!(lines[1].1["params"]["by"], "forward", "{:?}", lines[1]);
 
+    // **The recorder runs between the agent's steps**, as it does in the editor: `build::tile_history` watches the tile, and a
+    // step that left it unadopted (`TileHistory::set_cursor`'s `seen`) would be recorded as an edit of its own, which pushes the
+    // tile onto the past and clears the future, so the `forward` below would be refused. Mutation-checked: with the `seen`
+    // line of `set_cursor` deleted this test fails, at the key's Cmd+Shift+Z above (the recorder already ran there); the agent
+    // steps below ran no recorder before, and now guard the same line on the agent's own path.
     let said = apply(&mut app, "tile_history_step", json!({"by": "back"}));
     assert_eq!(said["outcome"], "applied", "an agent's call is applied, not refused for want of a view: {said}");
+    app.update();
+    app.update();
     assert_eq!(stands(&app).0, (0.0, 0.0), "an agent steps the editor's own history back");
     let said = apply(&mut app, "tile_history_step", json!({"by": "forward"}));
-    assert_eq!(said["outcome"], "applied", "{said}");
+    assert_eq!(said["outcome"], "applied", "the step was not recorded as an edit, so the future is still there: {said}");
+    app.update();
+    app.update();
     assert_eq!(stands(&app).0, nudged, "and forward");
     let refused = apply(&mut app, "tile_history_step", json!({"by": "forward"}));
     assert_eq!(refused["outcome"], "refused", "there is nothing left to put back: {refused}");
@@ -361,7 +370,11 @@ fn cmd_z_and_an_agent_step_the_tab_history_through_one_operation() {
 
     // Back past the first edit lands on no tile at all, as it always did, and then there is nothing to undo.
     apply(&mut app, "tile_history_step", json!({"by": "back"}));
+    app.update();
+    app.update();
     apply(&mut app, "tile_history_step", json!({"by": "back"}));
+    app.update();
+    app.update();
     assert!(build(&app).open.is_none(), "the history reaches back to before the tile was opened");
     let refused = apply(&mut app, "tile_history_step", json!({"by": "back"}));
     assert_eq!(refused["outcome"], "refused", "nothing to undo: {refused}");

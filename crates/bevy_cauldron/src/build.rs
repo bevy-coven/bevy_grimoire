@@ -1227,8 +1227,17 @@ pub fn tile_history(
                 }
                 state.status.note(outcome.summary);
             }
-            // Nothing to step is guidance, as it always was: a note the next keystroke replaces.
-            Ok(crate::ops::Applied::Refused(e)) | Err(e) => state.status.note(e.0),
+            // Nothing to step is guidance, as it always was: a note the next keystroke replaces. **Any other refusal is a
+            // problem**: a project whose log cannot be written, or no tile history in hand, is not "nothing to undo", and the
+            // old `Cmd+Z` depended on neither.
+            Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+                use crate::ops::tile_hand::tile_history_step::{NOTHING_TO_REDO, NOTHING_TO_UNDO};
+                if e.0 == NOTHING_TO_UNDO || e.0 == NOTHING_TO_REDO {
+                    state.status.note(e.0);
+                } else {
+                    state.status.problem(e.0);
+                }
+            }
         }
         return;
     }
