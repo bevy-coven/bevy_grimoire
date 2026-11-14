@@ -400,6 +400,10 @@ pub struct RigCursor {
     /// this and nothing else of a check; both are the default for every other operation.
     #[serde(default, skip_serializing_if = "CheckAnswer::is_default")]
     pub check: CheckAnswer,
+    /// **The bench's own history of `rigs.yaml`**, carried in for `rig_history_step` (E-002, #129 slice 35) and answered by it. Not
+    /// serialised while empty: every other operation carries none.
+    #[serde(default, skip_serializing_if = "RigHistory::is_default")]
+    pub history: RigHistory,
 }
 
 /// **What a project-wide rig check answered** (E-002, #129 slice 32): that it ran, and which rigs it queued.
@@ -415,6 +419,34 @@ pub struct CheckAnswer {
 }
 
 impl CheckAnswer {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// **The rig bench's own history**, as a value `rig_history_step` can step (E-002, #129 slice 35).
+///
+/// The same facts `anim_tab::BenchState` keeps: the manifest as the bench holds it now and the manifests a step back and a step
+/// forward restore, the nearest last. The step takes the top of one stack, writes it as the manifest and puts the text it
+/// replaced on the other; the front end applies the answer to the bench.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RigHistory {
+    /// The manifest as the bench holds it now, or `None` when none was read.
+    #[serde(default)]
+    pub text: Option<String>,
+    /// The manifests a step back restores, the nearest last.
+    #[serde(default)]
+    pub undo: Vec<String>,
+    /// The manifests a step forward restores, the nearest last.
+    #[serde(default)]
+    pub redo: Vec<String>,
+    /// **The answer**: which way the bench stepped, `Some(true)` back and `Some(false)` forward; `None` when it did not.
+    #[serde(default)]
+    pub stepped: Option<bool>,
+}
+
+impl RigHistory {
     fn is_default(&self) -> bool {
         *self == Self::default()
     }

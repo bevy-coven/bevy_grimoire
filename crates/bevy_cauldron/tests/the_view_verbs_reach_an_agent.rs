@@ -252,6 +252,7 @@ fn an_operation_that_needs_a_view_says_so() {
             "placement_set_hidden",
             "placement_set_locked",
             "rig_check_all",
+            "rig_history_step",
             "rig_walk",
             "snip_arm",
             "stage_camera",

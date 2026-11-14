@@ -4300,6 +4300,120 @@ pub mod kit_rescan {
     }
 }
 
+/// **Step the rig bench's history of `rigs.yaml`**, as Cmd+Z and Cmd+Shift+Z do on the Anim tab (E-002, #129 slice 35): the
+/// manifest the bench held before its newest write is written back, or the one a step back took away is put again. The bench
+/// records each manifest it replaces (an adopt, or an edit made under the tab), and the history is session state: the step takes
+/// the top of one stack, writes it through the one door to disk ([`crate::anim_tab::write_manifest`]: parsed first, saved
+/// atomically) and puts the text it replaced on the other, so **its inverse is the step the other way**. The answer is the
+/// stacks and the manifest now held ([`crate::ops_view::RigHistory`]), which the front end applies to the bench only when the
+/// write landed: a refused step costs no entry.
+pub mod rig_history_step {
+    use super::list_walk::need_view;
+    use super::*;
+    use crate::ops_view::RigHistory;
+    use serde_json::json;
+
+    /// **What a step says when the stack is empty**: guidance on the key and a refusal for an agent.
+    pub const NOTHING_TO_UNDO: &str = "nothing to undo on this tab";
+    pub const NOTHING_TO_REDO: &str = "nothing to redo on this tab";
+
+    /// **The sentence for a step**, written once for the operation's answer and the bench's status line.
+    pub fn says(back: bool) -> &'static str {
+        if back { "undid the last bench write" } else { "put the bench write back" }
+    }
+
+    #[derive(Debug, Clone, PartialEq, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Params {
+        /// `back` or `forward`.
+        by: String,
+    }
+
+    /// **Which way a step goes**, `true` for back, or the refusal that says what a direction is.
+    fn direction(params: &serde_json::Value) -> Result<bool, Refusal> {
+        let p: Params = serde_json::from_value(params.clone())
+            .map_err(|e| Refusal::new(format!("this is not a step: {e}. The field is `by`: `back` or `forward`.")))?;
+        match p.by.as_str() {
+            "back" => Ok(true),
+            "forward" => Ok(false),
+            other => Err(Refusal::new(format!("`{other}` is not a direction: `by` is `back` or `forward`."))),
+        }
+    }
+
+    pub struct RigHistoryStep;
+
+    impl RigHistoryStep {
+        /// **The step, computed and checked and not made**, so a preview refuses what the commit would: the direction, the
+        /// manifest to write, and the history after it.
+        fn step(ctx: &Ctx, params: &serde_json::Value) -> Result<(bool, String, RigHistory), Refusal> {
+            let back = direction(params)?;
+            let held = &need_view(ctx, "step")?.rig.history;
+            let (mut undo, mut redo) = (held.undo.clone(), held.redo.clone());
+            let Some(target) = (if back { undo.pop() } else { redo.pop() }) else {
+                return Err(Refusal::new(if back { NOTHING_TO_UNDO } else { NOTHING_TO_REDO }));
+            };
+            bevy_grimoire_core::rigs::Rigs::parse(&target).map_err(|e| Refusal::new(format!("NOT WRITTEN: {e}")))?;
+            if let Some(now) = &held.text {
+                if back { redo.push(now.clone()) } else { undo.push(now.clone()) }
+            }
+            let after = RigHistory { text: Some(target.clone()), undo, redo, stepped: Some(back) };
+            Ok((back, target, after))
+        }
+    }
+
+    impl Operation for RigHistoryStep {
+        fn name(&self) -> &'static str {
+            "rig_history_step"
+        }
+        fn changes_view(&self) -> bool {
+            true
+        }
+        /// **The manifest the step rewrites.**
+        fn shows(&self, ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            shown_named(ctx, crate::anim_tab::RIGS_FILE)
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &["rigs"]
+        }
+        /// **No inverse of its own**: the step the other way is the inverse, from the same history.
+        fn undo(&self) -> Undo {
+            Undo::None
+        }
+        fn schema(&self) -> serde_json::Value {
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["by"],
+                "properties": {
+                    "by": {"type": "string", "enum": ["back", "forward"], "description": "back restores the manifest the bench held before its newest write; forward puts back what a step back took away."}
+                }
+            })
+        }
+        fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+            let (back, _, after) = Self::step(ctx, params)?;
+            Ok(json!({ "writes": crate::anim_tab::RIGS_FILE, "back": back, "undo_left": after.undo.len(), "redo_left": after.redo.len() }))
+        }
+        fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+            let (back, target, after) = Self::step(ctx, params)?;
+            let Some(project) = ctx.project.as_ref() else {
+                return Err(Refusal::new("no project is open, so there is no rig manifest to write."));
+            };
+            crate::anim_tab::write_manifest(&project.root, &target).map_err(|e| Refusal::new(format!("NOT WRITTEN: {e}")))?;
+            let (undo_left, redo_left) = (after.undo.len(), after.redo.len());
+            if let Some(view) = ctx.view.as_mut() {
+                view.rig.history = after;
+            }
+            Ok(Outcome {
+                summary: says(back).to_owned(),
+                affected: 1,
+                saved: false,
+                inverse: None,
+                after: Some(json!({ "back": back, "undo_left": undo_left, "redo_left": redo_left })),
+            })
+        }
+    }
+}
+
 /// **The lattice grid's cursor, stepped** (E-002, #129 slice 27): `F`, `H`, `T` and `G` step the selected cell along a
 /// layer and `[` and `]` step the layer the grid shows, on the Meshes tab. One view operation for the six keys, on the rules
 /// the keys always had: a step stops at the grid's edges, the cursor rides the layer instead of being dropped by it, and a
@@ -7415,6 +7529,7 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(camera::camera_turn::CameraTurn),
         Box::new(rig_check_all::RigCheckAll),
         Box::new(kit_rescan::KitRescan),
+        Box::new(rig_history_step::RigHistoryStep),
         Box::new(crate::ops_labeller::LabelsSuggest),
         Box::new(crate::ops_labeller::LabelsWalk),
         Box::new(crate::ops_labeller::LabelsAbandon),
@@ -7721,6 +7836,8 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     ("rig_check_all", "\"rig_check_all\""),
     // **The Meshes tab's rescan key** (E-002, #129 slice 33): `R` dispatches `kit_rescan`, through `tiles::rescan_key`.
     ("kit_rescan", "\"kit_rescan\""),
+    // **The rig bench's history keys** (E-002, #129 slice 35): Cmd+Z and Cmd+Shift+Z on the Anim tab dispatch `rig_history_step`, through `anim_tab::bench_history_keys`.
+    ("rig_history_step", "\"rig_history_step\""),
     // **The labeller's keys** (E-002, #129 slice 34): `L` dispatches `labels_suggest`, `Shift+L` `labels_walk` and `Shift+Y`
     // `labels_abandon`, through `labels::Labeller::dispatch`, the body an agent's call is carried out by too.
     ("labels_suggest", "\"labels_suggest\""),

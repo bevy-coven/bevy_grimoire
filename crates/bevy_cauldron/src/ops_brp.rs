@@ -785,8 +785,12 @@ struct Gates<'w, 's> {
     rig: Option<ResMut<'w, crate::view::Rig>>,
     /// **The rig bench's measurements and the watcher's queue** (E-002, #129 slice 32): what `rig_check_all` reads (which rigs are
     /// measured) and asks (which to measure next), carried by the same view.
-    reports: Option<Res<'w, crate::anim_watch::BenchReports>>,
+    reports: Option<ResMut<'w, crate::anim_watch::BenchReports>>,
     measure: Option<ResMut<'w, crate::anim_watch::MeasureQueue>>,
+    /// **What a rig history step measures again and forgets** (E-002, #129 slice 35): the reports it invalidates and the bench's
+    /// trial exclusions, carried by the same view.
+    generation: Option<ResMut<'w, crate::anim_watch::BenchGeneration>>,
+    exclude: Option<ResMut<'w, crate::anim_tab::AdoptExclude>>,
 }
 
 impl Gates<'_, '_> {
@@ -908,6 +912,16 @@ impl Gates<'_, '_> {
             && let Some(queue) = self.measure.as_deref_mut()
         {
             bench.take_check(&view.rig, queue);
+        }
+        // **A step of the bench's history** (E-002, #129 slice 35): the manifest it wrote, the stacks it moved and what it
+        // measures again.
+        if view.rig.history.stepped.is_some()
+            && let Some(bench) = self.bench.as_deref_mut()
+            && let Some(reports) = self.reports.as_deref_mut()
+            && let Some(generation) = self.generation.as_deref_mut()
+            && let Some(exclude) = self.exclude.as_deref_mut()
+        {
+            bench.take_step(&view.rig.history, exclude, reports, generation);
         }
         if let Some(page) = view.tile_page
             && let Some(build) = self.build.as_deref_mut()
@@ -2206,6 +2220,12 @@ fn operation_apply(
         {
             view.labels = cursor;
         }
+        // **A step of the bench's history reads the history** (E-002, #129 slice 35), for a preview and a call alike.
+        if p.operation == "rig_history_step"
+            && let (Some(view), Some(bench)) = (view.as_mut(), gates.bench.as_deref())
+        {
+            view.rig.history = bench.history();
+        }
         let ctx = Ctx {
         view, trust_file: None,
             root: menu.as_ref().map(|m| m.root.clone()),
@@ -2248,6 +2268,11 @@ fn operation_apply(
     {
         view.labels = cursor;
         gathered = Some(taken);
+    }
+    if p.operation == "rig_history_step"
+        && let (Some(view), Some(bench)) = (ctx.view.as_mut(), gates.bench.as_deref())
+    {
+        view.rig.history = bench.history();
     }
     // **The proposal travels by value**, in and out, because it is not map data.
     ctx.proposal = proposal.as_deref_mut().and_then(|r| r.0.take());

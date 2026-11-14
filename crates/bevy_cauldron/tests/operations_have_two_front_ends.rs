@@ -263,8 +263,6 @@ const UNMIGRATED: &[Action] = &[
     Action::FocusCandidates,
     Action::CopyInfo,
     Action::FocusLibrary,
-    Action::UndoBench,
-    Action::RedoBench,
 ];
 
 /// **The ratchet.** It is lowered in the same commit that migrates an action, and it is the only
@@ -312,7 +310,8 @@ const UNMIGRATED: &[Action] = &[
 // 32 -> 31: `CheckAllRigs` -> `rig_check_all` (E-002, #129 slice 32): `C` on the Anim tab shows the project-wide summary and asks the watcher to measure the rigs with no report, through the operation an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `CheckAllRigs` from the `World` set for the same reason; nothing is skipped.
 // 31 -> 30: `Rescan` -> `kit_rescan` (E-002, #129 slice 33): `R` on the Meshes tab reads the pack's directory again through the operation an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `Rescan` from the `World` set for the same reason; nothing is skipped.
 // 30 -> 27: `SuggestLabels`, `SuggestAll` and `DiscardAllSuggestions` -> `labels_suggest`, `labels_walk` and `labels_abandon` (E-002, #129 slice 34): `L` photographs the focused piece, `Shift+L` walks, holds or resumes the batch and `Shift+Y` drops everything the labeller holds, through the operations an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the three from the `World` set for the same reason; nothing is skipped.
-const UNMIGRATED_MAX: usize = 27;
+// 27 -> 25: `UndoBench` and `RedoBench` -> `rig_history_step` (E-002, #129 slice 35): `Cmd+Z` and `Cmd+Shift+Z` on the Anim tab step the bench's record of `rigs.yaml` back and forward through the operation an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the two from the `World` set for the same reason; nothing is skipped.
+const UNMIGRATED_MAX: usize = 25;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///
@@ -648,7 +647,7 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     assert_eq!(
         world,
         [
-            "Undo", "Redo", "UndoTile", "RedoTile", "UndoBench", "RedoBench",
+            "Undo", "Redo", "UndoTile", "RedoTile",
         ],
         "the `World` set changed. A verb belongs here when its handler takes `Commands`, an \
          `AssetServer` or a `Query` — `Ctx` cannot carry those, so the operation would need a different \

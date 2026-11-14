@@ -1128,9 +1128,8 @@ impl Action {
             Action::Undo
             | Action::Redo
             | Action::UndoTile
-            | Action::RedoTile
-            | Action::UndoBench
-            | Action::RedoBench => Change::World,
+            | Action::RedoTile => Change::World,
+            // (`UndoBench` and `RedoBench` left this list for `rig_history_step`: they write `rigs.yaml`, so they are `Project`.)
 
             // Everything else writes the grimoire and owes an operation.
             _ => Change::Project,
@@ -1223,6 +1222,9 @@ impl Action {
             Action::SuggestLabels => Some("labels_suggest"),
             Action::SuggestAll => Some("labels_walk"),
             Action::DiscardAllSuggestions => Some("labels_abandon"),
+            // **The rig bench's history** (E-002, #129 slice 35): `Cmd+Z` and `Cmd+Shift+Z` on the Anim tab step the bench's record
+            // of `rigs.yaml` back and forward through the operation an agent calls.
+            Action::UndoBench | Action::RedoBench => Some("rig_history_step"),
             // **The tool keys** (E-002, #129): `B`, `Shift+B` and the run chord arm a tool through `tool_arm`.
             // **`Remove` and `NoteTool` arm a tool, so they name the arming operation** (E-002,
             // #129). They named `placement_remove` and `note_add`: a write neither key makes — its

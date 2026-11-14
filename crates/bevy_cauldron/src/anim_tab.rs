@@ -468,17 +468,24 @@ fn load_on_entry(
     }
 }
 
-/// **The one door to disk.** Parse and validate the candidate text, write it atomically, and only
-/// then adopt it in memory — the `tiles::commit_measured` shape. A failure leaves both the file and
-/// the in-memory state exactly as they were.
+/// **The one door to disk for the manifest.** Parse and validate the candidate text, then write it atomically; the parsed
+/// manifest comes back so the caller can adopt it once the write has landed, and a failure leaves the file as it was. The
+/// bench's history step (`ops::rig_history_step`) and [`commit_text`] both write through here.
+pub(crate) fn write_manifest(root: &std::path::Path, new_text: &str) -> Result<Rigs, String> {
+    let parsed = Rigs::parse(new_text)?;
+    bevy_grimoire_core::save::save_atomic(&root.join(RIGS_FILE), new_text)?;
+    Ok(parsed)
+}
+
+/// **Write a manifest and adopt it in memory**, the `tiles::commit_measured` shape, for the unit tests below that drive the
+/// bench without the operation. A failure leaves both the file and the in-memory state exactly as they were.
+#[cfg(test)]
 fn commit_text(
     root: &std::path::Path,
     bench: &mut BenchState,
     new_text: String,
 ) -> Result<(), String> {
-    let parsed = Rigs::parse(&new_text)?;
-    let path = root.join("assets/grimoire/rigs.yaml");
-    bevy_grimoire_core::save::save_atomic(&path, &new_text)?;
+    let parsed = write_manifest(root, &new_text)?;
     bench.rigs = Some(parsed);
     bench.text = Some(new_text);
     Ok(())
@@ -717,9 +724,9 @@ fn adopt_measured(
     }
 }
 
-/// Cmd+Z / Shift+Cmd+Z, in the Anim context. One body for both directions, restored **through**
-/// [`commit_text`] so an undo re-runs the same validation and atomic save as the write it takes
-/// back — and a refused restore pushes the entry back rather than eating it.
+/// Cmd+Z / Shift+Cmd+Z, in the Anim context. **Through `rig_history_step`** (E-002, #129 slice 35), the operation an agent calls:
+/// the stacks, the validation, the atomic write and the sentence are its, and a refused step costs no entry because the answer
+/// is applied only when the write landed. The bench's reports are measured again and the trial exclusions go, as after an adopt.
 fn bench_history_keys(
     keyboard: Res<ButtonInput<KeyCode>>,
     live: Res<crate::keys::Live>,
@@ -734,37 +741,32 @@ fn bench_history_keys(
     if !undo && !redo {
         return;
     }
-    let popped = if undo { bench.undo.pop() } else { bench.redo.pop() };
-    let Some(target) = popped else {
-        bench.status.note(format!("nothing to {} on this tab", if undo { "undo" } else { "redo" }));
-        return;
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View {
+            rig: crate::ops_view::RigCursor { history: bench.history(), ..bench.cursor() },
+            ..Default::default()
+        }),
+        ..crate::ops::Ctx::default()
     };
-    let now = bench.text.clone();
-    match commit_text(&project.root, &mut bench, target.clone()) {
-        Ok(()) => {
-            crate::anim_watch::invalidate(&mut reports, &mut generation);
-            // The manifest text changed under the excludes — same rule as adopt.
-            exclude.clear();
-            if let Some(now) = now {
-                if undo {
-                    bench.redo.push(now);
-                } else {
-                    bench.undo.push(now);
-                }
+    let params = serde_json::json!({ "by": if undo { "back" } else { "forward" } });
+    match crate::ops::dispatch(&mut ctx, "rig_history_step", &params) {
+        Ok(crate::ops::Applied::Done { .. }) => {
+            if let Some(view) = ctx.view.take() {
+                bench.take_step(&view.rig.history, &mut exclude, &mut reports, &mut generation);
             }
-            bench.status.note(if undo {
-                "undid the last bench write"
-            } else {
-                "put the bench write back"
-            });
         }
-        Err(e) => {
-            if undo {
-                bench.undo.push(target);
+        // Nothing to step is guidance, as it always was: a note the next keystroke replaces. Any other refusal (the manifest
+        // could not be written) is a problem.
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+            use crate::ops::rig_history_step::{NOTHING_TO_REDO, NOTHING_TO_UNDO};
+            if e.0 == NOTHING_TO_UNDO || e.0 == NOTHING_TO_REDO {
+                bench.status.note(e.0);
             } else {
-                bench.redo.push(target);
+                bench.status.problem(e.0);
             }
-            bench.status.problem(format!("NOT WRITTEN: {e}"));
         }
     }
 }
@@ -837,6 +839,42 @@ impl BenchState {
     pub(crate) fn set_cursor(&mut self, cursor: &crate::ops_view::RigCursor) {
         self.selected = cursor.selected;
         self.view = if cursor.all { View::All } else { View::One };
+    }
+
+    /// **The bench's own history as a value**, for `rig_history_step` to step (E-002, #129 slice 35).
+    pub(crate) fn history(&self) -> crate::ops_view::RigHistory {
+        crate::ops_view::RigHistory { text: self.text.clone(), undo: self.undo.clone(), redo: self.redo.clone(), stepped: None }
+    }
+
+    /// **Take what `rig_history_step` answered**: the manifest it wrote, the stacks it moved and its sentence. The reports are
+    /// measured again and the trial exclusions go, because both were about the text that was just replaced. A history that did
+    /// not step is left alone, and the selection stays on the same place in the list (or on the last rig, if the list shrank).
+    pub(crate) fn take_step(
+        &mut self,
+        history: &crate::ops_view::RigHistory,
+        exclude: &mut AdoptExclude,
+        reports: &mut crate::anim_watch::BenchReports,
+        generation: &mut crate::anim_watch::BenchGeneration,
+    ) {
+        let (Some(back), Some(text)) = (history.stepped, history.text.as_ref()) else {
+            return;
+        };
+        // The operation validated the text before it wrote it; a text that no longer parses is a defect to say, not to swallow.
+        let rigs = match Rigs::parse(text) {
+            Ok(rigs) => rigs,
+            Err(e) => {
+                self.status.problem(format!("written, but the tab could not read rigs.yaml back: {e}"));
+                return;
+            }
+        };
+        self.rigs = Some(rigs);
+        self.text = Some(text.clone());
+        self.undo = history.undo.clone();
+        self.redo = history.redo.clone();
+        self.selected = self.selected.min(self.names().len().saturating_sub(1));
+        crate::anim_watch::invalidate(reports, generation);
+        exclude.clear();
+        self.status.note(crate::ops::rig_history_step::says(back));
     }
 }
 
