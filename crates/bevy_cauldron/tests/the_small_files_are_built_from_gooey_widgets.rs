@@ -117,3 +117,45 @@ fn the_outliner_is_a_gooey_column() {
     let found = the::<Outliner>(&mut app);
     assert_column(&app, found, "the outliner");
 }
+
+/// **The Agent workspace's history** is a gooey column, in a block that is a gooey column and keeps its height.
+#[test]
+fn the_agent_workspaces_history_is_a_gooey_column() {
+    use bevy_cauldron::agent_view::AgentHistory;
+    let mut app = editor("agent", Mode::Agent);
+    let history = the::<AgentHistory>(&mut app);
+    assert_column(&app, history, "the agent's history list");
+    let block = parent(&app, history);
+    assert_column(&app, block, "the history block");
+    let node = app.world().get::<Node>(block).expect("the block has a Node");
+    assert_eq!(node.flex_shrink, 0.0, "the history block keeps its height when the pane is short");
+}
+
+/// **The library browser's section** is a gooey column, its tag toggles stand in a wrapping gooey row, and the grid's place is a gooey row.
+#[test]
+fn the_library_browser_is_a_gooey_column_with_a_wrapping_row_of_tags() {
+    use bevy_cauldron::library_browser::{LibraryBrowser, LibraryItem, LibraryTags};
+    let mut app = editor("library", Mode::Meshes);
+    let row = the::<LibraryItem>(&mut app);
+    app.world_mut().commands().trigger(bevy_gooey::ValueChange { source: row, value: true, is_final: true });
+    for _ in 0..6 {
+        app.update();
+    }
+    let browser = the::<LibraryBrowser>(&mut app);
+    assert_column(&app, browser, "the library section");
+    let tags = the::<LibraryTags>(&mut app);
+    assert_row(&app, tags, "the tag toggles' line");
+    let node = app.world().get::<Node>(tags).expect("the tags line has a Node");
+    assert_eq!(node.flex_wrap, FlexWrap::Wrap, "the tag toggles wrap onto a second line instead of running off the panel");
+}
+
+/// **A panel heading's row** (the title and its "?") is a gooey row whose cells stand level.
+#[test]
+fn a_panel_headings_row_is_a_gooey_row_level_with_its_words() {
+    use bevy_cauldron::help::PanelHeading;
+    let mut app = editor("heading", Mode::Map);
+    let row = the::<PanelHeading>(&mut app);
+    assert_row(&app, row, "the heading row");
+    let node = app.world().get::<Node>(row).expect("the heading row has a Node");
+    assert_eq!(node.align_items, AlignItems::Center, "the \"?\" stands level with the heading's words");
+}

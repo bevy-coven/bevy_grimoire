@@ -170,7 +170,7 @@ fn open(
                 .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(crate::launcher::CARD_WIDTH), max_width: Val::Percent(100.0), ..default() })
                 .with_children(|card| {
                     card.spawn(heading("Project configuration"));
-                    card.spawn((Node { flex_direction: FlexDirection::Column, ..default() }, Lines));
+                    card.spawn((bevy_gooey::column(0.0), Lines));
                     card.spawn(menu()).with_children(|actions| {
                         actions.spawn((
                             button("Close"),

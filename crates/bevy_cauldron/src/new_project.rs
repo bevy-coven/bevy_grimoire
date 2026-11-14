@@ -352,7 +352,7 @@ fn spawn_the_card(
                     observe(|change: On<ValueChange<String>>, mut form: ResMut<NewProjectForm>| form.0.name = change.value.clone()),
                 ));
                 card.spawn((crate::launcher::quiet(FOLDER_UNNAMED), FolderLine));
-                card.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::End, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|row| {
+                crate::chrome::gapped_row(card, crate::chrome::GAP_GROUP_STEPS, UiRect::ZERO, AlignItems::End).with_children(|row| {
                     row.spawn((
                         text_input("Location", start.location.clone()),
                         LocationField,
@@ -375,7 +375,10 @@ fn spawn_the_card(
                 ));
                 card.spawn((crate::launcher::quiet(start.template.describe()), TemplateNote));
                 card.spawn((label(""), ReasonLine));
-                card.spawn(Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::FlexEnd, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|row| {
+                let mut answers = crate::chrome::gapped_row(card, crate::chrome::GAP_GROUP_STEPS, UiRect::ZERO, AlignItems::Stretch);
+                // The answers stand at the right edge: a gooey row says nothing about where its cells gather.
+                answers.entry::<Node>().and_modify(|mut node| node.justify_content = JustifyContent::FlexEnd);
+                answers.with_children(|row| {
                     row.spawn((
                         button("Cancel"),
                         observe(|_: On<bevy_gooey::Activate>, mut launcher: ResMut<Launcher>| launcher.new_project_done = true),

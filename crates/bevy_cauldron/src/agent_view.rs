@@ -195,10 +195,13 @@ fn spawn_agent_panel(mut commands: Commands, frame: Res<Frame>, pause: Res<Agent
     let block = crate::familiar::spawn_the_block(&mut commands, pause.0, here.0);
     commands.entity(pane).add_child(block);
     commands.entity(pane).with_children(|s| {
-        s.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(chrome::GAP_TIGHT), flex_shrink: 0.0, ..default() })
+        let mut history = s.spawn(bevy_gooey::column(chrome::GAP_TIGHT_STEPS));
+        // The history keeps its height when the pane is short: a gooey column says nothing about shrinking.
+        history.entry::<Node>().and_modify(|mut node| node.flex_shrink = 0.0);
+        history
             .with_children(|h| {
                 chrome::section(h, "HISTORY");
-                h.spawn((AgentHistory, Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(chrome::GAP_TIGHT), ..default() }));
+                h.spawn((AgentHistory, bevy_gooey::column(chrome::GAP_TIGHT_STEPS)));
             });
     });
 }
@@ -280,7 +283,7 @@ fn draw_the_history(
             chrome::row_value(c, "The agent has made no changes yet", chrome::ink().dim, AgentChangeRow);
         }
         for row in &rows {
-            c.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::FlexStart, column_gap: Val::Px(chrome::GAP_TIGHT), ..default() })
+            chrome::gapped_row(c, chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::FlexStart)
                 .with_children(|r| {
                     r.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() }).with_children(|col| {
                         chrome::row_value(col, row.text.clone(), chrome::ink().text, AgentChangeRow);
@@ -297,7 +300,7 @@ fn draw_the_history(
         // **The hand-backs the person kept** (BM-07, #417): a result is a benchmark task once somebody accepted it. Drawn only when there is
         // one, so a workspace that has kept nothing holds no extra button.
         for hand in &hands {
-            c.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::FlexStart, column_gap: Val::Px(chrome::GAP_TIGHT), ..default() })
+            chrome::gapped_row(c, chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::FlexStart)
                 .with_children(|r| {
                     r.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() }).with_children(|col| {
                         chrome::row_value(col, format!("kept: {}", hand.title), chrome::ink().text, AgentHandBackRow);
