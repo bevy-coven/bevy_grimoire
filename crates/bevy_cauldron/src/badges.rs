@@ -456,7 +456,7 @@ impl Plugin for BadgePlugin {
             // flicker.
             .add_systems(
                 Update,
-                (rebuild_badges, place_badges, flash_live_badges)
+                (rebuild_badges.before(bevy_gooey::GooeySystems::Style), place_badges, flash_live_badges)
                     .chain()
                     .in_set(keys::Phase::Act)
                     .run_if(in_state(crate::screen::Screen::Editor)),
@@ -477,25 +477,15 @@ fn spawn_layer(
             BadgeLayer,
             // Not a panel — a layer over the whole window, whose children are each placed by
             // projecting a control's rect or a world point. `chrome::Frame` owns where a panel goes;
-            // nothing here is in the flow it governs.
-            Node {
-                // PLACES-ITSELF-OK: a layer, not a panel — see above.
-                position_type: PositionType::Absolute,
-                // CHROME-OK: an absolute layer's origin, not a spacing step.
-                left: Val::Px(0.0),
-                // CHROME-OK: as above.
-                top: Val::Px(0.0),
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                display: Display::None,
-                ..default()
-            },
+            // nothing here is in the flow it governs: gooey's `cover` (placed on the whole window, which the pointer goes through),
+            // hidden through `Shown` until the key is down.
+            bevy_gooey::cover(),
+            bevy_gooey::Shown(false),
             // **Per `docs/ui.md` §5 trap 7.** A full-screen container without this eats every world
             // click. It must also never carry `Hovered`: `view::over_ui` and `view::drive` ask "is
             // the pointer on the interface" by looking for any true one, and a layer covering the
             // window would answer yes everywhere — killing zoom and click-to-place with nothing on
             // screen to point at.
-            bevy::picking::Pickable::IGNORE,
             // Above the panels (0), the compass (100), the tab strip (101) and the name box (400).
             // Below `confirm`'s 900, deliberately: a question you have to answer outranks a hint
             // about keys.
@@ -631,7 +621,7 @@ fn rebuild_badges(
     shortcut: Shortcut<'_>,
     mode: Res<crate::tiles::Mode>,
     mut showing: ResMut<ShowingFor>,
-    mut layers: Query<(Entity, &mut Node), With<BadgeLayer>>,
+    mut layers: Query<(Entity, &mut bevy_gooey::Shown), With<BadgeLayer>>,
     stale: Stale<'_, '_>,
     // **No fold queries here any more.** Whether a control is laid out is a fact about the control;
     // where its badge may go is a fact about the pane, and that is `place_badges`'s question.
@@ -641,10 +631,9 @@ fn rebuild_badges(
     let ink = BadgeInk::of(skin.as_deref());
     let Stale { clusters, segs } = stale;
     let want = keys::pressed(&keyboard, *live, keys::Action::Shortcuts);
-    for (_, mut node) in &mut layers {
-        let display = if want { Display::Flex } else { Display::None };
-        if node.display != display {
-            node.display = display;
+    for (_, mut shown) in &mut layers {
+        if shown.0 != want {
+            shown.0 = want;
         }
     }
     // **What is on screen to be drawn on**, in `ControlId::ALL` order so the key is stable and a
@@ -741,15 +730,11 @@ fn rebuild_badges(
                     *seg = p
                         .spawn((
                             LeadSeg,
-                            Node {
-                                // PLACES-ITSELF-OK: a leader segment, laid against its anchor and
-                                // its box by `place_badges` — same standing as the clusters.
-                                position_type: PositionType::Absolute,
-                                ..default()
-                            },
+                            // A leader segment, laid against its anchor and its box by `place_badges`, which writes its left, top, width and height: `HostGeometry`.
+                            bevy_gooey::placed(UiRect::all(Val::Auto)),
+                            bevy_gooey::HostGeometry,
                             BackgroundColor(chrome::ink().key),
                             Visibility::Hidden,
-                            bevy::picking::Pickable::IGNORE,
                         ))
                         .id();
                 }
@@ -2423,12 +2408,13 @@ fn one_badge(
             bevy::picking::Pickable::IGNORE,
         );
         b.spawn((
-            Node {
-                min_width: if boxed { Val::Px(chord_col) } else { Val::Auto },
-                max_width: if boxed { Val::Px(chord_col) } else { Val::Auto },
-                flex_shrink: 0.0,
+            // The chord's column: `chord_col` wide inside a box, hugging the chord outside one, and never squeezed.
+            bevy_gooey::sized(bevy_gooey::Sizing {
+                min_width: boxed.then_some(bevy_gooey::Extent::Px(chord_col)),
+                max_width: boxed.then_some(bevy_gooey::Extent::Px(chord_col)),
                 ..default()
-            },
+            }),
+            bevy_gooey::TextFlow { shrink: Some(0.0), ..default() },
             bevy::picking::Pickable::IGNORE,
         ))
         .with_children(|w| {
@@ -2445,7 +2431,7 @@ fn one_badge(
             // where it can't be seen."* Constrained from outside, the measure
             // runs against the width it will actually get.
             b.spawn((
-                Node {
+                // The description's wrapper, a cap and not a width:
                     // A column, so the block has a width you can predict. Capping the
                     // *cluster* instead was tried and is the wrong lever:
                     // `align_items: Stretch` plus a shrinkable row let flex take the
@@ -2457,9 +2443,7 @@ fn one_badge(
                     // in and can afford a wide column, a control's box has to fit on whatever free
                     // ground is left beside it. That is a fact about the *home*, and the caller is
                     // where the home is known.
-                    max_width: Val::Px(does_col),
-                    ..default()
-                },
+                bevy_gooey::sized(bevy_gooey::Sizing { max_width: Some(bevy_gooey::Extent::Px(does_col)), ..default() }),
                 // **The wrapper answers the pointer too, or the whole layer does.** It is the one
                 // node in this subtree that carries no marker, so an `Or<With<..>>` guard could not
                 // see it, and `build_hover_map` blocks on an entity with no `Pickable` by default —
