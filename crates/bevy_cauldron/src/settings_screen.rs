@@ -84,6 +84,9 @@ pub struct SettingsDialog {
 #[derive(Component, Default)]
 struct Built {
     snapshot: Option<Snapshot>,
+    /// What the Terminal agent row was built with (#425): its problem line, its command and the choices it offers are built only
+    /// with the row, so a change to any of them builds the pages again, the one thing besides a search that does.
+    agent: Option<AgentRow>,
     /// The search the pages were built for: the settings listed follow from it alone.
     query: Option<String>,
 }
@@ -474,8 +477,10 @@ type ControlState = (Entity, &'static mut SettingControl, Option<&'static mut Ch
 
 /// **Follow what the rows are built from**: a choice, a search, or either file.
 ///
-/// A search changes which settings are listed, so it builds the pages again. Anything else (a write from a
-/// control, a Reset, an edit made by hand, the Applies-to choice) changes only what a row shows: the
+/// A search changes which settings are listed, so it builds the pages again. So does a change to what the **Terminal agent row**
+/// holds beyond its choice (#425): its problem line, its `Use Oh My Pi` button, its command and the field `command_editing` opens,
+/// and the choices it offers are spawned with the row and nowhere else, so [`Built::agent`] says what they were built from. Anything
+/// else (a write from a control, a Reset, an edit made by hand, the Applies-to choice) changes only what a row shows: the
 /// control's value and the line's *Modified* mark, Reset and project note are updated where they stand, so
 /// the list keeps its scroll offset, its focus and its layout (#429).
 #[allow(clippy::too_many_arguments)]
@@ -571,11 +576,12 @@ fn refresh(
             }
         })
     };
+    let agent = setting_catalogue::find("terminal_agent").and_then(agent_of);
 
     // The rows stand when the same settings are listed; they are built again when a search lists others, or
     // when a control cannot show what its row now holds (a row built as "unreadable value", or a kind that
     // does not match).
-    let mut rebuild = built.query.as_deref() != Some(dialog.query.as_str()) || !unreadable.is_empty();
+    let mut rebuild = built.query.as_deref() != Some(dialog.query.as_str()) || !unreadable.is_empty() || built.agent != agent;
     let mut switches: Vec<(Entity, bool)> = Vec::new();
     let mut sliders: Vec<(Entity, f32)> = Vec::new();
     if !rebuild {
@@ -699,6 +705,7 @@ fn refresh(
         }
     }
     built.snapshot = Some(snapshot);
+    built.agent = agent;
 }
 
 /// A scale slider that was just built or whose value moved.
