@@ -587,6 +587,10 @@ type Blenders<'w, 's> = Query<
     Or<(With<BenchStage>, With<BenchGhost>)>,
 >;
 
+/// **The least a press scrubs for**, in seconds: one frame at 240 Hz. `stage_scrub` refuses a scrub of no time, so a press
+/// that lands on a frame whose delta is zero (a first frame, a paused clock) scrubs for this much instead of not logging.
+const PRESS_FLOOR_SECONDS: f32 = 1.0 / 240.0;
+
 /// **Drive the staged blender** — the bench's creature driver, ordered exactly like the game's
 /// (`.after(PoseAttachSet).before(PoseBlendSet)`).
 #[allow(clippy::too_many_arguments)] // a bevy system: each parameter is a resource the key and the driver read
@@ -618,12 +622,16 @@ pub(crate) fn drive_bench_scrub(
     // **A held scrub is `stage_scrub` every frame**, for the seconds the frame lasted — the rate and the wrap are the
     // operation's. The press is the change and logs a line; the frames after it are it continuing (`dispatch_repeat`).
     // Both keys down cancel out, as they always did, and a playing figure is its own clock: the key stays silent there.
-    if !scrub.playing && back != fwd && dt > 0.0 {
-        let fresh = crate::keys::just_pressed(&keyboard, *live, Action::ScrubBack)
-            || crate::keys::just_pressed(&keyboard, *live, Action::ScrubFwd);
+    let fresh = crate::keys::just_pressed(&keyboard, *live, Action::ScrubBack)
+        || crate::keys::just_pressed(&keyboard, *live, Action::ScrubFwd);
+    // **The press is the change, so it dispatches whatever its frame lasted**: a frame of no time moves the phase by no more
+    // than [`PRESS_FLOOR_SECONDS`], but the next frame is no longer `just_pressed`, and skipping the press would leave a held
+    // scrub that is never logged. The frames after it are it continuing, and a frame of no time moves nothing there.
+    if !scrub.playing && back != fwd && (fresh || dt > 0.0) {
+        let seconds = if fresh { dt.max(PRESS_FLOOR_SECONDS) } else { dt };
         let params = serde_json::json!({
             "by": if fwd { "fwd" } else { "back" },
-            "seconds": dt.min(crate::ops::stage::MAX_SCRUB_SECONDS),
+            "seconds": seconds.min(crate::ops::stage::MAX_SCRUB_SECONDS),
             "fine": crate::keys::shift_held(&keyboard),
         });
         if let Some(after) = dispatch_stage(cursor(&scrub), project, "stage_scrub", params, !fresh)

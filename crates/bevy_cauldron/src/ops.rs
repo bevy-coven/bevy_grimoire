@@ -4093,6 +4093,9 @@ pub mod lattice_cursor_step {
 /// (`composition_define`), so none of these writes a file or takes an undo step of its own — the tab keeps a tile history of
 /// its own that `Cmd+Z` walks. Every change to the members goes through `build::edit_open`, the one door that re-resolves
 /// the hosts and keeps the result only if it still stands up, so a refusal leaves the tile as it was.
+///
+/// **They declare `Shown::Nowhere`** (`hand_operation!` hard-codes it): no `Shown` variant names the Tiles tab's draft, so the
+/// editor will not follow an agent's edit of it. The person sees the change where they already look, the tile's own panel.
 pub mod tile_hand {
     use super::list_walk::{DIRECTIONS, direction, need_view};
     use super::*;

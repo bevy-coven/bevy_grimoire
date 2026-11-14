@@ -251,3 +251,29 @@ fn the_seven_actions_name_the_operations_they_dispatch() {
     assert_eq!(Action::BuildDropMember.operation(), Some("tile_member_remove"));
     assert_eq!(Action::ClearTile.operation(), Some("tile_clear"));
 }
+
+/// **`Cmd+Z` on the Tiles tab takes back what an agent's call did to the draft**: the operations carry no undo step of their
+/// own (`Undo::None`), because the tab's own history watches the tile and records every change to it, whoever made it.
+#[test]
+fn cmd_z_takes_back_an_agents_clear_and_an_agents_removal() {
+    let mut app = editor("undo");
+    take_in_hand(&mut app);
+    assert_eq!(members(&app), 2);
+    let undo = |app: &mut App| tap(app, &[bevy_cauldron::keys::MOD_KEYS[0]], KeyCode::KeyZ);
+
+    let said = apply(&mut app, "tile_clear", json!({}));
+    assert_eq!(said["outcome"], "applied", "{said}");
+    app.update();
+    app.update();
+    assert_eq!(members(&app), 0, "an agent emptied the tile");
+    undo(&mut app);
+    assert_eq!(members(&app), 2, "Cmd+Z brings both members back as one step");
+
+    let said = apply(&mut app, "tile_member_remove", json!({}));
+    assert_eq!(said["outcome"], "applied", "{said}");
+    app.update();
+    app.update();
+    assert_eq!(members(&app), 1, "an agent took the focused member out");
+    undo(&mut app);
+    assert_eq!(members(&app), 2, "Cmd+Z puts it back");
+}

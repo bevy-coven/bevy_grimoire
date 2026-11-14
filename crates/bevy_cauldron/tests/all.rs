@@ -281,6 +281,7 @@ mod environment_applies;
 mod every_action_is_a_command;
 mod every_label_follows_the_writing_style;
 mod every_key_has_a_home;
+mod every_operation_has_a_row_in_the_agent_guide;
 mod editor_skin;
 mod editor_ui_plugin;
 mod every_list_follows_its_selection;

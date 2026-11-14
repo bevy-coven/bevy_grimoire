@@ -141,6 +141,13 @@ Goal: know what an agent can change, and what undoes each change.
 | `stage_play` | Plays the rig bench's staged figure, or pauses it into a scrub: `playing` `true` or `false`, and absent toggles, as Space does. | None: it changes the view, not the map |
 | `stage_scrub` | Scrubs the paused figure's phase, `by` `back` or `fwd`, for `seconds` of a held key (a quarter of the cycle per second), `fine` for Shift, as the left and right arrows do. Refused while the figure plays. | None: it changes the view, not the map |
 | `stage_camera` | Frames the rig bench's stage camera, `preset` `figure`, `feet`, `side` or `ground`; absent steps to the next, as V does. | None: it changes the view, not the map |
+| `lattice_cursor_step` | Steps the lattice grid's selected cell, `by` `left`, `right`, `forward` or `back`, or its layer, `down` or `up`, as F, H, T, G, `[` and `]` do on the Tiles tab. A step stops at the grid's edges, and is refused when no grid is up. | None: it changes the view, not the map |
+| `tile_hand_arm` | Takes the piece in hand on the Tiles tab, so the arrows steer the tile, or puts it back, so they walk the library list: `placing` `true` or `false`, and absent toggles, as Space does. Refused unless a bounded tile is open. | None: it changes the view, not the map |
+| `tile_member_focus` | Walks the focus through the open tile's members, `by` `prev` or `next`, as `,` and `.` do. It stops at the ends of the list, and is refused when the tile has no members. | None: it changes the view, not the map |
+| `tile_grid_deepen` | Makes the arrow ladder on the Tiles tab finer by thirds, wrapping back to the coarse rung, as J does. It takes no fields. | None: it changes the view, not the map |
+| `tile_member_turn` | Turns the focused member of the open tile a quarter, as R does. It takes no fields, and is refused when it would leave a fixture with no host. | Not `operation_undo`: it edits the draft on the Tiles tab, and `Cmd+Z` there takes it back |
+| `tile_member_remove` | Takes the focused member out of the open tile, as the remove key does. A host cannot be removed out from under what rests on it: the call is refused and the tile is as it was. | Not `operation_undo`: it edits the draft on the Tiles tab, and `Cmd+Z` there takes it back |
+| `tile_clear` | Empties the open tile, as Shift and the remove key do. The tab's history holds the members, so `Cmd+Z` there puts them all back as one step. | Not `operation_undo`: it edits the draft on the Tiles tab, and `Cmd+Z` there takes it back |
 | `label_set` | Sets one label axis (kind, effects, look, or surfaces) on a piece. | Puts the old labels back |
 
 `map_set_settings` refuses `bounds` and `axis` in the same call.

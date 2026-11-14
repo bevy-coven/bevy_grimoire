@@ -171,3 +171,21 @@ fn the_six_actions_name_the_operation_they_dispatch() {
         assert_eq!(action.operation(), Some("lattice_cursor_step"), "{action:?}");
     }
 }
+
+/// **A step whose log line cannot be written is taken back, and the cursor stays where it was**: the key applies the
+/// answer only when the operation was applied, as every other key does.
+#[test]
+fn a_step_whose_log_line_cannot_be_written_leaves_the_cursor_where_it_was() {
+    let mut app = editor("unwritable");
+    let picked = apply(&mut app, "piece_select", json!({"id": "site/hall"}));
+    assert_eq!(picked["outcome"], "applied", "{picked}");
+    tap(&mut app, KeyCode::KeyH);
+    assert_eq!(at(&app), Some((1, 0, 0)), "a step on a log that can be written moves the cursor");
+
+    // A directory where the log's file goes: the append fails, so the dispatch is refused after its commit.
+    let log = bevy_cauldron::ops::oplog_path_at(&app.world().resource::<Project>().root);
+    let _ = std::fs::remove_file(&log);
+    std::fs::create_dir_all(&log).expect("a directory in the log's place");
+    tap(&mut app, KeyCode::KeyH);
+    assert_eq!(at(&app), Some((1, 0, 0)), "a step whose log line cannot be written is refused, and moves nothing");
+}

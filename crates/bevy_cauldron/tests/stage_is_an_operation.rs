@@ -206,3 +206,21 @@ fn the_four_actions_name_the_operations_they_dispatch() {
     assert_eq!(Action::ScrubFwd.operation(), Some("stage_scrub"));
     assert_eq!(Action::CycleCamPreset.operation(), Some("stage_camera"));
 }
+
+/// **A press that lands on a frame of no time is still the change, and still logs**: the move may be nothing, but the
+/// press is the act, and the frames after it are no longer `just_pressed`.
+#[test]
+fn a_press_on_a_frame_of_no_time_still_logs_the_scrub() {
+    let mut app = editor("zero_frame");
+    tap(&mut app, &[], KeyCode::Space);
+    assert!(!playing(&app));
+    app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(std::time::Duration::ZERO));
+    app.update();
+    send(&mut app, KeyCode::ArrowRight, ButtonState::Pressed);
+    app.update();
+    send(&mut app, KeyCode::ArrowRight, ButtonState::Released);
+    app.update();
+    app.update();
+    let lines = logged(&app, "stage_scrub");
+    assert_eq!(lines.len(), 1, "the press logs one line even when its frame lasted no time: {lines:?}");
+}

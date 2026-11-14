@@ -2709,8 +2709,16 @@ fn lattice_keys(
         (Action::CellBack, "back"),
     ] {
         if pressed(action) {
-            // A refusal leaves the cursor where it was, as the key always did; there is nothing to say about a selection.
-            let _ = crate::ops::dispatch(&mut ctx, "lattice_cursor_step", &serde_json::json!({ "by": by }));
+            // **Applied only when the operation was**: a refusal leaves the cursor where it was, as the key always did, and
+            // so does a step whose log line could not be written, which the dispatch takes back after its commit has already
+            // moved the view's copy. There is nothing to say about a selection.
+            let before = ctx.view.as_ref().and_then(|v| v.lattice);
+            let applied = crate::ops::dispatch(&mut ctx, "lattice_cursor_step", &serde_json::json!({ "by": by }));
+            if !matches!(applied, Ok(crate::ops::Applied::Done { .. }))
+                && let Some(view) = ctx.view.as_mut()
+            {
+                view.lattice = before;
+            }
         }
     }
     if let Some(cursor) = ctx.view.and_then(|v| v.lattice)
