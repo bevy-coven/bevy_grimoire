@@ -757,6 +757,7 @@ pub fn draw_the_tabs(
                     ..default()
                 },
                 bevy_gooey::BorderPx(bevy_gooey::Sides { bottom: Some(3.0), ..default() }),
+                bevy_gooey::InkOverride { edge: Some(if active { ink.accent } else { Color::NONE }), ..default() },
                 BorderColor::all(if active { ink.accent } else { Color::NONE }),
                 BackgroundColor(if active { ink.panel_bg } else { ink.row_bg }),
                 bevy::a11y::AccessibilityNode::from(accesskit::Node::new(accesskit::Role::Tab)),

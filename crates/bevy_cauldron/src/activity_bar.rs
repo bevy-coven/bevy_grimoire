@@ -191,14 +191,11 @@ fn keep_the_activity_bar(
     let bar = commands
         .spawn((
             ActivityBar { frame: frame.root, shown },
-            Node {
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Stretch,
-                flex_shrink: 0.0,
-                height: Val::Percent(100.0),
-                border: UiRect::right(Val::Px(EDGE_W)),
-                ..default()
-            },
+            // A column of the tabs, as tall as the frame, that never gives way, with the edge it shares with the docks along its right.
+            bevy_gooey::column_with(0.0, bevy_gooey::RowLayout { align: Some(AlignItems::Stretch), shrink: Some(0.0), ..default() }),
+            bevy_gooey::Sizing { height: Some(bevy_gooey::Extent::Percent(100.0)), ..default() },
+            bevy_gooey::BorderPx(bevy_gooey::Sides { right: Some(EDGE_W), ..default() }),
+            bevy_gooey::InkOverride { edge: Some(ink().panel_edge), ..default() },
             BackgroundColor(ink().bar_bg),
             BorderColor::all(ink().panel_edge),
             // **A focus region of its own, so F6 reaches it** (UI-35, #229): viewport → bar → docks and

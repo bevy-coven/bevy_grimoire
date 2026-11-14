@@ -28,11 +28,10 @@ use crate::fixtures;
 
 /// The files that may still carry raw `Node` literals, with the number each carries (production code only). Sorted by path.
 const NODES_LEFT: &[(&str, usize)] = &[
-    ("activity_bar.rs", 1),
-    ("badges.rs", 6),
-    ("chrome.rs", 31),
+    ("badges.rs", 2),
+    ("chrome.rs", 29),
     ("compose.rs", 1),
-    ("editor.rs", 3),
+    ("editor.rs", 2),
     ("files.rs", 1),
     ("game_ui_preview.rs", 1),
     ("launcher.rs", 4),
@@ -44,7 +43,7 @@ const NODES_LEFT: &[(&str, usize)] = &[
 ];
 
 /// The sum of [`NODES_LEFT`]: the crate's raw `Node` literals outside the viewport surface. #260 closes when it is 0.
-const TOTAL_NODES_LEFT: usize = 65;
+const TOTAL_NODES_LEFT: usize = 57;
 
 /// The viewport surface: the files where a raw `Node` is allowed to stay and is not counted.
 const SURFACE_FILES: [&str; 2] = ["surface.rs", "view.rs"];

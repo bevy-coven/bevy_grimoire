@@ -2858,6 +2858,19 @@ pub fn the_words_of_a_quiet_item_are_a_control(commands: &mut Commands, item: En
     });
 }
 
+/// **The shape of a small box that holds one edge colour** (#260): a row of gooey's own with a row radius and a `px` border in `edge`, which is passed as `InkOverride` because the skin
+/// paints any `BorderPx` edge in its outline unless the host's colour is pinned (so a box whose edge the host changes by state cannot be this: see the chip's GAP4). A row writes only what it is
+/// asked to, so a caller's `entry::<Node>()` stands; `shrink` is `Some(0.0)` for a box that never gives way to its neighbours.
+pub fn small_box(spacing: bevy_gooey::Spacing, border: bevy_gooey::Sides<f32>, edge: Color, shrink: Option<f32>) -> impl Bundle {
+    (
+        bevy_gooey::row_with(0.0, bevy_gooey::RowLayout { shrink, ..default() }),
+        spacing,
+        bevy_gooey::BorderPx(border),
+        bevy_gooey::InkOverride { edge: Some(edge), ..default() },
+        bevy_gooey::Shape { radius: Some(bevy_gooey::Radius::Step(0)), ..default() },
+    )
+}
+
 /// **A chip's inset as gooey's `Spacing`** (#260): 6 px a side and a tight step above and below, the same box as [`CHIP_PAD`]. The 6 px is not a step of the skin's scale, so it is a literal `Space::Px`.
 pub const CHIP_SPACING: bevy_gooey::Spacing = bevy_gooey::Spacing {
     margin: NO_MARGIN,
@@ -2991,6 +3004,8 @@ pub fn chip<'a>(
         // `style_list_rows` already keys on it and has never needed to know what it is painting.
         RowRest(fill),
         marker,
+        // GAP4: a raw node. A `BorderPx` edge is painted in the skin's outline over any `BorderColor` the host wrote (an `InkOverride` pins one colour), and a chip's
+        // edge is the host's to paint by state (a held chip's accent, a ghost proposal's suggest, hover): `style_list_rows` and the tag painters write it every frame.
         Node {
             padding: CHIP_PAD,
             border: UiRect::all(Val::Px(EDGE_W)),
@@ -3075,14 +3090,11 @@ fn row_shape(selected: bool) -> impl Bundle {
         Hovered::default(),
         RowRest(rest),
         RowSelected(selected),
+        // GAP4: a raw node, for the reason `chip` gives (the rail is an edge the host paints by selection).
         Node {
             width: Val::Percent(100.0),
             padding: CHIP_PAD,
             border: UiRect::left(Val::Px(SELECT_RAIL_W)),
-            // `border_radius` is a `Node` field in Bevy 0.19, not a component — `BorderRadius`
-            // derives `Reflect` and not `Component` (`bevy_ui-0.19.0/src/ui_node.rs:2526`), so a
-            // tuple carrying one is simply not a `Bundle` and the error names the tuple rather than
-            // the offending member.
             border_radius: BorderRadius::all(Val::Px(RADIUS_ROW)),
             ..default()
         },
@@ -3236,6 +3248,7 @@ pub fn button<'a>(
         Hovered::default(),
         RowRest(ink().row_bg),
         marker,
+        // GAP4: a raw node, for the reason `chip` gives (the host paints the edge by state).
         Node {
             padding: BUTTON_PAD,
             border: UiRect::all(Val::Px(EDGE_W)),
@@ -3295,16 +3308,13 @@ pub fn modal_card<'a>(commands: &'a mut Commands, root: impl Bundle) -> EntityCo
         .id();
     let card = commands
         .spawn((
-            Node {
-                flex_direction: FlexDirection::Column,
-                min_width: Val::Px(MODAL_MIN_W),
-                max_width: Val::Px(MODAL_MAX_W),
-                padding: UiRect::all(Val::Px(MODAL_PAD)),
-                row_gap: Val::Px(GAP_GROUP),
-                border: UiRect::all(Val::Px(EDGE_W)),
-                border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
-                ..default()
-            },
+            // The card: a gooey column a group step between its parts, `MODAL_PAD` all round (not a step of the scale, so a literal), a 1 px edge and a panel radius.
+            bevy_gooey::column(GAP_GROUP_STEPS),
+            bevy_gooey::Sizing { min_width: Some(bevy_gooey::Extent::Px(MODAL_MIN_W)), max_width: Some(bevy_gooey::Extent::Px(MODAL_MAX_W)), ..default() },
+            bevy_gooey::Spacing { padding: bevy_gooey::Sides::all(bevy_gooey::Space::Px(MODAL_PAD)), ..default() },
+            bevy_gooey::BorderPx(bevy_gooey::Sides::all(EDGE_W)),
+            bevy_gooey::InkOverride { edge: Some(ink().panel_edge), ..default() },
+            bevy_gooey::Shape { radius: Some(bevy_gooey::Radius::Step(1)), ..default() },
             BackgroundColor(ink().overlay_bg),
             BorderColor::all(ink().panel_edge),
             Hovered::default(),
@@ -3413,14 +3423,13 @@ pub fn severity_rail<'a>(
     marker: impl Bundle,
 ) -> EntityCommands<'a> {
     parent.spawn((
-        Node {
-            flex_direction: FlexDirection::Column,
-            border: UiRect::left(Val::Px(2.0)),
-            padding: UiRect::left(Val::Px(7.0))
-                .with_top(Val::Px(GAP_TIGHT))
-                .with_bottom(Val::Px(GAP_TIGHT)),
-            margin: UiRect::bottom(Val::Px(GAP_ROW)),
-            ..default()
+        // A column that does not give way to its neighbours, with a 2 px rail along its left, 7 px (not a step of the scale) in from it, a tight step above and below and a row step under.
+        bevy_gooey::column_with(0.0, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }),
+        bevy_gooey::BorderPx(bevy_gooey::Sides { left: Some(2.0), ..default() }),
+        bevy_gooey::InkOverride { edge: Some(tint), ..default() },
+        bevy_gooey::Spacing {
+            padding: bevy_gooey::Sides { top: Some(STEP_TIGHT), bottom: Some(STEP_TIGHT), left: Some(bevy_gooey::Space::Px(7.0)), ..default() },
+            margin: margin_bottom(STEP_ROW),
         },
         BorderColor::all(tint),
         marker,

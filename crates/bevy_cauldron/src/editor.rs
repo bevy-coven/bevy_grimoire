@@ -3027,7 +3027,13 @@ impl Plugin for EditorPlugin {
                             .run_if(resource_exists_and_changed::<Project>.or_eager(run_once)),
                     ),
                     check_edges.run_if(resource_exists_and_changed::<Project>.or_eager(run_once)),
-                    (draw_edge_faults, draw_crowd_heat, crate::balloon::show_balloon).run_if(in_map_mode),
+                    (
+                        draw_edge_faults,
+                        draw_crowd_heat,
+                        // The balloon is a `placed` node now: it writes its `PlacedAt`, which gooey's skin reads the same frame.
+                        crate::balloon::show_balloon.before(bevy_gooey::GooeySystems::Style),
+                    )
+                        .run_if(in_map_mode),
                 ),)
                     .run_if(in_state(crate::screen::Screen::Editor))
                     .run_if(crate::workspace::Workspace::map_is_open),
@@ -7113,12 +7119,8 @@ fn refresh_notes_list(
                     // and `note_add`'s `auto` are where it is set.
                     if *auto {
                         row.spawn((
-                            Node {
-                                padding: crate::chrome::CHIP_PAD,
-                                border: UiRect::all(Val::Px(crate::chrome::EDGE_W)),
-                                border_radius: BorderRadius::all(Val::Px(crate::chrome::RADIUS_ROW)),
-                                ..default()
-                            },
+                            // A chip's box (a label here, not a button): its inset, a 1 px edge and a row radius.
+                            crate::chrome::small_box(crate::chrome::CHIP_SPACING, bevy_gooey::Sides::all(crate::chrome::EDGE_W), crate::chrome::ink().suggest, Some(0.0)),
                             BorderColor::all(crate::chrome::ink().suggest),
                         ))
                         .with_children(|chip| {

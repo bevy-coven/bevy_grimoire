@@ -467,6 +467,7 @@ pub fn snip_overlay(
                 ..default()
             },
             bevy_gooey::BorderPx(bevy_gooey::Sides::all(chrome::SNIP_EDGE_W)),
+            bevy_gooey::InkOverride { edge: Some(chrome::ink().accent), ..default() },
             BorderColor::all(chrome::ink().accent),
             BackgroundColor(chrome::ink().snip_wash),
         ))
