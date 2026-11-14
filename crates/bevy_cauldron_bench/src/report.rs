@@ -45,6 +45,9 @@ pub const HARNESS_ERROR_MAX_FRACTION: f64 = 0.10;
 /// **How many of an agent's last tool calls a failed trial shows.**
 pub const LAST_CALLS_SHOWN: usize = 5;
 
+/// **How many trials a "Harness errors" row of the markdown names** before it says how many more there were.
+pub const HARNESS_ERROR_TRIALS_SHOWN: usize = 10;
+
 /// **How many tools a report lists as the ones an agent called most.**
 pub const TOP_TOOLS_SHOWN: usize = 8;
 
@@ -350,6 +353,13 @@ pub struct TaskReport {
     pub tokens_in: Option<u64>,
     /// Output tokens, summed, or `None` when no scored trial reported any.
     pub tokens_out: Option<u64>,
+    /// **Input tokens served from the provider's cache, summed**, or `None` when no scored trial reported any (#432, D8).
+    /// A report written before the field reads as unknown.
+    #[serde(default)]
+    pub tokens_cache_read: Option<u64>,
+    /// **Input tokens written to the provider's cache, summed**, or `None` when no scored trial reported any.
+    #[serde(default)]
+    pub tokens_cache_write: Option<u64>,
     /// **Cost in dollars, or `None` for unknown** (a model with no listed price, or a trial that reported
     /// no tokens).
     pub cost_usd: Option<f64>,
@@ -390,6 +400,17 @@ pub struct Aggregate {
     pub edits_behind: u32,
 }
 
+/// **One trial the harness failed, and why** (#432, D1): what `trial.json` says in its `reason`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct HarnessErrorReason {
+    /// The task's id (a held-out task is its ordinal, as in its `trial.json`).
+    pub task: String,
+    /// Which trial of it.
+    pub trial: u32,
+    /// **The cause, in the words the harness gave**: the provider's own for a refused turn.
+    pub reason: String,
+}
+
 /// **A whole run's report.**
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Report {
@@ -415,6 +436,10 @@ pub struct Report {
     pub refusals_by_tool: BTreeMap<String, u32>,
     /// **The wishes the agent made**, by the tool it wished for.
     pub wishes_by_tool: BTreeMap<String, u32>,
+    /// **Every harness-error trial with its cause**, in task and trial order. Absent from a report written before
+    /// the field existed, which then reads as none.
+    #[serde(default)]
+    pub harness_error_reasons: Vec<HarnessErrorReason>,
 }
 
 /// **The sum of the counts that were reported**, or `None` when none was: a trial that reported no tokens
@@ -479,6 +504,8 @@ impl TaskReport {
             trials_with_edits_behind: scored.iter().filter(|t| !t.edits_behind.is_empty()).count() as u32,
             tokens_in: sum_known(scored.iter().map(|t| t.tokens_in)),
             tokens_out: sum_known(scored.iter().map(|t| t.tokens_out)),
+            tokens_cache_read: sum_known(scored.iter().map(|t| t.tokens_cache_read)),
+            tokens_cache_write: sum_known(scored.iter().map(|t| t.tokens_cache_write)),
             cost_usd: if scored.is_empty() { None } else { sum_costs(scored.iter().map(|t| t.cost_usd(price))) },
             wishes: scored.iter().map(|t| t.wishes.len() as u32).sum(),
             failures,
@@ -629,6 +656,12 @@ impl Report {
             tool_counts,
             refusals_by_tool,
             wishes_by_tool,
+            harness_error_reasons: run
+                .trials
+                .iter()
+                .filter(|t| t.harness_error())
+                .map(|t| HarnessErrorReason { task: t.task.clone(), trial: t.trial, reason: t.reason.clone() })
+                .collect(),
         }
     }
 
@@ -718,6 +751,43 @@ pub fn top(counts: &BTreeMap<String, u32>, shown: usize) -> String {
 }
 
 impl Report {
+    /// **The "Harness errors" section: every distinct cause, how many trials had it, and which** (#432, D1).
+    ///
+    /// Empty for a run with none. Trials with the same reason are one row (a hundred refused turns are one
+    /// sentence, not a hundred), naming the first [`HARNESS_ERROR_TRIALS_SHOWN`] of them; `report.json` keeps one row each.
+    fn harness_errors_markdown(&self) -> String {
+        if self.harness_error_reasons.is_empty() {
+            return String::new();
+        }
+        let mut by_reason: Vec<(&str, Vec<&HarnessErrorReason>)> = Vec::new();
+        for row in &self.harness_error_reasons {
+            match by_reason.iter_mut().find(|(reason, _)| *reason == row.reason) {
+                Some((_, rows)) => rows.push(row),
+                None => by_reason.push((row.reason.as_str(), vec![row])),
+            }
+        }
+        by_reason.sort_by(|a, b| b.1.len().cmp(&a.1.len()).then(a.0.cmp(b.0)));
+        let mut out = String::from("## Harness errors\n\nWhy the harness, and not the agent, failed these trials:\n\n");
+        out.push_str("| trials | reason | which |\n|---|---|---|\n");
+        for (reason, rows) in by_reason {
+            let named: Vec<String> = rows
+                .iter()
+                .take(HARNESS_ERROR_TRIALS_SHOWN)
+                .map(|r| format!("`{}` trial {}", r.task, r.trial))
+                .collect();
+            let more = rows.len().saturating_sub(HARNESS_ERROR_TRIALS_SHOWN);
+            let which = if more == 0 { named.join(", ") } else { format!("{}, and {more} more", named.join(", ")) };
+            out.push_str(&format!(
+                "| {} | {} | {} |\n",
+                rows.len(),
+                if reason.is_empty() { "no reason was recorded".to_owned() } else { cell(reason) },
+                cell(&which)
+            ));
+        }
+        out.push('\n');
+        out
+    }
+
     /// **The report a person reads**, as Markdown.
     pub fn markdown(&self) -> String {
         let h = &self.header;
@@ -755,6 +825,7 @@ impl Report {
             "\n{} trial(s), {} harness error(s). A harness error is never scored as a pass or a fail.\n\n",
             self.trials_total, self.harness_errors
         ));
+        out.push_str(&self.harness_errors_markdown());
 
         out.push_str("## The suite\n\n");
         out.push_str("| tasks | tasks scored | trials | successes | mean success (95% interval) | mean pass^k | cost | cost per success | harness errors |\n");
@@ -795,11 +866,11 @@ impl Report {
         }
 
         out.push_str("\n## By task (dev tasks)\n\n");
-        out.push_str("| task | n | c | c/n | pass^k | median s | p90 s | calls | refused | undos | behind the editor's back | tokens in/out | cost | wishes | harness errors |\n");
+        out.push_str("| task | n | c | c/n | pass^k | median s | p90 s | calls | refused | undos | behind the editor's back | tokens in/out (cache read/write) | cost | wishes | harness errors |\n");
         out.push_str("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
         for t in &self.tasks {
             out.push_str(&format!(
-                "| `{}` | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {}/{} | {} | {} | {} |\n",
+                "| `{}` | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {}/{} (cache {}/{}) | {} | {} | {} |\n",
                 t.task,
                 t.trials,
                 t.successes,
@@ -817,6 +888,8 @@ impl Report {
                 },
                 tokens_cell(t.tokens_in),
                 tokens_cell(t.tokens_out),
+                tokens_cell(t.tokens_cache_read),
+                tokens_cell(t.tokens_cache_write),
                 usd(t.cost_usd),
                 t.wishes,
                 t.harness_errors
