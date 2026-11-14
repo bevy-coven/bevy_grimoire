@@ -602,13 +602,13 @@ fn follow_the_hand_back(
                         // **The style lines the work followed** (SG-09, #408): at most `FOLLOWED_SHOWN_MAX` with each line's text and a link that opens it on the
                         // Design page, and a count of the rest. The text is the person's to read here; the state carries only the entries.
                         if !presented.followed.is_empty() {
-                            card.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::FlexStart, flex_shrink: 0.0, ..default() })
+                            crate::chrome::rigid_row(card, 0.0, AlignItems::FlexStart)
                                 .with_children(|row| {
                                     crate::chrome::row_label(row, crate::editor::READOUT_LABEL_W, "FOLLOWED");
-                                    row.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() })
+                                    row.spawn(bevy_gooey::fill_column(crate::chrome::GAP_TIGHT_STEPS))
                                         .with_children(|col| {
                                             for followed in presented.followed.iter().take(crate::style_followed::FOLLOWED_SHOWN_MAX) {
-                                                col.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_TIGHT), flex_wrap: FlexWrap::Wrap, ..default() })
+                                                crate::chrome::wrapping_row(col, crate::chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Center)
                                                     .with_children(|line| {
                                                         line.spawn((
                                                             button(format!("{}:{}", followed.path, followed.line)),
