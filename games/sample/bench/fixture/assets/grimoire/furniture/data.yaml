@@ -1,0 +1,9 @@
+# **The sample game's tuning files the style measurement's tasks may edit** (SG-10, #409), by registry id.
+version: 1
+files:
+- id: lighting/gate
+  path: data/gate_light.yaml
+  note: How the gate is lit.
+- id: dialogue/gatekeeper
+  path: data/gatekeeper.yaml
+  note: What the gatekeeper says.

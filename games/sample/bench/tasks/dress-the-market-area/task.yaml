@@ -1,0 +1,64 @@
+# **Dress the market area** (SG-10, #409): task 1 of 3 in the style measurement.
+#
+# The prompt says where and what to place, and **nothing of how it should look**: the style comes only from `grimoire_style`, which
+# the `without-style` arm is not offered. Each check named `# line <id>` is one Do or Don't line of the sample game's style
+# (`games/sample/design/style.md` is the game's, `.../levels/courtyard/style.md` the level's); a check named `# guard` is not a line, and only
+# stops a run that placed nothing from scoring. The order of `checks` is part of the pre-registration
+# (`docs/research/2026-11-14-style-helps-an-agent.md`), which reads a run's lines from it by position.
+id: dress-the-market-area
+title: Dress the market area of the courtyard
+split: dev
+tags: [style, place]
+map: courtyard
+prompt: |
+  The market area of the courtyard is empty: the rectangle with x from -10 to -2 and z from 2 to 10 (north is -z). Dress it as a market.
+
+  Place three market stalls (`market_stall`), and then whatever else from the library a market needs. Keep everything inside the rectangle and clear of one another.
+
+  When it is dressed, hand the result back with grimoire_present, and name every piece you placed.
+setup: []
+solution:
+  - {op: placement_add, params: {piece: market_stall, at: [-9.0, 9.0], yaw: 180.0}}
+  - {op: placement_add, params: {piece: market_stall, at: [-6.0, 9.0], yaw: 180.0}}
+  - {op: placement_add, params: {piece: market_stall, at: [-3.0, 9.0], yaw: 180.0}}
+  - {op: placement_add, params: {piece: lantern_oil, at: [-9.0, 7.9]}}
+  - {op: placement_add, params: {piece: lantern_oil, at: [-6.0, 7.9]}}
+  - {op: placement_add, params: {piece: lantern_oil, at: [-3.0, 7.9]}}
+  - {op: placement_add, params: {piece: awning_canvas, at: [-9.0, 6.8]}}
+  - {op: placement_add, params: {piece: awning_canvas, at: [-6.0, 6.8]}}
+  - {op: placement_add, params: {piece: awning_canvas, at: [-3.0, 6.8]}}
+  - {op: placement_add, params: {piece: crate_wood, at: [-8.0, 4.0]}}
+  - {op: placement_add, params: {piece: barrel_oak, at: [-5.0, 4.0]}}
+  - op: grimoire_present
+    params:
+      title: The market is dressed
+      summary: Three market stalls stand in a row along the south edge, each with an oil lantern and a canvas awning in front of it, and a crate and a barrel stand to the north.
+      specified:
+        - three market stalls
+        - three oil lanterns
+        - three canvas awnings
+        - a crate and a barrel
+checks:
+  # guard: the run placed at least the three stalls
+  - oplog_has: {op: placement_add, min: 3}
+  # line L-Do3 (level, Do): the market's stalls stand in one row along its south edge, between z = 8.5 and z = 9.5
+  - placements_within: {piece: market_stall, count: 3, x: [-10.0, -2.0], z: [8.5, 9.5]}
+  # line L-Do4 (level, Do): every stall is turned to yaw 180 (the first stall is the one measured)
+  - placement_at: {piece: market_stall, yaw_deg: 180.0, yaw_tolerance_deg: 15.0}
+  # line G-Do5 (game, Do): one oil lantern at every stall, as many lanterns as stalls
+  - placements_within: {piece: lantern_oil, count: 3, x: [-10.0, -2.0], z: [2.0, 10.0]}
+  # line G-Do6 (game, Do): one canvas awning at every stall, as many awnings as stalls
+  - placements_within: {piece: awning_canvas, count: 3, x: [-10.0, -2.0], z: [2.0, 10.0]}
+  # line G-Dn1 (game, Don't): no neon sign
+  - placement_exists: {piece: neon_sign, count: 0}
+  # line G-Dn2 (game, Don't): no plastic chair
+  - placement_exists: {piece: plastic_chair, count: 0}
+  # line G-Dn3 (game, Don't): no traffic cone
+  - placement_exists: {piece: traffic_cone, count: 0}
+  # line G-Dn4 (game, Don't): no vending machine
+  - placement_exists: {piece: vending_machine, count: 0}
+  # line L-Dn6 (level, Don't): no bright pennant
+  - placement_exists: {piece: pennant_bright, count: 0}
+  # guard: a hand-back that names the stalls
+  - handback_contains: [stall]
+budget: {wall_s: 900, tool_calls: 80}

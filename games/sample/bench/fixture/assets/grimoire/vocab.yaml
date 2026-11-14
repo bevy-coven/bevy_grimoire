@@ -1,0 +1,78 @@
+version: 1
+kind:
+  tokens:
+  - name: prop
+    note: a thing
+    implies: []
+  - name: stall
+    note: a place that sells
+    implies: []
+  - name: cover
+    note: something that covers
+    implies: []
+  - name: container
+    note: something that holds goods
+    implies: []
+  - name: seat
+    note: something to sit on
+    implies: []
+  - name: light
+    note: something that gives light
+    implies: []
+  - name: flag
+    note: something that flies
+    implies: []
+  - name: sign
+    note: something that announces
+    implies: []
+  - name: marker
+    note: something that marks a place
+    implies: []
+  - name: machine
+    note: something that works by itself
+    implies: []
+effects:
+  tokens:
+  - name: inert
+    note: does nothing
+    implies: []
+look:
+  tokens:
+  - name: plain
+    note: unremarkable
+    implies: []
+  - name: weathered
+    note: worn by years outdoors
+    implies: []
+  - name: muted
+    note: faded
+    implies: []
+  - name: rough
+    note: coarse
+    implies: []
+  - name: warm
+    note: lit by flame
+    implies: []
+  - name: vivid
+    note: saturated colour
+    implies: []
+  - name: glowing
+    note: gives off its own light
+    implies: []
+  - name: glossy
+    note: shiny
+    implies: []
+surfaces:
+  tokens:
+  - name: worktop
+    note: a top
+    implies: []
+capabilities:
+  tokens: []
+edge:
+  tokens:
+  - name: wall
+    note: a solid run-face
+    implies: []
+slot:
+  tokens: []

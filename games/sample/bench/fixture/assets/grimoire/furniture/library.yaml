@@ -1,0 +1,437 @@
+version: 1
+note: null
+descriptors:
+- id: floor
+  mesh: alpha/floor.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 0.5
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - prop
+  effects:
+  - inert
+  look:
+  - plain
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: a fixture piece
+- id: wall
+  mesh: alpha/wall.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 0.5
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - prop
+  effects:
+  - inert
+  look:
+  - plain
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: a fixture piece
+- id: market_stall
+  mesh: alpha/floor.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 2.0
+    - 1.2
+    height: 2.2
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - stall
+  effects:
+  - inert
+  look:
+  - weathered
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: a wooden market stall with a counter
+- id: awning_canvas
+  mesh: alpha/floor.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 2.2
+    - 1.4
+    height: 0.2
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - cover
+  effects:
+  - inert
+  look:
+  - muted
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: a canvas awning that covers one stall
+- id: crate_wood
+  mesh: alpha/floor.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.8
+    - 0.8
+    height: 0.8
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - container
+  effects:
+  - inert
+  look:
+  - weathered
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: a wooden crate
+- id: barrel_oak
+  mesh: alpha/floor.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.7
+    - 0.7
+    height: 0.9
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - container
+  effects:
+  - inert
+  look:
+  - weathered
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: an oak barrel
+- id: sack_grain
+  mesh: alpha/floor.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.6
+    - 0.5
+    height: 0.5
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - container
+  effects:
+  - inert
+  look:
+  - rough
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: a sack of grain
+- id: bench_plank
+  mesh: alpha/floor.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.6
+    - 0.5
+    height: 0.5
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - seat
+  effects:
+  - inert
+  look:
+  - weathered
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: a plank bench
+- id: lantern_oil
+  mesh: alpha/floor.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.3
+    - 0.3
+    height: 0.4
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - light
+  effects:
+  - inert
+  look:
+  - warm
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: an oil lantern with a flame
+- id: pennant_bright
+  mesh: alpha/floor.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.4
+    - 0.4
+    height: 1.6
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - flag
+  effects:
+  - inert
+  look:
+  - vivid
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: a bright pennant on a pole
+- id: neon_sign
+  mesh: alpha/floor.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 0.2
+    height: 0.6
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - sign
+  effects:
+  - inert
+  look:
+  - glowing
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: a glowing neon shop sign
+- id: plastic_chair
+  mesh: alpha/floor.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.5
+    - 0.5
+    height: 0.9
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - seat
+  effects:
+  - inert
+  look:
+  - glossy
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: a moulded plastic chair
+- id: traffic_cone
+  mesh: alpha/floor.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.4
+    - 0.4
+    height: 0.7
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - marker
+  effects:
+  - inert
+  look:
+  - glossy
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: a traffic cone
+- id: vending_machine
+  mesh: alpha/floor.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.9
+    - 0.8
+    height: 1.8
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - machine
+  effects:
+  - inert
+  look:
+  - glossy
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: a drinks vending machine

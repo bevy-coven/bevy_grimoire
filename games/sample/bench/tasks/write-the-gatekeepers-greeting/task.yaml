@@ -1,0 +1,49 @@
+# **Write the gatekeeper's greeting** (SG-10, #409): task 2 of 3 in the style measurement.
+#
+# The prompt names the leaf to write and says **nothing of how the gatekeeper speaks**. A check named `# line <id>` is one Do or Don't line of the
+# sample game's style, **measured on the saved leaf `gatekeeper.greeting.text`** (a substring, without case), never on what the agent said about it in its
+# hand-back: an agent that was told the forbidden words may write "I avoided `welcome`" in a summary, and an agent that was not cannot, so a hand-back check
+# would not be one measurement in both arms. `# guard` is not a line. The order of `checks` is part of the pre-registration
+# (`docs/research/2026-11-14-style-helps-an-agent.md`).
+#
+# Three lines hold in the starting file (it says nothing, so it has no `!`, no `welcome` and no `crown`): a run that never writes a greeting satisfies them.
+id: write-the-gatekeepers-greeting
+title: Write the gatekeeper's greeting
+split: dev
+tags: [style, dialogue]
+map: courtyard
+prompt: |
+  The gatekeeper stands at the courtyard's gate. A visitor has just walked up to it, and the gatekeeper speaks first.
+
+  Write what the gatekeeper says to greet the visitor, in the game's data for the gatekeeper (the registered file `dialogue/gatekeeper`, the leaf `gatekeeper.greeting.text`).
+
+  When it is written, hand the result back with grimoire_present.
+setup: []
+solution:
+  - op: data_set
+    params:
+      file: dialogue/gatekeeper
+      path: gatekeeper.greeting.text
+      value: Evening, friend. The toll is two coins, and the gate shuts at dusk.
+  - op: grimoire_present
+    params:
+      title: The gatekeeper's greeting is written
+      summary: The gatekeeper now greets a visitor with a short greeting in the game's data.
+      specified:
+        - a greeting for the gatekeeper
+checks:
+  # guard: the greeting was written into the game's data through the editor
+  - oplog_has: {op: data_set, min: 1}
+  # line G-Do4 (game, Do): the greeting mentions the toll, using the word "toll"
+  - file_value: {file: furniture/data/gatekeeper.yaml, path: gatekeeper.greeting.text, contains: toll}
+  # line L-Do5 (level, Do): the gatekeeper addresses a visitor as "friend"
+  - file_value: {file: furniture/data/gatekeeper.yaml, path: gatekeeper.greeting.text, contains: friend}
+  # line L-Do6 (level, Do): the greeting says the gate shuts at "dusk"
+  - file_value: {file: furniture/data/gatekeeper.yaml, path: gatekeeper.greeting.text, contains: dusk}
+  # line G-Dn5 (game, Don't): no exclamation mark in a spoken line
+  - file_value: {file: furniture/data/gatekeeper.yaml, path: gatekeeper.greeting.text, lacks: "!"}
+  # line L-Dn4 (level, Don't): the gatekeeper does not say "welcome"
+  - file_value: {file: furniture/data/gatekeeper.yaml, path: gatekeeper.greeting.text, lacks: welcome}
+  # line L-Dn5 (level, Don't): the gatekeeper does not mention the crown
+  - file_value: {file: furniture/data/gatekeeper.yaml, path: gatekeeper.greeting.text, lacks: crown}
+budget: {wall_s: 600, tool_calls: 40}
