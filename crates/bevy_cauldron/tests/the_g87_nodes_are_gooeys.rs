@@ -221,11 +221,11 @@ fn the_back_button_is_a_row_and_the_bars_spacers_are_gooeys() {
     assert_eq!(spacers, 1, "the bar's one spacer pushes the subject to the far end");
 }
 
-/// **The receipt row keeps its two lines of room, rounded up, at the editor's text size** (G-88 `Extent::LinesCeil`): the reserve `chrome::LinesRoom` computed (`2 x BODY_LINE_H x scale`, rounded up) is what the row asks for.
+/// **The receipt row keeps its two lines of room, rounded up, at the editor's text size** (G-88 `Extent::LinesCeil`): `2 x BODY_LINE_H x scale`, rounded up, is what the row asks for.
 #[test]
 fn the_receipt_row_reserves_its_two_lines_rounded_up() {
     let mut app = editor("receipt");
-    let want = chrome::LinesRoom { lines: 2.0, pad: 0.0, fixed: false }.at(chrome::text_scale());
+    let want = (2.0 * chrome::BODY_LINE_H * chrome::text_scale()).ceil();
     let world = app.world_mut();
     let mut found = Vec::new();
     for (sizing, node) in world.query::<(&bevy_gooey::Sizing, &Node)>().iter(world) {
@@ -234,6 +234,6 @@ fn the_receipt_row_reserves_its_two_lines_rounded_up() {
         }
     }
     assert_eq!(found.len(), 1, "one receipt row in the Map door: {found:?}");
-    // `LinesRoom` rounded up to a whole logical px (27); `LinesCeil` rounds up to a whole device px (26.67 at the editor's 1.2 scale = 32 physical), which is never short of the text's own box.
+    // Two lines rounded up to a whole logical px (27); `LinesCeil` rounds up to a whole device px (26.67 at the editor's 1.2 scale = 32 physical), which is never short of the text's own box.
     assert!((found[0] - want).abs() < 1.0 && found[0] >= want - 0.5, "the row reserves about {want} px (two lines rounded up), not {}", found[0]);
 }

@@ -778,7 +778,6 @@ pub fn resize_the_labels(
     settings: Option<Res<crate::settings::EditorSettings>>,
     mut applied: Local<Option<f32>>,
     mut labels: Query<(&TypeRole, &mut TextFont)>,
-    mut rooms: Query<(&LinesRoom, &mut Node), Without<TypeRole>>,
 ) {
     let Some(settings) = settings else { return };
     if applied.is_some_and(|last| (last - settings.text_scale).abs() < f32::EPSILON) {
@@ -790,18 +789,6 @@ pub fn resize_the_labels(
         let want = FontSize::Px(role.0.px() * scale);
         if font.font_size != want {
             font.font_size = want;
-        }
-    }
-    // **The room the labels are drawn in follows them**, or the label that grew is clipped by the
-    // box that did not. Same one comparison, same frame.
-    for (room, mut node) in &mut rooms {
-        let want = Val::Px(room.at(scale));
-        if room.fixed {
-            if node.height != want {
-                node.height = want;
-            }
-        } else if node.min_height != want {
-            node.min_height = want;
         }
     }
 }
@@ -865,38 +852,10 @@ pub const BODY_LINE_H: f32 = text::BODY.px() * 1.2;
 /// A box that reserves room for text has to reserve it at the size the text is drawn, or a person
 /// at 200% gets a row one line tall holding a two-line-tall label: the text is clipped, and
 /// `every_label_fits_its_panel_at_two_hundred_percent_text` measures exactly that. Spawn sites use
-/// this; a box that has to follow a *live* change carries [`LinesRoom`] and [`resize_the_labels`]
-/// rewrites it.
+/// this; a box that has to follow a *live* change asks gooey for `Extent::LinesCeil`, which tracks the
+/// running text size itself.
 pub fn body_line_h() -> f32 {
     BODY_LINE_H * text_scale()
-}
-
-/// **A box that reserves room for `lines` lines of [`text::BODY`]** (UI-73, #251).
-///
-/// [`body_line_h`] is read when the box is spawned; a person who changes the text size afterwards
-/// would leave the box the height it was built at, and the label inside it — which *does* resize,
-/// because it carries a [`TypeRole`] — would be clipped by its own room. So the reserve is a
-/// component too, and [`resize_the_labels`] rewrites it from the role-like numbers it holds.
-///
-/// **The padding is a number of its own**, because spacing does not follow the text size: a row
-/// inset is the interface's rhythm (`interface_scale`'s job), and scaling it with the type would
-/// double-thicken a row a person only asked to read better.
-#[derive(Component, Clone, Copy, Debug, PartialEq)]
-pub struct LinesRoom {
-    /// How many lines of [`text::BODY`] the box reserves.
-    pub lines: f32,
-    /// Vertical padding added to the reserve, in logical pixels — not scaled with the text.
-    pub pad: f32,
-    /// Fill `Node::height` (a clipped row that keeps one height) rather than `Node::min_height`
-    /// (a box that may grow past its reserve).
-    pub fixed: bool,
-}
-
-impl LinesRoom {
-    /// The height this room is worth at `scale`.
-    pub fn at(self, scale: f32) -> f32 {
-        (self.lines * BODY_LINE_H * scale + self.pad).ceil()
-    }
 }
 
 // ── spacing ──────────────────────────────────────────────────────────────────────────────────────

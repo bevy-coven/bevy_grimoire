@@ -1411,7 +1411,6 @@ fn spawn_the_find_box(commands: &mut Commands, body: Entity) {
             // Above the rows and the caret, which are its siblings.
             ZIndex(2),
             TerminalFindFrame,
-            Pickable::default(),
             Name::new("terminal find"),
             children![
                 (
@@ -1432,6 +1431,10 @@ fn spawn_the_find_box(commands: &mut Commands, body: Entity) {
                 (bevy_gooey::button("×"), bevy_gooey::observe(close_find_on_click)),
             ],
         ))
+        // **Not `Pickable::IGNORE`, which `placed` is**: the frame takes the pointer on its padding and edge, so a click there is the box's and does not
+        // fall to the shell beneath. Inserted after the spawn, not listed in the tuple: `placed` already carries a `Pickable`, and a bundle that holds one
+        // component twice panics at spawn in bevy_ecs 0.20 (as `spawn_the_invitation` does).
+        .insert(Pickable::default())
         .id();
     commands.entity(body).add_child(frame);
 }

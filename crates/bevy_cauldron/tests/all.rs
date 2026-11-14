@@ -584,6 +584,7 @@ mod the_shell_keeps_its_ctrl_chords;
 mod typing_brings_the_terminal_back_to_its_prompt;
 mod the_caret_takes_the_shape_a_program_asks_for;
 mod the_terminal_finds_in_its_scrollback;
+mod the_terminal_overlays_block_the_clicks_on_their_own_ground;
 mod the_shell_knows_it_runs_in_cauldron;
 mod the_terminal_draws_in_a_nerd_font;
 mod every_terminal_run_is_drawn_in_the_nerd_font;
