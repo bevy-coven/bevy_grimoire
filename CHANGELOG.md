@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-14
 
+- **sg-09-handback-names-style-lines** `59e6353531b1099e278c52637a432830f10b9790` A hand-back names the style lines it followed: the card lists each line's text with a link that opens it on the Design page, and the state keeps every line *No clip: visible, not yet recorded: fleet worker*
 - **sg-07-agents-write-style** `ed399cfa8919c15ac5ef56a5c83acd93a016eeaf` An agent changes a level's or area's style by style_edit (small exact edits, logged, undoable, followed to the Design page), and proposes a change to the game's or a region's style as a STYLE row you keep or discard *No clip: visible, not yet recorded: fleet worker*
 
 ## 2026-11-13
