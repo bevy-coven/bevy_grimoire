@@ -720,7 +720,7 @@ fn spawn_a_style_row(list: &mut ChildSpawnerCommands, queued: &crate::style_prop
         WishRow { id: id.clone(), kind: RowKind::Style },
         WishOf(id.clone()),
         Name::new(format!("style {}", queued.id)),
-        Node { flex_direction: FlexDirection::Column, width: Val::Percent(100.0), flex_shrink: 0.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+        bevy_gooey::column_with(crate::chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }),
     ))
     .with_children(|row| {
         row.spawn((
@@ -729,23 +729,14 @@ fn spawn_a_style_row(list: &mut ChildSpawnerCommands, queued: &crate::style_prop
             // CHROME-OK: the row is a fold, not a chip or a list row: its own header is the whole unfold target and wears no rest/hover/selected states of its own.
             bevy::ui_widgets::Button,
             Hovered::default(),
-            Node { flex_direction: FlexDirection::Column, width: Val::Percent(100.0), flex_shrink: 0.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+            bevy_gooey::column_with(crate::chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }),
         ))
         .observe(unfold_this_row)
         .with_children(|header| {
-            header
-                .spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_TIGHT), flex_shrink: 0.0, ..default() })
+            crate::chrome::rigid_row(header, crate::chrome::GAP_TIGHT_STEPS, AlignItems::Center)
                 .with_children(|line| {
                     line.spawn((Text::new(RowKind::Style.label()), TextColor(crate::chrome::ink().dim), crate::chrome::typed(crate::chrome::text::LABEL)));
-                    line.spawn((
-                        StyleTitle,
-                        WishOf(id.clone()),
-                        Text::new(style_title(queued)),
-                        TextColor(crate::chrome::ink().text),
-                        crate::chrome::typed(crate::chrome::text::BODY),
-                        Node { flex_grow: 1.0, min_width: Val::Px(0.0), ..default() },
-                        TextLayout::new(Justify::Left, LineBreak::WordBoundary),
-                    ));
+                    crate::chrome::fill_text(line, style_title(queued), crate::chrome::ink().text, crate::chrome::text::BODY).insert((StyleTitle, WishOf(id.clone())));
                 });
             if answered != StyleState::Waiting {
                 header.spawn((
@@ -760,7 +751,7 @@ fn spawn_a_style_row(list: &mut ChildSpawnerCommands, queued: &crate::style_prop
         if !unfolded {
             return;
         }
-        row.spawn((WishBody, WishOf(id.clone()), Node { flex_direction: FlexDirection::Column, flex_shrink: 0.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }))
+        row.spawn((WishBody, WishOf(id.clone()), bevy_gooey::column_with(crate::chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() })))
             .with_children(|body| {
                 style_line_of(body, "WHY", &id, &queued.why);
                 style_line_of(body, "PAGE", &id, &style_page_says(queued));
@@ -769,15 +760,9 @@ fn spawn_a_style_row(list: &mut ChildSpawnerCommands, queued: &crate::style_prop
                     style_line_of(body, "TO", &id, if edit.replace.is_empty() { "(taken out)" } else { &edit.replace });
                 }
                 if let Some(note) = &queued.note {
-                    body.spawn((
-                        Text::new(note.clone()),
-                        TextColor(crate::chrome::ink().danger),
-                        crate::chrome::typed(crate::chrome::text::LABEL),
-                        Node { flex_shrink: 0.0, ..default() },
-                        TextLayout::new(Justify::Left, LineBreak::WordBoundary),
-                    ));
+                    crate::chrome::fill_text(body, note.clone(), crate::chrome::ink().danger, crate::chrome::text::LABEL);
                 }
-                body.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(crate::chrome::GAP_TIGHT), flex_shrink: 0.0, ..default() })
+                crate::chrome::rigid_row(body, crate::chrome::GAP_TIGHT_STEPS, AlignItems::Stretch)
                     .with_children(|answers| {
                         crate::chrome::button(answers, (StyleShow, WishOf(id.clone())), "Show the page", crate::chrome::Severity::Plain).observe(show_this_style_page);
                         if queued.state != StyleState::Waiting {
@@ -816,9 +801,9 @@ fn style_page_says(queued: &crate::style_proposals::QueuedStyle) -> String {
 
 /// One `NAME  words` line of a style row, its own name on it so a test can ask for it.
 fn style_line_of(parent: &mut ChildSpawnerCommands, name: &'static str, id: &str, words: &str) {
-    parent.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::FlexStart, flex_shrink: 0.0, ..default() }).with_children(|line| {
+    crate::chrome::rigid_row(parent, 0.0, AlignItems::FlexStart).with_children(|line| {
         crate::chrome::row_label(line, crate::editor::READOUT_LABEL_W, name);
-        line.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() }).with_children(|col| {
+        line.spawn(bevy_gooey::fill_column(0.0)).with_children(|col| {
             col.spawn((
                 Text::new(words.to_owned()),
                 TextColor(crate::chrome::ink().text),
