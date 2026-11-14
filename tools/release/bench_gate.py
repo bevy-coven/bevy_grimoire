@@ -14,14 +14,17 @@ released** and **its comparison with the previous release's report is not `worse
 
 - **The report is for this code.** Its header's commit is a full 40-hex sha (never a ref name) and is the
   commit being released, or an ancestor of it whose `crates/` tree is identical (`git rev-parse
-  <commit>:crates`), so a docs-only commit needs no rerun. A `release: <version>` commit carries only the
-  manifest and `Cargo.lock` (`tools/loop/version.py`), and while it changes nothing but their version lines
-  it is judged as its parent, the code it bumps; one that changes anything else is judged as itself, which
-  no report can match. A report run on an uncommitted tree (`+dirty`) is for no commit and is refused.
+  <commit>:crates`), so a docs-only commit needs no rerun. A `release: <version>` commit carries only
+  manifests (`Cargo.toml`, any `crates/*/Cargo.toml`) and `Cargo.lock` (`tools/loop/version.py`: the editor's
+  bump also moves the library crates it releases with it), and while it changes nothing but version numbers
+  (a package's own `version`, a path dependency's pinned `version`, and the `version` of those same packages in
+  `Cargo.lock`) it is judged as its parent, the code it bumps; one that changes anything else (a feature, a
+  dependency, a checksum, an unbumped package's version) is judged as itself, which no report can match. A
+  report run on an uncommitted tree (`+dirty`) is for no commit and is refused.
 - **The run is the release's run**: the default agent (`omp`) at `RELEASE_TRIALS = 5` trials, on the dev
   suite and the held-out tasks, and fit to compare (`unfit` unset). Anything else is a different question.
-- **It is compared like with like.** The previous report must have the same agent, model and trial count
-  as the release's; only the **suite** may differ (it grows between releases, and `compare --across` pairs
+- **It is compared like with like.** The previous report must have the same agent, model, variant and trial
+  count as the release's; only the **suite** may differ (it grows between releases, and `compare --across` pairs
   the tasks both runs scored). A baseline run with `--agent nothing` would make every release read
   `better`, and a model swap can hide a regression or fake one, so either is refused, naming what differs.
 - **It is compared with the previous release's report**: the newest report whose commit is the previous
@@ -82,11 +85,15 @@ BASELINE_LABEL = "baseline"
 CODE_DIR = "crates"
 #: A commit subject that starts a release bump, and the only files such a commit may carry.
 RELEASE_SUBJECT = "release: "
-MANIFEST_PATH = "crates/bevy_cauldron/Cargo.toml"
 LOCK_PATH = "Cargo.lock"
-BUMP_FILES = frozenset({MANIFEST_PATH, LOCK_PATH})
-#: The package whose `version` a bump changes in `Cargo.lock`.
-BUMPED_PACKAGE = "bevy_cauldron"
+ROOT_MANIFEST_PATH = "Cargo.toml"
+#: Every crate's manifest: a release moves the editor's version and the library crates it publishes with it.
+CRATE_MANIFEST = re.compile(r"crates/.+/Cargo\.toml")
+#: A table header that holds a dependency's own keys, as in `[dependencies.bevy_grimoire_rhai]`.
+DEPENDENCY_SUBTABLE = re.compile(r"\[(?:workspace\.)?(?:target\..+\.)?(?:dev-|build-)?dependencies\.[^\]]+\]")
+#: A table header whose lines are dependencies, as in `[dependencies]`, where one may be an inline table.
+DEPENDENCY_TABLE = re.compile(r"\[(?:workspace\.)?(?:target\..+\.)?(?:dev-|build-)?dependencies\]")
+VERSION_LINE = re.compile(r'version\s*=\s*"[^"]*"')
 #: What a version line reads as once the version is taken out, so two files can be compared without it.
 VERSION_PLACEHOLDER = "<release version>"
 #: The marker `cauldron-bench` puts on a commit when the tree had uncommitted changes.
@@ -159,24 +166,66 @@ class Verdict:
     notes: list[str] = field(default_factory=list)
 
 
+def is_bump_file(path: str) -> bool:
+    """Whether a release commit may touch `path` at all: a manifest or the lock."""
+    return path in (LOCK_PATH, ROOT_MANIFEST_PATH) or bool(CRATE_MANIFEST.fullmatch(path))
+
+
 def without_manifest_version(text: str) -> str:
-    """A `Cargo.toml` with its `[package]` version taken out."""
-    out, in_package = [], False
+    """**A `Cargo.toml` with its version numbers taken out**: the package's own, and a path dependency's pin.
+
+    Everything else stays byte for byte, so a changed feature, an added dependency or a registry
+    dependency's requirement is still a difference. A path dependency is a table with a `path` key
+    (`[dependencies.x]` with `path = ...`) or an inline `x = { path = ..., version = ... }` line.
+    """
+    groups: list[tuple[str, list[str]]] = [("", [])]
+    for line in text.splitlines():
+        if line.strip().startswith("["):
+            groups.append((line.strip(), []))
+        groups[-1][1].append(line)
+    out = []
+    for header, body in groups:
+        has_path = any(re.match(r"\s*path\s*=", line) for line in body)
+        out.extend(_mask_line(line, header, has_path) for line in body)
+    return "\n".join(out)
+
+
+def _mask_line(line: str, section: str, has_path: bool) -> str:
+    """One manifest line with its version number taken out, when it is a version this check allows to move."""
+    stripped = line.strip()
+    if not section.startswith("[") or not stripped or stripped.startswith("#"):
+        return line
+    if section in ("[package]", "[workspace.package]"):
+        return VERSION_LINE.sub(f'version = "{VERSION_PLACEHOLDER}"', line) if VERSION_LINE.fullmatch(stripped) else line
+    if DEPENDENCY_SUBTABLE.fullmatch(section):
+        return VERSION_LINE.sub(f'version = "{VERSION_PLACEHOLDER}"', line) if has_path and VERSION_LINE.fullmatch(stripped) else line
+    if DEPENDENCY_TABLE.fullmatch(section) and re.search(r'=\s*\{[^}]*\bpath\s*=', stripped):
+        return VERSION_LINE.sub(f'version = "{VERSION_PLACEHOLDER}"', line)
+    return line
+
+
+def package_identity(text: str) -> tuple[str | None, str | None]:
+    """A manifest's `[package]` name and version, either `None` when it has none (a virtual workspace)."""
+    name = version_text = None
+    in_package = False
     for line in text.splitlines():
         stripped = line.strip()
         if stripped.startswith("["):
             in_package = stripped == "[package]"
-        elif in_package and re.fullmatch(r'version\s*=\s*"[^"]*"', stripped):
-            line = f'version = "{VERSION_PLACEHOLDER}"'
-        out.append(line)
-    return "\n".join(out)
+        elif in_package:
+            if match := re.fullmatch(r'name\s*=\s*"([^"]*)"', stripped):
+                name = match.group(1)
+            elif match := re.fullmatch(r'version\s*=\s*"([^"]*)"', stripped):
+                version_text = match.group(1)
+    return name, version_text
 
 
-def without_lock_version(text: str) -> str:
-    """A `Cargo.lock` with the bumped package's version taken out."""
+def without_lock_versions(text: str, names: set[str]) -> str:
+    """A `Cargo.lock` with the version of the named packages taken out and every other byte left."""
     blocks = text.split("[[package]]")
     for i, block in enumerate(blocks):
-        if re.search(rf'^name = "{BUMPED_PACKAGE}"$', block, re.MULTILINE):
+        match = re.search(r'^name = "([^"]*)"$', block, re.MULTILINE)
+        if match and match.group(1) in names:
             blocks[i] = re.sub(r'^version = "[^"]*"$', f'version = "{VERSION_PLACEHOLDER}"', block, count=1, flags=re.MULTILINE)
     return "[[package]]".join(blocks)
 
@@ -208,21 +257,38 @@ class Git:
     def tags(self) -> list[str]:
         return (self._out("tag", "-l", f"{version.TAG_PREFIX}*") or "").split()
 
-    def _only_the_version_changed(self, sha: str, path: str) -> bool:
-        """Whether `path` at `sha` differs from its parent's by the bumped version and nothing else."""
-        before, after = self._out("show", f"{sha}^:{path}"), self._out("show", f"{sha}:{path}")
-        if before is None or after is None:
-            return before == after
-        strip = without_manifest_version if path == MANIFEST_PATH else without_lock_version
-        return strip(before) == strip(after)
+    def _only_versions_changed(self, sha: str, changed: list[str]) -> bool:
+        """**Whether `sha` differs from its parent by version numbers and nothing else.**
+
+        Each changed manifest must be equal to its parent's once its package version and its path
+        dependencies' pins are masked; `Cargo.lock` must be equal once the packages whose manifests were bumped
+        have their version masked. A file added or removed is not a bump.
+        """
+        bumped: set[str] = set()
+        for path in changed:
+            if path == LOCK_PATH:
+                continue
+            before, after = self._out("show", f"{sha}^:{path}"), self._out("show", f"{sha}:{path}")
+            if before is None or after is None or without_manifest_version(before) != without_manifest_version(after):
+                return False
+            (name, old), (_, new) = package_identity(before), package_identity(after)
+            if name and old != new:
+                bumped.add(name)
+        if LOCK_PATH in changed:
+            before, after = self._out("show", f"{sha}^:{LOCK_PATH}"), self._out("show", f"{sha}:{LOCK_PATH}")
+            if before is None or after is None:
+                return False
+            return without_lock_versions(before, bumped) == without_lock_versions(after, bumped)
+        return True
 
     def code_commit(self, sha: str) -> tuple[str | None, str | None]:
         """**The commit whose code `sha` releases**: itself, or for a `release: <v>` bump its parent.
 
         A bump changes `crates/bevy_cauldron/Cargo.toml`, so its own `crates/` tree can never equal that of
-        the run it follows. It is a bump only while it carries the manifest and `Cargo.lock` and nothing
-        else, and only the version in each of them: a commit that carries more files is refused, and one
-        that also changes a dependency or a feature is judged as itself, because its code was not what ran.
+        the run it follows. It is a bump only while it carries manifests and `Cargo.lock` and nothing else
+        (the editor's bump also moves the library crates released with it), and only version numbers in them
+        (`_only_versions_changed`): a commit that carries more files is refused, and one that also changes a
+        dependency, a feature or a checksum is judged as itself, because its code was not what ran.
         """
         while True:
             subject = self._out("log", "-1", "--format=%s", sha)
@@ -234,13 +300,13 @@ class Git:
             changed = self._out("diff", "--name-only", f"{sha}^", sha)
             if parent is None or changed is None:
                 return None, f"the release commit {sha[:SHORT_SHA]} has no parent in this clone: fetch the full history"
-            extra = sorted(set(changed.split()) - BUMP_FILES)
+            extra = sorted(path for path in changed.split() if not is_bump_file(path))
             if extra:
                 return None, (
                     f"the release commit {sha[:SHORT_SHA]} carries more than the version bump "
                     f"({', '.join(extra)}): a bump is its own commit, so the code it releases is not the code that was run"
                 )
-            if not all(self._only_the_version_changed(sha, path) for path in changed.split()):
+            if not self._only_versions_changed(sha, changed.split()):
                 return sha, None
             sha = parent
 
@@ -291,9 +357,9 @@ def run_problems(entry: Entry) -> list[str]:
 
 
 def unlike(previous: Entry, current: Entry) -> list[str]:
-    """**What differs between two runs besides the suite**: agent, model, trials. Empty is like with like."""
+    """**What differs between two runs besides the suite**: agent, model, variant, trials. Empty is like with like."""
     found = []
-    for key, word in (("agent", "agent"), ("model", "model"), ("trials", "trials per task")):
+    for key, word in (("agent", "agent"), ("model", "model"), ("variant", "suite variant"), ("trials", "trials per task")):
         a, b = previous.header.get(key), current.header.get(key)
         if a != b:
             found.append(f"the {word} differs ({previous.name}: `{a}`, {current.name}: `{b}`)")
@@ -326,6 +392,17 @@ def fallen(comparison: dict) -> list[str]:
     return out
 
 
+def held_out_unreadable(entry: Entry) -> str | None:
+    """A refusal when a release report's held-out total has no mean or no interval: it measured nothing to judge."""
+    total = entry.report.get("held_out")
+    if isinstance(total, dict) and total.get("mean_success") is not None and interval_known(total.get("interval")):
+        return None
+    return (
+        f"{entry.name}'s held-out total has no mean or no interval, so it cannot be judged: the run scored no "
+        f"held-out task (is the held-out directory {HELD_OUT_DIR} there?)"
+    )
+
+
 def held_out_verdict(previous: Entry, current: Entry) -> tuple[str | None, str | None]:
     """**The held-out total's verdict as `(refusal, note)`**.
 
@@ -334,12 +411,8 @@ def held_out_verdict(previous: Entry, current: Entry) -> tuple[str | None, str |
     previous report's having none is a note, since there is then nothing to regress from.
     """
     a, b = previous.report.get("held_out"), current.report.get("held_out")
-    if not isinstance(b, dict) or b.get("mean_success") is None or not interval_known(b.get("interval")):
-        return (
-            f"{current.name}'s held-out total has no mean or no interval, so it cannot be judged against "
-            f"{previous.name}: the run scored no held-out task (is the held-out directory {HELD_OUT_DIR} there?)",
-            None,
-        )
+    if refusal := held_out_unreadable(current):
+        return refusal, None
     if not isinstance(a, dict):
         return None, f"held-out: {previous.name} has no held-out total, so there is nothing to compare it with"
     if a.get("mean_success") is None or not interval_known(a.get("interval")):
@@ -431,6 +504,8 @@ def check(git, release: str, previous_code: str | None, entries: list[Entry], co
     elif baselines:
         previous, what = newest(baselines), "the baseline report (no report is for the previous release)"
     elif chosen.label == BASELINE_LABEL:
+        if refusal := held_out_unreadable(chosen):
+            return Verdict(False, [refusal], notes)
         return Verdict(True, notes=[*notes, f"{chosen.name} is the baseline: nothing earlier to compare it with"])
     else:
         return Verdict(False, [

@@ -376,7 +376,9 @@ a report that is itself the baseline passes. The previous report must have the s
 count as this one (only the suite may differ), so a baseline made with another agent or model is refused,
 not compared. Run it on a clean tree at
 the commit to be released, so the header names a commit and not `+dirty`; the bump commit that follows
-changes only the manifest and `Cargo.lock`. A held-out directory that is missing is a refusal, not a
+changes only version numbers in manifests (the editor's and the library crates released with it, including a path
+dependency's pin) and in `Cargo.lock`: anything else in it (a feature, a dependency, a checksum) makes it a different
+commit that no report is for. A held-out directory that is missing is a refusal, not a
 shorter run.
 
 **When the check refuses on `worse`**, the pass does not release and does not retry the run until it is

@@ -31,7 +31,7 @@ RELEASE = "a" * 40
 CODE_TREE = "tree-of-the-code"
 
 
-def report(commit=RELEASE, label="run", date="2026-11-10", agent="omp", trials=5, held_out=(0.6, 0.5, 0.7), unfit=None, model="ollama-cloud/m"):
+def report(commit=RELEASE, label="run", date="2026-11-10", agent="omp", trials=5, held_out=(0.6, 0.5, 0.7), unfit=None, model="ollama-cloud/m", variant=None):
     """A report as `cauldron-bench report` writes it, with only the fields the gate reads."""
     ho = None
     if held_out is not None:
@@ -39,7 +39,7 @@ def report(commit=RELEASE, label="run", date="2026-11-10", agent="omp", trials=5
         ho = {"name": "held-out", "tasks": 4, "mean_success": mean, "interval": {"lo": lo, "hi": hi}}
     return {
         "header": {
-            "version": 1, "label": label, "commit": commit, "agent": agent, "model": model,
+            "version": 1, "label": label, "commit": commit, "agent": agent, "model": model, "variant": variant,
             "suite": "bench/tasks", "trials": trials, "date": date,
         },
         "unfit": unfit,
@@ -301,6 +301,13 @@ class LikeWithLike(unittest.TestCase):
         self.assertIn("trials per task differs", " ".join(verdict.reasons))
         self.assertEqual(compare.asked, [])
 
+    def test_a_baseline_of_another_suite_variant_is_refused_naming_it(self):
+        verdict, compare = self.judged({"variant": "arm-b"})
+        self.assertFalse(verdict.ok)
+        self.assertIn("suite variant", " ".join(verdict.reasons))
+        self.assertIn("arm-b", " ".join(verdict.reasons))
+        self.assertEqual(compare.asked, [])
+
     def test_a_difference_of_suite_alone_passes_and_is_printed(self):
         answer = comparison("better")
         answer["across"] = ["the suites differ (20 task(s) in `bench/tasks` against 28 in `bench/tasks`)"]
@@ -334,6 +341,14 @@ class WhatFailsClosed(unittest.TestCase):
             run.report["held_out"] = held_out
             entries = [entry("2026-11-01-baseline", label="baseline", date="2026-11-01"), run]
             verdict = bench_gate.check(GIT, RELEASE, None, entries, Compare(comparison("better")))
+            self.assertFalse(verdict.ok, held_out)
+            self.assertIn("held-out total has no mean or no interval", " ".join(verdict.reasons))
+
+    def test_a_baseline_with_no_held_out_mean_or_interval_is_refused_though_it_has_nothing_to_compare_with(self):
+        for held_out in ({"name": "held-out", "mean_success": None, "interval": None}, {"name": "held-out", "mean_success": 0.5}):
+            base = entry("2026-11-10-baseline", label="baseline")
+            base.report["held_out"] = held_out
+            verdict = bench_gate.check(GIT, RELEASE, None, [base], Compare(comparison("better")))
             self.assertFalse(verdict.ok, held_out)
             self.assertIn("held-out total has no mean or no interval", " ".join(verdict.reasons))
 
@@ -438,6 +453,129 @@ def git(repo, *args):
         ["git", "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", *args],
         cwd=repo, capture_output=True, text=True, check=True,
     ).stdout.strip()
+
+
+def crate_manifest(name, version, dependency=None, extra=""):
+    """A crate's manifest shaped like the repo's: a workspace dependency, an optional path dependency table, then `extra`."""
+    text = f'[package]\nname = "{name}"\nversion = "{version}"\nedition = "2024"\n\n[dependencies]\nserde.workspace = true\n'
+    if dependency:
+        crate, pinned = dependency
+        text += f'\n[dependencies.{crate}]\npath = "../{crate}"\nversion = "{pinned}"\n'
+    return text + extra
+
+
+def three_crate_lock(cauldron, grimoire, rhai, checksum="aaa", serde="1.0.0"):
+    return (
+        "version = 4\n\n"
+        f'[[package]]\nname = "bevy_cauldron"\nversion = "{cauldron}"\ndependencies = [\n "bevy_grimoire",\n]\n\n'
+        f'[[package]]\nname = "bevy_grimoire"\nversion = "{grimoire}"\ndependencies = [\n "bevy_grimoire_rhai",\n]\n\n'
+        f'[[package]]\nname = "bevy_grimoire_rhai"\nversion = "{rhai}"\n\n'
+        f'[[package]]\nname = "serde"\nversion = "{serde}"\nsource = "registry+x"\nchecksum = "{checksum}"\n'
+    )
+
+
+class AMultiCrateRelease(unittest.TestCase):
+    """The repo's real releases move several crates at once (`cc05ab5a`: bevy_cauldron, bevy_grimoire, bevy_grimoire_rhai).
+
+    The fixture has that shape: the editor's version, a library's version and the pin it holds on a path
+    dependency (the two version lines `bevy_grimoire`'s manifest changed), the dependency's own version, and the
+    lock's three matching `version` lines.
+    """
+
+    def setUp(self):
+        self.repo = tempfile.mkdtemp(prefix=f"bench_gate_multi_{self._testMethodName}_{os.getpid()}_")
+        git(self.repo, "init", "-q", "-b", "main")
+        self.commit(self.files(), "code")
+        self.code = git(self.repo, "rev-parse", "HEAD")
+        self.git = bench_gate.Git(self.repo)
+
+    def files(self, cauldron="0.6.6", grimoire="0.5.0", rhai="0.1.0", pin="0.1.0", grimoire_extra="", lock=None):
+        return {
+            "crates/bevy_cauldron/Cargo.toml": crate_manifest("bevy_cauldron", cauldron),
+            "crates/bevy_grimoire/Cargo.toml": crate_manifest("bevy_grimoire", grimoire, ("bevy_grimoire_rhai", pin), grimoire_extra),
+            "crates/bevy_grimoire_rhai/Cargo.toml": crate_manifest("bevy_grimoire_rhai", rhai),
+            "Cargo.lock": lock or three_crate_lock(cauldron, grimoire, rhai),
+            "crates/bevy_grimoire/src/lib.rs": "1\n",
+        }
+
+    def commit(self, files, message):
+        for path, text in files.items():
+            full = os.path.join(self.repo, path)
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w") as handle:
+                handle.write(text)
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", message)
+        return git(self.repo, "rev-parse", "HEAD")
+
+    def bump(self, **kwargs):
+        defaults = dict(cauldron="0.6.7", grimoire="0.5.1", rhai="0.1.1", pin="0.1.1")
+        return self.commit(self.files(**{**defaults, **kwargs}), "release: 0.6.7")
+
+    def test_a_bump_of_three_crates_is_judged_as_its_parent(self):
+        bump = self.bump()
+        self.assertEqual(self.git.code_commit(bump), (self.code, None))
+
+    def test_the_same_bump_with_a_changed_feature_is_judged_as_itself(self):
+        bump = self.bump(grimoire_extra="\n[features]\nextra = []\n")
+        self.assertEqual(self.git.code_commit(bump), (bump, None))
+
+    def test_the_same_bump_with_an_added_dependency_is_judged_as_itself(self):
+        bump = self.bump(grimoire_extra='\n[dependencies.newcomer]\npath = "../newcomer"\nversion = "0.1.0"\n')
+        self.assertEqual(self.git.code_commit(bump), (bump, None))
+
+    def test_the_same_bump_with_a_changed_registry_requirement_is_judged_as_itself(self):
+        """A pin on a path dependency may move with the release; a requirement on a registry crate is code."""
+        before = self.commit({"crates/bevy_grimoire/Cargo.toml": crate_manifest("bevy_grimoire", "0.5.0", ("bevy_grimoire_rhai", "0.1.0"), '\n[dependencies.regdep]\nversion = "1"\n')}, "feat: regdep")
+        bump = self.commit(
+            self.files(
+                cauldron="0.6.7", grimoire="0.5.1", rhai="0.1.1", pin="0.1.1", grimoire_extra='\n[dependencies.regdep]\nversion = "2"\n'
+            ),
+            "release: 0.6.7",
+        )
+        self.assertEqual(self.git.code_commit(bump), (bump, None))
+        self.assertNotEqual(before, bump)
+
+    def test_the_same_bump_with_a_changed_lock_checksum_is_judged_as_itself(self):
+        bump = self.bump(lock=three_crate_lock("0.6.7", "0.5.1", "0.1.1", checksum="bbb"))
+        self.assertEqual(self.git.code_commit(bump), (bump, None))
+
+    def test_the_same_bump_with_an_unbumped_package_s_lock_version_changed_is_judged_as_itself(self):
+        bump = self.bump(lock=three_crate_lock("0.6.7", "0.5.1", "0.1.1", serde="1.0.1"))
+        self.assertEqual(self.git.code_commit(bump), (bump, None))
+
+    def test_a_lock_that_bumps_a_package_whose_manifest_did_not_move_is_judged_as_itself(self):
+        bump = self.commit(self.files(lock=three_crate_lock("0.6.6", "0.5.0", "0.1.1")), "release: 0.6.7")
+        self.assertEqual(self.git.code_commit(bump), (bump, None))
+
+    def test_an_inline_path_dependency_pin_may_move_and_a_source_file_may_not(self):
+        inline = crate_manifest("bevy_grimoire", "0.5.0", extra='\n[workspace.dependencies]\nbevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.11.0" }\n')
+        self.commit({"crates/bevy_grimoire/Cargo.toml": inline}, "feat: inline")
+        before = git(self.repo, "rev-parse", "HEAD")
+        moved = crate_manifest("bevy_grimoire", "0.5.1", extra='\n[workspace.dependencies]\nbevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.11.1" }\n')
+        bump = self.commit({"crates/bevy_grimoire/Cargo.toml": moved, "Cargo.lock": three_crate_lock("0.6.6", "0.5.1", "0.1.0")}, "release: 0.6.7")
+        self.assertEqual(self.git.code_commit(bump), (before, None))
+        sneaky = self.commit({"crates/bevy_grimoire/src/lib.rs": "2\n"}, "release: 0.6.8")
+        code, problem = self.git.code_commit(sneaky)
+        self.assertIsNone(code)
+        self.assertIn("crates/bevy_grimoire/src/lib.rs", problem)
+
+
+class AgainstTheRealHistory(unittest.TestCase):
+    """The repository's own release commits: the shapes the rule has to accept, not the ones a fixture imagines.
+
+    `cc05ab5a` (0.6.7) and `d7f783d9` (0.6.6) also bump `crates/bevy_grimoire*/Cargo.toml`; `a6013260` (0.6.4) is the
+    manifest and lock alone. Skipped when this checkout does not have them (a shallow clone).
+    """
+
+    def test_the_real_release_commits_are_judged_as_their_parents(self):
+        git = bench_gate.Git()
+        for short in ("a6013260", "d7f783d9", "cc05ab5a"):
+            sha = git.resolve(short)
+            parent = git.resolve(f"{sha}^") if sha else None
+            if sha is None or parent is None:
+                self.skipTest(f"{short} (or its parent) is not in this checkout")
+            self.assertEqual(git.code_commit(sha), (parent, None), f"release commit {short}")
 
 
 class WithARealRepository(unittest.TestCase):
