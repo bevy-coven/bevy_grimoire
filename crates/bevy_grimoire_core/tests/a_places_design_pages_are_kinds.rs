@@ -33,3 +33,19 @@ fn a_walk_enters_the_folders_a_place_file_can_be_in_and_no_others() {
         assert!(!holds_place_files(dir), "{dir}");
     }
 }
+
+/// **The walk and `kind_of` are one rule**: every folder above a file `kind_of` classifies by the shape of a place is one the walk enters, so no
+/// classified file is out of reach of the panel (#420).
+#[test]
+fn every_folder_above_a_classified_place_file_is_one_the_walk_enters() {
+    let places = ["design", "design/regions/north", "design/levels/yard", "design/regions/n/levels/y", "design/levels/y/areas/docks", "design/regions/n/levels/y/areas/docks"];
+    for place in places {
+        for file in ["style.md", "dialogue.md", "board/board.yaml", "board/fog.png", "board/fog.JPEG"] {
+            let path = format!("{place}/{file}");
+            assert!(kind_of(Base::Root, &path).is_some(), "{path} is classified");
+            for (at, _) in path.match_indices('/') {
+                assert!(holds_place_files(&path[..at]), "{path} is a kind, and the walk does not enter {}", &path[..at]);
+            }
+        }
+    }
+}
