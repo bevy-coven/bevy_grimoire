@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-13
 
+- **tile-in-hand-operations** `9123e37e` The tile in hand: Space, the member keys, J, R and the remove keys are operations an agent calls too (tile_hand_arm, tile_member_focus, tile_grid_deepen, tile_member_turn, tile_member_remove, tile_clear) *No clip: an API behind existing keys, no new picture; proved by tile_in_hand_is_operations*
 - **lattice-cursor-operation** `69c9d194` The lattice grid cursor keys (F, H, T, G, [ and ]) are one operation an agent calls too (lattice_cursor_step) *No clip: an API behind existing keys, no new picture; proved by lattice_cursor_is_an_operation*
 - **stage-operations** `69c9d194` The rig bench stage keys (Space, the held left and right arrows, V) are operations an agent calls too (stage_play, stage_scrub, stage_camera) *No clip: an API behind existing keys, no new picture; proved by stage_is_an_operation*
 - **sg-02-style-chain** `dd9442a3` An agent reads the style of a place with grimoire_style: the game's files, then the region's, level's and area's, behind the person's trust, with the pictures they cite *For you: Your agent can read how a place in your game should look and feel, but only the style files you have allowed.* *No clip: an MCP tool; proved by the_style_of_a_place_is_the_chain_of_its_files, a_style_file_needs_the_persons_trust, the_style_of_a_place_is_served_behind_the_persons_trust, grimoire_style_attaches_the_pictures_the_style_cites*
