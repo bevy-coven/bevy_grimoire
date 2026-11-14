@@ -166,6 +166,8 @@ fn cmd_0_opens_design_and_a_level_selected_by_its_label_shows_its_headings_pictu
     assert_eq!(*app.world().resource::<Workspace>(), Workspace::Design, "Cmd/Ctrl+0 is the Design workspace");
     assert_eq!(selected(&app).as_deref(), Some(GAME), "it opens on the game's page");
 
+    // The level's row exists, labelled `m`.
+    assert!(visible(&mut app, "m"), "the tree has a row labelled `m`");
     // The level, by the label of its row in the tree.
     click(&mut app, "m");
     assert_eq!(selected(&app).as_deref(), Some(LEVEL), "a click on the level's row selects its page");
@@ -379,7 +381,7 @@ fn only_http_and_https_links_are_asked_about_and_nothing_else_is_launched() {
     let mut app = editor(&root);
     press(&mut app, Action::WorkspaceDesign);
     click(&mut app, "m");
-    for dest in ["file:///Applications/Calculator.app", "smb://x/y", "javascript:alert(1)", "mailto:a@b.c", "x-custom-handler://run?cmd=1"] {
+    for dest in ["file:///Applications/Calculator.app", "smb://x/y", "javascript:alert(1)", "mailto:a@b.c", "x-custom-handler://run?cmd=1", "https:example.com", "http:/x"] {
         link(&mut app, dest, LinkKind::Web);
         assert!(!app.world().resource::<Confirm>().asking(Asked::OpenAddress), "`{dest}` was asked about");
         assert_eq!(app.world().resource::<EditorState>().status.problem_text(), NOT_OPENED_SCHEME, "`{dest}` is refused with a fixed sentence");
@@ -388,6 +390,18 @@ fn only_http_and_https_links_are_asked_about_and_nothing_else_is_launched() {
     link(&mut app, "https://example.com/style", LinkKind::Web);
     assert!(app.world().resource::<Confirm>().asking(Asked::OpenAddress), "an https link still asks");
     assert!(app.world().resource::<LinksOff>().0.is_empty(), "and nothing opens before the person answers");
+}
+
+#[test]
+fn an_uppercase_http_scheme_is_asked_about() {
+    use bevy_cauldron::confirm::{Asked, Confirm};
+    use bevy_gooey::markdown::LinkKind;
+    let root = project("design_upper");
+    let mut app = editor(&root);
+    press(&mut app, Action::WorkspaceDesign);
+    click(&mut app, "m");
+    link(&mut app, "HTTP://example.com/x", LinkKind::Web);
+    assert!(app.world().resource::<Confirm>().asking(Asked::OpenAddress), "a scheme is case-insensitive, so HTTP:// asks as http:// does");
 }
 
 #[test]

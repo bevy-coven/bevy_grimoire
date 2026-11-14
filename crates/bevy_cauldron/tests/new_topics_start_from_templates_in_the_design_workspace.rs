@@ -178,3 +178,55 @@ fn new_topic_on_a_level_lists_only_the_games_topics() {
     offered.sort();
     assert_eq!(offered, ["dialogue", "sound"], "a level is offered only the game's topics, and not the three the game has no file for");
 }
+
+/// **A button's rectangle in logical pixels**, `(min, max)`, from its laid-out node.
+fn rect_of(app: &mut App, label: &str) -> (Vec2, Vec2) {
+    let entity = bevy_gooey::testing::find_by_label(app, label).unwrap_or_else(|e| panic!("`{label}`: {e}"));
+    let world = app.world();
+    let node = world.get::<bevy::ui::ComputedNode>(entity).unwrap_or_else(|| panic!("`{label}` is not laid out"));
+    let at = world.get::<bevy::ui::UiGlobalTransform>(entity).unwrap_or_else(|| panic!("`{label}` is not placed")).translation;
+    let (size, centre) = (node.size() * node.inverse_scale_factor(), at * node.inverse_scale_factor());
+    (centre - size / 2.0, centre + size / 2.0)
+}
+
+fn real_click(app: &mut App, label: &str) {
+    let entity = bevy_gooey::testing::find_by_label(app, label).unwrap_or_else(|e| panic!("`{label}`: {e}"));
+    bevy_gooey::testing::click(app, entity);
+    settle(app);
+}
+
+#[test]
+fn every_header_button_has_its_own_rectangle_in_the_window_and_takes_a_real_click() {
+    let (mut app, root, _store) = designer("header", &[("design/style.md", "# The game\n\nGrey.\n")]);
+    let labels = ["Edit page", "As an agent reads it", "New topic"];
+    let rects: Vec<(Vec2, Vec2)> = labels.iter().map(|l| rect_of(&mut app, l)).collect();
+    for (label, (min, max)) in labels.iter().zip(&rects) {
+        assert!(max.x - min.x >= 40.0 && max.y - min.y > 0.0, "`{label}` is squeezed to {min:?} {max:?}: too small to hit");
+        assert!(min.x >= 0.0 && min.y >= 0.0 && max.x <= 1536.0 && max.y <= 1400.0, "`{label}` is outside the window: {min:?} {max:?}");
+    }
+    for (i, a) in rects.iter().enumerate() {
+        for (j, b) in rects.iter().enumerate().skip(i + 1) {
+            let apart = a.1.x <= b.0.x || b.1.x <= a.0.x || a.1.y <= b.0.y || b.1.y <= a.0.y;
+            assert!(apart, "`{}` and `{}` overlap: {a:?} {b:?}", labels[i], labels[j]);
+        }
+    }
+    // Each takes a real click, and the click does what the button says.
+    real_click(&mut app, "As an agent reads it");
+    assert!(app.world().resource::<DesignView>().as_agent(), "a click on the toggle turns it on");
+    real_click(&mut app, "As an agent reads it");
+    assert!(!app.world().resource::<DesignView>().as_agent(), "and off");
+    real_click(&mut app, "New topic");
+    assert!(!offered_topics(&mut app).is_empty(), "a click on New topic opens the topic menu");
+    real_click(&mut app, "dialogue");
+    assert!(root.join("design/dialogue.md").is_file(), "a click on a topic writes its page");
+    real_click(&mut app, "Edit page");
+    assert_eq!(app.world().resource::<DesignView>().editing_file(), Some("design/dialogue.md"), "a click on Edit page opens the editor on the page shown");
+}
+
+#[test]
+fn a_game_with_no_topic_yet_shows_its_first_topic_as_a_row_of_the_tree() {
+    let (mut app, _root, _store) = designer("first_topic", &[("design/style.md", "# The game\n\nGrey.\n")]);
+    click(&mut app, "New topic");
+    click(&mut app, "dialogue");
+    assert!(visible(&mut app, "dialogue"), "the new topic is a visible row under the game, which had no children before it");
+}

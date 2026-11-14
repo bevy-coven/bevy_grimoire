@@ -602,7 +602,8 @@ fn nodes_of(places: &[PlaceRow], names: &mut HashMap<u64, String>) -> Vec<TreeNo
             .collect();
         children.extend(places.iter().filter(|p| parent_of(&p.path) == Some(place.path.as_str())).map(|child| build(child, places, names)));
         let node = TreeNode::new(key, label);
-        if children.is_empty() { node } else { node.expanded().children(children) }
+        // **Every node is expanded, a leaf included**: a leaf that gains its first child (the game after its first New topic) must show it, and `open_keys` only holds nodes that were open.
+        node.expanded().children(children)
     }
     places.iter().filter(|p| p.kind == PlaceKind::Game).map(|game| build(game, places, names)).collect()
 }
@@ -762,7 +763,6 @@ fn keep_the_top(
             } else if exists && !key.as_agent {
                 buttons.spawn((bevy_gooey::button("Edit page"), DesignAction::Edit, observe(on_action)));
             }
-            buttons.spawn((bevy_gooey::toggle("As an agent reads it", key.as_agent), DesignAgentToggle, observe(on_agent_toggle)));
             if matches!(key.page, PageKind::Missing) && key.selected.as_deref().is_some_and(|page| topic_of(page) == design::STYLE_TOPIC) {
                 buttons.spawn((bevy_gooey::button("Create style"), DesignAction::CreateStyle, observe(on_action)));
             }
@@ -770,6 +770,8 @@ fn keep_the_top(
                 buttons.spawn((bevy_gooey::button("New topic"), DesignAction::NewTopicMenu, observe(on_action)));
             }
         });
+        // **The toggle is a row of its own**: beside the buttons it took the room and squeezed New topic to 24 px, which a click could not hit.
+        top.spawn((bevy_gooey::toggle("As an agent reads it", key.as_agent), DesignAgentToggle, observe(on_agent_toggle)));
         if key.topic_menu {
             top.spawn(bevy_gooey::row(1.0)).with_children(|menu| {
                 for topic in &key.offered {
