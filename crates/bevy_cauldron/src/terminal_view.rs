@@ -472,20 +472,11 @@ fn draw_the_terminal(
         let index = drawn.row_entities.len();
         let node = commands
             .spawn((
-                Node {
-                    width: Val::Percent(100.0),
-                    // **Logical, like every `Val::Px`**: Bevy multiplies it by the target's scale
-                    // factor and `UiScale`, exactly as it does the row's text, so `metrics.height()`
-                    // here is one text line on screen. The glyph line's *physical* height was used
-                    // once, on the belief that a `Node`'s height is in surface pixels; at the
-                    // editor's `UiScale` of 1.2 that drew every row 20 % taller than the cell the
-                    // shell was sized for, so the prompt fell below the pane and the caret drifted
-                    // above the cursor (#310).
-                    height: Val::Px(metrics.height()),
-                    flex_direction: FlexDirection::Row,
-                    flex_shrink: 0.0,
-                    ..default()
-                },
+                // A row: the pane's width and one text line tall, in a line, never shrinking. **Logical, like every `Val::Px`**: Bevy multiplies it by the target's scale factor and
+                // `UiScale`, exactly as it does the row's text, so `metrics.height()` is one text line on screen (the glyph line's *physical* height drew every row 20 % taller than the
+                // cell the shell was sized for at the editor's `UiScale` of 1.2 (#310)). The system below rewrites the height as the metrics change, comparing before it writes.
+                bevy_gooey::sized(bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(100.0)), height: Some(bevy_gooey::Extent::Px(metrics.height())), ..default() }),
+                bevy_gooey::RowLayout { direction: Some(FlexDirection::Row), shrink: Some(0.0), ..default() },
                 TerminalRow(index),
                 Pickable::IGNORE,
                 Name::new(format!("terminal row {index}")),

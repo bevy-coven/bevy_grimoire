@@ -674,12 +674,9 @@ fn build_the_pane(
 
     let grip = commands
         .spawn((
-            Node {
-                width: Val::Percent(100.0),
-                height: Val::Px(TERMINAL_GRIP_H),
-                flex_shrink: 0.0,
-                ..default()
-            },
+            // The grip: a gooey sized box the pane wide and `TERMINAL_GRIP_H` tall that never shrinks (the column's stretch gives it the width).
+            bevy_gooey::sized(bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(100.0)), height: Some(bevy_gooey::Extent::Px(TERMINAL_GRIP_H)), ..default() }),
+            bevy_gooey::TextFlow { shrink: Some(0.0), ..default() },
             BackgroundColor(chrome::ink().panel_edge),
             TerminalGrip,
             Pickable::default(),
@@ -689,16 +686,11 @@ fn build_the_pane(
 
     let bar = commands
         .spawn((
-            bevy::prelude::Node {
-                width: Val::Percent(100.0),
-                height: Val::Px(TERMINAL_BAR_H),
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                column_gap: Val::Px(chrome::GAP_TIGHT),
-                padding: UiRect::axes(Val::Px(chrome::MARGIN), Val::Px(0.0)),
-                flex_shrink: 0.0,
-                ..default()
-            },
+            // The bar: a gooey row the pane wide and `TERMINAL_BAR_H` tall, its parts centred and a tight step apart, `MARGIN` in from each end, never shrinking.
+            bevy_gooey::row_with(0.0, bevy_gooey::RowLayout { align: Some(AlignItems::Center), shrink: Some(0.0), ..default() }),
+            bevy_gooey::GapPx(chrome::GAP_TIGHT),
+            bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(100.0)), height: Some(bevy_gooey::Extent::Px(TERMINAL_BAR_H)), ..default() },
+            bevy_gooey::Spacing { padding: bevy_gooey::Sides::x(chrome::STEP_PAD), ..default() },
             BackgroundColor(chrome::ink().bar_bg),
             TerminalBar,
             Pickable::default(),
@@ -709,20 +701,19 @@ fn build_the_pane(
     let menu = build_the_menu(commands);
     let body_node = commands
         .spawn((
-            Node {
-                width: Val::Percent(100.0),
-                flex_direction: FlexDirection::Column,
-                flex_grow: 1.0,
-                min_height: Val::Px(0.0),
-                // **Clipped, and not a `ScrollArea`.** The scrollback belongs to the emulator
-                // (`TerminalScreen::scroll`): a layout scroll would move the *drawn* rows while the
-                // shell's history lives in the grid, which is two answers to one question. `clip`
-                // is what stops a row painting over the status band.
-                overflow: Overflow::clip(),
-                padding: UiRect::axes(
-                    Val::Px(crate::terminal_view::BODY_INSET.x),
-                    Val::Px(crate::terminal_view::BODY_INSET.y),
-                ),
+            // The body: a gooey sized column that grows into what the bar and the grip leave (no least height), **clipped, and not a `ScrollArea`**. The scrollback belongs to the
+            // emulator (`TerminalScreen::scroll`): a layout scroll would move the *drawn* rows while the shell's history lives in the grid, which is two answers to one question;
+            // `clip` is what stops a row painting over the status band. `BODY_INSET` in on each side (neither is a step of the scale).
+            bevy_gooey::sized(bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(100.0)), min_height: Some(bevy_gooey::Extent::Px(0.0)), clip: Some(true), ..default() }),
+            bevy_gooey::RowLayout { direction: Some(FlexDirection::Column), ..default() },
+            bevy_gooey::TextFlow { grow: Some(1.0), ..default() },
+            bevy_gooey::Spacing {
+                padding: bevy_gooey::Sides {
+                    top: Some(bevy_gooey::Space::Px(crate::terminal_view::BODY_INSET.y)),
+                    right: Some(bevy_gooey::Space::Px(crate::terminal_view::BODY_INSET.x)),
+                    bottom: Some(bevy_gooey::Space::Px(crate::terminal_view::BODY_INSET.y)),
+                    left: Some(bevy_gooey::Space::Px(crate::terminal_view::BODY_INSET.x)),
+                },
                 ..default()
             },
             BackgroundColor(chrome::ink().panel_bg),
@@ -747,17 +738,10 @@ fn build_the_pane(
 
     let caret = commands
         .spawn((
-            Node {
-                // The caret is not a panel: it marks one cell of the shell's grid, exactly as a
-                // list's scrollbar overlay sits on its viewport, and `draw_the_terminal` moves it.
-                // PLACES-ITSELF-OK: a caret over one cell is not a panel `chrome::Frame` places.
-                position_type: PositionType::Absolute,
-                left: Val::Px(0.0),
-                top: Val::Px(0.0),
-                width: Val::Px(CARET_W),
-                height: Val::Px(crate::terminal_view::TERMINAL_CELL_H),
-                ..default()
-            },
+            // The caret is not a panel: it marks one cell of the shell's grid, exactly as a list's scrollbar overlay sits on its viewport, and `draw_the_terminal` moves it, writing its own
+            // left, top, width and height each frame (`HostGeometry`). `placed` is `Pickable::IGNORE`, which the caret is.
+            bevy_gooey::placed(UiRect::all(Val::Auto)),
+            bevy_gooey::HostGeometry,
             BackgroundColor(chrome::ink().accent),
             BorderColor::all(chrome::ink().accent),
             // **Above the rows, its siblings** (#320): a block caret is a tint over its cell with the
@@ -765,7 +749,6 @@ fn build_the_pane(
             // letter stays crisp through the tint rather than being dimmed by it.
             ZIndex(1),
             TerminalCaret,
-            Pickable::IGNORE,
             Name::new("terminal caret"),
             children![(
                 Text::new(String::new()),

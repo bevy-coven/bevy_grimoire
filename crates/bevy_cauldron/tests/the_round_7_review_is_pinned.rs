@@ -24,7 +24,7 @@ fn the_compass_arms_and_dots_are_laid_out_at_their_size() {
     }
     let world = app.world_mut();
     let (mut arms, mut dots) = (0, 0);
-    for (entity, computed, node, kids) in world.query_filtered::<(Entity, &ComputedNode, &Node, Option<&Children>), With<bevy_gooey::HostGeometry>>().iter(world) {
+    for (entity, computed, node, kids) in world.query_filtered::<(Entity, &ComputedNode, &Node, Option<&Children>), (With<bevy_gooey::HostGeometry>, Without<bevy_cauldron::terminal_pane::TerminalCaret>)>().iter(world) {
         let size = logical(computed);
         if kids.is_some() {
             dots += 1;
