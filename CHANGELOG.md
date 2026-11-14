@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-14
 
+- **ui-99-gooey-gaps** `b41c8d84` The growing columns, dialog cards, placed overlays and splash images of the editor are laid out with bevy_gooey's new layout constructors instead of hand-built nodes (UI-99, #260 part) *No clip: nobody can see this change; proved by the_editor_keeps_its_raw_nodes_counted, the_small_files_are_built_from_gooey_widgets and the whole editor binary*
 - **ui-99-gooey-sections** `daedd101` The Map inspector's section blocks, the wish and lesson lines, the problem lines and the report note's answers are laid out with bevy_gooey's rows and columns instead of hand-built nodes (UI-99, #260 part) *No clip: nobody can see this change; proved by the_editor_keeps_its_raw_nodes_counted, the_small_files_are_built_from_gooey_widgets and the_agent_blocks_lines_are_gooey_rows*
 - **ui-99-gooey-notes** `74c7ffd1` The notes and data editors' columns and the review thumbnail are laid out with bevy_gooey's column, row and image_box instead of hand-built nodes (UI-99, #260 part) *No clip: nobody can see this change; proved by the_editor_keeps_its_raw_nodes_counted and the whole editor binary*
 - **ui-99-gooey-readouts** `13346151` The Familiar's readout lines, the launcher's button lines and the project page's dialog answers are laid out with bevy_gooey's rows instead of hand-built nodes (UI-99, #260 part) *No clip: nobody can see this change; proved by the_editor_keeps_its_raw_nodes_counted and the_small_files_are_built_from_gooey_widgets*
