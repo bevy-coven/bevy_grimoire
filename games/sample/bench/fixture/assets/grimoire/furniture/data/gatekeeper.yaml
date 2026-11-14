@@ -1,0 +1,5 @@
+# What the gatekeeper says; `data_set` edits one leaf and nothing else.
+gatekeeper:
+  name: the gatekeeper
+  greeting:
+    text: Nothing has been said yet.

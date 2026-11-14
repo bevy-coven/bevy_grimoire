@@ -1,0 +1,56 @@
+# **Light the gate at night** (SG-10, #409): task 3 of 3 in the style measurement.
+#
+# The gate's light is a registered data file, set up for the day. The prompt names it and asks for the night, and says **nothing of how the
+# light should be**. A check named `# line <id>` is one Do or Don't line of the sample game's style, measured on the saved file; `# guard` is not
+# a line. The order of `checks` is part of the pre-registration (`docs/research/2026-11-14-style-helps-an-agent.md`).
+#
+# One line holds in the starting file (`tint` is `white` by day too): a run that never touches the tint satisfies it, which the report states.
+id: light-the-gate-at-night
+title: Light the gate at night
+split: dev
+tags: [style, light]
+map: courtyard
+prompt: |
+  The gate is lit for the day, and night is coming. Set the gate's light up for the night, in the game's data for it (the registered file `lighting/gate`).
+
+  When it is set, hand the result back with grimoire_present, and say what each setting is now.
+setup: []
+solution:
+  - {op: data_set, params: {file: lighting/gate, path: gate_light.count, value: 2}}
+  - {op: data_set, params: {file: lighting/gate, path: gate_light.colour_temperature_k, value: 2200}}
+  - {op: data_set, params: {file: lighting/gate, path: gate_light.intensity_lm, value: 600}}
+  - {op: data_set, params: {file: lighting/gate, path: gate_light.radius_m, value: 4.0}}
+  - {op: data_set, params: {file: lighting/gate, path: gate_light.flicker, value: true}}
+  - {op: data_set, params: {file: lighting/gate, path: gate_light.flicker_hz, value: 4.0}}
+  - {op: data_set, params: {file: lighting/gate, path: gate_light.height_m, value: 2.0}}
+  - {op: data_set, params: {file: lighting/gate, path: gate_light.ambient_lux, value: 3.0}}
+  - op: grimoire_present
+    params:
+      title: The gate is lit for the night
+      summary: Two lanterns light the gate at 2200 K and 600 lm, reaching 4 m, flickering at 4 Hz and hung at 2 m, with the night's ambient light at 3 lux and the tint left white.
+      specified:
+        - the gate's light is set for the night
+checks:
+  # guard: the light was set through the editor
+  - oplog_has: {op: data_set, min: 1}
+  # line G-Do1 (game, Do): warm light, a colour temperature between 1800 K and 2700 K
+  - file_value: {file: furniture/data/gate_light.yaml, path: gate_light.colour_temperature_k, min: 1800, max: 2700}
+  # line G-Do2 (game, Do): the lantern's flicker setting is on
+  - file_value: {file: furniture/data/gate_light.yaml, path: gate_light.flicker, equals: true}
+  # line G-Do3 (game, Do): the reach of the light is between 2 m and 5 m
+  - file_value: {file: furniture/data/gate_light.yaml, path: gate_light.radius_m, min: 2, max: 5}
+  # line L-Do1 (level, Do): exactly two lanterns light the gate
+  - file_value: {file: furniture/data/gate_light.yaml, path: gate_light.count, equals: 2}
+  # line L-Do2 (level, Do): the gate lanterns' brightness is between 400 lm and 800 lm
+  - file_value: {file: furniture/data/gate_light.yaml, path: gate_light.intensity_lm, min: 400, max: 800}
+  # line G-Dn6 (game, Don't): the light is not tinted, its tint stays white (this holds in the starting file)
+  - file_value: {file: furniture/data/gate_light.yaml, path: gate_light.tint, equals: white}
+  # line L-Dn1 (level, Don't): no flicker faster than 6 Hz
+  - file_value: {file: furniture/data/gate_light.yaml, path: gate_light.flicker_hz, max: 6}
+  # line L-Dn2 (level, Don't): the night's ambient light is not above 5 lux
+  - file_value: {file: furniture/data/gate_light.yaml, path: gate_light.ambient_lux, max: 5}
+  # line L-Dn3 (level, Don't): no lantern hung higher than 2.5 m
+  - file_value: {file: furniture/data/gate_light.yaml, path: gate_light.height_m, max: 2.5}
+  # guard: a hand-back that names the gate
+  - handback_contains: [gate]
+budget: {wall_s: 600, tool_calls: 60}

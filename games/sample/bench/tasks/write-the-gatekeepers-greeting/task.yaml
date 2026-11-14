@@ -1,0 +1,45 @@
+# **Write the gatekeeper's greeting** (SG-10, #409): task 2 of 3 in the style measurement.
+#
+# The prompt names the leaf to write and asks for the line to be quoted in the hand-back, and says **nothing of how the gatekeeper speaks**.
+# A check named `# line <id>` is one Do or Don't line of the sample game's style, judged on what the hand-back says (a substring, without case);
+# `# guard` is not a line. The order of `checks` is part of the pre-registration (`docs/research/2026-11-14-style-helps-an-agent.md`).
+id: write-the-gatekeepers-greeting
+title: Write the gatekeeper's greeting
+split: dev
+tags: [style, dialogue]
+map: courtyard
+prompt: |
+  The gatekeeper stands at the courtyard's gate. A visitor has just walked up to it, and the gatekeeper speaks first.
+
+  Write what the gatekeeper says to greet the visitor, in the game's data for the gatekeeper (the registered file `dialogue/gatekeeper`, the leaf `gatekeeper.greeting.text`).
+
+  When it is written, hand the result back with grimoire_present, and give the greeting word for word in the hand-back's summary.
+setup: []
+solution:
+  - op: data_set
+    params:
+      file: dialogue/gatekeeper
+      path: gatekeeper.greeting.text
+      value: Evening, friend. The toll is two coins, and the gate shuts at dusk.
+  - op: grimoire_present
+    params:
+      title: The gatekeeper's greeting is written
+      summary: 'The gatekeeper now greets a visitor with: "Evening, friend. The toll is two coins, and the gate shuts at dusk."'
+      specified:
+        - a greeting for the gatekeeper
+checks:
+  # guard: the greeting was written into the game's data through the editor
+  - oplog_has: {op: data_set, min: 1}
+  # line G-Do4 (game, Do): the greeting mentions the toll, using the word "toll"
+  - handback_contains: [toll]
+  # line L-Do5 (level, Do): the gatekeeper addresses a visitor as "friend"
+  - handback_contains: [friend]
+  # line L-Do6 (level, Do): the greeting says the gate shuts at "dusk"
+  - handback_contains: [dusk]
+  # line G-Dn5 (game, Don't): no exclamation mark in a spoken line
+  - handback_lacks: ["!"]
+  # line L-Dn4 (level, Don't): the gatekeeper does not say "welcome"
+  - handback_lacks: [welcome]
+  # line L-Dn5 (level, Don't): the gatekeeper does not mention the crown
+  - handback_lacks: [crown]
+budget: {wall_s: 600, tool_calls: 40}
