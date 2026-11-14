@@ -1460,8 +1460,12 @@ fn run_omp(
     )
     .map_err(|e| format!("{}: {e}", extension.display()))?;
     // **The credential the trial's HOME needs**, carried from the user's own and nothing else: `omp auth
-    // export` names credentials, so no MCP server, skill or memory can ride along.
-    seed_credentials(&dir.join("home"))?;
+    // export` names credentials, so no MCP server, skill or memory can ride along. **Only the model's own
+    // provider's** is carried, and the HOME (which also holds omp's 128 MB of natives) is deleted when the
+    // trial's agent is done, on every path out of this function (#432, D6 and D7). The guard is made first, so
+    // a failed import leaves nothing behind either.
+    let _secrets = TrialSecrets::new([dir.join("home")]);
+    seed_credentials(OMP_PROGRAM, &dir.join("home"), &options.model)?;
     let transcript = dir.join("transcript.jsonl");
     let stdout = std::fs::File::create(&transcript).map_err(|e| format!("{}: {e}", transcript.display()))?;
     let stderr = std::fs::File::create(dir.join("agent.err")).map_err(|e| format!("{e}"))?;
@@ -1469,7 +1473,7 @@ fn run_omp(
     // middle of one: `--max-time` is omp's own stop, and a trial that kills a write leaves a project no agent
     // wrote. The wait below is the outer bound for a harness that ignores it.
     let wall = format!("{}s", task.budget.wall_s);
-    let mut omp = Command::new("omp");
+    let mut omp = Command::new(OMP_PROGRAM);
     omp.args([
             "-p",
             "--mode",
@@ -1583,13 +1587,99 @@ pub fn parse_tools_offered(text: &str, server: &str) -> Result<Vec<String>, Stri
     Ok(names)
 }
 
-/// **Give a trial's isolated `HOME` the credentials the user's own holds**, and nothing else.
+/// **The program a trial runs for the `omp` harness**, found on `PATH`.
+///
+/// A parameter of [`check_model`] and [`seed_credentials`] and not only a literal, so a test drives them
+/// with a stand-in script that holds no credential and calls no model.
+pub const OMP_PROGRAM: &str = "omp";
+
+/// **The provider a model runs on**: the part of `provider/model` before its first `/`, or `None` for a
+/// bare model name that names none.
+pub fn model_provider(model: &str) -> Option<&str> {
+    model.split_once('/').map(|(provider, _)| provider).filter(|provider| !provider.is_empty())
+}
+
+/// **What a trial keeps from `omp auth export`: the credentials of one provider**, in the export's own shape.
+///
+/// A trial runs one model, so it needs one provider's login and no other: copying every stored credential
+/// into every trial's `HOME` put the host's whole login (an OAuth refresh token included, which omp itself
+/// warns signs the source machine out once a copy refreshes it) in a directory that outlived the trial (#432,
+/// D6). `provider` is `None` for a bare model name, and then nothing can be narrowed: every credential is kept.
+///
+/// An export that holds nothing for the provider is an error naming the providers it does hold (a provider's
+/// name is not a secret) and the one to log in to.
+pub fn credentials_for(carried: &Value, provider: Option<&str>, model: &str) -> Result<Value, String> {
+    let all = carried.get("credentials").and_then(Value::as_array).cloned().unwrap_or_default();
+    if all.is_empty() {
+        return Err(
+            "this host has no stored omp credentials, so a trial's harness could not reach a model. \
+             Log in with `omp` once."
+                .to_owned(),
+        );
+    }
+    let Some(provider) = provider else {
+        return Ok(carried.clone());
+    };
+    let own: Vec<Value> = all
+        .iter()
+        .filter(|c| c.get("provider").and_then(Value::as_str) == Some(provider))
+        .cloned()
+        .collect();
+    if own.is_empty() {
+        let held: Vec<&str> = all.iter().filter_map(|c| c.get("provider").and_then(Value::as_str)).collect();
+        return Err(format!(
+            "this host has no stored omp credential for `{provider}`, the provider `{model}` runs on, so a trial's \
+             harness could not reach it. It holds credentials for: {}. Log in to `{provider}` with `omp` once.",
+            held.join(", ")
+        ));
+    }
+    let mut narrowed = carried.clone();
+    if let Some(object) = narrowed.as_object_mut() {
+        object.insert("credentials".to_owned(), Value::Array(own));
+    }
+    Ok(narrowed)
+}
+
+/// **Directories and files a trial made that hold a credential, deleted when this is dropped.**
+///
+/// A trial's isolated `HOME` holds the imported login (`agent.db`, mode 600) and, because omp extracts its
+/// natives there, about 200 MB (a 128 MB `.node` and a 10 MB `models.db`): kept for every trial of a 140-trial
+/// run that is 28 GB and 140 copies of a secret on a disk nobody reads again (#432, D6 and D7). Nothing in
+/// them is needed once the trial is graded, so they go with the guard: **on every path out of the trial**, an
+/// error and a panic included, because the guard is made *before* anything is written.
+pub struct TrialSecrets {
+    paths: Vec<PathBuf>,
+}
+
+impl TrialSecrets {
+    /// **A guard over these paths**, which need not exist yet.
+    pub fn new(paths: impl IntoIterator<Item = PathBuf>) -> TrialSecrets {
+        TrialSecrets { paths: paths.into_iter().collect() }
+    }
+}
+
+impl Drop for TrialSecrets {
+    fn drop(&mut self) {
+        for path in &self.paths {
+            let _ = std::fs::remove_dir_all(path);
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+/// **The file the credentials travel in** between `omp auth export` and `omp auth import`, inside the trial's `HOME`.
+const AUTH_CARRIED_FILE: &str = "auth-carried.json";
+
+/// **Give a trial's isolated `HOME` the credential of its model's provider**, and nothing else.
 ///
 /// `omp auth export` prints what this host is logged in to; `omp auth import` writes it into the `HOME`
 /// this is pointed at. A failure here is a harness error, because a trial whose harness cannot reach a
 /// model measures the harness: **the reason is what the user has to fix**, and it is named.
-fn seed_credentials(home: &Path) -> Result<(), String> {
-    let exported = Command::new("omp")
+///
+/// **The carrying file is removed on every path**, a failed import included: it holds the credentials in
+/// plain text. The caller holds a [`TrialSecrets`] over `home`, which removes what the import wrote.
+pub fn seed_credentials(omp: &str, home: &Path, model: &str) -> Result<(), String> {
+    let exported = Command::new(omp)
         .args(["auth", "export"])
         .output()
         .map_err(|e| format!("`omp auth export` could not be run: {e}"))?;
@@ -1602,28 +1692,20 @@ fn seed_credentials(home: &Path) -> Result<(), String> {
     }
     let carried = serde_json::from_slice::<Value>(&exported.stdout)
         .map_err(|e| format!("`omp auth export` did not print JSON: {e}"))?;
-    let count = carried
-        .get("credentials")
-        .and_then(Value::as_array)
-        .map(Vec::len)
-        .unwrap_or(0);
-    if count == 0 {
-        return Err(
-            "this host has no stored omp credentials, so a trial's harness could not reach a model. \
-             Log in with `omp` once."
-                .to_owned(),
-        );
-    }
-    let file = home.join("auth-carried.json");
-    if let Some(parent) = file.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
-    }
-    bevy_grimoire_core::atomic_file::write(
-        &file,
-        serde_json::to_vec(&carried).map_err(|e| format!("{e}"))?,
-    )
-    .map_err(|e| format!("{}: {e}", file.display()))?;
-    let imported = Command::new("omp")
+    let carried = credentials_for(&carried, model_provider(model), model)?;
+    let file = home.join(AUTH_CARRIED_FILE);
+    std::fs::create_dir_all(home).map_err(|e| format!("{}: {e}", home.display()))?;
+    let imported = import_credentials(omp, home, &file, &carried);
+    // **Removed whether or not the import worked**: the file is the secret in plain text.
+    let _ = std::fs::remove_file(&file);
+    imported
+}
+
+/// **Write the carrying file and run `omp auth import` on it** into `home`.
+fn import_credentials(omp: &str, home: &Path, file: &Path, carried: &Value) -> Result<(), String> {
+    bevy_grimoire_core::atomic_file::write(file, serde_json::to_vec(carried).map_err(|e| format!("{e}"))?)
+        .map_err(|e| format!("{}: {e}", file.display()))?;
+    let imported = Command::new(omp)
         .args(["auth", "import", &file.to_string_lossy()])
         .env("HOME", home)
         .output()
@@ -1635,7 +1717,6 @@ fn seed_credentials(home: &Path) -> Result<(), String> {
             String::from_utf8_lossy(&imported.stderr).lines().next().unwrap_or("nothing")
         ));
     }
-    let _ = std::fs::remove_file(&file);
     Ok(())
 }
 

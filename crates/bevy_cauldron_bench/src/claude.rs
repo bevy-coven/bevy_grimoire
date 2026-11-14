@@ -106,6 +106,9 @@ pub fn run(
     let text = serde_json::to_string_pretty(config).map_err(|e| format!("{e}"))? + "\n";
     bevy_grimoire_core::atomic_file::write(&mcp, text).map_err(|e| format!("{}: {e}", mcp.display()))?;
     let claude_config = dir.join("claude-config");
+    // **The login copied into the trial and the HOME beside it are deleted with the trial's agent**, on every
+    // path out of this function, as `omp`'s are: a copy of the user's credential file does not outlive its use (#432, D6).
+    let _secrets = crate::run::TrialSecrets::new([claude_config.clone(), dir.join("home")]);
     seed_credentials(&claude_config)?;
     let transcript = dir.join("transcript.jsonl");
     let stdout = std::fs::File::create(&transcript).map_err(|e| format!("{}: {e}", transcript.display()))?;
