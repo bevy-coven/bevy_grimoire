@@ -422,7 +422,7 @@ fn spawn_the_design_workspace(mut commands: Commands, frame: Res<Frame>) {
     let panel = chrome::panel_root(&mut commands, &frame, Side::Left, TREE_PANEL_W, true, false, "DESIGN").insert(DesignPanel).id();
     commands.entity(panel).with_children(|p| {
         chrome::title(p, "DESIGN");
-        p.spawn(Node { flex_grow: 1.0, min_height: Val::Px(0.0), flex_direction: FlexDirection::Column, ..default() }).with_children(|column| {
+        p.spawn(bevy_gooey::fill_region()).with_children(|column| {
             column.spawn((tree(Vec::<TreeNode>::new()), DesignTree::default(), SelectMode::Single, observe(on_tree_pick)));
         });
     });
@@ -451,10 +451,11 @@ fn spawn_the_design_workspace(mut commands: Commands, frame: Res<Frame>) {
             AccessibleLabel::new("Design page"),
         ))
         .with_children(|host| {
-            host.spawn((DesignTop, Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(chrome::GAP_TIGHT), flex_shrink: 0.0, ..default() }));
+            host.spawn((DesignTop, bevy_gooey::column_with(chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() })));
             host.spawn((
                 DesignBody,
-                Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), min_width: Val::Px(0.0), ..default() },
+                bevy_gooey::fill_region(),
+                bevy_gooey::Sizing { min_width: Some(bevy_gooey::Extent::Px(0.0)), ..default() },
             ));
         })
         .id();

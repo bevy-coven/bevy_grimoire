@@ -849,7 +849,11 @@ fn projects_body(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut
 /// - **The three steps answer "then what?"** in the space the centring left empty, and **Take the tour** —
 ///   the actual onboarding, which was two clicks away under Learn — is on the screen a first-timer lands on.
 fn welcome(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &Art) {
-    body.spawn(Node { flex_direction: FlexDirection::Column, align_items: AlignItems::FlexStart, row_gap: Val::Px(crate::chrome::GAP_GROUP), max_width: Val::Px(WELCOME_COLUMN_PX), ..default() }).with_children(|card| {
+    body.spawn((
+        bevy_gooey::column_with(crate::chrome::GAP_GROUP_STEPS, bevy_gooey::RowLayout { align: Some(AlignItems::FlexStart), ..default() }),
+        bevy_gooey::Sizing { max_width: Some(bevy_gooey::Extent::Px(WELCOME_COLUMN_PX)), ..default() },
+    ))
+    .with_children(|card| {
         if let Some((handle, size)) = art.splash.as_ref() {
             card.spawn((
                 bevy_gooey::aspect_image(handle.clone(), size.x * WELCOME_SPLASH_SCALE, size.x / size.y),
@@ -1231,7 +1235,11 @@ fn news_page(page: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut Art
             // take whatever the window gave it — 118 characters a line at the capture's own width —
             // so it is bounded to `NEWS_MEASURE_PX` and the row's leftover is margin
             // (`feedback-1793905698793`).
-            entry.spawn(Node { flex_direction: FlexDirection::Column, width: Val::Px(NEWS_MEASURE_PX), max_width: Val::Px(NEWS_MEASURE_PX), flex_shrink: 1.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }).with_children(|words| {
+            entry.spawn((
+                bevy_gooey::column_with(crate::chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(1.0), ..default() }),
+                bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Px(NEWS_MEASURE_PX)), max_width: Some(bevy_gooey::Extent::Px(NEWS_MEASURE_PX)), ..default() },
+            ))
+            .with_children(|words| {
                 if fresh {
                     words.spawn((Text::new("New"), Role::Label, Pickable::IGNORE));
                 }

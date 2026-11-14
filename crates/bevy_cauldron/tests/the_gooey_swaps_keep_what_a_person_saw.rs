@@ -8,6 +8,7 @@ use bevy::prelude::*;
 use bevy::ui::ComputedNode;
 use bevy_cauldron::harness;
 use bevy_cauldron::tiles::Mode;
+use bevy_cauldron::chrome::GAP_TIGHT;
 use bevy_gooey::Role;
 
 use crate::fixtures;
@@ -23,6 +24,20 @@ fn editor(tag: &str) -> App {
     let mut app = harness::build_headless_at(&root, "m", None, Mode::Map).unwrap_or_else(|e| panic!("{e}"));
     settle(&mut app, 8);
     app
+}
+
+/// A headless editor opened on `mode`, settled.
+fn editor_on(tag: &str, mode: Mode) -> App {
+    let root = fixtures::Fixture::new(&format!("keep_on_{tag}_{}", std::process::id())).descriptor("site/wall", "alpha").place("site/wall", (0.0, 0.0)).build("m");
+    let mut app = harness::build_headless_at(&root, "m", None, mode).unwrap_or_else(|e| panic!("{e}"));
+    settle(&mut app, 8);
+    app
+}
+
+/// The one entity carrying marker `M`.
+fn the<M: Component>(app: &mut App) -> Entity {
+    let mut found = app.world_mut().query_filtered::<Entity, With<M>>();
+    found.iter(app.world()).next().unwrap_or_else(|| panic!("an entity carrying {} is on screen", std::any::type_name::<M>()))
 }
 
 /// The logical width a node is laid out at.
@@ -204,4 +219,30 @@ fn the_familiar_block_fills_its_pane() {
     let room = pane.content_box().width() * pane.inverse_scale_factor();
     let width = width_of(&app, block);
     assert!((width - room).abs() < 1.0, "the block is {width} px wide in a pane with {room} px of room");
+}
+
+/// **The workspace strip keeps its 35 px** now that its `min_height` is gooey's `Sizing` and not a patch: the edge tabs' own inset is smaller, so the strip holds the height the
+/// panels under it were laid out from.
+#[test]
+fn the_workspace_strip_keeps_its_height_through_sizing() {
+    let mut app = editor_on("strip", Mode::Map);
+    let world = app.world_mut();
+    let mut q = world.query::<(&Role, &Node, &bevy_gooey::Sizing)>();
+    let strips = q.iter(world).filter(|(role, node, sizing)| **role == Role::Row && node.min_height == Val::Px(35.0) && sizing.min_height == Some(bevy_gooey::Extent::Px(35.0))).count();
+    assert_eq!(strips, 1, "one gooey row holds the workspace's tabs at 35 px");
+}
+
+/// **The Design workspace's page is gooey regions**: its tree holder, its top and its body are the fill regions and the rigid column they stood as, with the gaps they had.
+#[test]
+fn the_design_workspaces_page_is_built_from_gooey_regions() {
+    use bevy_cauldron::design_view::{DesignBody, DesignTop};
+    let mut app = editor_on("design", Mode::Design);
+    let top = the::<DesignTop>(&mut app);
+    assert_eq!(app.world().get::<Role>(top), Some(&Role::Column), "the page's top is a gooey column");
+    let node = app.world().get::<Node>(top).expect("the top has a Node");
+    assert_eq!((node.row_gap, node.flex_shrink), (Val::Px(GAP_TIGHT), 0.0), "with the tight gap, never squeezed");
+    let body = the::<DesignBody>(&mut app);
+    assert_eq!(app.world().get::<Role>(body), Some(&Role::FillRegion), "the page's body is a gooey fill region");
+    let node = app.world().get::<Node>(body).expect("the body has a Node");
+    assert_eq!((node.flex_grow, node.min_height, node.min_width), (1.0, Val::Px(0.0), Val::Px(0.0)), "that takes the room left and may narrow to nothing");
 }

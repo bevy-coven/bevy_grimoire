@@ -4123,7 +4123,7 @@ fn spawn_tab_strip(
     commands.entity(frame.door_strip).add_child(strip);
     // **The strip keeps the height the hand-built tab gave it** ([`TAB_STRIP_H`]): gooey's `edge_tab` brings a smaller inset of its own, and
     // everything under the strip (the inspector, the badges' free ground, the history list) is laid out from where it ends.
-    commands.entity(strip).entry::<Node>().and_modify(|mut node| node.min_height = Val::Px(TAB_STRIP_H));
+    commands.entity(strip).insert(bevy_gooey::Sizing { min_height: Some(bevy_gooey::Extent::Px(TAB_STRIP_H)), ..default() });
     commands
         .entity(strip)
         .with_children(|p| {

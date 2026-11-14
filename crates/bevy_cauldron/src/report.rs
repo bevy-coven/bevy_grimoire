@@ -1137,8 +1137,9 @@ fn report_overlay(
             root.spawn((
                 ReportPart,
                 Node {
-                    // PLACES-ITSELF-OK: the outline is placed at the pick over the frozen frame, not in a layout. Kept raw (GAP3): gooey's `Shape` border is snapped
-                    // to whole device pixels, so this 3 px edge would draw thinner than the drag's own, which `the_drag_box_is_plainly_visible` holds to 3 px.
+                    // Kept raw (GAP3): gooey's `Shape` border is snapped to whole device pixels, so this 3 px edge would draw thinner than the drag's own,
+                    // which `the_drag_box_is_plainly_visible` holds to 3 px.
+                    // PLACES-ITSELF-OK: the outline is placed at the pick over the frozen frame, not in a layout.
                     position_type: PositionType::Absolute,
                     left: Val::Px(overlay_px(rect[0])),
                     top: Val::Px(overlay_px(rect[1])),

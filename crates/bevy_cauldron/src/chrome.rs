@@ -2789,6 +2789,7 @@ pub fn row_label_with(
 ) -> Entity {
     row.spawn((
         // **The value never starts at the label's last glyph**: the label keeps its words' width and is at least the column wide, and a margin of its own
+        // (`GAP_ROW`, the design system's row gap, as its spacing step `STEP_ROW`)
         // (outside its box) stands the value off however wide a long label turned out, because the row's `column_gap` only applies between boxes, and a label
         // longer than its column pushes its own box wider (measured on the KIT INFO panel: 5 px against 133 px).
         (

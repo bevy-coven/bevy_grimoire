@@ -4286,15 +4286,9 @@ fn rebuild_palette(
                                 slot.insert(ImageNode::new(image));
                             }
                             row.spawn((
-                                Node {
-                                    flex_grow: 1.0,
-                                    // See `tiles::count_cell`: the name wraps inside its own column
-                                    // rather than pushing the cost out of the row.
-                                    // CHROME-OK: zero is not a spacing step.
-                                    min_width: Val::Px(0.0),
-                                    overflow: Overflow::clip_x(),
-                                    ..default()
-                                },
+                                // The name wraps inside its own column rather than pushing the cost out of the row (`tiles::count_cell`) and is clipped to it.
+                                crate::chrome::text_narrows(),
+                                bevy_gooey::Sizing { clip: Some(true), ..default() },
                                 Text::new(bevy_grimoire_core::naming::display_name(&d.id)),
                                 TextColor(crate::chrome::ink().text),
                                 crate::chrome::typed(crate::chrome::text::BODY),
@@ -7174,9 +7168,11 @@ fn refresh_notes_list(
                 if !loaded.is_empty() {
                     p.spawn(bevy_gooey::row(crate::chrome::GAP_TIGHT_STEPS)).with_children(|h| {
                         for handle in loaded {
-                            // CHROME-OK: a fixed 4:3 review thumbnail, kept raw: gooey's `image_box` also forces no-shrink, a clip and a stretched
-                            // image, which changes what a narrow panel shows, and no test pins that (GAP: an image box that keeps `ImageNode`'s own mode).
-                            h.spawn((Node { width: Val::Px(REVIEW_THUMBNAIL_PX.x), height: Val::Px(REVIEW_THUMBNAIL_PX.y), ..default() }, ImageNode::new(handle)));
+                            // A fixed 4:3 review thumbnail: a `sized` box that keeps `ImageNode`'s own mode (gooey's `image_box` would also force no-shrink, a clip and a stretch).
+                            h.spawn((
+                                bevy_gooey::sized(bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Px(REVIEW_THUMBNAIL_PX.x)), height: Some(bevy_gooey::Extent::Px(REVIEW_THUMBNAIL_PX.y)), ..default() }),
+                                ImageNode::new(handle),
+                            ));
                         }
                     });
                 }
