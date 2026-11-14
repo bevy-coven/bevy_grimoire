@@ -226,6 +226,8 @@ enum Slot {
     /// build that has the overlay; `layout` adds it under the same `cfg` the row's spawn is under.
     #[cfg(feature = "bevy_light_grid")]
     LightMap,
+    /// View ▸ Show style areas (SG-06, #405): outlines each area of the open map, with its name.
+    StyleAreas,
 }
 
 /// **The Map menu, in the groups its keys fall into**: choosing and tools, turning and tipping, filling, and the map itself.
@@ -319,6 +321,7 @@ fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slo
         slots.push(Slot::GameUi);
         #[cfg(feature = "bevy_light_grid")]
         slots.push(Slot::LightMap);
+        slots.push(Slot::StyleAreas);
         slots.push(Slot::Familiar);
         slots.push(Slot::PauseAgent);
         slots.push(Slot::FollowAgent);
@@ -485,6 +488,14 @@ fn spawn_slot(
                 crate::light_overlay::LightMapItem,
                 bevy_gooey::check_item("Light map", false),
                 bevy_gooey::observe(crate::light_overlay::on_light_map_item),
+            ));
+        }
+        // **View ▸ Show style areas** (SG-06, #405): a tick for the overlay that outlines the open map's areas. Off by default.
+        Slot::StyleAreas => {
+            menu.spawn((
+                crate::design_areas::StyleAreasItem,
+                bevy_gooey::check_item("Show style areas", false),
+                bevy_gooey::observe(crate::design_areas::on_style_areas_item),
             ));
         }
         Slot::ActivityBar => {

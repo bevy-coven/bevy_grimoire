@@ -138,6 +138,92 @@ impl Area {
     }
 }
 
+/// **Where a removed area's folder goes**, under the project root: a folder that still holds a page or a board is
+/// moved here, never deleted (SG-06, #405).
+pub const REMOVED_AREAS_DIR: &str = ".dark_factory/removed-areas";
+
+/// **The longest an area's name may be, in characters.** A name is a folder name and a label drawn on the map.
+pub const AREA_NAME_MAX_CHARS: usize = 48;
+
+/// **Whether `name` is a name an area can have**: letters, digits, `_` and `-`, at most [`AREA_NAME_MAX_CHARS`]. It is a
+/// folder name and a label, and a name with a slash or a dot in front would be a way out of the folder it belongs in.
+pub fn is_area_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.chars().count() <= AREA_NAME_MAX_CHARS
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// **Whether `name` is a name a topic can have**: the rule of an area's name, because both are a file or folder name an agent is told.
+pub fn is_topic_name(name: &str) -> bool {
+    is_area_name(name)
+}
+
+/// **An area's folder**, relative to the project root: `<level>/areas/<name>`.
+pub fn area_folder(level: &str, name: &str) -> String {
+    format!("{level}/{AREAS_DIR}/{name}")
+}
+
+/// **One area of a level as it is on disk**: read from its `area.yaml` alone, so a caller that draws or asks "which area
+/// is this point in" does not read every style file the way [`Tree::read`] does.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AreaOnMap {
+    pub name: String,
+    /// The area's folder, relative to the project root.
+    pub path: String,
+    /// `[x0, z0, x1, z1]`, map metres.
+    pub rect: [f32; 4],
+    /// Whether the folder holds a `style.md`, which is the page its Style link opens.
+    pub has_style: bool,
+}
+
+/// **The areas of the level whose folder is `level`**, sorted by name. An area whose `area.yaml` does not read, or whose
+/// rectangle is not one, is left out: [`Tree::problems`] is where it is named.
+pub fn areas_of_level(root: &Path, level: &str) -> Vec<AreaOnMap> {
+    let mut out = Vec::new();
+    for (name, dir) in folders(&root.join(level).join(AREAS_DIR)) {
+        let path = area_folder(level, &name);
+        let Ok(text) = std::fs::read_to_string(dir.join(AREA_FILE)) else { continue };
+        let Ok(area) = crate::yaml::from_str::<Area>(&text, &format!("{path}/{AREA_FILE}")) else { continue };
+        let [x0, z0, x1, z1] = area.rect;
+        if area.version != AREA_VERSION || !(x0.is_finite() && z0.is_finite() && x1.is_finite() && z1.is_finite()) || x0 > x1 || z0 > z1 {
+            continue;
+        }
+        let has_style = dir.join(format!("{STYLE_TOPIC}.{MARKDOWN_EXT}")).is_file();
+        out.push(AreaOnMap { name, path, rect: area.rect, has_style });
+    }
+    out
+}
+
+/// **The area a map point is in**: the smallest that holds it, as [`Tree::chain_to`] chooses.
+pub fn area_at(areas: &[AreaOnMap], at: (f32, f32)) -> Option<&AreaOnMap> {
+    areas.iter().filter(|a| inside(a.rect, at)).min_by(|a, b| area_size(Some(a.rect)).total_cmp(&area_size(Some(b.rect))))
+}
+
+/// **Every level folder of the tree**, relative to the project root: the levels in no region, then each region's.
+/// A walk of folder names, which is what an operation asks to know where an area may live.
+pub fn levels_of(root: &Path) -> Vec<String> {
+    let design = root.join(DESIGN_DIR);
+    let mut out: Vec<String> = folders(&design.join(LEVELS_DIR)).into_iter().map(|(name, _)| format!("{DESIGN_DIR}/{LEVELS_DIR}/{name}")).collect();
+    for (region, dir) in folders(&design.join(REGIONS_DIR)) {
+        out.extend(folders(&dir.join(LEVELS_DIR)).into_iter().map(|(name, _)| format!("{DESIGN_DIR}/{REGIONS_DIR}/{region}/{LEVELS_DIR}/{name}")));
+    }
+    out
+}
+
+/// **A saved map's floor, `[x0, z0, x1, z1]` in map metres**, or `None` when the project has no such map or it does not
+/// read. The box [`crate::map::Map::floor_rect`] answers, read from the map's own file.
+pub fn floor_of_map(root: &Path, map: &str) -> Option<[f32; 4]> {
+    let file = root.join(GRIMOIRE_DIR).join(crate::project_data::MAPS_DIR).join(format!("{map}{}", crate::map::MAP_SUFFIX));
+    let parsed = crate::map::Map::parse(&std::fs::read_to_string(file).ok()?).ok()?;
+    let (x0, z0, x1, z1) = parsed.floor_rect();
+    Some([x0, z0, x1, z1])
+}
+
+/// **An area's `area.yaml` text** for a rectangle.
+pub fn area_yaml(rect: [f32; 4]) -> Result<String, String> {
+    crate::yaml::to_string(&Area { version: AREA_VERSION, rect }).map_err(|p| p.line())
+}
+
 /// **Which kind of place a folder is.** Ordered the way a chain is read: the whole game first, then the
 /// region, then the level, then the area.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]

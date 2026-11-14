@@ -2654,6 +2654,7 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::files_panel::FilesPanelPlugin);
         // **The open page's outline** (SG-04, #403): View ▸ Show outline, and `grimoire_state.file_outline`.
         app.add_plugins(crate::file_outline::FileOutlinePlugin);
+        app.add_plugins(crate::design_areas::StyleAreasPlugin);
         app.add_plugins(crate::app_verbs::AppVerbsPlugin);
         // **Each panel header's "?"** (UI-91, #257): the guide page that covers what the panel holds.
         app.add_plugins(crate::help::HelpPlugin);
@@ -5728,6 +5729,8 @@ fn terrain_edit_keys(
                     set_trigger(project.as_deref(), open.as_deref(), &mut state, &raw);
                 } else if raw.trim_start().starts_with("ref ") {
                     set_board(project.as_deref(), open.as_deref(), &mut state, &raw);
+                } else if raw.trim_start().starts_with("area ") {
+                    set_area(project.as_deref(), open.as_deref(), &mut state, &raw);
                 } else if raw.trim_start().starts_with("person ") {
                     set_person(project.as_deref(), open.as_deref(), &mut state, &raw);
                 } else {
@@ -5866,6 +5869,42 @@ fn drop_to_board(
         };
         let params = serde_json::json!({"action": "add", "path": path, "caption": bevy_grimoire_core::board::PENDING_CAPTION});
         dispatch_board(Some(project), open, &mut state, &params, Some("say what to take from it with `ref <path> <caption>`"));
+    }
+}
+
+/// **Draw, move, resize or remove a style area of the open map's level** through the registry as `design_area_set`, from the
+/// terrain line `area <name> <x0> <z0> <x1> <z1>` (corners in map metres) or `area <name> remove` (SG-06, #405).
+///
+/// **The area is the design's data, not the map's**, so nothing here marks the map changed: the overlay re-reads the area files
+/// itself (`design_areas`). One line is one log line and one undo step, the same as an agent's `apply`.
+fn set_area(project: Option<&Project>, open: Option<&OpenMap>, state: &mut EditorState, raw: &str) {
+    let words: Vec<&str> = raw.split_whitespace().collect();
+    let (Some(project), Some(open), Some(name)) = (project, open, words.get(1)) else {
+        state.status.problem(format!("`{}` is not `area <name> <x0> <z0> <x1> <z1>` or `area <name> remove`, so nothing was changed", raw.trim()));
+        return;
+    };
+    let corners: Vec<f32> = words[2..].iter().filter_map(|w| w.parse().ok()).collect();
+    let params = match (&words[2..], corners.as_slice()) {
+        (["remove"], _) => serde_json::json!({"name": name}),
+        (rest, [x0, z0, x1, z1]) if rest.len() == 4 => serde_json::json!({"name": name, "rect": [x0, z0, x1, z1]}),
+        _ => {
+            state.status.problem(format!("`{}` is not `area <name> <x0> <z0> <x1> <z1>` or `area <name> remove`, so nothing was changed", raw.trim()));
+            return;
+        }
+    };
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: Some(open.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        ..crate::ops::Ctx::default()
+    };
+    match crate::ops::dispatch(&mut ctx, "design_area_set", &params) {
+        Ok(crate::ops::Applied::Done { outcome, operation_id, .. }) => {
+            state.status.note(outcome.summary.clone());
+            state.record(Undo::Logged { line: operation_id, phrase: outcome.summary, agent: false });
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => state.status.problem(e.0),
     }
 }
 
@@ -16676,6 +16715,7 @@ impl UnderCursor {
 /// promise about a key that acts on the PLACE selection there. A readout that is believed and wrong
 /// is worse than none, by this function's own argument; the gate is the same `view::over_ui` the
 /// verbs ask, so the line and the key cannot disagree.
+#[allow(clippy::too_many_arguments)]
 fn sense_under_cursor(
     pointer: Res<crate::view::Pointer>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
@@ -16684,6 +16724,7 @@ fn sense_under_cursor(
     mut lock: ResMut<TargetLock>,
     mut under: ResMut<UnderCursor>,
     ui_nodes: Query<(&bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), With<Hovered>>,
+    areas: Option<ResMut<crate::design_areas::StyleAreas>>,
 ) {
     let on_ui = crate::view::over_ui(
         pointer.0,
@@ -16693,6 +16734,24 @@ fn sense_under_cursor(
             .unwrap_or(1.0),
         ui_nodes.iter(),
     );
+    // **The style area the cursor is in** (SG-06, #405): asked of the ground point the pieces' pick starts from, so the line and the
+    // verbs share one cursor. A cursor on a panel names none, but the area it was last in is kept for the inspector's Style link.
+    // **Only a cursor that is on the map's ground changes which area it was last in**: one off the window, or with no camera, leaves the answer.
+    let on_ground = (!on_ui)
+        .then(|| camera.as_ref().and_then(|c| cursor_ground(pointer.0, c.0, c.1)))
+        .flatten()
+        .map(|hit| open.map.to_map_space((hit.x, hit.z)));
+    // The reading is `StyleAreas::observe_cursor`'s (a point in an area, a point outside, a cursor not on the map); the resource is marked
+    // changed only when the area the cursor was last in did.
+    let in_area: Option<String> = areas.and_then(|mut areas| {
+        let held = areas.bypass_change_detection();
+        let before = held.cursor_area.clone();
+        let found = held.observe_cursor(on_ground);
+        if held.cursor_area != before {
+            areas.set_changed();
+        }
+        found
+    });
     let picked = under_cursor_target(&mut lock, *pointer, camera, &project, &open)
         .and_then(|i| open.map.placements.get(i));
     // **The descriptor comes from the piece, through the same resolver every other question uses**,
@@ -16700,7 +16759,7 @@ fn sense_under_cursor(
     // (E-059). A piece the library has dropped answers `None` and the line keeps the words it had.
     let described = picked
         .and_then(|p| bevy_grimoire_core::stack::descriptor_of(&project.library, p));
-    let want = under_readout(on_ui, picked, described.as_deref());
+    let want = crate::design_areas::under_phrase(under_readout(on_ui, picked, described.as_deref()), in_area.as_deref());
     if under.0 != want {
         under.0 = want;
     }
