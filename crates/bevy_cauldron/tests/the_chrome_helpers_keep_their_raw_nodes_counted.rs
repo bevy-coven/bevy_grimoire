@@ -10,7 +10,8 @@ use crate::fixtures;
 /// `Node::default()`). A new one needs a reason in the commit that adds it and this number raised by the same amount.
 // 42 -> 38: #260 moved the heading and title margins and the row helpers' margins onto gooey's `Spacing`. Owner exception (2026-11-14): a ratchet tightened to the real count.
 // 38 -> 34: #260 moved the problem line, the row labels and the wrapping text onto gooey's `TextFlow`, `Sizing` and `Spacing`. Owner exception (2026-11-14): a ratchet tightened to the real count.
-const CHROME_NODES_LEFT: usize = 34;
+// 34 -> 33: #260 moved the frame root's height onto gooey's `Extent::Vh`. Owner exception (2026-11-14): a ratchet tightened to the real count.
+const CHROME_NODES_LEFT: usize = 33;
 
 #[test]
 fn chrome_rs_carries_no_more_raw_nodes_than_it_is_counted_to() {

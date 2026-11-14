@@ -1117,7 +1117,7 @@ fn draw_the_look_chip(
     // **Where the map is drawn**, from the node the camera renders into — the same rect
     // `view::drive` asks of a wheel, read the other way round.
     viewport: Option<Single<(&ComputedNode, &UiGlobalTransform), With<crate::chrome::ViewportSlot>>>,
-    mut nodes: Query<(Entity, &mut Node, &Children), With<LookChipNode>>,
+    mut nodes: Query<(Entity, &mut bevy_gooey::PlacedAt, &Children), With<LookChipNode>>,
     mut words: Query<&mut Text>,
 ) {
     // **Nothing waits, or there is no map to say it about: the chip goes.**
@@ -1142,11 +1142,11 @@ fn draw_the_look_chip(
         // a dock drag or a theme change moves the viewport, and a chip pinned to where it used to be
         // would name the change from the wrong corner of the map.
         let (left, top) = (Val::Px(home.x), Val::Px(home.y));
-        if style.left != left {
-            style.left = left;
+        if style.0.left != left {
+            style.0.left = left;
         }
-        if style.top != top {
-            style.top = top;
+        if style.0.top != top {
+            style.0.top = top;
         }
         for kid in children.iter() {
             if let Ok(mut text) = words.get_mut(kid)
@@ -1160,29 +1160,22 @@ fn draw_the_look_chip(
     commands
         .spawn((
             LookChipNode,
-            Node {
-                // PLACES-ITSELF-OK: the chip stands over the viewport rather than in a flow, which is
-                // what "over the viewport" means — the same placement `compass` makes for its gizmo.
-                position_type: PositionType::Absolute,
-                left: Val::Px(home.x),
-                top: Val::Px(home.y),
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                column_gap: Val::Px(crate::chrome::GAP_ROW),
-                padding: crate::chrome::CHIP_PAD,
-                border_radius: BorderRadius::all(Val::Px(crate::chrome::RADIUS_ROW)),
-                ..default()
-            },
+            // The chip stands over the viewport rather than in a flow, which is what "over the viewport" means: placed at the viewport's corner (the system below keeps
+            // `PlacedAt` on it), its words and the Look button in a line, a chip's inset inside and a row radius.
+            bevy_gooey::placed(UiRect { left: Val::Px(home.x), top: Val::Px(home.y), ..UiRect::all(Val::Auto) }),
+            bevy_gooey::RowLayout { direction: Some(FlexDirection::Row), align: Some(AlignItems::Center), ..default() },
+            crate::chrome::CHIP_SPACING,
+            bevy_gooey::Shape { radius: Some(bevy_gooey::Radius::Step(0)), ..default() },
             BackgroundColor(crate::chrome::ink().panel_bg),
             GlobalZIndex(crate::chrome::COMPASS_Z),
-            // **The chip's own text is not a target**; the button beside it is.
-            bevy::picking::Pickable::IGNORE,
         ))
         .with_children(|chip_node| {
             chip_node.spawn((
                 Text::new(sentence),
                 TextColor(crate::chrome::ink().text),
                 crate::chrome::typed(crate::chrome::text::BODY),
+                // A row step of room before the Look button (the gap the chip stood between its parts).
+                crate::chrome::spaced(crate::chrome::margin_right(crate::chrome::STEP_ROW)),
                 bevy::picking::Pickable::IGNORE,
             ));
             // **Look**, the button the issue names: show the oldest change now rather than waiting out

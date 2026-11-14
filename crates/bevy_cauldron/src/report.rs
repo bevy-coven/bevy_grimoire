@@ -1136,21 +1136,16 @@ fn report_overlay(
             let Some(rect) = rect else { continue };
             root.spawn((
                 ReportPart,
-                Node {
-                    // Kept raw (GAP3): gooey's `Shape` border is snapped to whole device pixels, so this 3 px edge would draw thinner than the drag's own,
-                    // which `the_drag_box_is_plainly_visible` holds to 3 px.
-                    // PLACES-ITSELF-OK: the outline is placed at the pick over the frozen frame, not in a layout.
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(overlay_px(rect[0])),
-                    top: Val::Px(overlay_px(rect[1])),
-                    width: Val::Px(overlay_px((rect[2] - rect[0]).max(0.0))),
-                    height: Val::Px(overlay_px((rect[3] - rect[1]).max(0.0))),
-                    border: UiRect::all(Val::Px(chrome::SNIP_EDGE_W)),
+                // The outline is placed at the pick over the frozen frame, not in a layout: its corner, its size and a 3 px edge that is exactly 3 px, like the drag's own.
+                bevy_gooey::placed(UiRect { left: Val::Px(overlay_px(rect[0])), top: Val::Px(overlay_px(rect[1])), ..UiRect::all(Val::Auto) }),
+                bevy_gooey::Sizing {
+                    width: Some(bevy_gooey::Extent::Px(overlay_px((rect[2] - rect[0]).max(0.0)))),
+                    height: Some(bevy_gooey::Extent::Px(overlay_px((rect[3] - rect[1]).max(0.0)))),
                     ..default()
                 },
+                bevy_gooey::BorderPx(bevy_gooey::Sides::all(chrome::SNIP_EDGE_W)),
                 BorderColor::all(chrome::ink().accent),
                 BackgroundColor(wash),
-                Pickable::IGNORE,
             ));
         }
         for at in marks {

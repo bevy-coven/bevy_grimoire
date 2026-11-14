@@ -23,7 +23,7 @@ use bevy::ui_widgets::{Activate, Button as UiButton};
 use bevy_grimoire_core::map::Placed;
 use bevy_grimoire_core::stack::{descriptor_of, descriptor_with};
 
-use crate::chrome::{CHIP_PAD, LIST_W};
+use crate::chrome::LIST_W;
 use crate::keys::{self, Action};
 use crate::project::{OpenMap, Project};
 use crate::view::{MainCamera, cursor_ground};
@@ -3106,23 +3106,12 @@ fn spawn_cost_readout(mut commands: Commands, frame: Res<crate::chrome::Frame>) 
     commands.entity(frame.chrome_bar).with_children(|bar| {
         bar.spawn((
             crate::tiles::MapRoot,
-            Node {
-                padding: UiRect::axes(Val::Px(COST_PAD_X), Val::Px(crate::chrome::GAP_TIGHT)),
-                // **A reserved column, and the number grows leftwards into it.**
-                //
-                // This is the last child of a row whose spacer pushes everything to the right end, so
-                // every digit the count gained shoved `MAP · untitled_map` further left — reported
-                // from the keyboard as the label "bouncing around a whole lot as those triangle
-                // numbers change". A readout that moves its neighbour is a readout that makes the
-                // neighbour unreadable, and the neighbour is the one thing on the bar that says which
-                // map you are in.
-                //
-                // `min_width` rather than `width`, so a count past what [`COST_COL`] reserves pushes
-                // out rather than clipping — the same choice, for the same reason, the key list's
-                // chord column makes. `FlexEnd` is what makes the phrase hold still: the digits
-                // extend into the slack instead of dragging `tris drawn` with them.
-                min_width: Val::Px(COST_COL),
-                justify_content: JustifyContent::FlexEnd,
+            // **A reserved column, and the number grows leftwards into it** (see `COST_COL`): at least that wide, the digits flush right so `tris drawn` holds still, and
+            // the bar's inset either side. A literal 8 px (not a step of the scale), and a tight step above and below.
+            bevy_gooey::row_with(0.0, bevy_gooey::RowLayout { justify: Some(JustifyContent::FlexEnd), ..default() }),
+            bevy_gooey::Sizing { min_width: Some(bevy_gooey::Extent::Px(COST_COL)), ..default() },
+            bevy_gooey::Spacing {
+                padding: bevy_gooey::Sides { top: Some(crate::chrome::STEP_TIGHT), right: Some(bevy_gooey::Space::Px(COST_PAD_X)), bottom: Some(crate::chrome::STEP_TIGHT), left: Some(bevy_gooey::Space::Px(COST_PAD_X)) },
                 ..default()
             },
             // Nothing here is clickable, and a readout that eats clicks is a readout that steals
@@ -4198,14 +4187,9 @@ fn rebuild_palette(
                     // five states every row and chip has. It sensed `Hovered` and nothing repainted
                     // it.
                     crate::chrome::RowRest(crate::chrome::ink().header_bg),
-                    Node {
-                        width: Val::Percent(100.0),
-                        padding: CHIP_PAD,
-                        flex_direction: FlexDirection::Row,
-                        column_gap: Val::Px(crate::chrome::GAP_ROW),
-                        margin: UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
-                        ..default()
-                    },
+                    bevy_gooey::row(crate::chrome::GAP_ROW_STEPS),
+                    bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(100.0)), ..default() },
+                    bevy_gooey::Spacing { margin: crate::chrome::margin_top(crate::chrome::STEP_ROW), ..crate::chrome::CHIP_SPACING },
                     BackgroundColor(crate::chrome::ink().header_bg),
                 ))
                 .with_children(|row| {
@@ -4265,12 +4249,13 @@ fn rebuild_palette(
                     palette_row.insert(bevy_gooey::DragPayload(PieceDrag(d.id.clone())));
                     palette_row.with_children(|row| {
                             let mut slot = row.spawn((
-                                bevy_gooey::sized(bevy_gooey::Sizing {
+                                // A row (`RowLayout` is written on rows, columns and placed nodes, not on a bare `sized` box) that never shrinks.
+                                bevy_gooey::row_with(0.0, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }),
+                                bevy_gooey::Sizing {
                                     width: Some(bevy_gooey::Extent::Px(crate::chrome::THUMB_SLOT)),
                                     height: Some(bevy_gooey::Extent::Px(crate::chrome::THUMB_SLOT)),
                                     ..default()
-                                }),
-                                bevy_gooey::RowLayout { shrink: Some(0.0), ..default() },
+                                },
                                 crate::chrome::spacing(crate::chrome::margin_right(crate::chrome::STEP_ROW)),
                                 BackgroundColor(crate::chrome::ink().slot_bg),
                             ));

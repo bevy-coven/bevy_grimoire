@@ -749,14 +749,14 @@ pub fn draw_the_tabs(
         let chip = commands
             .spawn((
                 DocumentTab(doc.clone()),
-                Node {
-                    align_items: AlignItems::Center,
-                    column_gap: Val::Px(crate::chrome::GAP_ROW),
-                    // CHROME-OK: a document tab's own inset, the same box the workspace strip's tabs are.
-                    padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)),
-                    border: UiRect::bottom(Val::Px(3.0)), // CHROME-OK: the active-tab marker's thickness, as the workspace tabs'.
+                // A document tab: its words a row step apart, the same inset as the workspace strip's tabs (12 px across, 8 px down: not a step of the scale, so a literal)
+                // and the active-tab marker's 3 px edge along the bottom (exactly 3 px).
+                bevy_gooey::row_with(crate::chrome::GAP_ROW_STEPS, bevy_gooey::RowLayout { align: Some(AlignItems::Center), ..default() }),
+                bevy_gooey::Spacing {
+                    padding: bevy_gooey::Sides { top: Some(bevy_gooey::Space::Px(8.0)), right: Some(crate::chrome::STEP_PAD), bottom: Some(bevy_gooey::Space::Px(8.0)), left: Some(crate::chrome::STEP_PAD) },
                     ..default()
                 },
+                bevy_gooey::BorderPx(bevy_gooey::Sides { bottom: Some(3.0), ..default() }),
                 BorderColor::all(if active { ink.accent } else { Color::NONE }),
                 BackgroundColor(if active { ink.panel_bg } else { ink.row_bg }),
                 bevy::a11y::AccessibilityNode::from(accesskit::Node::new(accesskit::Role::Tab)),

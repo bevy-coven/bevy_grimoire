@@ -454,18 +454,19 @@ pub fn snip_overlay(
     commands
         .spawn((
             SnipOverlay,
-            Node {
-                // Kept raw (GAP3): gooey's `Shape` border is written in the skin's line weights, which are snapped to whole device pixels, so the 3 px edge
-                // draws 2.5 px at the editor's scale and `the_drag_box_is_plainly_visible` (at least 3 px) fails.
-                // PLACES-ITSELF-OK: the drag rectangle is placed at the pointer over the whole window, so it is not a panel and has no layout to join.
-                position_type: PositionType::Absolute,
+            // The drag rectangle is placed at the pointer over the whole window, so it is not a panel and has no layout to join: its corner, its size and a 3 px edge
+            // that is exactly 3 px (`BorderPx` is not snapped to device pixels the way a skin border is).
+            bevy_gooey::placed(UiRect {
                 left: Val::Px(chrome::overlay_px(rect[0], ui_scale.0)),
                 top: Val::Px(chrome::overlay_px(rect[1], ui_scale.0)),
-                width: Val::Px(chrome::overlay_px(rect[2] - rect[0], ui_scale.0)),
-                height: Val::Px(chrome::overlay_px(rect[3] - rect[1], ui_scale.0)),
-                border: UiRect::all(Val::Px(chrome::SNIP_EDGE_W)),
+                ..UiRect::all(Val::Auto)
+            }),
+            bevy_gooey::Sizing {
+                width: Some(bevy_gooey::Extent::Px(chrome::overlay_px(rect[2] - rect[0], ui_scale.0))),
+                height: Some(bevy_gooey::Extent::Px(chrome::overlay_px(rect[3] - rect[1], ui_scale.0))),
                 ..default()
             },
+            bevy_gooey::BorderPx(bevy_gooey::Sides::all(chrome::SNIP_EDGE_W)),
             BorderColor::all(chrome::ink().accent),
             BackgroundColor(chrome::ink().snip_wash),
         ))

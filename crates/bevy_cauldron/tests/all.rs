@@ -231,6 +231,7 @@ mod the_gooey_swaps_keep_what_a_person_saw;
 mod the_spacing_is_gooeys;
 mod the_pages_and_spacers_are_gooeys;
 mod the_placed_nodes_are_gooeys;
+mod the_borders_and_paddings_are_gooeys;
 mod the_small_files_are_built_from_gooey_widgets;
 mod shift_click_selects_pieces_beside_each_other;
 mod the_inspector_edits_through_the_operation;

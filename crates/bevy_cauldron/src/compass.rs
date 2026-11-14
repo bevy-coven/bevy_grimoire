@@ -92,25 +92,15 @@ impl Plugin for CompassPlugin {
 fn spawn(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
     let gizmo = commands
         .spawn((
-            Node {
-                // PLACES-ITSELF-OK: a gizmo's arms and dots are placed by projecting a world axis, not by
-                // flow — `follow_the_camera` computes each position from the rig every time it turns.
-                position_type: PositionType::Absolute,
-                left: Val::Px(MARGIN),
-                bottom: Val::Px(MARGIN),
-                width: Val::Px(SIZE),
-                height: Val::Px(SIZE),
-                // The circle the arms turn inside — the "circle" of the request, and what makes a
-                // rotating cluster read as one object rather than three drifting dots. A `Node`
-                // FIELD in 0.19, not a component of its own.
-                border_radius: BorderRadius::MAX,
-                ..default()
-            },
+            // A gizmo's arms and dots are placed by projecting a world axis, not by flow: the gizmo is a box in the viewport's bottom-left corner, `SIZE` square, and its
+            // arms and dots are `HostGeometry` that `follow_the_camera` moves every time the rig turns.
+            bevy_gooey::placed(UiRect { left: Val::Px(MARGIN), bottom: Val::Px(MARGIN), ..UiRect::all(Val::Auto) }),
+            bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Px(SIZE)), height: Some(bevy_gooey::Extent::Px(SIZE)), ..default() },
+            // The circle the arms turn inside — the "circle" of the request, and what makes a rotating cluster read as one object rather than three drifting dots.
+            bevy_gooey::Shape { radius: Some(bevy_gooey::Radius::Full), ..default() },
             BackgroundColor(crate::chrome::ink().panel_bg.with_alpha(0.72)),
             GlobalZIndex(crate::chrome::COMPASS_Z),
-            // A readout that eats clicks is a readout that steals the corner of the map underneath
-            // it — the rule `spawn_cost_readout` states, and the same corner problem.
-            Pickable::IGNORE,
+            // A readout that eats clicks is a readout that steals the corner of the map underneath it — the rule `spawn_cost_readout` states: `placed` is `Pickable::IGNORE`.
             Compass,
         ))
         .with_children(|p| {
@@ -118,32 +108,22 @@ fn spawn(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
             // under it. Bevy UI paints siblings in spawn order.
             for (i, (_, colour, _)) in AXES.iter().enumerate() {
                 p.spawn((
-                    Node {
-                        // PLACES-ITSELF-OK: a gizmo's arms and dots are placed by projecting a world axis, not by
-                        // flow — `follow_the_camera` computes each position from the rig every time it turns.
-                        position_type: PositionType::Absolute,
-                        width: Val::Px(REACH),
-                        height: Val::Px(ARM),
-                        ..default()
-                    },
+                    // Placed by `follow_the_camera` from the rig every time it turns: the system writes this node's own left, top and width, so it is `HostGeometry`.
+                    bevy_gooey::placed(UiRect::all(Val::Auto)),
+                    bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Px(REACH)), height: Some(bevy_gooey::Extent::Px(ARM)), ..default() },
+                    bevy_gooey::HostGeometry,
                     BackgroundColor(*colour),
-                    Pickable::IGNORE,
                     CompassArm(i),
                 ));
             }
             for (i, (_, colour, name)) in AXES.iter().enumerate() {
                 p.spawn((
-                    Node {
-                        // PLACES-ITSELF-OK: a gizmo's arms and dots are placed by projecting a world axis, not by
-                        // flow — `follow_the_camera` computes each position from the rig every time it turns.
-                        position_type: PositionType::Absolute,
-                        width: Val::Px(DOT),
-                        height: Val::Px(DOT),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border_radius: BorderRadius::MAX,
-                        ..default()
-                    },
+                    // Placed by `follow_the_camera` from the rig every time it turns (`HostGeometry`): a round dot with its letter at the middle.
+                    bevy_gooey::placed(UiRect::all(Val::Auto)),
+                    bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Px(DOT)), height: Some(bevy_gooey::Extent::Px(DOT)), ..default() },
+                    bevy_gooey::HostGeometry,
+                    bevy_gooey::RowLayout { align: Some(AlignItems::Center), justify: Some(JustifyContent::Center), ..default() },
+                    bevy_gooey::Shape { radius: Some(bevy_gooey::Radius::Full), ..default() },
                     BackgroundColor(*colour),
                     // **Above every arm, said rather than implied.** Sibling spawn order already
                     // puts the dots second, and it was not enough: at some yaws an arm still drew
@@ -152,7 +132,6 @@ fn spawn(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                     // dot's edge as well, so this is the belt to that braces: the letter is legible
                     // even if a future arm reaches further than it should.
                     ZIndex(1),
-                    Pickable::IGNORE,
                     CompassDot(i),
                 ))
                 .with_children(|dot| {

@@ -1573,17 +1573,16 @@ pub fn spawn_frame(
 
     let root = commands
         .spawn((
-            Node {
-                width: Val::Percent(100.0),
-                // **`Vh`, not `Percent`.** A UI root is a grid item of Bevy's implicit viewport node
+            // **`Vh`, not `Percent`.** A UI root is a grid item of Bevy's implicit viewport node
                 // whose single row is `auto`, so a percentage height is cyclic there and, under
                 // Bevy 0.20's taffy, resolves to the content's height: the root grew to its
                 // content and no `ScrollArea` below it ever had anything to scroll. A viewport
                 // unit is a definite length and does not depend on the track.
-                height: Val::Vh(100.0),
-                flex_direction: FlexDirection::Column,
+            bevy_gooey::sized(bevy_gooey::Sizing {
+                width: Some(bevy_gooey::Extent::Percent(100.0)),
+                height: Some(bevy_gooey::Extent::Vh(100.0)),
                 ..default()
-            },
+            }),
             // See the type doc: no `Hovered`, and nothing here eats a click meant for the map.
             bevy::picking::Pickable::IGNORE,
         ))
@@ -2846,6 +2845,29 @@ pub const fn margin_left(space: bevy_gooey::Space) -> bevy_gooey::Sides<bevy_goo
 pub const fn margin_right(space: bevy_gooey::Space) -> bevy_gooey::Sides<bevy_gooey::Space> {
     bevy_gooey::Sides { right: Some(space), ..NO_MARGIN }
 }
+
+/// **A quiet status item's words are a control's, not a button's** (#260): gooey's `status_item_quiet` puts `Role::ButtonText` on its text, and the editor's tests count `ButtonText`
+/// over the world to say what a dialog's answers are (`the_bands_item_does_not_call_itself_a_button`), so the item's words become `Role::ControlText` (and take `marker`) when the item is
+/// spawned. `item` is the quiet item's entity, spawned in the same command flush.
+pub fn the_words_of_a_quiet_item_are_a_control(commands: &mut Commands, item: Entity, marker: impl Bundle) {
+    commands.queue(move |world: &mut World| {
+        let kids: Vec<Entity> = world.get::<Children>(item).map(|c| c.iter().collect()).unwrap_or_default();
+        if let Some(words) = kids.into_iter().find(|k| world.get::<Text>(*k).is_some()) {
+            world.entity_mut(words).insert((bevy_gooey::Role::ControlText, Pickable::IGNORE, marker));
+        }
+    });
+}
+
+/// **A chip's inset as gooey's `Spacing`** (#260): 6 px a side and a tight step above and below, the same box as [`CHIP_PAD`]. The 6 px is not a step of the skin's scale, so it is a literal `Space::Px`.
+pub const CHIP_SPACING: bevy_gooey::Spacing = bevy_gooey::Spacing {
+    margin: NO_MARGIN,
+    padding: bevy_gooey::Sides {
+        top: Some(STEP_TIGHT),
+        right: Some(bevy_gooey::Space::Px(6.0)),
+        bottom: Some(STEP_TIGHT),
+        left: Some(bevy_gooey::Space::Px(6.0)),
+    },
+};
 
 /// **A margin for a text or a cell to stand off its neighbours by** (UI-59, #245; #260): gooey's [`bevy_gooey::Spacing`], in steps of the skin's scale.
 ///
