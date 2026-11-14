@@ -2,9 +2,21 @@
 //! one H1 and nine H2s in a fixed order, each holding one italic prompt line; a topic of the game starts from its own template; a lower
 //! place is offered only the game's topics; and a project the editor did not create gets no file.
 
+use bevy::prelude::*;
+use bevy::ui_widgets::Activate;
+use bevy_cauldron::confirm::Confirm;
 use bevy_cauldron::design_templates::{self, STYLE_H2S, TOPICS};
-use bevy_cauldron::new_project::{self, NewProject, Template};
+use bevy_cauldron::editor::EditorState;
+use bevy_cauldron::harness;
+use bevy_cauldron::launcher::LauncherPlugin;
+use bevy_cauldron::loading::LoadingPlugin;
+use bevy_cauldron::new_project::{self, CreateButton, LocationField, NameField, NewProject, NewProjectForm, Template};
+use bevy_cauldron::ops_brp::OpsBridgePlugin;
+use bevy_cauldron::screen::Screen;
+use bevy_gooey::testing;
 use bevy_grimoire_core::design::{self, Tree};
+use bevy_grimoire_core::trust::{Decision, Scope, TrustStore};
+use serde_json::json;
 
 use crate::fixtures;
 
@@ -133,4 +145,67 @@ fn create_style_writes_the_template_once_and_opening_a_project_writes_no_file() 
     assert_eq!(file, root.join("design/style.md"));
     assert!(std::fs::read_to_string(&file).unwrap().starts_with("# Yard Game\n"));
     assert!(design_templates::write_style(&root, "design", "Yard Game").is_err(), "an existing style is never overwritten");
+}
+
+fn settle(app: &mut App) {
+    for _ in 0..6 {
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        app.update();
+    }
+}
+
+/// **The wizard, driven through its own form**: the home, New project, a name and a folder, Create. The person's store is the scratch one.
+fn run_the_wizard(tag: &str, holder: &std::path::Path) -> std::path::PathBuf {
+    let start = fixtures::Fixture::new(&format!("style_wizard_{tag}_{}", std::process::id())).descriptor("site/wall", "alpha").build("m");
+    let mut app = harness::build_headless(&start, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    app.add_plugins((LoadingPlugin, LauncherPlugin, bevy_debugger_bevy::DebuggerPlugin::default(), OpsBridgePlugin));
+    app.insert_resource(bevy_cauldron::trusted::StoreRoot(holder.to_path_buf()));
+    app.world_mut().resource_mut::<NextState<Screen>>().set(Screen::Launcher);
+    settle(&mut app);
+    let button = testing::find_by_label(&mut app, "New project").unwrap_or_else(|e| panic!("{e:?}"));
+    app.world_mut().commands().trigger(Activate { entity: button });
+    settle(&mut app);
+    assert!(app.world().get_resource::<NewProjectForm>().is_some(), "the form is open");
+    let name = app.world_mut().query_filtered::<Entity, With<NameField>>().single(app.world()).expect("the Name field");
+    app.world_mut().commands().trigger(bevy::ui_widgets::ValueChange::<String> { source: name, value: tag.to_owned(), is_final: true });
+    let location = app.world_mut().query_filtered::<Entity, With<LocationField>>().single(app.world()).expect("the Location field");
+    app.world_mut().commands().trigger(bevy::ui_widgets::ValueChange::<String> { source: location, value: holder.to_string_lossy().into_owned(), is_final: true });
+    settle(&mut app);
+    let create = app.world_mut().query_filtered::<Entity, With<CreateButton>>().iter(app.world()).next().expect("Create is on the form");
+    app.world_mut().commands().trigger(Activate { entity: create });
+    settle(&mut app);
+    settle(&mut app);
+    let root = holder.join(tag);
+    assert!(root.join("assets/grimoire").is_dir(), "the wizard made the project at {}", root.display());
+    root
+}
+
+/// **The wizard's Create grants the style it wrote, and `grimoire_style` serves it with no question.**
+#[test]
+fn the_wizard_grants_the_style_so_grimoire_style_serves_it_and_asks_nothing() {
+    let holder = scratch("grant");
+    let tag = format!("style_grant_{}", std::process::id());
+    let root = run_the_wizard(&tag, &holder);
+    let text = std::fs::read_to_string(root.join("design/style.md")).expect("the wizard wrote the style");
+    let store = TrustStore::load(&holder.join(bevy_grimoire_core::trust::STORE_FILE)).expect("the person's store reads");
+    assert_eq!(store.text_decision(&root, "design/style.md", &text).expect("resolves"), Decision::Trusted(Scope::Command), "Create wrote a grant for the text it wrote");
+
+    let mut app = harness::build_headless(&root, new_project::FIRST_MAP, None).unwrap_or_else(|e| panic!("{e}"));
+    app.add_plugins((bevy_debugger_bevy::DebuggerPlugin::default(), OpsBridgePlugin));
+    app.insert_resource(bevy_cauldron::trusted::StoreRoot(holder.clone()));
+    settle(&mut app);
+    assert!(app.world().resource::<EditorState>().trust.file.is_none(), "the store is the default one");
+    use bevy::remote::{RemoteMethodSystemId, RemoteMethods};
+    let id = match app.world().resource::<RemoteMethods>().get("grimoire/style") {
+        Some(RemoteMethodSystemId::Instant(id)) => *id,
+        _ => panic!("`grimoire/style` is not registered"),
+    };
+    let answer = app.world_mut().run_system_with(id, Some(json!({"map": new_project::FIRST_MAP}))).unwrap_or_else(|e| panic!("{e:?}")).unwrap_or_else(|e| panic!("{e:?}"));
+    settle(&mut app);
+    let file = answer["files"].as_array().and_then(|f| f.iter().find(|f| f["path"] == "design/style.md")).unwrap_or_else(|| panic!("design/style.md is not in {answer}"));
+    assert_eq!(file["state"], "served", "{answer}");
+    assert!(answer["text"].as_str().is_some_and(|t| t.contains("## Pillars")), "{answer}");
+    assert!(answer["withheld"].as_array().is_none_or(Vec::is_empty), "nothing is withheld: {answer}");
+    assert!(!app.world().resource::<Confirm>().is_open(), "a new project's style is never withheld from its author, so nothing is asked");
+    std::fs::remove_dir_all(&holder).unwrap();
 }

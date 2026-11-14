@@ -400,7 +400,12 @@ fn spawn_the_card(
                                     // (`crate::trusted::store_path`), so a real editor always writes one.
                                     // There is no silent "no store, no grant" arm: a guide nobody allowed
                                     // is the state this whole slice exists to prevent.
-                                    match crate::guide_template::grant(&dir, store_root.as_deref(), state.as_deref().and_then(|s| s.trust.file.as_deref())) {
+                                    // **The style is granted in the same step** (SG-08, #407), for the same reason: the person who
+                                    // made the project wrote `design/style.md`, so `grimoire_style` serves it with no question.
+                                    let trust_file = state.as_deref().and_then(|s| s.trust.file.as_deref());
+                                    match crate::guide_template::grant(&dir, store_root.as_deref(), trust_file)
+                                        .and_then(|()| crate::design_templates::grant_style(&dir, store_root.as_deref(), trust_file))
+                                    {
                                         Ok(()) => launcher.problem = None,
                                         Err(e) => launcher.problem = Some(e),
                                     }

@@ -59,6 +59,18 @@ pub fn topic_text(topic: &str, place_name: &str) -> Option<String> {
     TOPICS.iter().find(|(name, _)| *name == topic).map(|(_, template)| template.replace(PLACE_TOKEN, place_name.trim()))
 }
 
+/// **Grant the game's `design/style.md` as it stands in `root`**, which is the other half of the wizard's writing it: the person who made the project
+/// wrote this text, so it is allowed, and `grimoire_style` serves it with no question (SG-02, #401). `store` is the override, as for the guide's
+/// grant: `None` is the person's own `trusted.yaml`. A store that cannot be read or written is an `Err` naming it, never a silent grant-less style.
+pub fn grant_style(root: &Path, store_root: Option<&crate::trusted::StoreRoot>, store: Option<&Path>) -> Result<(), String> {
+    let path = format!("{GAME_PLACE}/{}.{}", design::STYLE_TOPIC, design::MARKDOWN_EXT);
+    let text = std::fs::read_to_string(root.join(&path)).map_err(|e| format!("{path}: {e}"))?;
+    let store_file = crate::trusted::resolve(store_root, store)?;
+    let mut trusted = bevy_grimoire_core::trust::TrustStore::load(&store_file)?;
+    trusted.trust_text(root, &path, &text)?;
+    trusted.save(&store_file)
+}
+
 /// **The folder of a place on disk, or the sentence saying it is none.**
 fn folder_of(root: &Path, place: &str) -> Result<PathBuf, String> {
     let place = place.trim_end_matches('/');
