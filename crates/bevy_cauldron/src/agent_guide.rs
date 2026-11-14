@@ -400,18 +400,28 @@ pub fn serve_style(
     project: &Project,
     store_root: Option<&crate::trusted::StoreRoot>,
     request: &bevy_grimoire_core::style::Request,
-) -> Result<bevy_grimoire_core::style::Answer, String> {
+) -> Result<(bevy_grimoire_core::style::Answer, Vec<(String, String)>), String> {
     let tree = bevy_grimoire_core::design::Tree::read(&project.root);
     let store = crate::trusted::load_at(store_root, state.trust.file.as_deref());
     let root = project.root.clone();
-    let answer = bevy_grimoire_core::style::compose(&tree, request, &mut |path, text| match &store {
-        Ok(store) => store.text_decision(&root, path, text),
-        Err(e) => Err(e.clone()),
+    // **The text that was checked is the text that is noted as served** (SG-09, #408 review): a page is recorded from the very string the trust decision was made
+    // about, never read again from disk, so a write between the answer and the record cannot note text nobody was served.
+    let mut checked: Vec<(String, String)> = Vec::new();
+    let answer = bevy_grimoire_core::style::compose(&tree, request, &mut |path, text| {
+        let decision = match &store {
+            Ok(store) => store.text_decision(&root, path, text),
+            Err(e) => Err(e.clone()),
+        };
+        if matches!(decision, Ok(bevy_grimoire_core::trust::Decision::Trusted(_))) {
+            checked.push((path.to_owned(), text.to_owned()));
+        }
+        decision
     })?;
     for withheld in &answer.withheld {
         raise(state, &project.root, &withheld.path, &withheld.text);
     }
-    Ok(answer)
+    let served = crate::style_followed::served_pages(&answer.files, &checked);
+    Ok((answer, served))
 }
 
 /// **The guide's `layers`, `withheld`, `problems` and `trouble`, as `grimoire/agent_guide` answers.**

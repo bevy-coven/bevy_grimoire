@@ -167,16 +167,14 @@ fn style(
         return Err("this editor holds no state, so the person's trust cannot be asked about a style file.".to_owned());
     };
     let request = bevy_grimoire_core::style::Request { map: p.map, at: p.at.map(|[x, z]| (x, z)), topic: p.topic };
-    let answer = crate::agent_guide::serve_style(&mut state, &project, store_root.as_deref(), &request)?;
+    let (answer, served_pages) = crate::agent_guide::serve_style(&mut state, &project, store_root.as_deref(), &request)?;
     if let Some(trouble) = &answer.trouble {
         state.status.problem(format!("style: {trouble}"));
     }
-    // **What was served is what a hand-back may cite** (SG-09, #408): each page whose text the answer carries, as it reads now.
+    // **What was served is what a hand-back may cite** (SG-09, #408): each page, as the text that was trust-checked and served (never read again from disk).
     if let Some(served) = served.as_mut() {
-        for file in answer.files.iter().filter(|f| f.state == bevy_grimoire_core::style::FileState::Served) {
-            if let Ok(text) = std::fs::read_to_string(project.root.join(&file.path)) {
-                served.record(&project.root, &file.path, text);
-            }
+        for (path, text) in served_pages {
+            served.record(&project.root, &path, text);
         }
     }
     Ok(answer.json())
@@ -595,9 +593,14 @@ fn agent_hello(
     time: Res<Time<Real>>,
     activity: Option<ResMut<crate::familiar::AgentActivity>>,
     mut client: Option<ResMut<crate::present::AgentClient>>,
+    mut served: Option<ResMut<crate::style_followed::StyleServed>>,
 ) -> Result<Value, String> {
     if let Some(mut activity) = activity {
         activity.hear("agent_hello", time.elapsed_secs_f64());
+    }
+    // **A client that says hello is a new agent**: what an earlier one was served is not what this one read, so it asks `grimoire_style` again before it cites a line.
+    if let Some(served) = served.as_mut() {
+        served.clear();
     }
     // **Who is talking**, kept for the session so a wish can carry it without the agent retyping
     // it (#353). `client` is the handshake's own `{name, version}`; a server that sent none is not
@@ -3687,7 +3690,7 @@ fn editor_present(
         }
         (false, None) => return Err("no project is open, so there are no served style lines to cite".to_owned()),
     };
-    let body = crate::present::body(&p, &steps);
+    let body = crate::present::body_with_followed(&p, &steps, &followed);
     // **With the AGENT block open and "Answer hand-backs here" on, the question is asked there**, beside the rest of what the
     // agent did; otherwise in the modal, as it always was. A block closed on a waiting question hands it to the modal.
     let inline = here.is_some_and(|here| here.0) && !block.is_empty();

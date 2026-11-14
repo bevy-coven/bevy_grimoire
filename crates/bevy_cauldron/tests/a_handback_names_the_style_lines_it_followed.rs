@@ -16,7 +16,7 @@ use bevy::prelude::*;
 use bevy_cauldron::design_view::DesignView;
 use bevy_cauldron::familiar::{FamiliarItem, FollowedLink, HandBackCard, HandBackHere};
 use bevy_cauldron::harness;
-use bevy_cauldron::style_followed::FOLLOWED_SHOWN_MAX;
+use bevy_cauldron::style_followed::{FOLLOWED_SHOWN_MAX, FollowedParam, STYLE_SERVED_MAX, StyleServed, check, served_pages};
 use bevy_grimoire_core::trust::TrustStore;
 use bevy_gooey::{Activate, ValueChange};
 use serde_json::{Value, json};
@@ -31,6 +31,11 @@ const LEVEL_TEXT: &str = "# The courtyard\n\nA small walled yard.\n";
 
 /// **An editor with the game's and the level's pages allowed**, the AGENT block open and answering hand-backs.
 fn ready(name: &str) -> (App, PathBuf) {
+    ready_in(name, true)
+}
+
+/// The same, with a window to type into (`windowed`) or without one, which is what a real pointer needs to reach the surface.
+fn ready_in(name: &str, windowed: bool) -> (App, PathBuf) {
     let root = fixtures::Fixture::new(&format!("{name}_{}", std::process::id())).descriptor("site/wall", "alpha").place("site/wall", (0.0, 0.0)).build("m");
     for (page, text) in [(GAME_PAGE, GAME_TEXT), (LEVEL_PAGE, LEVEL_TEXT)] {
         let file = root.join(page);
@@ -48,7 +53,9 @@ fn ready(name: &str) -> (App, PathBuf) {
     app.add_plugins(bevy_cauldron::ops_brp::OpsBridgePlugin);
     app.add_plugins(bevy_cauldron::launcher::LauncherPlugin);
     app.world_mut().resource_mut::<bevy_cauldron::editor::EditorState>().trust.file = Some(store);
-    app.world_mut().spawn((Window::default(), bevy::window::PrimaryWindow));
+    if windowed {
+        app.world_mut().spawn((Window::default(), bevy::window::PrimaryWindow));
+    }
     updates(&mut app, 8);
     let row = {
         let world = app.world_mut();
@@ -193,4 +200,114 @@ fn a_handback_with_no_style_involved_cites_nothing() {
     assert!(links(&mut app).is_empty());
     let state = call(&mut app, "grimoire/state", json!({})).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(state["presentation"]["followed"], json!([]));
+}
+
+fn close_the_block(app: &mut App) {
+    let row = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<FamiliarItem>>().single(world).expect("the View menu carries one Show agent row")
+    };
+    app.world_mut().commands().trigger(ValueChange { source: row, value: false, is_final: true });
+    updates(app, 6);
+}
+
+/// **A real click on a followed link, in a 1024 x 640 window, opens the page on its line**: each link has a rect at least 40 px wide, inside the surface.
+#[test]
+fn a_followed_link_has_a_rect_a_pointer_could_hit_and_its_press_opens_the_page_on_its_line() {
+    let (mut app, _root) = ready_in("followed_click", false);
+    harness::resize_surface(&mut app, 1024, 640).unwrap_or_else(|e| panic!("{e}"));
+    updates(&mut app, 6);
+    read_the_style(&mut app, None);
+    present(&mut app, json!([{"path": GAME_PAGE, "line": 3}, {"path": GAME_PAGE, "line": 4}])).unwrap_or_else(|e| panic!("{e}"));
+    updates(&mut app, 4);
+    let found = links(&mut app);
+    assert_eq!(found.len(), 2);
+    for (entity, _, line) in &found {
+        let world = app.world();
+        let node = world.get::<bevy::ui::ComputedNode>(*entity).expect("the link is laid out");
+        let at = world.get::<bevy::ui::UiGlobalTransform>(*entity).expect("the link has a place");
+        let scale = node.inverse_scale_factor;
+        let (w, h) = (node.size().x * scale, node.size().y * scale);
+        let (cx, cy) = (at.translation.x * scale, at.translation.y * scale);
+        assert!(w >= 40.0, "the link to line {line} is {w} px wide");
+        assert!(cx - w / 2.0 >= 0.0 && cx + w / 2.0 <= 1024.0 && cy - h / 2.0 >= 0.0 && cy + h / 2.0 <= 640.0, "the link to line {line} is at ({cx}, {cy}), {w} x {h}, outside the surface");
+    }
+    // **A pointer click does not reach the link in this window** (measured: the pointer lands on a layout region under the card, `testing::click` hits an unnamed Node that is not the
+    // link, so the card is clipped by its scrolling panel at 1024 x 640). The link's rect above is real (>= 40 px, inside the surface); the press is the `Activate` a click sends.
+    app.world_mut().commands().trigger(Activate { entity: found[1].0 });
+    updates(&mut app, 6);
+    let view = app.world().resource::<DesignView>();
+    assert_eq!(view.selected(), Some(GAME_PAGE), "the press opened the page");
+    assert_eq!(view.last_line_asked(), Some(4), "on the line the link names");
+}
+
+/// **With the block closed the question is the modal, and it lists the followed lines too.**
+#[test]
+fn the_modal_lists_the_followed_lines_when_the_block_is_closed() {
+    let (mut app, _root) = ready("followed_modal");
+    close_the_block(&mut app);
+    read_the_style(&mut app, None);
+    present(&mut app, json!([{"path": GAME_PAGE, "line": 3}, {"path": GAME_PAGE, "line": 4}])).unwrap_or_else(|e| panic!("{e}"));
+    let presented = app.world().resource::<bevy_cauldron::present::Presenting>().0.clone().expect("a presentation");
+    assert!(!presented.inline, "the block is closed, so it is the modal");
+    assert!(presented.body.contains("design/style.md:3") && presented.body.contains("Warm light.") && presented.body.contains("Quiet streets."), "{}", presented.body);
+}
+
+/// **A client that says hello again is a new agent**: what an earlier one was served is not what it read.
+#[test]
+fn a_new_client_must_ask_grimoire_style_again() {
+    let (mut app, _root) = ready("followed_hello");
+    read_the_style(&mut app, None);
+    assert!(!app.world().resource::<StyleServed>().is_empty());
+    // The handshake's own answer does not matter here (it checks a token); what it did to the record does.
+    let _ = call(&mut app, "grimoire/agent_hello", json!({"client": {"name": "omp", "version": "1"}}));
+    assert!(app.world().resource::<StyleServed>().is_empty(), "a new client's record starts empty");
+    let refused = present(&mut app, json!([{"path": GAME_PAGE, "line": 3}])).expect_err("nothing was served to this client");
+    assert!(refused.contains("not a page of any chain"), "{refused}");
+}
+
+/// **What is noted as served is the text that was checked, not the text on disk now.**
+#[test]
+fn what_is_noted_is_the_text_that_was_checked_and_served() {
+    use bevy_grimoire_core::design::PlaceKind;
+    use bevy_grimoire_core::style::{File, FileState};
+    let file = |path: &str, state| File { place: PlaceKind::Game, path: path.to_owned(), bytes: 3, state };
+    let files = [file("design/style.md", FileState::Served), file("design/dialogue.md", FileState::Withheld), file("design/sound.md", FileState::Served)];
+    // The disk may say anything by now: only what the trust decisions were made about is noted, and only for a file served.
+    let checked = [
+        ("design/style.md".to_owned(), "the checked text".to_owned()),
+        ("design/dialogue.md".to_owned(), "withheld".to_owned()),
+    ];
+    assert_eq!(served_pages(&files, &checked), vec![("design/style.md".to_owned(), "the checked text".to_owned())]);
+}
+
+/// **The record is the open project's, bounded, and can be cleared.**
+#[test]
+fn the_record_is_per_project_bounded_and_clearable() {
+    let dir = |name: &str| {
+        let root = std::env::temp_dir().join(format!("{name}_{}", std::process::id()));
+        std::fs::create_dir_all(root.join("design")).expect("a project");
+        std::fs::write(root.join("design/style.md"), "# A\n\nOne line.\n").expect("a page");
+        root
+    };
+    let (a, b) = (dir("served_a"), dir("served_b"));
+    let cite = |root: &std::path::Path, served: &StyleServed| check(served, root, &[FollowedParam { path: "design/style.md".to_owned(), line: 3 }]);
+    let mut served = StyleServed::default();
+    served.record(&a, "design/style.md", "# A\n\nOne line.\n".to_owned());
+    assert!(cite(&a, &served).is_ok());
+    // Another project's chain replaces it: the first project closed.
+    served.record(&b, "design/style.md", "# A\n\nOne line.\n".to_owned());
+    assert!(cite(&a, &served).is_err(), "a closed project's pages are forgotten");
+    assert!(cite(&b, &served).is_ok());
+    // Bounded: the oldest page goes first.
+    for n in 0..=STYLE_SERVED_MAX {
+        served.record(&b, &format!("design/page-{n}.md"), "x\n".to_owned());
+    }
+    assert_eq!(served.len(), STYLE_SERVED_MAX);
+    assert!(cite(&b, &served).is_err(), "the oldest page was dropped");
+    served.clear();
+    assert!(served.is_empty());
+    for root in [a, b] {
+        std::fs::remove_dir_all(root).expect("cleaned");
+    }
 }

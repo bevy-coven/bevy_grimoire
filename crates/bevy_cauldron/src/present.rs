@@ -123,7 +123,7 @@ pub const MAX_CHECKS: usize = 3;
 /// The order is the brief's own: what it is, what changed, what you asked for, what I assumed, and
 /// where to look — then one line saying how to change it, because "accept or reject" is not a
 /// vocabulary for a result that is nearly right.
-pub fn body(params: &PresentParams, steps: &[String]) -> String {
+pub fn body_with_followed(params: &PresentParams, steps: &[String], followed: &[crate::style_followed::Followed]) -> String {
     let mut out = String::new();
     out.push_str(&params.summary);
     out.push_str("\n\n");
@@ -148,6 +148,16 @@ pub fn body(params: &PresentParams, steps: &[String]) -> String {
         }
     }
     out.push('\n');
+    // **The style lines the work followed** (SG-09, #408), in the modal too: at most the card's five, each as `path:line  text`, and a count of the rest. The text is the person's.
+    if !followed.is_empty() {
+        out.push_str("Style followed:\n");
+        for f in followed.iter().take(crate::style_followed::FOLLOWED_SHOWN_MAX) {
+            out.push_str(&format!("{}:{}  {}\n", f.path, f.line, f.text.trim()));
+        }
+        if let Some(more) = crate::style_followed::more_says(followed.len()) {
+            out.push_str(&format!("{more}\n"));
+        }
+    }
     out.push_str("To change it, tell the agent.");
     out
 }

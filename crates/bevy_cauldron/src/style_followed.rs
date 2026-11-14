@@ -26,6 +26,20 @@ pub const FOLLOWED_SHOWN_MAX: usize = 5;
 /// **The most lines one hand-back may cite.** A citation is a handful of the lines the work went by; past this it is a copy of the style.
 pub const FOLLOWED_MAX: usize = 30;
 
+/// **The most pages the editor notes as served**, oldest dropped first: a chain is a few pages (the game's, a region's, a level's and an area's, each with a topic), so this is
+/// many chains, and an agent that reads more asks again.
+pub const STYLE_SERVED_MAX: usize = 64;
+
+/// **The pages a `grimoire_style` answer served, with the text that was trust-checked for each**: a file the answer lists as served, paired with the text its decision was made
+/// about. A file withheld or unread is not here, and nothing is read from disk, so what is noted is what was served.
+pub fn served_pages(files: &[bevy_grimoire_core::style::File], checked: &[(String, String)]) -> Vec<(String, String)> {
+    files
+        .iter()
+        .filter(|f| f.state == bevy_grimoire_core::style::FileState::Served)
+        .filter_map(|f| checked.iter().find(|(path, _)| *path == f.path).cloned())
+        .collect()
+}
+
 /// **One style line, as an agent cites it.**
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -61,10 +75,27 @@ struct ServedPage {
 impl StyleServed {
     /// **Note that this page was served**, as it reads now. A page served again replaces what was noted for it.
     pub fn record(&mut self, root: &Path, path: &str, text: String) {
-        match self.pages.iter_mut().find(|p| p.root == root && p.path == path) {
-            Some(page) => page.text = text,
-            None => self.pages.push(ServedPage { root: root.to_path_buf(), path: path.to_owned(), text }),
+        // **A project that closes takes what it served with it**: only the open project's pages are kept, and a page served again moves to the newest.
+        self.pages.retain(|p| p.root == root && p.path != path);
+        self.pages.push(ServedPage { root: root.to_path_buf(), path: path.to_owned(), text });
+        if self.pages.len() > STYLE_SERVED_MAX {
+            self.pages.remove(0);
         }
+    }
+
+    /// **Forget everything served**: a client that said hello again is a new agent, which must ask `grimoire_style` again before it cites a line.
+    pub fn clear(&mut self) {
+        self.pages.clear();
+    }
+
+    /// How many pages are noted.
+    pub fn len(&self) -> usize {
+        self.pages.len()
+    }
+
+    /// Whether nothing is noted.
+    pub fn is_empty(&self) -> bool {
+        self.pages.is_empty()
     }
 
     /// The text this page had when it was last served, when it was.
