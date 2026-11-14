@@ -15,8 +15,12 @@ const LEAF: &str = "gatekeeper.greeting.text";
 const FILE: &str = "assets/grimoire/furniture/data/gatekeeper.yaml";
 
 /// **Positions in the task's `checks`**: the guard, then the three Do lines, then the three Don't lines.
-const DO_LINES: std::ops::RangeInclusive<usize> = 1..=3;
-const DONT_LINES: std::ops::RangeInclusive<usize> = 4..=6;
+fn do_lines() -> std::ops::RangeInclusive<usize> {
+    1..=3
+}
+fn dont_lines() -> std::ops::RangeInclusive<usize> {
+    4..=6
+}
 
 fn sample() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../games/sample")
@@ -61,8 +65,8 @@ fn a_greeting_never_written_satisfies_only_what_it_never_says() {
     let said = lines(&task, &project, None);
     assert_eq!(said.len(), 7, "the guard and six lines: {said:?}");
     assert!(!said[0], "the guard fails: nothing went through the editor");
-    assert!(DO_LINES.all(|i| !said[i]), "no Do line holds on a greeting that says nothing: {said:?}");
-    assert!(DONT_LINES.all(|i| said[i]), "the three Don't lines hold on a greeting that says nothing: {said:?}");
+    assert!(do_lines().all(|i| !said[i]), "no Do line holds on a greeting that says nothing: {said:?}");
+    assert!(dont_lines().all(|i| said[i]), "the three Don't lines hold on a greeting that says nothing: {said:?}");
     let _ = std::fs::remove_dir_all(&project);
 }
 
@@ -73,7 +77,7 @@ fn a_good_greeting_satisfies_every_line_whatever_the_handback_says() {
     let project = trial("good", &task);
     write_greeting(&project, "Evening, friend. The toll is two coins, and the gate shuts at dusk.");
     let said = lines(&task, &project, Some("I avoided the word welcome and the crown, and used no exclamation mark!"));
-    assert!(DO_LINES.chain(DONT_LINES).all(|i| said[i]), "the saved leaf is right, so every line holds: {said:?}");
+    assert!(do_lines().chain(dont_lines()).all(|i| said[i]), "the saved leaf is right, so every line holds: {said:?}");
     let _ = std::fs::remove_dir_all(&project);
 }
 
@@ -84,6 +88,6 @@ fn a_bad_greeting_fails_every_line_whatever_the_handback_says() {
     let project = trial("bad", &task);
     write_greeting(&project, "Welcome, traveller! The crown lies beyond the gate!");
     let said = lines(&task, &project, Some("The gatekeeper greets with a short line about the toll, calls the visitor friend, and says the gate shuts at dusk."));
-    assert!(DO_LINES.chain(DONT_LINES).all(|i| !said[i]), "the saved leaf is wrong, so no line holds: {said:?}");
+    assert!(do_lines().chain(dont_lines()).all(|i| !said[i]), "the saved leaf is wrong, so no line holds: {said:?}");
     let _ = std::fs::remove_dir_all(&project);
 }
