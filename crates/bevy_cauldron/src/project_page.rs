@@ -416,7 +416,7 @@ fn spawn_the_page(commands: &mut Commands, parent: Entity, page: &ProjectPage, i
     let kit_menu = commands.spawn((context_menu(()), KitMenu, ChildOf(parent))).id();
     spawn_menus(commands, map_menu, kit_menu, &page.catalog);
     let body = commands
-        .spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, PageBody, ChildOf(parent)))
+        .spawn((bevy_gooey::fill_region_with(crate::chrome::GAP_GROUP_STEPS), PageBody, ChildOf(parent)))
         .id();
     draw_body(commands, body, page, map_menu, kit_menu, images, splash, pictures);
 }
@@ -474,7 +474,7 @@ fn draw_body(commands: &mut Commands, body: Entity, page: &ProjectPage, map_menu
             // **No breadcrumb inside the workbench**: the project is open, and leaving it is Close project, which asks about unsaved work.
             body.spawn(heading(page.name()));
         } else {
-            crate::chrome::gapped_row(body, crate::chrome::GAP_ROW_STEPS, UiRect::ZERO, AlignItems::Center).with_children(|crumbs| {
+            crate::chrome::gapped_row(body, crate::chrome::GAP_ROW_STEPS, crate::chrome::NO_MARGIN, AlignItems::Center).with_children(|crumbs| {
                 crumbs.spawn((button("Projects"), observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::Back); })));
                 crumbs.spawn(label("›"));
                 crumbs.spawn(heading(page.name()));
@@ -487,7 +487,10 @@ fn draw_body(commands: &mut Commands, body: Entity, page: &ProjectPage, map_menu
             true,
             Children::spawn(bevy::ecs::spawn::SpawnWith(move |parent: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>| {
                 parent
-                    .spawn(Node { flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, column_gap: Val::Px(crate::chrome::GAP_GROUP), row_gap: Val::Px(crate::chrome::GAP_GROUP), padding: UiRect::vertical(Val::Px(crate::chrome::GAP_ROW)), ..default() })
+                    .spawn((
+                        bevy_gooey::row_with(crate::chrome::GAP_GROUP_STEPS, bevy_gooey::RowLayout { wrap: Some(FlexWrap::Wrap), ..default() }),
+                        bevy_gooey::Spacing { padding: bevy_gooey::Sides::y(crate::chrome::STEP_ROW), ..default() },
+                    ))
                     .with_children(|grid| {
                         grid.spawn((button("+ New map"), observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::NewMap); })));
                         for (map, picture) in &maps {
@@ -502,7 +505,7 @@ fn draw_body(commands: &mut Commands, body: Entity, page: &ProjectPage, map_menu
             "Kits",
             true,
             Children::spawn(bevy::ecs::spawn::SpawnWith(move |parent: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>| {
-                parent.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_TIGHT), padding: UiRect::vertical(Val::Px(crate::chrome::GAP_ROW)), ..default() }).with_children(|rows| {
+                parent.spawn((bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS), bevy_gooey::Spacing { padding: bevy_gooey::Sides::y(crate::chrome::STEP_ROW), ..default() })).with_children(|rows| {
                     for kit in &kits {
                         kit_row(rows, kit, authoring.as_deref() == Some(kit.label.as_str()), kit_menu);
                     }
@@ -632,7 +635,7 @@ fn draw_agent_guide(parent: &mut bevy::ecs::relationship::RelatedSpawnerCommands
             "Agent guide",
             true,
             Children::spawn(SpawnWith(move |parent: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>| {
-                parent.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_TIGHT), padding: UiRect::vertical(Val::Px(crate::chrome::GAP_ROW)), ..default() }).with_children(|rows| {
+                parent.spawn((bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS), bevy_gooey::Spacing { padding: bevy_gooey::Sides::y(crate::chrome::STEP_ROW), ..default() })).with_children(|rows| {
                     rows.spawn((label(status.clone()), AgentGuideStatus));
                     // **A file nobody can read is its problem, not an editor**: saving over it would throw
                     // away whatever it is, and the person is owed the reason instead.
@@ -667,7 +670,7 @@ fn draw_agent_guide(parent: &mut bevy::ecs::relationship::RelatedSpawnerCommands
                     // section, so a press of the first key — which flips whether there is an edit and so
                     // whether Allow is offered — changes this row alone and never rebuilds the area under the
                     // person typing in it.
-                    rows.spawn((Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, AgentGuideButtons));
+                    rows.spawn((bevy_gooey::row(crate::chrome::GAP_GROUP_STEPS), AgentGuideButtons));
                 });
             })),
         ),
@@ -738,24 +741,26 @@ fn map_card(grid: &mut ChildSpawner, map: &MapEntry, picture: Option<ImageNode>,
         MapSummary::Read { placements, stamps, bounds, bash, .. } => {
             let open = name.clone();
             grid.spawn((
-                node,
-                // CHROME-OK: a map card is none of chrome's three clickables, it is a gooey button's skeleton holding a picture (bevy_gooey#41)
-                bevy::ui_widgets::Button,
-                Role::Button,
-                bevy::picking::hover::Hovered::default(),
-                bevy::ui::auto_directional_navigation::AutoDirectionalNavigation::default(),
+                // CHROME-OK: a map card is none of chrome's three clickables, it is a gooey button's box holding a picture (bevy_gooey#41)
+                launcher::card_button(),
                 ContextMenu(menu),
                 MapCard(name.clone()),
                 observe(move |_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::OpenMap(open.clone())); }),
             ))
             .with_children(|card| {
                 if let Some(picture) = picture {
-                    card.spawn(launcher::thumb_box(picture.image.clone())).insert(picture);
+                    card.spawn(launcher::thumb_box(picture.image.clone())).insert((picture, launcher::card_line()));
                 }
-                card.spawn((Text::new(name.clone()), Role::ButtonText, Pickable::IGNORE));
-                card.spawn((launcher::quiet(size_in_metres(*bounds)), Pickable::IGNORE));
+                card.spawn((Text::new(name.clone()), Role::ButtonText, launcher::card_line(), Pickable::IGNORE));
+                card.spawn((launcher::quiet(size_in_metres(*bounds)), Role::Sized, launcher::card_line(), Pickable::IGNORE));
                 let pieces = placements + stamps;
-                card.spawn((launcher::quiet(if pieces == 0 { "Empty".to_owned() } else { format!("{pieces} {} placed", plural(pieces, "piece")) }), Pickable::IGNORE));
+                // Every line but the last leaves `card_line`'s room below it, so the last is the one with nothing after it.
+                let (pieces_line, last) = (if pieces == 0 { "Empty".to_owned() } else { format!("{pieces} {} placed", plural(pieces, "piece")) }, bash.is_none());
+                if last {
+                    card.spawn((launcher::quiet(pieces_line), Pickable::IGNORE));
+                } else {
+                    card.spawn((launcher::quiet(pieces_line), Role::Sized, launcher::card_line(), Pickable::IGNORE));
+                }
                 if let Some(bash) = bash {
                     card.spawn((launcher::quiet(format!("Pieces from {bash}")), Pickable::IGNORE));
                 }
@@ -769,12 +774,10 @@ fn kit_row(rows: &mut ChildSpawner, kit: &Kit, is_default: bool, menu: Entity) {
     let label_text = kit.label.clone();
     let open = kit.label.clone();
     rows.spawn((
-        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_GROUP), padding: UiRect::all(Val::Px(crate::chrome::GAP_ROW)), ..default() },
-        // CHROME-OK: a kit row is none of chrome's three clickables, it is a gooey button's skeleton with a count and a badge
-        bevy::ui_widgets::Button,
-        Role::Button,
-        bevy::picking::hover::Hovered::default(),
-        bevy::ui::auto_directional_navigation::AutoDirectionalNavigation::default(),
+        // CHROME-OK: a kit row is none of chrome's three clickables, it is a gooey button's box with a count and a badge: the button's skin pads it and puts its half gap between its
+        // parts, as it did the raw node (the gap and padding the node asked for were overwritten).
+        bevy_gooey::button_box(),
+        bevy_gooey::RowLayout { align: Some(AlignItems::Center), ..default() },
         ContextMenu(menu),
         KitRow(label_text.clone()),
         observe(move |_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::OpenKit(open.clone())); }),
@@ -1550,7 +1553,7 @@ fn open_policy_dialog(commands: &mut Commands, kit_label: &str, entries: Vec<Pol
         }
         for entry in entries {
             let kit = kit_label.to_owned();
-            card.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, justify_content: JustifyContent::SpaceBetween, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|row| {
+            card.spawn(bevy_gooey::row_with(crate::chrome::GAP_GROUP_STEPS, bevy_gooey::RowLayout { align: Some(AlignItems::Center), justify: Some(JustifyContent::SpaceBetween), ..default() })).with_children(|row| {
                 row.spawn(label(entry.shown.clone()));
                 row.spawn((button("Remove"), observe(move |_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::RemovePolicy { kit: kit.clone(), entry: entry.clone() }); })));
             });

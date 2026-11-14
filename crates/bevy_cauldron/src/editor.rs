@@ -23,7 +23,7 @@ use bevy::ui_widgets::{Activate, Button as UiButton};
 use bevy_grimoire_core::map::Placed;
 use bevy_grimoire_core::stack::{descriptor_of, descriptor_with};
 
-use crate::chrome::{CHIP_PAD, LIST_W};
+use crate::chrome::LIST_W;
 use crate::keys::{self, Action};
 use crate::project::{OpenMap, Project};
 use crate::view::{MainCamera, cursor_ground};
@@ -3027,7 +3027,13 @@ impl Plugin for EditorPlugin {
                             .run_if(resource_exists_and_changed::<Project>.or_eager(run_once)),
                     ),
                     check_edges.run_if(resource_exists_and_changed::<Project>.or_eager(run_once)),
-                    (draw_edge_faults, draw_crowd_heat, crate::balloon::show_balloon).run_if(in_map_mode),
+                    (
+                        draw_edge_faults,
+                        draw_crowd_heat,
+                        // The balloon is a `placed` node now: it writes its `PlacedAt`, which gooey's skin reads the same frame.
+                        crate::balloon::show_balloon.before(bevy_gooey::GooeySystems::Style),
+                    )
+                        .run_if(in_map_mode),
                 ),)
                     .run_if(in_state(crate::screen::Screen::Editor))
                     .run_if(crate::workspace::Workspace::map_is_open),
@@ -3106,23 +3112,12 @@ fn spawn_cost_readout(mut commands: Commands, frame: Res<crate::chrome::Frame>) 
     commands.entity(frame.chrome_bar).with_children(|bar| {
         bar.spawn((
             crate::tiles::MapRoot,
-            Node {
-                padding: UiRect::axes(Val::Px(COST_PAD_X), Val::Px(crate::chrome::GAP_TIGHT)),
-                // **A reserved column, and the number grows leftwards into it.**
-                //
-                // This is the last child of a row whose spacer pushes everything to the right end, so
-                // every digit the count gained shoved `MAP · untitled_map` further left — reported
-                // from the keyboard as the label "bouncing around a whole lot as those triangle
-                // numbers change". A readout that moves its neighbour is a readout that makes the
-                // neighbour unreadable, and the neighbour is the one thing on the bar that says which
-                // map you are in.
-                //
-                // `min_width` rather than `width`, so a count past what [`COST_COL`] reserves pushes
-                // out rather than clipping — the same choice, for the same reason, the key list's
-                // chord column makes. `FlexEnd` is what makes the phrase hold still: the digits
-                // extend into the slack instead of dragging `tris drawn` with them.
-                min_width: Val::Px(COST_COL),
-                justify_content: JustifyContent::FlexEnd,
+            // **A reserved column, and the number grows leftwards into it** (see `COST_COL`): at least that wide, the digits flush right so `tris drawn` holds still, and
+            // the bar's inset either side. A literal 8 px (not a step of the scale), and a tight step above and below.
+            bevy_gooey::row_with(0.0, bevy_gooey::RowLayout { justify: Some(JustifyContent::FlexEnd), ..default() }),
+            bevy_gooey::Sizing { min_width: Some(bevy_gooey::Extent::Px(COST_COL)), ..default() },
+            bevy_gooey::Spacing {
+                padding: bevy_gooey::Sides { top: Some(crate::chrome::STEP_TIGHT), right: Some(bevy_gooey::Space::Px(COST_PAD_X)), bottom: Some(crate::chrome::STEP_TIGHT), left: Some(bevy_gooey::Space::Px(COST_PAD_X)) },
                 ..default()
             },
             // Nothing here is clickable, and a readout that eats clicks is a readout that steals
@@ -3868,7 +3863,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 // from the heading's own margins (the 2026-08-17 type-role decision).
                 crate::chrome::section(s, "MAP SIZE  (m)");
                 for axis in [Axis::X, Axis::Y, Axis::Z] {
-                    crate::chrome::gapped_row(s, crate::chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Center)
+                    crate::chrome::gapped_row(s, crate::chrome::GAP_TIGHT_STEPS, crate::chrome::NO_MARGIN, AlignItems::Center)
                     .with_children(|row| {
                         // `COL_TIGHT`: the label is a single axis letter, which is exactly what that
                         // column is for. It was a bare 14.
@@ -4198,36 +4193,23 @@ fn rebuild_palette(
                     // five states every row and chip has. It sensed `Hovered` and nothing repainted
                     // it.
                     crate::chrome::RowRest(crate::chrome::ink().header_bg),
-                    Node {
-                        width: Val::Percent(100.0),
-                        padding: CHIP_PAD,
-                        flex_direction: FlexDirection::Row,
-                        column_gap: Val::Px(crate::chrome::GAP_ROW),
-                        margin: UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
-                        ..default()
-                    },
+                    bevy_gooey::row(crate::chrome::GAP_ROW_STEPS),
+                    bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(100.0)), ..default() },
+                    bevy_gooey::Spacing { margin: crate::chrome::margin_top(crate::chrome::STEP_ROW), ..crate::chrome::CHIP_SPACING },
                     BackgroundColor(crate::chrome::ink().header_bg),
                 ))
                 .with_children(|row| {
                     // A caret, so folded and unfolded differ by shape and not only by what is below
                     // them — an encoding that survives being glanced at.
                     row.spawn((
-                        Node {
-                            width: Val::Px(crate::chrome::COL_TIGHT),
-                            flex_shrink: 0.0,
-                            ..default()
-                        },
+                        crate::chrome::text_keeps_its_width(),
+                        bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Px(crate::chrome::COL_TIGHT)), ..default() },
                         Text::new(if folded { ">" } else { "v" }),
                         TextColor(crate::chrome::ink().label),
                         crate::chrome::typed(crate::chrome::text::LABEL),
                     ));
                     row.spawn((
-                        Node {
-                            flex_grow: 1.0,
-                            // CHROME-OK: zero, not a spacing step — see `tiles::count_cell`.
-                            min_width: Val::Px(0.0),
-                            ..default()
-                        },
+                        crate::chrome::text_narrows(),
                         Text::new(category.to_uppercase()),
                         TextColor(crate::chrome::ink().label),
                         crate::chrome::typed(crate::chrome::text::LABEL),
@@ -4273,13 +4255,14 @@ fn rebuild_palette(
                     palette_row.insert(bevy_gooey::DragPayload(PieceDrag(d.id.clone())));
                     palette_row.with_children(|row| {
                             let mut slot = row.spawn((
-                                Node {
-                                    width: Val::Px(crate::chrome::THUMB_SLOT),
-                                    height: Val::Px(crate::chrome::THUMB_SLOT),
-                                    margin: UiRect::right(Val::Px(crate::chrome::GAP_ROW)),
-                                    flex_shrink: 0.0,
+                                // A row (`RowLayout` is written on rows, columns and placed nodes, not on a bare `sized` box) that never shrinks.
+                                bevy_gooey::row_with(0.0, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }),
+                                bevy_gooey::Sizing {
+                                    width: Some(bevy_gooey::Extent::Px(crate::chrome::THUMB_SLOT)),
+                                    height: Some(bevy_gooey::Extent::Px(crate::chrome::THUMB_SLOT)),
                                     ..default()
                                 },
+                                crate::chrome::spacing(crate::chrome::margin_right(crate::chrome::STEP_ROW)),
                                 BackgroundColor(crate::chrome::ink().slot_bg),
                             ));
                             // **By id, not by index.** The library grows on Accept and shrinks on
@@ -4294,15 +4277,9 @@ fn rebuild_palette(
                                 slot.insert(ImageNode::new(image));
                             }
                             row.spawn((
-                                Node {
-                                    flex_grow: 1.0,
-                                    // See `tiles::count_cell`: the name wraps inside its own column
-                                    // rather than pushing the cost out of the row.
-                                    // CHROME-OK: zero is not a spacing step.
-                                    min_width: Val::Px(0.0),
-                                    overflow: Overflow::clip_x(),
-                                    ..default()
-                                },
+                                // The name wraps inside its own column rather than pushing the cost out of the row (`tiles::count_cell`) and is clipped to it.
+                                crate::chrome::text_narrows(),
+                                bevy_gooey::Sizing { clip: Some(true), ..default() },
                                 Text::new(bevy_grimoire_core::naming::display_name(&d.id)),
                                 TextColor(crate::chrome::ink().text),
                                 crate::chrome::typed(crate::chrome::text::BODY),
@@ -4314,11 +4291,8 @@ fn rebuild_palette(
                             // **The triangle cost keeps its own ink** (`cost_tint`: the accent past a busy piece, the danger past the
                             // importer's limit), which gooey's `count_text` would not: the skin writes that text's colour.
                             row.spawn((
-                                Node {
-                                    flex_shrink: 0.0,
-                                    margin: UiRect::left(Val::Px(crate::chrome::GAP_ROW)),
-                                    ..default()
-                                },
+                                crate::chrome::text_keeps_its_width(),
+                                crate::chrome::spacing(crate::chrome::margin_left(crate::chrome::STEP_ROW)),
                                 Text::new(brief_count(tris)),
                                 TextColor(cost_tint(tris)),
                                 crate::chrome::typed(crate::chrome::text::LABEL),
@@ -7145,12 +7119,8 @@ fn refresh_notes_list(
                     // and `note_add`'s `auto` are where it is set.
                     if *auto {
                         row.spawn((
-                            Node {
-                                padding: crate::chrome::CHIP_PAD,
-                                border: UiRect::all(Val::Px(crate::chrome::EDGE_W)),
-                                border_radius: BorderRadius::all(Val::Px(crate::chrome::RADIUS_ROW)),
-                                ..default()
-                            },
+                            // A chip's box (a label here, not a button): its inset, a 1 px edge and a row radius.
+                            crate::chrome::small_box(crate::chrome::CHIP_SPACING, bevy_gooey::Sides::all(crate::chrome::EDGE_W), crate::chrome::ink().suggest, Some(0.0)),
                             BorderColor::all(crate::chrome::ink().suggest),
                         ))
                         .with_children(|chip| {
@@ -7185,14 +7155,16 @@ fn refresh_notes_list(
                 if !loaded.is_empty() {
                     p.spawn(bevy_gooey::row(crate::chrome::GAP_TIGHT_STEPS)).with_children(|h| {
                         for handle in loaded {
-                            // CHROME-OK: a fixed 4:3 review thumbnail, kept raw: gooey's `image_box` also forces no-shrink, a clip and a stretched
-                            // image, which changes what a narrow panel shows, and no test pins that (GAP: an image box that keeps `ImageNode`'s own mode).
-                            h.spawn((Node { width: Val::Px(REVIEW_THUMBNAIL_PX.x), height: Val::Px(REVIEW_THUMBNAIL_PX.y), ..default() }, ImageNode::new(handle)));
+                            // A fixed 4:3 review thumbnail: a `sized` box that keeps `ImageNode`'s own mode (gooey's `image_box` would also force no-shrink, a clip and a stretch).
+                            h.spawn((
+                                bevy_gooey::sized(bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Px(REVIEW_THUMBNAIL_PX.x)), height: Some(bevy_gooey::Extent::Px(REVIEW_THUMBNAIL_PX.y)), ..default() }),
+                                ImageNode::new(handle),
+                            ));
                         }
                     });
                 }
                 if !review.ops.is_empty() {
-                    crate::chrome::wrapping_row(p, crate::chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Stretch).with_children(|h| {
+                    crate::chrome::wrapping_row(p, crate::chrome::GAP_TIGHT_STEPS, crate::chrome::NO_MARGIN, AlignItems::Stretch).with_children(|h| {
                         for op in &review.ops {
                             crate::chrome::button(h, NoteOpButton { op: op.clone() }, op, crate::chrome::Severity::Plain);
                         }

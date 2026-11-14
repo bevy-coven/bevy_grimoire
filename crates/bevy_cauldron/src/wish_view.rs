@@ -42,7 +42,7 @@ use std::time::Duration;
 use bevy::prelude::*;
 use bevy::tasks::Task;
 use bevy::picking::hover::Hovered;
-use bevy_gooey::{Activate, Role};
+use bevy_gooey::Activate;
 use bevy_grimoire_core::wish::{percent_encode, WISH_REPO};
 
 use crate::present::{QueuedWish, WishSearch, WishState, Wishes};
@@ -119,7 +119,7 @@ impl Plugin for WishViewPlugin {
             .add_systems(OnEnter(Screen::Editor), spawn_the_chip.after(crate::chrome::FrameSystems))
             .add_systems(
                 Update,
-                (ask_the_unfolded, land_the_searches, follow_the_rows, follow_the_search_lines, follow_the_chip)
+                (ask_the_unfolded, land_the_searches, follow_the_rows, follow_the_search_lines, follow_the_chip.before(bevy_gooey::GooeySystems::Style))
                     .run_if(in_state(Screen::Editor)),
             );
     }
@@ -513,7 +513,7 @@ fn spawn_a_row(
                         Text::new(title_of(queued, client)),
                         TextColor(crate::chrome::ink().text),
                         crate::chrome::typed(crate::chrome::text::BODY),
-                        Node { flex_grow: 1.0, min_width: Val::Px(0.0), ..default() },
+                        crate::chrome::text_narrows(),
                         TextLayout::new(Justify::Left, LineBreak::WordBoundary),
                     ));
                 });
@@ -553,7 +553,7 @@ fn spawn_a_row(
                 Text::new(queued.search.sentence()),
                 TextColor(crate::chrome::ink().dim),
                 crate::chrome::typed(crate::chrome::text::LABEL),
-                Node { flex_shrink: 0.0, ..default() },
+                crate::chrome::text_keeps_its_width(),
                 TextLayout::new(Justify::Left, LineBreak::WordBoundary),
             ));
             if let Some(note) = &queued.note {
@@ -561,7 +561,7 @@ fn spawn_a_row(
                     Text::new(format!("GitHub did not open: {note}")),
                     TextColor(crate::chrome::ink().danger),
                     crate::chrome::typed(crate::chrome::text::LABEL),
-                    Node { flex_shrink: 0.0, ..default() },
+                    crate::chrome::text_keeps_its_width(),
                     TextLayout::new(Justify::Left, LineBreak::WordBoundary),
                 ));
             }
@@ -620,7 +620,7 @@ fn spawn_a_lesson_row(list: &mut ChildSpawnerCommands, queued: &crate::present::
                         Text::new(lesson_title(queued)),
                         TextColor(crate::chrome::ink().text),
                         crate::chrome::typed(crate::chrome::text::BODY),
-                        Node { flex_grow: 1.0, min_width: Val::Px(0.0), ..default() },
+                        crate::chrome::text_narrows(),
                         TextLayout::new(Justify::Left, LineBreak::WordBoundary),
                     ));
                 });
@@ -652,7 +652,7 @@ fn spawn_a_lesson_row(list: &mut ChildSpawnerCommands, queued: &crate::present::
                     Text::new(note.clone()),
                     TextColor(crate::chrome::ink().danger),
                     crate::chrome::typed(crate::chrome::text::LABEL),
-                    Node { flex_shrink: 0.0, ..default() },
+                    crate::chrome::text_keeps_its_width(),
                     TextLayout::new(Justify::Left, LineBreak::WordBoundary),
                 ));
             }
@@ -1213,18 +1213,16 @@ fn spawn_the_chip(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
     let chip = commands
         .spawn((
             WishChip,
-            // **Not a `Button`**, deliberately: the editor has twenty-four global `Activate`
-            // observers, and this is a quiet status item whose one gesture is a click. `jobs.rs`
-            // documents the day a band item on that bus took the application down.
-            Node { display: Display::None, ..default() },
-            Role::StatusItem,
-            Hovered::default(),
+            // **Not a `Button`**, deliberately: the editor has twenty-four global `Activate` observers, and this is a quiet status item whose one gesture is a click.
+            // `jobs.rs` documents the day a band item on that bus took the application down; gooey's `status_item_quiet` stays off it and `Shown` hides it until a row waits.
+            bevy_gooey::status_item_quiet(String::new()),
+            bevy_gooey::Shown(false),
             bevy::picking::Pickable::default(),
             ChipShown(String::new()),
-            children![(Text::new(String::new()), Role::ControlText, WishChipText, bevy::picking::Pickable::IGNORE)],
         ))
         .observe(open_the_block_on_click)
         .id();
+    crate::chrome::the_words_of_a_quiet_item_are_a_control(&mut commands, chip, WishChipText);
     commands.entity(frame.status).add_child(chip);
 }
 
@@ -1244,7 +1242,7 @@ fn follow_the_chip(
     lessons: Option<Res<crate::present::Lessons>>,
     styles: Option<Res<crate::style_proposals::StyleProposals>>,
     blocks: Query<(), With<crate::familiar::Familiar>>,
-    mut chips: Query<(&mut Node, &mut ChipShown), With<WishChip>>,
+    mut chips: Query<(&mut bevy_gooey::Shown, &mut ChipShown), With<WishChip>>,
     mut texts: Query<&mut Text, With<WishChipText>>,
 ) {
     let Some(wishes) = wishes else { return };
@@ -1252,10 +1250,10 @@ fn follow_the_chip(
     // **Wishes and lessons are one count**: both are rows in the block, and both wait for the person.
     let waiting = crate::activity_bar::waiting_on_you(Some(&wishes), lessons.as_deref(), styles.as_deref());
     let said = if hiding { chip_says(waiting) } else { String::new() };
-    for (mut node, mut shown) in &mut chips {
-        let display = if said.is_empty() { Display::None } else { Display::Flex };
-        if node.display != display {
-            node.display = display;
+    for (mut visible, mut shown) in &mut chips {
+        let on = !said.is_empty();
+        if visible.0 != on {
+            visible.0 = on;
         }
         if shown.0 != said {
             shown.0.clone_from(&said);

@@ -50,7 +50,7 @@ use bevy::ui::{ComputedNode, ScrollPosition, UiGlobalTransform};
 use bevy::ui_widgets::{Activate, ValueChange};
 use bevy_gooey::{
     Card, CardSelection, MarkdownBase, MarkdownLink, MarkdownOutline, MarkdownPicture, MarkdownView, MarkdownViewport, SelectMode, Table, TableSelection,
-    RowLayout, TreeNode, column_with, fill_region, markdown_view, observe, scroll_to_heading, tree,
+    TreeNode, markdown_view, observe, scroll_to_heading, tree,
 };
 use bevy_grimoire_core::board::{self, Board};
 use bevy_grimoire_core::design::{self, Place, PlaceKind};
@@ -437,7 +437,7 @@ fn spawn_the_design_workspace(mut commands: Commands, frame: Res<Frame>) {
     let panel = chrome::panel_root(&mut commands, &frame, Side::Left, TREE_PANEL_W, true, false, "DESIGN").insert(DesignPanel).id();
     commands.entity(panel).with_children(|p| {
         chrome::title(p, "DESIGN");
-        p.spawn(fill_region()).with_children(|column| {
+        p.spawn(bevy_gooey::fill_region()).with_children(|column| {
             column.spawn((tree(Vec::<TreeNode>::new()), DesignTree::default(), SelectMode::Single, observe(on_tree_pick)));
         });
     });
@@ -455,10 +455,11 @@ fn spawn_the_design_workspace(mut commands: Commands, frame: Res<Frame>) {
             AccessibleLabel::new("Design page"),
         ))
         .with_children(|host| {
-            host.spawn((DesignTop, column_with(chrome::GAP_TIGHT_STEPS, RowLayout { shrink: Some(0.0), ..default() })));
+            host.spawn((DesignTop, bevy_gooey::column_with(chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() })));
             host.spawn((
                 DesignBody,
-                fill_region(),
+                bevy_gooey::fill_region(),
+                bevy_gooey::Sizing { min_width: Some(bevy_gooey::Extent::Px(0.0)), ..default() },
             ));
         })
         .id();
@@ -778,7 +779,7 @@ fn keep_the_top(
         top.spawn((bevy_gooey::toggle("As an agent reads it", key.as_agent), DesignAgentToggle, observe(on_agent_toggle)));
         if key.topic_menu {
             // **A wrapping row**: five topic buttons do not fit the middle column of the smallest window (1024 x 640), and a plain row squeezed each to about 23 px.
-            crate::chrome::wrapping_row(top, 1.0, UiRect::ZERO, AlignItems::Center).with_children(|menu| {
+            crate::chrome::wrapping_row(top, 1.0, crate::chrome::NO_MARGIN, AlignItems::Center).with_children(|menu| {
                 for topic in &key.offered {
                     // Padded with two spaces a side, so the shortest name (`ui`) is still a target at least 40 px wide; the label is compared trimmed.
                     menu.spawn((bevy_gooey::button(format!("  {topic}  ")), DesignAction::NewTopic(topic.clone()), observe(on_action)));

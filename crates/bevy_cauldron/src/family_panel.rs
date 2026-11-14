@@ -533,7 +533,7 @@ fn mirror_the_blocks(
             .spawn((
                 FamilyBlock { krate: name.clone() },
                 Name::new(format!("family block {name}")),
-                Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+                bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS),
             ))
             .with_children(|block| {
                 crate::chrome::list_heading(block, &name.to_uppercase());

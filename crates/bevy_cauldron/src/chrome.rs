@@ -939,10 +939,7 @@ pub fn section<'a>(parent: &'a mut ChildSpawnerCommands, label: &str) -> EntityC
         Text::new(label.to_owned()),
         TextColor(ink().label),
         typed(text::HEADING),
-        Node {
-            margin: UiRect::top(Val::Px(GAP_GROUP)).with_bottom(Val::Px(GAP_TIGHT)),
-            ..default()
-        },
+        spaced(bevy_gooey::Sides { top: Some(STEP_GROUP), bottom: Some(STEP_TIGHT), ..NO_MARGIN }),
     ))
 }
 
@@ -1576,17 +1573,16 @@ pub fn spawn_frame(
 
     let root = commands
         .spawn((
-            Node {
-                width: Val::Percent(100.0),
-                // **`Vh`, not `Percent`.** A UI root is a grid item of Bevy's implicit viewport node
+            // **`Vh`, not `Percent`.** A UI root is a grid item of Bevy's implicit viewport node
                 // whose single row is `auto`, so a percentage height is cyclic there and, under
                 // Bevy 0.20's taffy, resolves to the content's height: the root grew to its
                 // content and no `ScrollArea` below it ever had anything to scroll. A viewport
                 // unit is a definite length and does not depend on the track.
-                height: Val::Vh(100.0),
-                flex_direction: FlexDirection::Column,
+            bevy_gooey::sized(bevy_gooey::Sizing {
+                width: Some(bevy_gooey::Extent::Percent(100.0)),
+                height: Some(bevy_gooey::Extent::Vh(100.0)),
                 ..default()
-            },
+            }),
             // See the type doc: no `Hovered`, and nothing here eats a click meant for the map.
             bevy::picking::Pickable::IGNORE,
         ))
@@ -1722,10 +1718,7 @@ pub fn title(parent: &mut ChildSpawnerCommands, text: &str) {
         Text::new(text.to_owned()),
         TextColor(ink().text),
         typed(text::TITLE),
-        Node {
-            margin: UiRect::bottom(Val::Px(GAP_ROW)),
-            ..default()
-        },
+        spaced(margin_bottom(STEP_ROW)),
     ));
 }
 
@@ -2310,12 +2303,9 @@ pub struct JournalList;
 pub fn problem_log_line(parent: &mut ChildSpawnerCommands, text: &str, colour: Color) {
     parent
         .spawn((
-            Node {
-                flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(4.0),
-                width: Val::Percent(100.0),
-                ..default()
-            },
+            // A bullet and the line, 4 px apart (0.8 of the skin's 5 px gap), as wide as the list.
+            bevy_gooey::row(PROBLEM_LOG_GAP_STEPS),
+            bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(100.0)), ..default() },
             ProblemLogLine,
         ))
         .with_children(|row| {
@@ -2330,17 +2320,16 @@ pub fn problem_log_line(parent: &mut ChildSpawnerCommands, text: &str, colour: C
                 // without it a wrapping text item's flex base can resolve to zero width and lay
                 // out one glyph per line, clipped to nothing (measured live in the Compose pane,
                 // 2026-08-17). `min_width: 0` is what then lets it shrink below its longest word.
-                Node {
-                    flex_grow: 1.0,
-                    min_width: Val::Px(0.0),
-                    ..default()
-                },
+                text_narrows(),
                 Text::new(text.to_owned()),
                 TextColor(colour),
                 typed(text::LABEL),
             ));
         });
 }
+
+/// The gap between a problem line's bullet and its words, in steps of the skin's gap: 4 px of the editor skin's 5.
+const PROBLEM_LOG_GAP_STEPS: f32 = 0.8;
 
 
 /// **A scrolling list that fills what is left of its panel.**
@@ -2784,12 +2773,10 @@ pub fn row_label_wrapping(row: &mut ChildSpawnerCommands, width: f32, label: &st
     let id = row_label_with(row, width, label, ());
     row.commands()
         .entity(id)
-        .insert(TextLayout::new(Justify::Left, LineBreak::WordBoundary))
-        .queue(move |mut label: EntityWorldMut| {
-            if let Some(mut node) = label.get_mut::<Node>() {
-                node.width = Val::Px(width);
-            }
-        });
+        .insert((
+            TextLayout::new(Justify::Left, LineBreak::WordBoundary),
+            bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Px(width)), ..default() },
+        ));
 }
 
 /// [`row_label`] with a marker on its label, for a label that changes while the row is on screen.
@@ -2800,30 +2787,15 @@ pub fn row_label_with(
     marker: impl Bundle,
 ) -> Entity {
     row.spawn((
-        Node {
-            min_width: Val::Px(width),
-            flex_shrink: 0.0,
-            // **And a gap of its own, so the value never starts at the label's last glyph.**
-            //
-            // The row's `column_gap` is a **flex** gap: it is the space between two flex items, and
-            // a flex item's box is its `min_width` **at least**. So a label *shorter* than its
-            // column gets the gap — its box is the column, and the value starts one gap later. But
-            // a label *longer* than its column **pushes its own box wider**, and the value starts
-            // immediately at the label's last glyph, with **no gap at all**.
-            //
-            // Measured on the menu's KIT INFO panel, in the capture: the row `new work lands here`
-            // / `no` had a **5 px** gap between the label and the value, and the rows above it —
-            // `pieces` / `166` and `excluded` / `4 pack(s)` — had **133 px**. So the one row whose
-            // label is longer than its column read as a single phrase, *"new work lands here no"*,
-            // while the others read as two things.
-            //
-            // **The gap is the label's, not the row's**, because the row's gap only applies between
-            // items and this is the space a *long* label would otherwise swallow. It is a `margin`,
-            // so it is outside the label's box and the value starts after it however wide the
-            // label turned out to be.
-            margin: UiRect::right(Val::Px(GAP_ROW)),
-            ..default()
-        },
+        // **The value never starts at the label's last glyph**: the label keeps its words' width and is at least the column wide, and a margin of its own
+        // (`GAP_ROW`, the design system's row gap, as its spacing step `STEP_ROW`)
+        // (outside its box) stands the value off however wide a long label turned out, because the row's `column_gap` only applies between boxes, and a label
+        // longer than its column pushes its own box wider (measured on the KIT INFO panel: 5 px against 133 px).
+        (
+            bevy_gooey::Role::Sized,
+            bevy_gooey::TextFlow { grow: None, shrink: Some(0.0), min_width: Some(bevy_gooey::Extent::Px(width)), align: None },
+            spacing(margin_right(STEP_ROW)),
+        ),
         Text::new(label.to_owned()),
         TextColor(ink().label),
         typed(text::LABEL),
@@ -2844,44 +2816,123 @@ pub fn row_value(row: &mut ChildSpawnerCommands, text: impl Into<String>, colour
     ));
 }
 
-/// **A margin for a text or a cell to stand off its neighbours by**, as the `Node` a text bundle needs (UI-59, #245).
+/// **The editor skin's spacing steps, named** (#260): `editor_skin.yaml`'s `spacing` scale is `[3, 5, 12, 16, 20, 24]` px, so the editor's own gaps are
+/// steps of it. [`bevy_gooey::Spacing`] takes a step, and `the_editor_spacing_steps_are_its_gap_constants` holds each to the px constant it replaces.
+pub const STEP_TIGHT: bevy_gooey::Space = bevy_gooey::Space::Step(0);
+/// [`GAP_ROW`] (5 px) as a step of the skin's spacing scale.
+pub const STEP_ROW: bevy_gooey::Space = bevy_gooey::Space::Step(1);
+/// [`PAD`] (12 px) as a step of the skin's spacing scale.
+pub const STEP_PAD: bevy_gooey::Space = bevy_gooey::Space::Step(2);
+/// [`GAP_GROUP`] (16 px) as a step of the skin's spacing scale.
+pub const STEP_GROUP: bevy_gooey::Space = bevy_gooey::Space::Step(3);
+
+/// No margin on any side.
+pub const NO_MARGIN: bevy_gooey::Sides<bevy_gooey::Space> = bevy_gooey::Sides { top: None, right: None, bottom: None, left: None };
+
+/// A margin above only.
+pub const fn margin_top(space: bevy_gooey::Space) -> bevy_gooey::Sides<bevy_gooey::Space> {
+    bevy_gooey::Sides { top: Some(space), ..NO_MARGIN }
+}
+/// A margin below only.
+pub const fn margin_bottom(space: bevy_gooey::Space) -> bevy_gooey::Sides<bevy_gooey::Space> {
+    bevy_gooey::Sides { bottom: Some(space), ..NO_MARGIN }
+}
+/// A margin to the left only.
+pub const fn margin_left(space: bevy_gooey::Space) -> bevy_gooey::Sides<bevy_gooey::Space> {
+    bevy_gooey::Sides { left: Some(space), ..NO_MARGIN }
+}
+/// A margin to the right only.
+pub const fn margin_right(space: bevy_gooey::Space) -> bevy_gooey::Sides<bevy_gooey::Space> {
+    bevy_gooey::Sides { right: Some(space), ..NO_MARGIN }
+}
+
+/// **A quiet status item's words are a control's, not a button's** (#260): gooey's `status_item_quiet` puts `Role::ButtonText` on its text, and the editor's tests count `ButtonText`
+/// over the world to say what a dialog's answers are (`the_bands_item_does_not_call_itself_a_button`), so the item's words become `Role::ControlText` (and take `marker`) when the item is
+/// spawned. `item` is the quiet item's entity, spawned in the same command flush.
+pub fn the_words_of_a_quiet_item_are_a_control(commands: &mut Commands, item: Entity, marker: impl Bundle) {
+    commands.queue(move |world: &mut World| {
+        let kids: Vec<Entity> = world.get::<Children>(item).map(|c| c.iter().collect()).unwrap_or_default();
+        if let Some(words) = kids.into_iter().find(|k| world.get::<Text>(*k).is_some()) {
+            world.entity_mut(words).insert((bevy_gooey::Role::ControlText, Pickable::IGNORE, marker));
+        }
+    });
+}
+
+/// **The shape of a small box that holds one edge colour** (#260): a row of gooey's own with a row radius and a `px` border in `edge`, which is passed as `InkOverride` because the skin
+/// paints any `BorderPx` edge in its outline unless the host's colour is pinned (so a box whose edge the host changes by state cannot be this: see the chip's GAP4). A row writes only what it is
+/// asked to, so a caller's `entry::<Node>()` stands; `shrink` is `Some(0.0)` for a box that never gives way to its neighbours.
+pub fn small_box(spacing: bevy_gooey::Spacing, border: bevy_gooey::Sides<f32>, edge: Color, shrink: Option<f32>) -> impl Bundle {
+    (
+        bevy_gooey::row_with(0.0, bevy_gooey::RowLayout { shrink, ..default() }),
+        spacing,
+        bevy_gooey::BorderPx(border),
+        bevy_gooey::InkOverride { edge: Some(edge), ..default() },
+        bevy_gooey::Shape { radius: Some(bevy_gooey::Radius::Step(0)), ..default() },
+    )
+}
+
+/// **A chip's inset as gooey's `Spacing`** (#260): 6 px a side and a tight step above and below, the same box as [`CHIP_PAD`]. The 6 px is not a step of the skin's scale, so it is a literal `Space::Px`.
+pub const CHIP_SPACING: bevy_gooey::Spacing = bevy_gooey::Spacing {
+    margin: NO_MARGIN,
+    padding: bevy_gooey::Sides {
+        top: Some(STEP_TIGHT),
+        right: Some(bevy_gooey::Space::Px(6.0)),
+        bottom: Some(STEP_TIGHT),
+        left: Some(bevy_gooey::Space::Px(6.0)),
+    },
+};
+
+/// **A margin for a text or a cell to stand off its neighbours by** (UI-59, #245; #260): gooey's [`bevy_gooey::Spacing`], in steps of the skin's scale.
 ///
-/// A text carries a `Node` of its own, and a margin is the one thing about it a panel decides: the gap above a block, the
-/// half-step below a heading. The Kit panels used to spell it as a `Node` literal at each text; this is the one place that
-/// does, so a panel's spacing is read from a name and not from nine copies of the same four lines.
-pub fn spaced(margin: UiRect) -> Node {
-    Node { margin, ..default() }
+/// A text carries a `Node` of its own, and a margin is the one thing about it a panel decides: the gap above a block, the half-step below a
+/// heading. `Spacing` is written on a node with a `Role`, and a bare `Text` has none, so this carries gooey's `Role::Sized`, a layout role that
+/// draws nothing and leaves the text's own ink and font as the host set them (`the_section_headings_keep_their_ink_and_their_margins`).
+pub fn spaced(margin: bevy_gooey::Sides<bevy_gooey::Space>) -> impl Bundle {
+    (bevy_gooey::Role::Sized, bevy_gooey::Spacing { margin, padding: default() })
+}
+
+/// **A text that takes the room its row leaves and may narrow to nothing** (#260): gooey's `TextFlow` on a bare text, with the layout role `TextFlow` is written on
+/// (`Role::Sized`, which draws nothing and leaves the text's ink and font as the host set them). A long name wraps in its own column and never pushes its row wider.
+pub fn text_narrows() -> impl Bundle {
+    (
+        bevy_gooey::Role::Sized,
+        bevy_gooey::TextFlow { grow: Some(1.0), shrink: None, min_width: Some(bevy_gooey::Extent::Px(0.0)), align: None },
+    )
+}
+
+/// **A text that keeps its words' width** (#260): `TextFlow { shrink: 0 }` on a bare text, so a tally or a mark keeps a column of its own when its row is squeezed.
+pub fn text_keeps_its_width() -> impl Bundle {
+    (bevy_gooey::Role::Sized, bevy_gooey::TextFlow { grow: None, shrink: Some(0.0), min_width: None, align: None })
+}
+
+/// **A margin for a gooey widget** (it has a `Role` already, which `Spacing` needs): the same margin as [`spaced`], without the layout role a bare text needs.
+pub fn spacing(margin: bevy_gooey::Sides<bevy_gooey::Space>) -> bevy_gooey::Spacing {
+    bevy_gooey::Spacing { margin, padding: default() }
 }
 
 /// **A gooey row with room around it** (UI-59, #245): [`bevy_gooey::row_with`] with no gap of its own, the margin outside it and
-/// its cells on `align` across.
-///
-/// gooey's `RowLayout` carries the alignment; a margin is the one thing it has no field for, so a row that stands off its
-/// neighbours has it set over the spawned bundle (a zero margin writes nothing). `.insert(..)` a marker on the returned commands,
-/// or `.with_children(..)` the row's cells.
-pub fn spaced_row<'a>(parent: &'a mut ChildSpawnerCommands, margin: UiRect, align: AlignItems) -> EntityCommands<'a> {
+/// its cells on `align` across. `.insert(..)` a marker on the returned commands, or `.with_children(..)` the row's cells.
+pub fn spaced_row<'a>(parent: &'a mut ChildSpawnerCommands, margin: bevy_gooey::Sides<bevy_gooey::Space>, align: AlignItems) -> EntityCommands<'a> {
     gapped_row(parent, 0.0, margin, align)
 }
 
 /// **A [`spaced_row`] whose cells stand `gap` steps of the skin's gap apart** (a gooey row's own rhythm: 1.0 is the skin's gap).
-pub fn gapped_row<'a>(parent: &'a mut ChildSpawnerCommands, gap: f32, margin: UiRect, align: AlignItems) -> EntityCommands<'a> {
-    let mut row = parent.spawn(bevy_gooey::row_with(gap, bevy_gooey::RowLayout { align: Some(align), ..default() }));
-    if margin != UiRect::ZERO {
-        row.entry::<Node>().and_modify(move |mut node| node.margin = margin);
-    }
-    row
+pub fn gapped_row<'a>(parent: &'a mut ChildSpawnerCommands, gap: f32, margin: bevy_gooey::Sides<bevy_gooey::Space>, align: AlignItems) -> EntityCommands<'a> {
+    parent.spawn((
+        bevy_gooey::row_with(gap, bevy_gooey::RowLayout { align: Some(align), ..default() }),
+        bevy_gooey::Spacing { margin, padding: default() },
+    ))
 }
 
 /// **A gooey row that wraps its cells onto a second line instead of running off the panel's edge** (UI-59, #245): the cells
 /// stand `gap` steps of the skin's gap apart, and so do the lines (gooey's wrapping container puts the skin's gap between its
 /// lines as well), and the row may narrow below its widest run, which a gooey row always may, so a last chip is never clipped
 /// by the panel (the 2026-09-03 audit's F7).
-pub fn wrapping_row<'a>(parent: &'a mut ChildSpawnerCommands, gap: f32, margin: UiRect, align: AlignItems) -> EntityCommands<'a> {
-    let mut row = parent.spawn(bevy_gooey::row_with(gap, bevy_gooey::RowLayout { align: Some(align), wrap: Some(FlexWrap::Wrap), ..default() }));
-    if margin != UiRect::ZERO {
-        row.entry::<Node>().and_modify(move |mut node| node.margin = margin);
-    }
-    row
+pub fn wrapping_row<'a>(parent: &'a mut ChildSpawnerCommands, gap: f32, margin: bevy_gooey::Sides<bevy_gooey::Space>, align: AlignItems) -> EntityCommands<'a> {
+    parent.spawn((
+        bevy_gooey::row_with(gap, bevy_gooey::RowLayout { align: Some(align), wrap: Some(FlexWrap::Wrap), ..default() }),
+        bevy_gooey::Spacing { margin, padding: default() },
+    ))
 }
 
 /// **A [`gapped_row`] that is never squeezed** (#260): the cells stand `gap` steps apart on `align` across, and the row keeps its height when
@@ -2902,12 +2953,7 @@ pub fn end_row<'a>(parent: &'a mut ChildSpawnerCommands, gap: f32) -> EntityComm
 /// row's last cell is clipped by the panel's edge (the 2026-09-03 audit's F7). Returns the commands so a caller can mark it.
 pub fn fill_text<'a>(row: &'a mut ChildSpawnerCommands, text: impl Into<String>, ink: Color, role: text::Role) -> EntityCommands<'a> {
     row.spawn((
-        Node {
-            flex_grow: 1.0,
-            // CHROME-OK: zero is not a spacing step.
-            min_width: Val::Px(0.0),
-            ..default()
-        },
+        text_narrows(),
         Text::new(text.into()),
         TextColor(ink),
         typed(role),
@@ -2958,6 +3004,8 @@ pub fn chip<'a>(
         // `style_list_rows` already keys on it and has never needed to know what it is painting.
         RowRest(fill),
         marker,
+        // GAP4: a raw node. A `BorderPx` edge is painted in the skin's outline over any `BorderColor` the host wrote (an `InkOverride` pins one colour), and a chip's
+        // edge is the host's to paint by state (a held chip's accent, a ghost proposal's suggest, hover): `style_list_rows` and the tag painters write it every frame.
         Node {
             padding: CHIP_PAD,
             border: UiRect::all(Val::Px(EDGE_W)),
@@ -3042,14 +3090,11 @@ fn row_shape(selected: bool) -> impl Bundle {
         Hovered::default(),
         RowRest(rest),
         RowSelected(selected),
+        // GAP4: a raw node, for the reason `chip` gives (the rail is an edge the host paints by selection).
         Node {
             width: Val::Percent(100.0),
             padding: CHIP_PAD,
             border: UiRect::left(Val::Px(SELECT_RAIL_W)),
-            // `border_radius` is a `Node` field in Bevy 0.19, not a component — `BorderRadius`
-            // derives `Reflect` and not `Component` (`bevy_ui-0.19.0/src/ui_node.rs:2526`), so a
-            // tuple carrying one is simply not a `Bundle` and the error names the tuple rather than
-            // the offending member.
             border_radius: BorderRadius::all(Val::Px(RADIUS_ROW)),
             ..default()
         },
@@ -3203,6 +3248,7 @@ pub fn button<'a>(
         Hovered::default(),
         RowRest(ink().row_bg),
         marker,
+        // GAP4: a raw node, for the reason `chip` gives (the host paints the edge by state).
         Node {
             padding: BUTTON_PAD,
             border: UiRect::all(Val::Px(EDGE_W)),
@@ -3262,16 +3308,13 @@ pub fn modal_card<'a>(commands: &'a mut Commands, root: impl Bundle) -> EntityCo
         .id();
     let card = commands
         .spawn((
-            Node {
-                flex_direction: FlexDirection::Column,
-                min_width: Val::Px(MODAL_MIN_W),
-                max_width: Val::Px(MODAL_MAX_W),
-                padding: UiRect::all(Val::Px(MODAL_PAD)),
-                row_gap: Val::Px(GAP_GROUP),
-                border: UiRect::all(Val::Px(EDGE_W)),
-                border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
-                ..default()
-            },
+            // The card: a gooey column a group step between its parts, `MODAL_PAD` all round (not a step of the scale, so a literal), a 1 px edge and a panel radius.
+            bevy_gooey::column(GAP_GROUP_STEPS),
+            bevy_gooey::Sizing { min_width: Some(bevy_gooey::Extent::Px(MODAL_MIN_W)), max_width: Some(bevy_gooey::Extent::Px(MODAL_MAX_W)), ..default() },
+            bevy_gooey::Spacing { padding: bevy_gooey::Sides::all(bevy_gooey::Space::Px(MODAL_PAD)), ..default() },
+            bevy_gooey::BorderPx(bevy_gooey::Sides::all(EDGE_W)),
+            bevy_gooey::InkOverride { edge: Some(ink().panel_edge), ..default() },
+            bevy_gooey::Shape { radius: Some(bevy_gooey::Radius::Step(1)), ..default() },
             BackgroundColor(ink().overlay_bg),
             BorderColor::all(ink().panel_edge),
             Hovered::default(),
@@ -3380,14 +3423,13 @@ pub fn severity_rail<'a>(
     marker: impl Bundle,
 ) -> EntityCommands<'a> {
     parent.spawn((
-        Node {
-            flex_direction: FlexDirection::Column,
-            border: UiRect::left(Val::Px(2.0)),
-            padding: UiRect::left(Val::Px(7.0))
-                .with_top(Val::Px(GAP_TIGHT))
-                .with_bottom(Val::Px(GAP_TIGHT)),
-            margin: UiRect::bottom(Val::Px(GAP_ROW)),
-            ..default()
+        // A column that does not give way to its neighbours, with a 2 px rail along its left, 7 px (not a step of the scale) in from it, a tight step above and below and a row step under.
+        bevy_gooey::column_with(0.0, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }),
+        bevy_gooey::BorderPx(bevy_gooey::Sides { left: Some(2.0), ..default() }),
+        bevy_gooey::InkOverride { edge: Some(tint), ..default() },
+        bevy_gooey::Spacing {
+            padding: bevy_gooey::Sides { top: Some(STEP_TIGHT), bottom: Some(STEP_TIGHT), left: Some(bevy_gooey::Space::Px(7.0)), ..default() },
+            margin: margin_bottom(STEP_ROW),
         },
         BorderColor::all(tint),
         marker,

@@ -348,7 +348,7 @@ fn spawn_the_card(
                     observe(|change: On<ValueChange<String>>, mut form: ResMut<NewProjectForm>| form.0.name = change.value.clone()),
                 ));
                 card.spawn((crate::launcher::quiet(FOLDER_UNNAMED), FolderLine));
-                crate::chrome::gapped_row(card, crate::chrome::GAP_GROUP_STEPS, UiRect::ZERO, AlignItems::End).with_children(|row| {
+                crate::chrome::gapped_row(card, crate::chrome::GAP_GROUP_STEPS, crate::chrome::NO_MARGIN, AlignItems::End).with_children(|row| {
                     row.spawn((
                         text_input("Location", start.location.clone()),
                         LocationField,

@@ -760,7 +760,7 @@ fn draw_the_field_files(
     }
     commands.entity(container).with_children(|c| {
         for (component, rel, line) in &want {
-            crate::chrome::gapped_row(c, crate::chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Center)
+            crate::chrome::gapped_row(c, crate::chrome::GAP_TIGHT_STEPS, crate::chrome::NO_MARGIN, AlignItems::Center)
                 .with_children(|r| {
                     r.spawn((Text::new(component.clone()), TextColor(crate::chrome::ink().dim), crate::chrome::typed(crate::chrome::text::BODY)));
                     crate::chrome::button(r, FieldFileButton { rel: rel.clone(), line: *line }, "Open file", crate::chrome::Severity::Plain);

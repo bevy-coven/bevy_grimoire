@@ -201,7 +201,7 @@ pub fn toggle_the_library(
             ));
             // **The tag row is filled by `draw_the_tags`**, from the library's own vocabulary: a project
             // with no `kind` tags has no row, and one that grows a tag gets a toggle for it.
-            chrome::wrapping_row(block, chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Stretch).insert(LibraryTags);
+            chrome::wrapping_row(block, chrome::GAP_TIGHT_STEPS, crate::chrome::NO_MARGIN, AlignItems::Stretch).insert(LibraryTags);
             block.spawn((bevy_gooey::row(0.0), LibraryGridMarker));
         });
     });

@@ -4123,7 +4123,7 @@ fn spawn_tab_strip(
     commands.entity(frame.door_strip).add_child(strip);
     // **The strip keeps the height the hand-built tab gave it** ([`TAB_STRIP_H`]): gooey's `edge_tab` brings a smaller inset of its own, and
     // everything under the strip (the inspector, the badges' free ground, the history list) is laid out from where it ends.
-    commands.entity(strip).entry::<Node>().and_modify(|mut node| node.min_height = Val::Px(TAB_STRIP_H));
+    commands.entity(strip).insert(bevy_gooey::Sizing { min_height: Some(bevy_gooey::Extent::Px(TAB_STRIP_H)), ..default() });
     commands
         .entity(strip)
         .with_children(|p| {
@@ -4148,7 +4148,7 @@ fn spawn_tab_strip(
                         TextColor(crate::chrome::ink().danger),
                         crate::chrome::typed(crate::chrome::text::LABEL),
                         TextLayout::new(Justify::Left, LineBreak::NoWrap),
-                        crate::chrome::spaced(UiRect::left(Val::Px(crate::chrome::GAP_ROW))),
+                        crate::chrome::spaced(crate::chrome::margin_left(crate::chrome::STEP_ROW)),
                         TabBadge,
                     ));
                 })
@@ -4171,7 +4171,7 @@ fn spawn_tab_strip(
             // **The name is here; the keys are the workspace chords'.** `=` was this cue's key
             // until #379 replaced it with `Cmd`/`Ctrl`+`1`…`9`, which are on the strip's badge
             // already, so this prints the *name* of where a click goes and the badge prints the keys.
-            crate::chrome::gapped_row(p, crate::chrome::GAP_ROW_STEPS, UiRect::left(Val::Px(crate::chrome::GAP_GROUP)), AlignItems::Center)
+            crate::chrome::gapped_row(p, crate::chrome::GAP_ROW_STEPS, crate::chrome::margin_left(crate::chrome::STEP_GROUP), AlignItems::Center)
                 .insert(OtherWorkspaceMark)
             // **A click on the name crosses.** The mark says where it goes, and a name that names
             // a place is a name that gets clicked (#288). The Rigs door hides the mark, so a click
@@ -4194,7 +4194,7 @@ fn spawn_tab_strip(
                     // 11 px, the readable default, and it is still a step below the panels: **the
                     // panels are the strip's subject, and the cue is a sentence beside them.**
                     crate::chrome::typed(crate::chrome::text::BODY),
-                    crate::chrome::spaced(UiRect::right(Val::Px(crate::chrome::GAP_ROW))),
+                    crate::chrome::spaced(crate::chrome::margin_right(crate::chrome::STEP_ROW)),
                     OtherWorkspaceLabel,
                 ));
             });
@@ -8306,7 +8306,7 @@ fn shelf_strip(
     // the panel edge, which is the same class of defect as the kit row that wrapped into its own value column — a fixed
     // width and content that outgrew it. The hint drops to a second line rather than being cut, and on a wider panel it stays
     // where it was.
-    crate::chrome::wrapping_row(p, crate::chrome::GAP_ROW_STEPS, UiRect::ZERO, AlignItems::Center)
+    crate::chrome::wrapping_row(p, crate::chrome::GAP_ROW_STEPS, crate::chrome::NO_MARGIN, AlignItems::Center)
     .with_children(|row| {
         // A tab shows the two shelves its own keys reach: `Meshes` imports (candidates <-> library),
         // `Tiles` composes (library <-> kit). Drawing all three everywhere would offer a chip whose
@@ -8478,7 +8478,7 @@ fn on_new_tile_click(
 pub(crate) fn count_cell(row: &mut ChildSpawnerCommands, text: String) {
     row.spawn((
         bevy_gooey::count_text(text),
-        crate::chrome::spaced(UiRect::left(Val::Px(crate::chrome::GAP_ROW))),
+        crate::chrome::spacing(crate::chrome::margin_left(crate::chrome::STEP_ROW)),
     ));
 }
 
@@ -9676,7 +9676,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 Text::new(id_text),
                 TextColor(id_tint),
                 crate::chrome::typed(crate::chrome::text::TAB),
-                crate::chrome::spaced(UiRect::bottom(Val::Px(crate::chrome::GAP_ROW))),
+                crate::chrome::spaced(crate::chrome::margin_bottom(crate::chrome::STEP_ROW)),
                 // The line `I` types into, so that is where its badge goes.
                 crate::chrome::Control(crate::keys::ControlId::IdField),
             ));
@@ -9867,7 +9867,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 }
                 None => "  no measured footprint to size".to_owned(),
             };
-            crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_GROUP)), AlignItems::Center)
+            crate::chrome::spaced_row(p, crate::chrome::margin_top(crate::chrome::STEP_GROUP), AlignItems::Center)
             .with_children(|row| {
                 crate::chrome::row_label(row, crate::chrome::COL_LABEL, "size");
                 crate::chrome::text_field(
@@ -9894,7 +9894,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             // changes; a file that does not parse is named, never read as no rules.
             let standards_lines = standards_lines(placed, &project.project_dir);
             if !standards_lines.is_empty() {
-                crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_ROW)), AlignItems::FlexStart)
+                crate::chrome::spaced_row(p, crate::chrome::margin_top(crate::chrome::STEP_ROW), AlignItems::FlexStart)
                 .with_children(|row| {
                     crate::chrome::row_label(row, crate::chrome::COL_LABEL, "standards");
                     row.spawn(bevy_gooey::column(0.0))
@@ -9938,7 +9938,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     })
                     .collect();
             if !dead.is_empty() {
-                crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_ROW)), AlignItems::FlexStart)
+                crate::chrome::spaced_row(p, crate::chrome::margin_top(crate::chrome::STEP_ROW), AlignItems::FlexStart)
                 .with_children(|row| {
                     crate::chrome::row_label(row, crate::chrome::COL_LABEL, "dead ends");
                     row.spawn(bevy_gooey::column(0.0))
@@ -9993,7 +9993,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 (None, Some(f)) => (format!("{} face", f.label()), crate::chrome::ink().text),
                 (None, None) => ("none".to_owned(), crate::chrome::ink().label),
             };
-            crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_GROUP)), AlignItems::Center)
+            crate::chrome::spaced_row(p, crate::chrome::margin_top(crate::chrome::STEP_GROUP), AlignItems::Center)
                 // The row `M` cycles.
                 .insert(crate::chrome::Control(crate::keys::ControlId::Mount))
             .with_children(|row| {
@@ -10027,7 +10027,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 // that case — so the row reads as an absence, not an error.
                 None => ("—".to_owned(), crate::chrome::ink().label),
             };
-            crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)), AlignItems::Center)
+            crate::chrome::spaced_row(p, crate::chrome::margin_top(crate::chrome::STEP_TIGHT), AlignItems::Center)
             .with_children(|row| {
                 crate::chrome::row_label(row, crate::chrome::COL_LABEL, "mesh");
                 crate::chrome::row_value(row, mesh_text, mesh_ink, ());
@@ -10098,7 +10098,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     }
                 }
             };
-            crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)), AlignItems::Center)
+            crate::chrome::spaced_row(p, crate::chrome::margin_top(crate::chrome::STEP_TIGHT), AlignItems::Center)
             .with_children(|row| {
                 crate::chrome::row_label(row, crate::chrome::COL_LABEL, "labels");
                 // **Wraps, like the mesh row above it.** The value used to be one no-wrap line clipped
@@ -10116,7 +10116,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     height_edit.active.as_ref().map(|(_, raw)| raw.as_str()),
                     (format!("{now:.2}"), crate::chrome::ink().text),
                 );
-                crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)), AlignItems::Center)
+                crate::chrome::spaced_row(p, crate::chrome::margin_top(crate::chrome::STEP_TIGHT), AlignItems::Center)
                 .with_children(|row| {
                     crate::chrome::row_label(row, crate::chrome::COL_LABEL, "height");
                     crate::chrome::text_field(
@@ -10219,7 +10219,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         Text::new(line),
                         TextColor(crate::chrome::ink().dim),
                         crate::chrome::typed(crate::chrome::text::HINT),
-                        crate::chrome::spaced(UiRect::top(Val::Px(crate::chrome::GAP_TIGHT))),
+                        crate::chrome::spaced(crate::chrome::margin_top(crate::chrome::STEP_TIGHT)),
                     ));
                 }
                 for (axis, _, kept) in &surviving {
@@ -10280,7 +10280,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     // and "the filter matched nothing" is precisely the moment an author wants to add
                     // the word they just typed. So the row is spawned unconditionally and the dash
                     // moves inside it, where it can stand beside the `+` alone.
-                    crate::chrome::wrapping_row(p, crate::chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Center)
+                    crate::chrome::wrapping_row(p, crate::chrome::GAP_TIGHT_STEPS, crate::chrome::NO_MARGIN, AlignItems::Center)
                     .with_children(|chips| {
                         if kept.is_empty() {
                             chips.spawn((
@@ -10426,7 +10426,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     Text::new("what the importer noticed about this mesh"),
                     TextColor(crate::chrome::ink().dim),
                     crate::chrome::typed(crate::chrome::text::HINT),
-                    crate::chrome::spaced(UiRect::bottom(Val::Px(crate::chrome::GAP_ROW))),
+                    crate::chrome::spaced(crate::chrome::margin_bottom(crate::chrome::STEP_ROW)),
                 ));
                 for f in findings {
                     let (tint, word) = crate::chrome::severity_style(f.severity);
@@ -10452,7 +10452,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                                 TextColor(quiet_ink),
                                 crate::chrome::typed(crate::chrome::text::LABEL),
                                 bevy::text::LineHeight::RelativeToFont(1.35),
-                                crate::chrome::spaced(UiRect::top(Val::Px(crate::chrome::GAP_TIGHT))),
+                                crate::chrome::spaced(crate::chrome::margin_top(crate::chrome::STEP_TIGHT)),
                             ));
                         }
                     });
@@ -10511,7 +10511,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 )),
                 TextColor(crate::chrome::ink().dim),
                 crate::chrome::typed(crate::chrome::text::HINT),
-                crate::chrome::spaced(UiRect::top(Val::Px(crate::chrome::GAP_TIGHT))),
+                crate::chrome::spaced(crate::chrome::margin_top(crate::chrome::STEP_TIGHT)),
             ));
 
             // **Every layer at once, side by side, bottom on the left.** A picker showed one slice
@@ -10527,7 +10527,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             crate::chrome::wrapping_row(
                 p,
                 crate::chrome::GAP_GROUP_STEPS,
-                UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
+                crate::chrome::margin_top(crate::chrome::STEP_ROW),
                 AlignItems::FlexStart,
             )
             // What the cell cursor walks and what solid/edge/clear paints — all eleven of those chords belong here rather
@@ -10632,12 +10632,12 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 }),
                 crate::chrome::typed(crate::chrome::text::HINT),
                 SelectedCellLine,
-                crate::chrome::spaced(UiRect::top(Val::Px(crate::chrome::GAP_ROW))),
+                crate::chrome::spaced(crate::chrome::margin_top(crate::chrome::STEP_ROW)),
             ));
             crate::chrome::wrapping_row(
                 p,
                 crate::chrome::GAP_TIGHT_STEPS,
-                UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
+                crate::chrome::margin_top(crate::chrome::STEP_TIGHT),
                 AlignItems::Center,
             )
             .insert(
@@ -10721,7 +10721,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         Text::new(format!("{} tris", c.triangles)),
                         TextColor(crate::chrome::ink().dim),
                         crate::chrome::typed(crate::chrome::text::HINT),
-                        crate::chrome::spaced(UiRect::left(Val::Px(crate::chrome::GAP_GROUP))),
+                        crate::chrome::spaced(crate::chrome::margin_left(crate::chrome::STEP_GROUP)),
                     ));
                 }
             });

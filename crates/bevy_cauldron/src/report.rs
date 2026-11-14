@@ -1136,50 +1136,34 @@ fn report_overlay(
             let Some(rect) = rect else { continue };
             root.spawn((
                 ReportPart,
-                Node {
-                    // PLACES-ITSELF-OK: the outline is placed at the pick over the frozen frame, not in a layout.
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(overlay_px(rect[0])),
-                    top: Val::Px(overlay_px(rect[1])),
-                    width: Val::Px(overlay_px((rect[2] - rect[0]).max(0.0))),
-                    height: Val::Px(overlay_px((rect[3] - rect[1]).max(0.0))),
-                    border: UiRect::all(Val::Px(chrome::SNIP_EDGE_W)),
+                // The outline is placed at the pick over the frozen frame, not in a layout: its corner, its size and a 3 px edge that is exactly 3 px, like the drag's own.
+                bevy_gooey::placed(UiRect { left: Val::Px(overlay_px(rect[0])), top: Val::Px(overlay_px(rect[1])), ..UiRect::all(Val::Auto) }),
+                bevy_gooey::Sizing {
+                    width: Some(bevy_gooey::Extent::Px(overlay_px((rect[2] - rect[0]).max(0.0)))),
+                    height: Some(bevy_gooey::Extent::Px(overlay_px((rect[3] - rect[1]).max(0.0)))),
                     ..default()
                 },
+                bevy_gooey::BorderPx(bevy_gooey::Sides::all(chrome::SNIP_EDGE_W)),
+                bevy_gooey::InkOverride { edge: Some(chrome::ink().accent), ..default() },
                 BorderColor::all(chrome::ink().accent),
                 BackgroundColor(wash),
-                Pickable::IGNORE,
             ));
         }
         for at in marks {
             let arm = overlay_px(TAKEN_MARK_ARM_PX);
             root.spawn((
                 ReportPart,
-                Node {
-                    // PLACES-ITSELF-OK: a mark sits on its own pixel of the frozen frame.
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(overlay_px(at.x) - arm),
-                    top: Val::Px(overlay_px(at.y) - arm * 0.2),
-                    width: Val::Px(arm * 2.0),
-                    height: Val::Px(arm * 0.4),
-                    ..default()
-                },
+                // A mark sits on its own pixel of the frozen frame: the horizontal arm.
+                bevy_gooey::placed(UiRect { left: Val::Px(overlay_px(at.x) - arm), top: Val::Px(overlay_px(at.y) - arm * 0.2), ..UiRect::all(Val::Auto) }),
+                bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Px(arm * 2.0)), height: Some(bevy_gooey::Extent::Px(arm * 0.4)), ..default() },
                 BackgroundColor(chrome::ink().accent),
-                Pickable::IGNORE,
             ));
             root.spawn((
                 ReportPart,
-                Node {
-                    // PLACES-ITSELF-OK: the cross's other arm, on the same pixel.
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(overlay_px(at.x) - arm * 0.2),
-                    top: Val::Px(overlay_px(at.y) - arm),
-                    width: Val::Px(arm * 0.4),
-                    height: Val::Px(arm * 2.0),
-                    ..default()
-                },
+                // The cross's other arm, on the same pixel.
+                bevy_gooey::placed(UiRect { left: Val::Px(overlay_px(at.x) - arm * 0.2), top: Val::Px(overlay_px(at.y) - arm), ..UiRect::all(Val::Auto) }),
+                bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Px(arm * 0.4)), height: Some(bevy_gooey::Extent::Px(arm * 2.0)), ..default() },
                 BackgroundColor(chrome::ink().accent),
-                Pickable::IGNORE,
             ));
         }
         root.spawn((
@@ -1188,16 +1172,9 @@ fn report_overlay(
             chrome::typed(chrome::text::LABEL),
             TextColor(chrome::ink().text),
             TextLayout::default().with_no_wrap(),
-            Node {
-                // PLACES-ITSELF-OK: the hint rides the top edge of the frozen frame, not a panel.
-                position_type: PositionType::Absolute,
-                top: Val::Px(chrome::GAP_GROUP),
-                left: Val::Px(0.0),
-                width: Val::Percent(100.0),
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-            Pickable::IGNORE,
+            // The hint rides the top edge of the frozen frame, not a panel: pinned left and right so it is as wide as the frame, its words centred.
+            bevy_gooey::placed(UiRect { left: Val::Px(0.0), right: Val::Px(0.0), top: Val::Px(chrome::GAP_GROUP), bottom: Val::Auto }),
+            bevy_gooey::RowLayout { justify: Some(JustifyContent::Center), ..default() },
         ));
     });
     // **Focus the root while pointing**, so `Tab` cycles inside the report rather than warning on the

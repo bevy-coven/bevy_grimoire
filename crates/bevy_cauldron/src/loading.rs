@@ -153,7 +153,7 @@ impl Plugin for LoadingPlugin {
                 commands.remove_resource::<LoadReport>();
                 commands.insert_resource(LoadPhase::Quiet);
             })
-            .add_systems(Update, (poll_the_load, show_the_report, show_the_phase).chain().run_if(in_state(Screen::Loading)));
+            .add_systems(Update, (poll_the_load, show_the_report, show_the_phase).chain().before(bevy_gooey::GooeySystems::Style).run_if(in_state(Screen::Loading)));
     }
 }
 
@@ -190,27 +190,22 @@ fn start_the_load(mut commands: Commands, request: Option<Res<LoadRequest>>, del
 }
 
 fn build_the_screen(mut commands: Commands) {
-    let hidden = |flex_direction| Node { display: Display::None, flex_direction, ..default() };
     // **The card is centred in what the terminal leaves** (#314): the screen's root is a column whose last row is
     // the docked terminal (`TerminalDock`), so the card sits in a growing cell above it rather than being centred
     // together with a 320 px pane, which would put the terminal mid-window.
-    let cell = Node {
-        width: Val::Percent(100.0),
-        flex_grow: 1.0,
-        min_height: Val::Px(0.0),
-        flex_direction: FlexDirection::Column,
-        align_items: AlignItems::Center,
-        justify_content: JustifyContent::Center,
-        ..default()
-    };
+    let cell = (
+        bevy_gooey::fill_region(),
+        bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(100.0)), ..default() },
+        bevy_gooey::RowLayout { align: Some(AlignItems::Center), justify: Some(JustifyContent::Center), ..default() },
+    );
     commands.spawn((screen(), DespawnOnExit(Screen::Loading), LoadingRoot, Name::new("loading"))).with_children(|root| {
         // `insert` after the widget's own `Node`: a bundle cannot carry two.
         root.spawn((cell, Pickable::IGNORE)).with_children(|cell| {
-            cell.spawn((panel(), LoadingPanel)).insert(hidden(FlexDirection::Column)).with_children(|card| {
+            cell.spawn((panel(), LoadingPanel, bevy_gooey::Shown(false))).with_children(|card| {
                 card.spawn(heading("Opening the project"));
                 card.spawn((label(""), StageLine));
-                card.spawn((spinner(), SpinnerRow)).insert(hidden(FlexDirection::Row));
-                card.spawn((progress(0.0), ProgressRow)).insert(hidden(FlexDirection::Column));
+                card.spawn((spinner(), SpinnerRow, bevy_gooey::Shown(false)));
+                card.spawn((progress(0.0), ProgressRow, bevy_gooey::Shown(false)));
                 card.spawn((
                     button("Cancel"),
                     observe(|_: On<bevy_gooey::Activate>, mut commands: Commands, job: Option<Res<LoadJob>>, mut next: ResMut<NextState<Screen>>| {
@@ -272,9 +267,9 @@ fn show_the_phase(
     timing: Res<LoadTiming>,
     time: Res<Time<Real>>,
     mut phase: ResMut<LoadPhase>,
-    mut panels: Query<&mut Node, PanelNode>,
-    mut spinners: Query<&mut Node, SpinnerNode>,
-    mut bars: Query<(&mut Node, &mut Progress, &mut ProgressText), BarNode>,
+    mut panels: Query<&mut bevy_gooey::Shown, PanelNode>,
+    mut spinners: Query<&mut bevy_gooey::Shown, SpinnerNode>,
+    mut bars: Query<(&mut bevy_gooey::Shown, &mut Progress, &mut ProgressText), BarNode>,
     mut lines: Query<&mut Text, With<StageLine>>,
 ) {
     let (want, stage) = match (&job, &failed) {
@@ -296,10 +291,9 @@ fn show_the_phase(
         *phase = want;
     }
     let showing = report.is_none() && failed.is_none() && want != LoadPhase::Quiet;
-    let set = |node: &mut Node, on: bool| {
-        let display = if on { Display::Flex } else { Display::None };
-        if node.display != display {
-            node.display = display;
+    let set = |shown: &mut bevy_gooey::Shown, on: bool| {
+        if shown.0 != on {
+            shown.0 = on;
         }
     };
     for mut node in &mut panels {
@@ -367,7 +361,7 @@ fn show_the_report(
             for row in rows {
                 card.spawn((label(row), ReportRow));
             }
-            crate::chrome::gapped_row(card, crate::chrome::GAP_GROUP_STEPS, UiRect::ZERO, AlignItems::Stretch).with_children(|row| {
+            crate::chrome::gapped_row(card, crate::chrome::GAP_GROUP_STEPS, crate::chrome::NO_MARGIN, AlignItems::Stretch).with_children(|row| {
                 if open_anyway {
                     row.spawn((
                         button("Open anyway"),

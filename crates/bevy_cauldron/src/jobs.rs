@@ -33,9 +33,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use bevy::picking::events::PointerClick;
-use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
-use bevy_gooey::{Placement, Role, StatusItem};
+use bevy_gooey::Placement;
 
 /// **One job, as the editor reports it.**
 ///
@@ -224,7 +223,7 @@ impl Plugin for JobsPlugin {
             )
             .add_systems(
                 Update,
-                (refresh_band, refresh_popover).run_if(in_state(crate::screen::Screen::Editor)),
+                (refresh_band.before(bevy_gooey::GooeySystems::Style), refresh_popover).run_if(in_state(crate::screen::Screen::Editor)),
             );
     }
 }
@@ -233,42 +232,30 @@ impl Plugin for JobsPlugin {
 fn spawn_band_item(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
     let item = commands
         .spawn((
-            // **Not a `bevy::ui_widgets::Button`**, deliberately: this editor has twenty-four global
-            // `Activate` observers and a `Button` fires `Activate` for every one of them. `quiet_row`
-            // documents the day that took the application down; a job item that brings its own click
-            // handling stays off the bus, and gooey styles it by its `Role` all the same.
-            Node { display: Display::None, ..default() },
-            Role::StatusItem,
-            StatusItem,
-            // **A job in progress is plain state, so the mark is not drawn** — `Role::StatusMark`
-            // hides itself unless the parent's kind is a warning or an error, which is gooey's own
-            // rule for what a status item's mark means.
-            bevy_gooey::StatusKind::Info,
-            Hovered::default(),
+            // **Not a `bevy::ui_widgets::Button`**, deliberately: this editor has twenty-four global `Activate` observers and a `Button` fires `Activate` for every one of them.
+            // `quiet_row` documents the day that took the application down; gooey's `status_item_quiet` is a status item that stays off the bus, hidden through `Shown` until
+            // a job runs. A job in progress is plain state (an `Info` kind), so the mark is not drawn.
+            bevy_gooey::status_item_quiet(String::new()),
+            bevy_gooey::Shown(false),
             bevy::picking::Pickable::default(),
             JobsItem,
-            children![
-                bevy_gooey::status_mark(),
-                // **`ControlText`, not `ButtonText`.** The item is deliberately not on the `Activate`
-                // bus (see the comment above), so its words must not claim to be a button's: a test
-                // that counts the interface's buttons by their role would see a job row as one.
-                (Text::new(String::new()), Role::ControlText, bevy::picking::Pickable::IGNORE),
-            ],
         ))
         .observe(open_on_click)
         .id();
+    // **`ControlText`, not `ButtonText`**: the item is deliberately not on the `Activate` bus, so its words must not claim to be a button's.
+    crate::chrome::the_words_of_a_quiet_item_are_a_control(&mut commands, item, ());
     commands.entity(frame.status).add_child(item);
 }
 
 /// One line in the band: the words, and whether the item is there at all. Both compared before being
 /// written, so a band with nothing running writes nothing on any frame.
-fn refresh_band(jobs: Option<Res<Jobs>>, mut items: Query<(&mut Node, &Children), With<JobsItem>>, mut texts: Query<&mut Text>) {
+fn refresh_band(jobs: Option<Res<Jobs>>, mut items: Query<(&mut bevy_gooey::Shown, &Children), With<JobsItem>>, mut texts: Query<&mut Text>) {
     let Some(jobs) = jobs else { return };
     let said = jobs.line();
-    for (mut node, children) in &mut items {
-        let display = if said.is_empty() { Display::None } else { Display::Flex };
-        if node.display != display {
-            node.display = display;
+    for (mut shown, children) in &mut items {
+        let on = !said.is_empty();
+        if shown.0 != on {
+            shown.0 = on;
         }
         for child in children.iter() {
             if let Ok(mut text) = texts.get_mut(child)

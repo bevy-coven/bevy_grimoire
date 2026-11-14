@@ -8,7 +8,11 @@ use crate::fixtures;
 
 /// The number of raw `Node` literals `chrome.rs` may carry, counted as the Kit ratchet counts (`Node {`, `Node{`,
 /// `Node::default()`). A new one needs a reason in the commit that adds it and this number raised by the same amount.
-const CHROME_NODES_LEFT: usize = 42;
+// 42 -> 38: #260 moved the heading and title margins and the row helpers' margins onto gooey's `Spacing`. Owner exception (2026-11-14): a ratchet tightened to the real count.
+// 38 -> 34: #260 moved the problem line, the row labels and the wrapping text onto gooey's `TextFlow`, `Sizing` and `Spacing`. Owner exception (2026-11-14): a ratchet tightened to the real count.
+// 34 -> 33: #260 moved the frame root's height onto gooey's `Extent::Vh`. Owner exception (2026-11-14): a ratchet tightened to the real count.
+// 33 -> 31: #260 moved the modal card, the severity rail and the frame root onto gooey's column, px border and Extent::Vh. Owner exception (2026-11-14): a ratchet tightened to the real count.
+const CHROME_NODES_LEFT: usize = 31;
 
 #[test]
 fn chrome_rs_carries_no_more_raw_nodes_than_it_is_counted_to() {

@@ -72,7 +72,7 @@ pub fn show_balloon(
     ui_scale: Res<UiScale>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<crate::view::MainCamera>>>,
     placed: Query<(&Placement, &GlobalTransform)>,
-    mut balloons: Query<(Entity, &mut Node, &mut Text), With<Balloon>>,
+    mut balloons: Query<(Entity, &mut bevy_gooey::PlacedAt, &mut Text), With<Balloon>>,
 ) {
     let text = preview.text();
     let anchor = camera.as_ref().zip(open.as_ref()).and_then(|(camera, open)| {
@@ -94,9 +94,11 @@ pub fn show_balloon(
     };
     let left = (at.x - WIDTH * 0.5).clamp(0.0, (vp.x - WIDTH).max(0.0));
     let bottom = (vp.y - at.y).max(0.0);
-    if let Ok((_, mut node, mut shown)) = balloons.single_mut() {
-        node.left = Val::Px(left);
-        node.bottom = Val::Px(bottom);
+    if let Ok((_, mut at, mut shown)) = balloons.single_mut() {
+        if at.0.left != Val::Px(left) || at.0.bottom != Val::Px(bottom) {
+            at.0.left = Val::Px(left);
+            at.0.bottom = Val::Px(bottom);
+        }
         if shown.0 != text {
             shown.0 = text;
         }
@@ -108,15 +110,10 @@ pub fn show_balloon(
         TextColor(crate::chrome::ink().text),
         crate::chrome::typed(crate::chrome::text::LABEL),
         BackgroundColor(crate::chrome::ink().overlay_bg),
-        Node {
-            // PLACES-ITSELF-OK: a balloon is anchored to a piece projected through the camera, not a panel.
-            position_type: PositionType::Absolute,
-            width: Val::Px(WIDTH),
-            left: Val::Px(left),
-            bottom: Val::Px(bottom),
-            padding: UiRect::all(Val::Px(crate::chrome::GAP_ROW)),
-            ..default()
-        },
+        // A balloon is anchored to a piece projected through the camera, not a panel: placed at its left and bottom edges, `WIDTH` wide, a row step of room inside.
+        bevy_gooey::placed(UiRect { left: Val::Px(left), bottom: Val::Px(bottom), ..UiRect::all(Val::Auto) }),
+        bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Px(WIDTH)), ..default() },
+        bevy_gooey::Spacing { padding: bevy_gooey::Sides::all(crate::chrome::STEP_ROW), ..default() },
         GlobalZIndex(crate::chrome::BALLOON_Z),
     ));
 }

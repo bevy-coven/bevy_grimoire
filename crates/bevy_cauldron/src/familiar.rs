@@ -565,7 +565,7 @@ fn follow_the_hand_back(
                         bevy_gooey::column_with(crate::chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }),
                     ))
                     .with_children(|card| {
-                        crate::chrome::wrapping_row(card, crate::chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Stretch)
+                        crate::chrome::wrapping_row(card, crate::chrome::GAP_TIGHT_STEPS, crate::chrome::NO_MARGIN, AlignItems::Stretch)
                             .with_children(|answers| {
                                 for (text, reply) in [
                                     ("Accept".to_owned(), crate::present::Reply::Accept),
@@ -608,7 +608,7 @@ fn follow_the_hand_back(
                                     row.spawn(bevy_gooey::fill_column(crate::chrome::GAP_TIGHT_STEPS))
                                         .with_children(|col| {
                                             for followed in presented.followed.iter().take(crate::style_followed::FOLLOWED_SHOWN_MAX) {
-                                                crate::chrome::wrapping_row(col, crate::chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Center)
+                                                crate::chrome::wrapping_row(col, crate::chrome::GAP_TIGHT_STEPS, crate::chrome::NO_MARGIN, AlignItems::Center)
                                                     .with_children(|line| {
                                                         line.spawn((
                                                             button(format!("{}:{}", followed.path, followed.line)),

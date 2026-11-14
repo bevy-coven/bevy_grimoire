@@ -33,7 +33,6 @@ use bevy::image::{CompressedImageFormats, ImageSampler, ImageType};
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::ui::Selected;
-use bevy::ui::auto_directional_navigation::AutoDirectionalNavigation;
 use bevy_gooey::{
     Activate, ContextMenu, ContextTarget, Role, SplitAxis, SplitFraction, SplitMin, TextHint, ToastAction, ValueChange, button, context_menu,
     fuzzy_score, heading, label, menu_item, observe, screen, separator, split, text_input, toast, toast_alert,
@@ -450,7 +449,7 @@ impl Plugin for LauncherPlugin {
             .add_systems(OnEnter(Screen::Launcher), (build_launcher, fill_the_home).chain())
             .add_systems(
                 Update,
-                (hide_the_divider, say_the_startup_notices, open_requested, on_picked, say_the_problem, redraw_the_cards, apply_filter, show_the_tab, mark_the_focus)
+                (hide_the_divider, say_the_startup_notices, open_requested, on_picked, say_the_problem, redraw_the_cards, apply_filter, show_the_tab.before(bevy_gooey::GooeySystems::Style), mark_the_focus)
                     .chain()
                     .run_if(in_state(Screen::Launcher)),
             );
@@ -520,7 +519,23 @@ fn paint_the_quiet_lines(skin: Option<Res<bevy_gooey::GooeySkin>>, mut lines: Qu
     }
 }
 
-/// A card's box: its width, padding and the gap between its lines.
+/// A card that is a button (#260): gooey's button box in a column, a card wide. The padding is the button skin's (a card was always padded by it: the 12 px its raw node asked for
+/// was overwritten, measured 9 x 3.6 px), and a button's role writes a gap along its row only, so a card's lines stand `STEP_TIGHT` apart by a bottom margin on each line above
+/// the last ([`card_line`]).
+pub(crate) fn card_button() -> impl Bundle {
+    (
+        bevy_gooey::button_box(),
+        bevy_gooey::RowLayout { direction: Some(FlexDirection::Column), align: Some(AlignItems::Stretch), ..default() },
+        bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Px(CARD_PX)), ..default() },
+    )
+}
+
+/// The room a card's line leaves before the next one (what `row_gap` was when the card was a raw column).
+pub(crate) fn card_line() -> bevy_gooey::Spacing {
+    crate::chrome::spacing(crate::chrome::margin_bottom(crate::chrome::STEP_TIGHT))
+}
+
+/// A card's box on a card that is not a button: its width, padding and the gap between its lines.
 pub(crate) fn card_node() -> Node {
     Node { flex_direction: FlexDirection::Column, width: Val::Px(CARD_PX), padding: UiRect::all(Val::Px(crate::chrome::PAD)), row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }
 }
@@ -637,7 +652,7 @@ pub(crate) fn fill_sidebar(commands: &mut Commands, sidebar: Entity, launcher: &
                 nav.insert(Selected);
             }
         }
-        side.spawn(Node { flex_grow: 1.0, ..default() });
+        side.spawn(bevy_gooey::spacer());
         side.spawn((
             button("Settings"),
             observe(|_: On<Activate>, mut out: MessageWriter<crate::settings_screen::OpenSettings>| {
@@ -762,16 +777,16 @@ fn fill_the_home(
     commands.entity(content).with_children(|content| {
         content.spawn(bevy_gooey::fill_region()).with_children(|pages| {
             pages
-                .spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, HomePage(HomeTab::Projects)))
+                .spawn((bevy_gooey::fill_region_with(crate::chrome::GAP_GROUP_STEPS), bevy_gooey::Shown(true), HomePage(HomeTab::Projects)))
                 .with_children(|page| {
-                    page.spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, ProjectsBody))
+                    page.spawn((bevy_gooey::fill_region_with(crate::chrome::GAP_GROUP_STEPS), ProjectsBody))
                         .with_children(|body| projects_body(body, &launcher, &mut art));
                 });
             pages
-                .spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_GROUP), display: Display::None, ..default() }, HomePage(HomeTab::Learn)))
+                .spawn((bevy_gooey::column(crate::chrome::GAP_GROUP_STEPS), bevy_gooey::Shown(false), HomePage(HomeTab::Learn)))
                 .with_children(|page| learn_page(page, &launcher));
             pages
-                .spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_ROW), display: Display::None, ..default() }, HomePage(HomeTab::WhatsNew)))
+                .spawn((bevy_gooey::fill_region_with(crate::chrome::GAP_ROW_STEPS), bevy_gooey::Shown(false), HomePage(HomeTab::WhatsNew)))
                 .with_children(|page| {
                     // FOLLOW-OK: the entries are focusable buttons in a column, not a list with a
                     // highlight of its own — gooey's focus navigation scrolls a focused entry into
@@ -800,9 +815,9 @@ fn projects_body(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut
         welcome(body, launcher, art);
         return;
     }
-    crate::chrome::gapped_row(body, crate::chrome::GAP_GROUP_STEPS, UiRect::ZERO, AlignItems::Center).with_children(|header| {
+    crate::chrome::gapped_row(body, crate::chrome::GAP_GROUP_STEPS, crate::chrome::NO_MARGIN, AlignItems::Center).with_children(|header| {
         header.spawn(heading("Projects"));
-        header.spawn(Node { flex_grow: 1.0, ..default() });
+        header.spawn(bevy_gooey::spacer());
         // The one accent button of the page: New project, or, with nothing else to start from, nothing.
         header.spawn((submit_button("New project"), observe(|_: On<Activate>, mut launcher: ResMut<Launcher>| launcher.new_project_asked = true)));
         header.spawn((button("Open folder…"), observe(|_: On<Activate>, mut out: MessageWriter<PickRequest>| { out.write(PickRequest(PickFor::OpenFolder)); })));
@@ -816,7 +831,7 @@ fn projects_body(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut
     // scrolls a focused card into view, and the wheel scrolls the rest.
     // **Type-select (UI-R04, #334):** the cards are a group, so typing a project's first letters moves to it, as it does in a list.
     crate::chrome::scroll_list(body, (ProjectGrid, bevy_gooey::TypeSelectGroup)).with_children(|scroll| {
-        crate::chrome::wrapping_row(scroll, crate::chrome::GAP_GROUP_STEPS, UiRect::ZERO, AlignItems::Stretch).with_children(|grid| {
+        crate::chrome::wrapping_row(scroll, crate::chrome::GAP_GROUP_STEPS, crate::chrome::NO_MARGIN, AlignItems::Stretch).with_children(|grid| {
             for row in &launcher.rows {
                 if row.missing {
                     missing_card(grid, row);
@@ -849,7 +864,11 @@ fn projects_body(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut
 /// - **The three steps answer "then what?"** in the space the centring left empty, and **Take the tour** —
 ///   the actual onboarding, which was two clicks away under Learn — is on the screen a first-timer lands on.
 fn welcome(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &Art) {
-    body.spawn(Node { flex_direction: FlexDirection::Column, align_items: AlignItems::FlexStart, row_gap: Val::Px(crate::chrome::GAP_GROUP), max_width: Val::Px(WELCOME_COLUMN_PX), ..default() }).with_children(|card| {
+    body.spawn((
+        bevy_gooey::column_with(crate::chrome::GAP_GROUP_STEPS, bevy_gooey::RowLayout { align: Some(AlignItems::FlexStart), ..default() }),
+        bevy_gooey::Sizing { max_width: Some(bevy_gooey::Extent::Px(WELCOME_COLUMN_PX)), ..default() },
+    ))
+    .with_children(|card| {
         if let Some((handle, size)) = art.splash.as_ref() {
             card.spawn((
                 bevy_gooey::aspect_image(handle.clone(), size.x * WELCOME_SPLASH_SCALE, size.x / size.y),
@@ -858,7 +877,7 @@ fn welcome(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &Art) {
         }
         card.spawn(heading("Welcome to Cauldron"));
         card.spawn((label(WELCOME_PITCH), TextLayout::new(Justify::Left, LineBreak::WordBoundary)));
-        crate::chrome::gapped_row(card, crate::chrome::GAP_GROUP_STEPS, UiRect::ZERO, AlignItems::Stretch).with_children(|actions| {
+        crate::chrome::gapped_row(card, crate::chrome::GAP_GROUP_STEPS, crate::chrome::NO_MARGIN, AlignItems::Stretch).with_children(|actions| {
             let example = launcher.example.is_some();
             if example {
                 actions.spawn((submit_button("Open the example"), observe(open_the_example)));
@@ -992,14 +1011,9 @@ fn project_card(grid: &mut ChildSpawnerCommands, row: &Listed, art: &mut Art) {
     let when = format!("Opened {}", ago(row.project.last_opened, art.now));
     let key = card_key(&path);
     grid.spawn((
-        card_node(),
-        // CHROME-OK: a card is none of chrome's three clickables, it is a gooey button's skeleton holding a picture (bevy_gooey#41)
-        bevy::ui_widgets::Button,
-        Role::Button,
-        Hovered::default(),
-        // FOCUS-DECISION-REOPENED: a card is a button like gooey's own (which carry a `TabIndex` too), reached by Tab and the arrows on a screen no editor chord routes
-        bevy::input_focus::tab_navigation::TabIndex(0),
-        AutoDirectionalNavigation::default(),
+        // CHROME-OK: a card is none of chrome's three clickables, it is a gooey button's box holding a picture (bevy_gooey#41)
+        // FOCUS-DECISION-REOPENED: a card is a button like gooey's own, reached by Tab and the arrows (`button_box` is a tab stop) on a screen no editor chord routes
+        card_button(),
         ContextMenu(art.menu),
         ProjectCard { path: path.clone(), key },
         // **A card is drawn a little smaller under the press** (UI-R04, #334), as gooey's own card cells are: a card here is a button
@@ -1009,10 +1023,10 @@ fn project_card(grid: &mut ChildSpawnerCommands, row: &Listed, art: &mut Art) {
     ))
     .with_children(|card| {
         if let Some(picture) = picture {
-            card.spawn(thumb_box(picture.image.clone())).insert(picture);
+            card.spawn(thumb_box(picture.image.clone())).insert((picture, card_line()));
         }
-        card.spawn((Text::new(name_of(&path)), Role::ButtonText, Pickable::IGNORE));
-        card.spawn((quiet(shown_folder(&path)), Pickable::IGNORE));
+        card.spawn((Text::new(name_of(&path)), Role::ButtonText, card_line(), Pickable::IGNORE));
+        card.spawn((quiet(shown_folder(&path)), Role::Sized, card_line(), Pickable::IGNORE));
         card.spawn((quiet(when), Pickable::IGNORE));
     });
 }
@@ -1029,7 +1043,7 @@ fn missing_card(grid: &mut ChildSpawnerCommands, row: &Listed) {
         card.spawn(quiet(name_of(&path)));
         card.spawn(label("Folder not found"));
         card.spawn(quiet(shown_folder(&path)));
-        crate::chrome::gapped_row(card, crate::chrome::GAP_ROW_STEPS, UiRect::ZERO, AlignItems::Stretch).with_children(|actions| {
+        crate::chrome::gapped_row(card, crate::chrome::GAP_ROW_STEPS, crate::chrome::NO_MARGIN, AlignItems::Stretch).with_children(|actions| {
             let locate = path.clone();
             actions.spawn((button("Locate…"), observe(move |_: On<Activate>, mut out: MessageWriter<PickRequest>| { out.write(PickRequest(PickFor::Locate(locate.clone()))); })));
             let gone = path.clone();
@@ -1210,12 +1224,10 @@ fn news_page(page: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut Art
         let fresh = launcher.whats_new.iter().any(|n| n.id == item.id);
         let picture = item.still.as_deref().and_then(still_image).map(|image| art.images.add(image));
         page.spawn((
-            Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_GROUP), padding: UiRect::all(Val::Px(crate::chrome::PAD)), ..default() },
-            // CHROME-OK: an entry is none of chrome's three clickables, it is a gooey button's skeleton holding a picture (bevy_gooey#41)
-            bevy::ui_widgets::Button,
-            Role::Button,
-            bevy::picking::hover::Hovered::default(),
-            bevy::ui::auto_directional_navigation::AutoDirectionalNavigation::default(),
+            // CHROME-OK: an entry is none of chrome's three clickables, it is a gooey button's box holding a picture (bevy_gooey#41): the button's skin pads it and puts its half gap between
+            // its parts, as it did the raw node (the 16 px gap and 12 px padding the node asked for were overwritten).
+            bevy_gooey::button_box(),
+            bevy_gooey::RowLayout { align: Some(AlignItems::Center), ..default() },
             NewsEntry(item.id.clone()),
             observe(|_: On<Activate>, mut launcher: ResMut<Launcher>| {
                 if let Err(e) = open_in_os(CHANGELOG_URL) {
@@ -1231,7 +1243,11 @@ fn news_page(page: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut Art
             // take whatever the window gave it — 118 characters a line at the capture's own width —
             // so it is bounded to `NEWS_MEASURE_PX` and the row's leftover is margin
             // (`feedback-1793905698793`).
-            entry.spawn(Node { flex_direction: FlexDirection::Column, width: Val::Px(NEWS_MEASURE_PX), max_width: Val::Px(NEWS_MEASURE_PX), flex_shrink: 1.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }).with_children(|words| {
+            entry.spawn((
+                bevy_gooey::column_with(crate::chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(1.0), ..default() }),
+                bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Px(NEWS_MEASURE_PX)), max_width: Some(bevy_gooey::Extent::Px(NEWS_MEASURE_PX)), ..default() },
+            ))
+            .with_children(|words| {
                 if fresh {
                     words.spawn((Text::new("New"), Role::Label, Pickable::IGNORE));
                 }
@@ -1393,11 +1409,11 @@ fn apply_filter(launcher: Res<Launcher>, mut cards: Query<Filterable, Or<(With<P
 }
 
 /// Shows the page the sidebar chose, and marks its row.
-fn show_the_tab(launcher: Res<Launcher>, mut pages: Query<(&HomePage, &mut Node)>, nav: Query<(Entity, &NavTab, Has<Selected>)>, mut commands: Commands) {
-    for (page, mut node) in &mut pages {
-        let display = if page.0 == launcher.tab { Display::Flex } else { Display::None };
-        if node.display != display {
-            node.display = display;
+fn show_the_tab(launcher: Res<Launcher>, mut pages: Query<(&HomePage, &mut bevy_gooey::Shown)>, nav: Query<(Entity, &NavTab, Has<Selected>)>, mut commands: Commands) {
+    for (page, mut shown) in &mut pages {
+        let on = page.0 == launcher.tab;
+        if shown.0 != on {
+            shown.0 = on;
         }
     }
     for (entity, tab, selected) in &nav {
