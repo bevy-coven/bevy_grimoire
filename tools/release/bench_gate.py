@@ -22,7 +22,9 @@ released** and **its comparison with the previous release's report is not `worse
   dependency, a checksum, an unbumped package's version) is judged as itself, which no report can match. A
   report run on an uncommitted tree (`+dirty`) is for no commit and is refused.
 - **The run is the release's run**: the default agent (`omp`) at `RELEASE_TRIALS = 5` trials, on the dev
-  suite and the held-out tasks, and fit to compare (`unfit` unset). Anything else is a different question.
+  suite and the held-out tasks, and fit to compare (`unfit` unset). Anything else is a different question. The
+  command that makes it names `--model RELEASE_MODEL` and `--jobs RELEASE_JOBS` (the runner's default model has
+  no quota today, and parallel trials take a 140-trial run from hours to about one or two).
 - **It is compared like with like.** The previous report must have the same agent, model, variant and trial
   count as the release's; only the **suite** may differ (it grows between releases, and `compare --across` pairs
   the tasks both runs scored). A baseline run with `--agent nothing` would make every release read
@@ -79,6 +81,13 @@ RUNS_DIR = REPO / "docs" / "bench" / "runs"
 RELEASE_TRIALS = 5
 #: The agent a release is measured with: the default agent, the one a person's editor is handed to.
 RELEASE_AGENT = "omp"
+#: **The model the release's run names** (`--model`), because the runner's default (`ollama-cloud/deepseek-v4.1-flash:1017`)
+#: has no quota today: every trial of it is a provider refusal (HTTP 429, a weekly limit). Naming one model for
+#: every release run also keeps the runs comparable, which the gate requires.
+RELEASE_MODEL = "anthropic/claude-sonnet-5-5"
+#: **How many trials a release's run makes at once** (`--jobs`): each starts its own editor under its own Xvfb. The
+#: first real-agent run (#432) put a 140-trial run at 3 to 8 h serial and 0.6 to 2.5 h at `--jobs 4..6`.
+RELEASE_JOBS = 4
 #: The label BM-04's first run was committed under, which the first release is compared with.
 BASELINE_LABEL = "baseline"
 #: `git rev-parse <commit>:<this>` names the code a report is for.
@@ -121,7 +130,10 @@ def run_howto(label: str) -> str:
     return (
         f"Where an editor can open a window (big, or a Mac): `{BUILD_COMMAND}` (the editor, its MCP server and the "
         f"runner must sit side by side in target/release), then `target/release/cauldron-bench run --agent "
-        f"{RELEASE_AGENT} --trials {RELEASE_TRIALS} --held-out {HELD_OUT_DIR} --label {label}`. `--label` writes "
+        f"{RELEASE_AGENT} --model {RELEASE_MODEL} --trials {RELEASE_TRIALS} --jobs {RELEASE_JOBS} "
+        f"--held-out {HELD_OUT_DIR} --label {label}`. `--model` is named because the runner's default model has no "
+        f"quota today (every trial of it is a provider refusal), and the same one is named for every release run so "
+        f"the runs compare. `--label` writes "
         f"docs/bench/runs/<date>-{label}.md and .json, and those files must then be COMMITTED "
         "(docs/loop/RUNNING-A-LOOP.md)"
     )
