@@ -156,6 +156,7 @@ impl Plugin for LoadingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<LoadTiming>()
             .init_resource::<LoadPhase>()
+            .init_resource::<SettleBudget>()
             .add_systems(OnEnter(Screen::Loading), (start_the_load, build_the_screen).chain())
             .add_systems(OnExit(Screen::Loading), |mut commands: Commands| {
                 commands.remove_resource::<LoadJob>();
@@ -164,6 +165,8 @@ impl Plugin for LoadingPlugin {
                 commands.remove_resource::<Entering>();
                 commands.insert_resource(LoadPhase::Quiet);
             })
+            .add_systems(OnExit(Screen::Editor), |mut commands: Commands| commands.remove_resource::<Settling>())
+            .add_systems(Update, settle_the_view.run_if(in_state(Screen::Editor)).run_if(resource_exists::<Settling>))
             .add_systems(Update, (poll_the_load, show_the_report, show_the_phase, enter_the_editor).chain().run_if(in_state(Screen::Loading)));
     }
 }
@@ -281,9 +284,65 @@ impl Entering {
     }
 }
 
-/// Counts the frames [`Stage::BuildEditor`] has been on screen, then enters the editor. **A Cancel in the meantime wins**:
-/// it takes the chosen door away, and a hand-over with no door is dropped instead of entering an editor with no project.
-fn enter_the_editor(mut commands: Commands, entering: Option<ResMut<Entering>>, chosen: Option<Res<crate::screen::Chosen>>, mut next: ResMut<NextState<Screen>>) {
+/// **The editor's frames are watched until they settle** (#430). The editor's own first frames, and what follows them (the
+/// GPU compiling its pipelines, thumbnails, the first frame's asset work), hold the window in frames the loading screen no longer
+/// owns, and a headless test cannot see the GPU's. So the hand-over leaves a quiet band, "Preparing the view", that stays
+/// until [`SettleBudget::quiet_frames`] frames in a row take under [`SettleBudget::frame`], and that can never stay for
+/// longer than [`SettleBudget::cap`].
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SettleBudget {
+    /// The slowest a frame may take and count as quiet: a frame at 20 fps.
+    pub frame: Duration,
+    /// How many quiet frames in a row end the wait.
+    pub quiet_frames: u32,
+    /// The longest the band stays whatever the frames do, so it can never stick.
+    pub cap: Duration,
+}
+
+impl Default for SettleBudget {
+    fn default() -> Self {
+        SettleBudget { frame: Duration::from_millis(SETTLE_FRAME_MS), quiet_frames: SETTLE_QUIET_FRAMES, cap: Duration::from_secs(SETTLE_CAP_S) }
+    }
+}
+
+/// The slowest frame that counts as quiet, in milliseconds.
+pub const SETTLE_FRAME_MS: u64 = 50;
+
+/// How many quiet frames in a row the editor needs before the band goes: half a second at 20 fps or better.
+pub const SETTLE_QUIET_FRAMES: u32 = 10;
+
+/// The most seconds the band stays: a window that has not settled by then is not going to, and a band that stays is worse.
+pub const SETTLE_CAP_S: u64 = 10;
+
+/// How far the band is from the window's left and bottom edges, in logical px.
+const BAND_INSET_PX: f32 = 16.0;
+
+/// What the band says.
+pub const PREPARING_WORDS: &str = "Preparing the view";
+
+/// **The editor has been entered and its frames have not settled yet.**
+#[derive(Resource, Clone, Copy, Debug)]
+struct Settling {
+    /// Real time when the hand-over happened.
+    since: Duration,
+    /// Frames in a row under the budget so far.
+    quiet: u32,
+}
+
+/// The quiet band that says the view is being prepared.
+#[derive(Component)]
+pub struct PreparingBand;
+
+/// Counts the frames [`Stage::BuildEditor`] has been on screen, then enters the editor and leaves the [`PreparingBand`] up.
+/// **A Cancel in the meantime wins**: it takes the chosen door away, and a hand-over with no door is dropped instead of
+/// entering an editor with no project.
+fn enter_the_editor(
+    mut commands: Commands,
+    entering: Option<ResMut<Entering>>,
+    chosen: Option<Res<crate::screen::Chosen>>,
+    time: Res<Time<Real>>,
+    mut next: ResMut<NextState<Screen>>,
+) {
     let Some(mut entering) = entering else { return };
     if chosen.is_none() {
         commands.remove_resource::<Entering>();
@@ -292,7 +351,47 @@ fn enter_the_editor(mut commands: Commands, entering: Option<ResMut<Entering>>, 
     entering.frames_left = entering.frames_left.saturating_sub(1);
     if entering.frames_left == 0 {
         commands.remove_resource::<Entering>();
+        commands.insert_resource(Settling { since: time.elapsed(), quiet: 0 });
+        commands
+            .spawn((
+                bevy_gooey::placed(UiRect { left: Val::Px(BAND_INSET_PX), bottom: Val::Px(BAND_INSET_PX), ..UiRect::all(Val::Auto) }),
+                PreparingBand,
+                GlobalZIndex(crate::chrome::MODAL_Z),
+                DespawnOnExit(Screen::Editor),
+                Name::new("preparing the view"),
+            ))
+            .with_children(|band| {
+                band.spawn(panel()).with_children(|card| {
+                    card.spawn(spinner());
+                    card.spawn(label(PREPARING_WORDS));
+                });
+            });
         next.set(Screen::Editor);
+    }
+}
+
+/// Takes the band down once the editor's frames have settled, or at the cap.
+fn settle_the_view(
+    time: Res<Time<Real>>,
+    budget: Res<SettleBudget>,
+    mut settling: ResMut<Settling>,
+    bands: Query<Entity, With<PreparingBand>>,
+    mut commands: Commands,
+) {
+    if time.delta() > budget.frame {
+        settling.quiet = 0;
+    } else {
+        settling.quiet += 1;
+    }
+    let capped = time.elapsed().saturating_sub(settling.since) >= budget.cap;
+    if settling.quiet >= budget.quiet_frames || capped {
+        if capped && settling.quiet < budget.quiet_frames {
+            warn!("the editor's frames did not settle in {:?}; taking the preparing band down anyway", budget.cap);
+        }
+        for band in &bands {
+            commands.entity(band).despawn();
+        }
+        commands.remove_resource::<Settling>();
     }
 }
 
