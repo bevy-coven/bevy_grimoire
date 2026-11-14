@@ -771,6 +771,12 @@ struct Gates<'w, 's> {
     /// carried by the same view.
     bench: Option<ResMut<'w, crate::anim_tab::BenchState>>,
     build: Option<ResMut<'w, crate::build::Build>>,
+    /// **The rig bench's stage** (E-002, #129 slice 26): what `stage_play`, `stage_scrub` and `stage_camera` change,
+    /// carried by the same view.
+    scrub: Option<ResMut<'w, crate::anim_stage::BenchScrub>>,
+    camera: Option<ResMut<'w, crate::anim_stage::BenchCamera>>,
+    /// **The lattice grid's cursor** (E-002, #129 slice 27): what `lattice_cursor_step` changes, carried by the same view.
+    cells: Option<ResMut<'w, crate::tiles::CellEdit>>,
 }
 
 impl Gates<'_, '_> {
@@ -804,6 +810,12 @@ impl Gates<'_, '_> {
             }),
             packs: import.map(|i| i.folds()).unwrap_or_default(),
             filter_pane: filters.and_then(|f| f.focus_name()),
+            lattice: self.cells.as_deref().zip(import).zip(project).and_then(|((edit, import), project)| crate::tiles::lattice_cursor(edit, import, project)),
+            stage: crate::ops_view::StageCursor {
+                playing: self.scrub.as_deref().is_none_or(|s| s.playing),
+                phase: self.scrub.as_deref().map(|s| s.phase).unwrap_or_default(),
+                camera: self.camera.as_deref().map(|c| c.0).unwrap_or_default(),
+            },
             ..Default::default()
         }
     }
@@ -892,6 +904,26 @@ impl Gates<'_, '_> {
             && let Some(pane) = filters.box_to_clear(view.filter_pane.as_deref(), view.filter_fresh)
         {
             filters.take_focus(pane);
+        }
+        // **The rig bench's stage** (E-002, #129 slice 26), written only when it moved: the scrub is rewritten every playing
+        // frame, and a write that changes nothing would still mark it changed.
+        if self.scrub.as_deref().is_some_and(|s| s.playing != view.stage.playing || s.phase != view.stage.phase)
+            && let Some(scrub) = self.scrub.as_deref_mut()
+        {
+            scrub.playing = view.stage.playing;
+            scrub.phase = view.stage.phase;
+        }
+        if self.camera.as_deref().is_some_and(|c| c.0 != view.stage.camera)
+            && let Some(camera) = self.camera.as_deref_mut()
+        {
+            camera.0 = view.stage.camera;
+        }
+        // **The lattice grid's cursor** (E-002, #129 slice 27), written only when it moved, and a moved cursor closes an open token field.
+        if let Some(cursor) = view.lattice
+            && self.cells.as_deref().is_some_and(|e| !e.is_at(&cursor))
+            && let Some(edit) = self.cells.as_deref_mut()
+        {
+            edit.set_cursor(&cursor);
         }
     }
 

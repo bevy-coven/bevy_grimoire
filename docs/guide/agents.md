@@ -138,6 +138,9 @@ Goal: know what an agent can change, and what undoes each change.
 | `tile_page_walk` | Moves the Tiles page's cursor along its rows (`+ New Tile`, then the kit's tiles), `by` `prev` or `next`, `rows` at a time, as up and down do. It stops at the ends of the page, and is refused unless the Tiles page is up. | None: it changes the view, not the map |
 | `pack_fold` | Folds a pack away on the Meshes tab's candidate list, or opens it, as Space on a heading or a click on it does. Name the `pack` (a folder under `assets/`, not a mesh path) or `excluded: true` for the EXCLUDED band; `folded` says which way, and absent toggles. It is not refused for a folder the list does not draw: a pack can appear between a call and the list it read. | None: it changes the view, not the map |
 | `filter_focus` | Puts the keyboard in a filter box, `palette`, `candidates`, `rigs` or `tags`, and starts its search fresh, as F and / do. | None: it changes the view, not the map |
+| `stage_play` | Plays the rig bench's staged figure, or pauses it into a scrub: `playing` `true` or `false`, and absent toggles, as Space does. | None: it changes the view, not the map |
+| `stage_scrub` | Scrubs the paused figure's phase, `by` `back` or `fwd`, for `seconds` of a held key (a quarter of the cycle per second), `fine` for Shift, as the left and right arrows do. Refused while the figure plays. | None: it changes the view, not the map |
+| `stage_camera` | Frames the rig bench's stage camera, `preset` `figure`, `feet`, `side` or `ground`; absent steps to the next, as V does. | None: it changes the view, not the map |
 | `label_set` | Sets one label axis (kind, effects, look, or surfaces) on a piece. | Puts the old labels back |
 
 `map_set_settings` refuses `bounds` and `axis` in the same call.

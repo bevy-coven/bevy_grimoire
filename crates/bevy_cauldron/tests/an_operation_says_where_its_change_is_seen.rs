@@ -66,6 +66,14 @@ const PINNED_NOWHERE: &[&str] = &[
     // list's groups are folded and which filter box has the keyboard, which a person's own view holds, like the picker's above.
     "pack_fold",
     "filter_focus",
+    // Assumed owner exception (2026-11-13): the list grows by the three operations #129 slice 26 registers, whether the rig
+    // bench's figure plays, the phase a scrub holds and the stage camera's framing, which a person's own view holds, like the picker's above.
+    "stage_play",
+    "stage_scrub",
+    "stage_camera",
+    // Assumed owner exception (2026-11-13): the list grows by the operation #129 slice 27 registers, the lattice grid's cursor,
+    // which a person's own view holds, like the picker's above.
+    "lattice_cursor_step",
     "tool_arm",
     "snip_arm",
     "brush_arm",

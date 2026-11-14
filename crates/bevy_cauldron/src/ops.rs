@@ -3715,6 +3715,375 @@ pub mod shelf_cursors {
     }
 }
 
+/// **The rig bench's stage** (E-002, #129 slice 26): whether the figure plays, the phase a scrub holds while it is
+/// paused, and the camera preset it is framed by. Three view operations on one body of rules, so `Space`, the held left
+/// and right arrows, `V` and an agent's call cannot disagree about what a toggle, a sweep or a cycle means. The stage is
+/// what a person is looking at: none of these writes a file or takes an undo step.
+pub mod stage {
+    use super::list_walk::need_view;
+    use super::*;
+    use crate::anim_stage::{CamPreset, FINE_DIVISOR, SCRUB_RATE};
+    use crate::ops_view::StageCursor;
+    use serde_json::json;
+
+    /// **The longest scrub one call may make**, in seconds of the key being held: far past any frame, so a request is a
+    /// sweep and not a spin.
+    pub const MAX_SCRUB_SECONDS: f32 = 60.0;
+
+    /// **A scrub's default length**, in seconds of the key being held: a quarter of a second is a short tap.
+    pub const DEFAULT_SCRUB_SECONDS: f32 = 0.25;
+
+    /// The two directions of a scrub, named as the keys are (`ScrubBack`, `ScrubFwd`).
+    pub const DIRECTIONS: &[&str] = &["back", "fwd"];
+
+    fn stage_in<'a>(ctx: &'a Ctx, what: &str) -> Result<&'a StageCursor, Refusal> {
+        Ok(&need_view(ctx, what)?.stage)
+    }
+
+    /// **Put the stage where an operation answered**, and say what happened.
+    fn settle(ctx: &mut Ctx, landed: StageCursor, summary: String, after: serde_json::Value) -> Result<Outcome, Refusal> {
+        let Some(view) = ctx.view.as_mut() else {
+            return Err(Refusal::new("no view is in hand, so there is no stage to change."));
+        };
+        view.stage = landed;
+        Ok(Outcome { summary, affected: 0, saved: false, inverse: None, after: Some(after) })
+    }
+
+    /// **Play the figure, or pause it into a scrub**, as `Space` does. The phase carries across the change.
+    pub mod stage_play {
+        use super::*;
+
+        #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `true` plays, `false` pauses; absent toggles, as `Space` does.
+            #[serde(default)]
+            pub playing: Option<bool>,
+        }
+
+        pub struct StagePlay;
+
+        impl StagePlay {
+            fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<StageCursor, Refusal> {
+                let p: Params = serde_json::from_value(params.clone())
+                    .map_err(|e| Refusal::new(format!("these are not a play: {e}. The only field is `playing`, true or false.")))?;
+                let now = stage_in(ctx, "play or pause")?;
+                Ok(StageCursor { playing: p.playing.unwrap_or(!now.playing), ..*now })
+            }
+        }
+
+        impl Operation for StagePlay {
+            fn name(&self) -> &'static str {
+                "stage_play"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "playing": {"type": "boolean", "description": "`true` plays the staged figure at its own authored speed; `false` pauses it, and the arrows then scrub its phase. Absent toggles, as Space does."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                Ok(json!({ "playing": Self::landing(ctx, params)?.playing }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let landed = Self::landing(ctx, params)?;
+                let summary = if landed.playing {
+                    "the figure plays"
+                } else {
+                    "the figure is paused: left and right scrub its phase"
+                };
+                settle(ctx, landed, summary.to_owned(), json!({ "playing": landed.playing }))
+            }
+        }
+    }
+
+    /// **Scrub the paused figure's phase**, for as long as a key would be held.
+    pub mod stage_scrub {
+        use super::*;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `"back"` or `"fwd"`.
+            pub by: String,
+            /// For how long the key would be held, in seconds. The sweep is a quarter of the cycle per second.
+            #[serde(default = "default_seconds")]
+            pub seconds: f32,
+            /// `true` is Shift: a fifth of the sweep.
+            #[serde(default)]
+            pub fine: bool,
+        }
+
+        fn default_seconds() -> f32 {
+            DEFAULT_SCRUB_SECONDS
+        }
+
+        pub struct StageScrub;
+
+        impl StageScrub {
+            fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<StageCursor, Refusal> {
+                let p: Params = serde_json::from_value(params.clone()).map_err(|e| {
+                    Refusal::new(format!("these are not a scrub: {e}. The fields are `by`, `back` or `fwd`, `seconds` and `fine`."))
+                })?;
+                let by = match p.by.as_str() {
+                    "back" => -1.0,
+                    "fwd" => 1.0,
+                    other => {
+                        return Err(Refusal::new(format!("`{other}` is not a direction; say one of {}", DIRECTIONS.join(", "))));
+                    }
+                };
+                if !(p.seconds > 0.0 && p.seconds <= MAX_SCRUB_SECONDS) {
+                    return Err(Refusal::new(format!("`seconds` is {}, and a scrub is longer than 0 and at most {MAX_SCRUB_SECONDS}", p.seconds)));
+                }
+                let now = stage_in(ctx, "scrub")?;
+                if now.playing {
+                    return Err(Refusal::new(
+                        "the figure is playing, and it keeps its own phase; there is nothing to scrub. Pause it first (`stage_play`).",
+                    ));
+                }
+                let fine = if p.fine { FINE_DIVISOR } else { 1.0 };
+                let phase = bevy_grimoire_anim::wrap01(now.phase + by * SCRUB_RATE / fine * p.seconds);
+                Ok(StageCursor { phase, ..*now })
+            }
+        }
+
+        impl Operation for StageScrub {
+            fn name(&self) -> &'static str {
+                "stage_scrub"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["by"],
+                    "properties": {
+                        "by": {"type": "string", "enum": DIRECTIONS, "description": "Which way to scrub the paused figure's phase: `back` is the left arrow and `fwd` the right. Refused while the figure is playing (`stage_play` pauses it)."},
+                        "seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": MAX_SCRUB_SECONDS, "description": "For how long the key would be held, in seconds: the phase moves a quarter of the cycle per second. A quarter of a second unless given."},
+                        "fine": {"type": "boolean", "description": "`true` is Shift held: a fifth of the sweep."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                Ok(json!({ "phase": Self::landing(ctx, params)?.phase }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let landed = Self::landing(ctx, params)?;
+                settle(ctx, landed, format!("the phase is {:.3}", landed.phase), json!({ "phase": landed.phase }))
+            }
+        }
+    }
+
+    /// **Frame the stage camera**: the next preset, or the one named.
+    pub mod stage_camera {
+        use super::*;
+
+        #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `figure`, `feet`, `side` or `ground`; absent steps to the next, as `V` does.
+            #[serde(default)]
+            pub preset: Option<String>,
+        }
+
+        pub struct StageCamera;
+
+        fn names() -> Vec<&'static str> {
+            CamPreset::ALL.into_iter().map(CamPreset::label).collect()
+        }
+
+        impl StageCamera {
+            fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<StageCursor, Refusal> {
+                let p: Params = serde_json::from_value(params.clone())
+                    .map_err(|e| Refusal::new(format!("these are not a framing: {e}. The only field is `preset`.")))?;
+                let now = stage_in(ctx, "frame")?;
+                let camera = match p.preset {
+                    None => now.camera.next(),
+                    Some(name) => CamPreset::from_label(&name)
+                        .ok_or_else(|| Refusal::new(format!("`{name}` is not a camera preset; say one of {}", names().join(", "))))?,
+                };
+                Ok(StageCursor { camera, ..*now })
+            }
+        }
+
+        impl Operation for StageCamera {
+            fn name(&self) -> &'static str {
+                "stage_camera"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "preset": {"type": "string", "enum": names(), "description": "How the rig bench's stage camera frames the figure: the whole figure, its feet, a low side profile, or near ground level. Absent steps to the next, as V does."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                Ok(json!({ "preset": Self::landing(ctx, params)?.camera.label() }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let landed = Self::landing(ctx, params)?;
+                let preset = landed.camera.label();
+                settle(ctx, landed, format!("the stage camera frames the {preset}"), json!({ "preset": preset }))
+            }
+        }
+    }
+}
+
+/// **The lattice grid's cursor, stepped** (E-002, #129 slice 27): `F`, `H`, `T` and `G` step the selected cell along a
+/// layer and `[` and `]` step the layer the grid shows, on the Meshes tab. One view operation for the six keys, on the rules
+/// the keys always had: a step stops at the grid's edges, the cursor rides the layer instead of being dropped by it, and a
+/// layer step that goes nowhere changes nothing. A cursor is what a person is looking at, so it writes no file and takes no
+/// undo step.
+pub mod lattice_cursor_step {
+    use super::*;
+    use crate::ops_view::LatticeCursor;
+    use serde_json::json;
+
+    /// **The six steps an agent names**, in the order of the keys that make them, beside the schema so the parse and the
+    /// schema cannot disagree.
+    pub const STEPS: &[&str] = &["left", "right", "forward", "back", "down", "up"];
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Params {
+        /// One of [`STEPS`].
+        pub by: String,
+    }
+
+    pub struct LatticeCursorStep;
+
+    impl LatticeCursorStep {
+        /// **Where the cursor lands**: the one rule, for `plan` and `commit`.
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<LatticeCursor, Refusal> {
+            let p: Params = serde_json::from_value(params.clone())
+                .map_err(|e| Refusal::new(format!("these are not a step: {e}. The only field is `by`, one of {}.", STEPS.join(", "))))?;
+            if !STEPS.contains(&p.by.as_str()) {
+                return Err(Refusal::new(format!("`{}` is not a step; say one of {}", p.by, STEPS.join(", "))));
+            }
+            let cursor = super::list_walk::need_view(ctx, "step")?.lattice.ok_or_else(|| {
+                Refusal::new(
+                    "no piece's lattice is up, so there is no grid cursor to step. Select a library piece on the Meshes tab (`piece_select`).",
+                )
+            })?;
+            let (dx, dy, dz) = cursor.div;
+            // A lattice with no cells in one direction has no cell to stand on; `divisions` refuses a zero, but this is a
+            // cursor and `dy - 1` on one would wrap to `u32::MAX`.
+            if dx == 0 || dy == 0 || dz == 0 {
+                return Err(Refusal::new(format!("the lattice is {dx}x{dy}x{dz}, which has no cell to stand on.")));
+            }
+            let mut layer = cursor.layer.min(dy - 1);
+            match p.by.as_str() {
+                "down" => layer = layer.saturating_sub(1),
+                "up" => layer = (layer + 1).min(dy - 1),
+                _ => {}
+            }
+            let layer_step = matches!(p.by.as_str(), "down" | "up");
+            // **A layer step that goes nowhere writes nothing**: the cursor stays where it was, including no cell at all.
+            if layer_step && layer == cursor.layer {
+                return Ok(cursor);
+            }
+            // **The cursor rides the layer rather than being dropped by it**: (x, z) stay and y moves, so walking up a
+            // lattice column stays on the column an author is looking at instead of clearing the selection every step.
+            let mut at = cursor.at.unwrap_or((0, layer, 0));
+            at.1 = layer;
+            match p.by.as_str() {
+                "left" => at.0 = at.0.saturating_sub(1),
+                "right" => at.0 = (at.0 + 1).min(dx - 1),
+                "forward" => at.2 = (at.2 + 1).min(dz - 1),
+                "back" => at.2 = at.2.saturating_sub(1),
+                _ => {}
+            }
+            at.0 = at.0.min(dx - 1);
+            at.2 = at.2.min(dz - 1);
+            Ok(LatticeCursor { layer, at: Some(at), ..cursor })
+        }
+    }
+
+    impl Operation for LatticeCursorStep {
+        fn name(&self) -> &'static str {
+            "lattice_cursor_step"
+        }
+        fn changes_view(&self) -> bool {
+            true
+        }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::Nowhere
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &[]
+        }
+        fn undo(&self) -> Undo {
+            Undo::None
+        }
+        fn schema(&self) -> serde_json::Value {
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["by"],
+                "properties": {
+                    "by": {"type": "string", "enum": STEPS, "description": "Which way to step the lattice grid's cursor on the Meshes tab: `left`, `right`, `forward` and `back` move the selected cell along the layer shown (F, H, T and G), `down` and `up` show the previous or next layer (`[` and `]`) and the cursor rides it. Every step stops at the grid's edge. Refused unless a library piece is selected."},
+                },
+            })
+        }
+        fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+            let landed = Self::landing(ctx, params)?;
+            Ok(json!({ "layer": landed.layer, "at": landed.at }))
+        }
+        fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+            let landed = Self::landing(ctx, params)?;
+            let Some(view) = ctx.view.as_mut() else {
+                return Err(Refusal::new("no view is in hand, so there is no grid cursor to step."));
+            };
+            view.lattice = Some(landed);
+            let summary = match landed.at {
+                Some((x, y, z)) => format!("the grid's cursor is on cell ({x}, {y}, {z})"),
+                None => format!("the grid shows layer {}", landed.layer),
+            };
+            Ok(Outcome { summary, affected: 0, saved: false, inverse: None, after: Some(json!({ "layer": landed.layer, "at": landed.at })) })
+        }
+    }
+}
+
 pub mod view_cycle_grid {
     use super::*;
     use serde_json::json;
@@ -6030,6 +6399,10 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(list_cursors::tile_page_walk::TilePageWalk),
         Box::new(shelf_cursors::pack_fold::PackFold),
         Box::new(shelf_cursors::filter_focus::FilterFocus),
+        Box::new(stage::stage_play::StagePlay),
+        Box::new(stage::stage_scrub::StageScrub),
+        Box::new(stage::stage_camera::StageCamera),
+        Box::new(lattice_cursor_step::LatticeCursorStep),
         Box::new(tool_arm::ToolArm),
         Box::new(snip_arm::SnipArm),
         Box::new(map_create::MapCreate),
@@ -6308,6 +6681,14 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // and the heading clicks), and `F` and `/` dispatch `filter_focus` (`tiles::focus_filter`).
     ("pack_fold", "\"pack_fold\""),
     ("filter_focus", "\"filter_focus\""),
+    // **The bench's stage keys** (E-002, #129 slice 26): `Space` dispatches `stage_play`, the held left and right arrows
+    // `stage_scrub`, and `V` `stage_camera`, through `anim_stage`'s `drive_bench_scrub` and `cycle_cam_preset`.
+    ("stage_play", "\"stage_play\""),
+    ("stage_scrub", "\"stage_scrub\""),
+    ("stage_camera", "\"stage_camera\""),
+    // **The lattice grid's cursor keys** (E-002, #129 slice 27): `F`, `H`, `T`, `G`, `[` and `]` dispatch `lattice_cursor_step`,
+    // through `tiles::lattice_keys`.
+    ("lattice_cursor_step", "\"lattice_cursor_step\""),
     // **The clone and run keys**, which dispatch `tool_arm` through `arm_tool` (E-002, #129). Two keys,
     // one rule: press to arm, press again to return to `Tool::Place`.
     ("tool_arm", "\"tool_arm\""),

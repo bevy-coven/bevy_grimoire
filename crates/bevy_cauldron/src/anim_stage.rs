@@ -31,11 +31,12 @@ pub const BENCH_STAGE: Vec3 = crate::stages::BENCH;
 /// as `tiles::TILE_VIEW_HEIGHT`.
 pub const BENCH_VIEW_HEIGHT: f32 = 4.0;
 
-/// Cycles per second a held scrub key sweeps, before the Shift divisor.
-const SCRUB_RATE: f32 = 0.25;
+/// Cycles per second a held scrub key sweeps, before the Shift divisor. `ops::stage` moves the phase by this rate, so the
+/// key and an agent's call sweep at one speed.
+pub(crate) const SCRUB_RATE: f32 = 0.25;
 
 /// How much slower Shift makes the sweep.
-const FINE_DIVISOR: f32 = 5.0;
+pub(crate) const FINE_DIVISOR: f32 = 5.0;
 
 /// The staged preview's root.
 #[derive(Component)]
@@ -96,7 +97,8 @@ pub(crate) struct ScrubLine;
 #[derive(Resource, Default, Clone, Copy, PartialEq)]
 pub struct BenchCamera(pub CamPreset);
 
-#[derive(Default, Clone, Copy, PartialEq, Debug)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum CamPreset {
     /// The whole figure, the tab's original framing.
     #[default]
@@ -117,6 +119,14 @@ impl CamPreset {
             CamPreset::Side => CamPreset::Ground,
             CamPreset::Ground => CamPreset::Figure,
         }
+    }
+
+    /// Every preset, in the order `V` cycles them, so a request's names and the cycle cannot disagree.
+    pub const ALL: [CamPreset; 4] = [CamPreset::Figure, CamPreset::Feet, CamPreset::Side, CamPreset::Ground];
+
+    /// The preset a name spells, or `None`.
+    pub fn from_label(name: &str) -> Option<CamPreset> {
+        CamPreset::ALL.into_iter().find(|p| p.label() == name)
     }
 
     pub fn label(self) -> &'static str {
@@ -142,14 +152,54 @@ impl CamPreset {
     }
 }
 
-/// `V`: the next preset.
+/// **Dispatch a stage operation for a key** (E-002, #129 slice 26), and answer the stage as the operation left it, or
+/// `None` when it refused.
+///
+/// **The project's root travels with it**, because the operation is logged and a log with no place to be written is a
+/// refusal that takes the change back (#224). `repeat` is a held key's later frames: the same operation without a second
+/// log line (`ops::dispatch_repeat`), because "I held the key" is one act.
+fn dispatch_stage(
+    stage: crate::ops_view::StageCursor,
+    project: Option<&crate::project::Project>,
+    operation: &str,
+    params: serde_json::Value,
+    repeat: bool,
+) -> Option<crate::ops_view::StageCursor> {
+    let mut ctx = crate::ops::Ctx {
+        root: project.map(|p| p.root.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View { stage, ..Default::default() }),
+        ..crate::ops::Ctx::default()
+    };
+    let applied = if repeat {
+        crate::ops::dispatch_repeat(&mut ctx, operation, &params)
+    } else {
+        crate::ops::dispatch(&mut ctx, operation, &params)
+    };
+    match applied {
+        Ok(crate::ops::Applied::Done { .. }) => ctx.view.map(|v| v.stage),
+        Ok(crate::ops::Applied::Refused(_)) | Err(_) => None,
+    }
+}
+
+/// `V`: the next preset, through `stage_camera`, the operation an agent calls.
 pub(crate) fn cycle_cam_preset(
     keyboard: Res<ButtonInput<KeyCode>>,
     live: Res<crate::keys::Live>,
+    scrub: Res<BenchScrub>,
     mut cam: ResMut<BenchCamera>,
+    project: Option<Res<crate::project::Project>>,
 ) {
-    if crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::CycleCamPreset) {
-        cam.0 = cam.0.next();
+    if !crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::CycleCamPreset) {
+        return;
+    }
+    let stage = crate::ops_view::StageCursor { playing: scrub.playing, phase: scrub.phase, camera: cam.0 };
+    // Compared before writing: a write through a `ResMut` marks it changed, and `tiles::stage_camera` re-frames on a change.
+    if let Some(after) = dispatch_stage(stage, project.as_deref(), "stage_camera", serde_json::json!({}), false)
+        && after.camera != cam.0
+    {
+        cam.0 = after.camera;
     }
 }
 
@@ -539,28 +589,48 @@ type Blenders<'w, 's> = Query<
 
 /// **Drive the staged blender** — the bench's creature driver, ordered exactly like the game's
 /// (`.after(PoseAttachSet).before(PoseBlendSet)`).
+#[allow(clippy::too_many_arguments)] // a bevy system: each parameter is a resource the key and the driver read
 pub(crate) fn drive_bench_scrub(
     keyboard: Res<ButtonInput<KeyCode>>,
     live: Res<crate::keys::Live>,
     time: Res<Time>,
     bench: Option<Res<BenchState>>,
+    camera: Res<BenchCamera>,
+    project: Option<Res<crate::project::Project>>,
     mut scrub: ResMut<BenchScrub>,
     mut blenders: Blenders<'_, '_>,
 ) {
-    // Space toggles; the phase carries across the toggle in both directions.
-    if crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::PlayPause) {
-        scrub.playing = !scrub.playing;
+    use crate::keys::Action;
+    let project = project.as_deref();
+    let cursor = |scrub: &BenchScrub| crate::ops_view::StageCursor { playing: scrub.playing, phase: scrub.phase, camera: camera.0 };
+    // Space toggles through `stage_play`, the operation an agent calls (E-002, #129 slice 26); the phase carries across
+    // the toggle in both directions. Compared before writing: the scrub is rewritten every playing frame, but a frame that
+    // changes nothing must not mark it changed.
+    if crate::keys::just_pressed(&keyboard, *live, Action::PlayPause)
+        && let Some(after) = dispatch_stage(cursor(&scrub), project, "stage_play", serde_json::json!({}), false)
+        && after.playing != scrub.playing
+    {
+        scrub.playing = after.playing;
     }
-    let back = crate::keys::pressed(&keyboard, *live, crate::keys::Action::ScrubBack);
-    let fwd = crate::keys::pressed(&keyboard, *live, crate::keys::Action::ScrubFwd);
-    if !scrub.playing && (back || fwd) {
-        let fine = if crate::keys::shift_held(&keyboard) {
-            FINE_DIVISOR
-        } else {
-            1.0
-        };
-        let dir = (fwd as i8 - back as i8) as f32;
-        scrub.phase = bevy_grimoire_anim::wrap01(scrub.phase + dir * SCRUB_RATE / fine * time.delta_secs());
+    let back = crate::keys::pressed(&keyboard, *live, Action::ScrubBack);
+    let fwd = crate::keys::pressed(&keyboard, *live, Action::ScrubFwd);
+    let dt = time.delta_secs();
+    // **A held scrub is `stage_scrub` every frame**, for the seconds the frame lasted — the rate and the wrap are the
+    // operation's. The press is the change and logs a line; the frames after it are it continuing (`dispatch_repeat`).
+    // Both keys down cancel out, as they always did, and a playing figure is its own clock: the key stays silent there.
+    if !scrub.playing && back != fwd && dt > 0.0 {
+        let fresh = crate::keys::just_pressed(&keyboard, *live, Action::ScrubBack)
+            || crate::keys::just_pressed(&keyboard, *live, Action::ScrubFwd);
+        let params = serde_json::json!({
+            "by": if fwd { "fwd" } else { "back" },
+            "seconds": dt.min(crate::ops::stage::MAX_SCRUB_SECONDS),
+            "fine": crate::keys::shift_held(&keyboard),
+        });
+        if let Some(after) = dispatch_stage(cursor(&scrub), project, "stage_scrub", params, !fresh)
+            && after.phase != scrub.phase
+        {
+            scrub.phase = after.phase;
+        }
     }
 
     let Some(bench) = bench else { return };

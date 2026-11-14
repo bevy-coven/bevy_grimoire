@@ -264,12 +264,6 @@ const UNMIGRATED: &[Action] = &[
     Action::Rescan,
     Action::UndoTile,
     Action::RedoTile,
-    Action::CellLeft,
-    Action::CellRight,
-    Action::CellForward,
-    Action::CellBack,
-    Action::LayerDown,
-    Action::LayerUp,
     Action::TileListPrev,
     Action::TileListNext,
     Action::BuildForward,
@@ -302,11 +296,7 @@ const UNMIGRATED: &[Action] = &[
     Action::DiscardAllSuggestions,
     Action::UndoBench,
     Action::RedoBench,
-    Action::ScrubBack,
-    Action::ScrubFwd,
-    Action::PlayPause,
     Action::CheckAllRigs,
-    Action::CycleCamPreset,
 ];
 
 /// **The ratchet.** It is lowered in the same commit that migrates an action, and it is the only
@@ -345,7 +335,9 @@ const UNMIGRATED: &[Action] = &[
 // 82 -> 76: `ComposePrev`, `ComposeNext`, `ComposeMemberPrev`, `ComposeMemberNext`, `CarouselPrev` and `CarouselNext` -> `compose_walk`, `compose_focus` and `compose_carousel_step` (E-002, #129 slice 23): up and down walk the COMPOSE tab's focused list, left and right choose it, and `O` and `P` step the carousel, through the operations an agent calls. Assumed owner exception (2026-11-12): the ratchet number the slice's own work lowers; nothing is skipped.
 // 76 -> 72: `PrevRig`, `NextRig`, `TilePrev` and `TileNext` -> `rig_walk` and `tile_page_walk` (E-002, #129 slice 24): up and down walk the rig bench's list and the Tiles page's rows through the operations an agent calls. Assumed owner exception (2026-11-12): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `TilePrev` and `TileNext` from the `View` set for the same reason; nothing is skipped.
 // 72 -> 69: `FoldPack`, `FocusFilter` and `FocusTagFilter` -> `pack_fold` and `filter_focus` (E-002, #129 slice 25): `Space` opens or closes a pack heading or the EXCLUDED band, and `F` and `/` take a filter box, through the operations an agent calls. Assumed owner exception (2026-11-12): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `FocusFilter` and `FocusTagFilter` from the `View` set for the same reason; nothing is skipped.
-const UNMIGRATED_MAX: usize = 69;
+// 69 -> 65: `PlayPause`, `ScrubBack`, `ScrubFwd` and `CycleCamPreset` -> `stage_play`, `stage_scrub` and `stage_camera` (E-002, #129 slice 26): `Space` plays and pauses the rig bench's figure, the held left and right arrows scrub its phase, and `V` frames the stage camera, through the operations an agent calls. Assumed owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the four from the `Camera` set for the same reason; nothing is skipped.
+// 65 -> 59: `CellLeft`, `CellRight`, `CellForward`, `CellBack`, `LayerDown` and `LayerUp` -> `lattice_cursor_step` (E-002, #129 slice 27): `F`, `H`, `T` and `G` step the lattice grid's selected cell and `[` and `]` the layer it shows, through the operation an agent calls. Assumed owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the six from the `Camera` set for the same reason; nothing is skipped.
+const UNMIGRATED_MAX: usize = 59;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///
@@ -698,12 +690,10 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
         camera,
         [
             "FrameView", "LookAtAgentChange", "PageEnter", "PageLeave", "TileOpen", "CloseTile", "PanForward", "PanBack",
-            "PanLeft", "PanRight", "TurnViewLeft", "TurnViewRight", "CellLeft", "CellRight",
-            "CellForward", "CellBack", "LayerDown", "LayerUp", "BuildForward", "BuildLeft",
+            "PanLeft", "PanRight", "TurnViewLeft", "TurnViewRight", "BuildForward", "BuildLeft",
             "BuildRight", "BuildBack", "MemberPrev", "MemberNext", "BuildDown", "BuildUp",
             "BuildDrop", "BuildSlot", "BuildArm", "AlignForward", "AlignBack", "AlignLeft",
             "AlignRight", "BuildNew", "BuildDropMember", "ClearTile", "BuildTurn", "BuildRung",
-            "ScrubBack", "ScrubFwd", "PlayPause", "CycleCamPreset",
         ],
         "the `Camera` set changed. A verb belongs here when a BRP method already moves the camera \
          (`grimoire/frame_view`) or when a front end reads it every frame; neither can be a `Ctx` \

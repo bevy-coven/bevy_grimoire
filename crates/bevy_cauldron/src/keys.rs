@@ -1029,7 +1029,21 @@ impl Action {
             | Action::PrevRig
             | Action::NextRig
             // **The candidate list's fold** (E-002, #129 slice 25): view state, migrated to `pack_fold`.
-            | Action::FoldPack => Change::View,
+            | Action::FoldPack
+            // **The rig bench's stage** (E-002, #129 slice 26): whether the figure plays, the phase a scrub holds and the
+            // camera framing are what a person is looking at, migrated to `stage_play`, `stage_scrub` and `stage_camera`.
+            | Action::PlayPause
+            | Action::ScrubBack
+            | Action::ScrubFwd
+            | Action::CycleCamPreset
+            // **The lattice grid's cursor** (E-002, #129 slice 27): the cell and layer a person is looking at, migrated to
+            // `lattice_cursor_step`.
+            | Action::CellLeft
+            | Action::CellRight
+            | Action::CellForward
+            | Action::CellBack
+            | Action::LayerDown
+            | Action::LayerUp => Change::View,
 
             // **Held, not pressed.** The effect is the hold: things fade, a pick is live, the overlay is
             // up. An operation whose effect reverses when a key is released is not a value an agent can
@@ -1042,9 +1056,7 @@ impl Action {
             | Action::TurnViewRight
             | Action::FrameView
             | Action::LookAtAgentChange
-            | Action::CycleCamPreset
             | Action::ToggleGhost
-            | Action::PlayPause
             // **Read with `pressed`, every frame.** A key held down is not a one-shot `Outcome`:
             // the arrows walk a tile, the four `Align*` keys slide a member, and `CellLeft`/`LayerDown`
             // step the tile's editor — each changes for as long as the key stays down. Measured by
@@ -1067,20 +1079,12 @@ impl Action {
             | Action::BuildSlot
             | Action::BuildTurn
             | Action::BuildUp
-            | Action::CellBack
-            | Action::CellForward
-            | Action::CellLeft
-            | Action::CellRight
             | Action::ClearTile
             | Action::CloseTile
-            | Action::LayerDown
-            | Action::LayerUp
             | Action::MemberNext
             | Action::MemberPrev
             | Action::PageEnter
             | Action::PageLeave
-            | Action::ScrubBack
-            | Action::ScrubFwd
             | Action::TileOpen => Change::Camera,
 
             Action::Shortcuts => Change::Held,
@@ -1143,6 +1147,19 @@ impl Action {
             // take a box, through the operations an agent calls.
             Action::FoldPack => Some("pack_fold"),
             Action::FocusFilter | Action::FocusTagFilter => Some("filter_focus"),
+            // **The rig bench's stage is view state** (E-002, #129 slice 26): `Space` plays and pauses, the held left and right
+            // arrows scrub the paused figure's phase and `V` frames the camera, through the operations an agent calls.
+            Action::PlayPause => Some("stage_play"),
+            Action::ScrubBack | Action::ScrubFwd => Some("stage_scrub"),
+            Action::CycleCamPreset => Some("stage_camera"),
+            // **The lattice grid's cursor is view state** (E-002, #129 slice 27): `F`, `H`, `T` and `G` step the selected cell
+            // and `[` and `]` the layer, through the operation an agent calls.
+            Action::CellLeft
+            | Action::CellRight
+            | Action::CellForward
+            | Action::CellBack
+            | Action::LayerDown
+            | Action::LayerUp => Some("lattice_cursor_step"),
             // **The tool keys** (E-002, #129): `B`, `Shift+B` and the run chord arm a tool through `tool_arm`.
             // **`Remove` and `NoteTool` arm a tool, so they name the arming operation** (E-002,
             // #129). They named `placement_remove` and `note_add`: a write neither key makes — its

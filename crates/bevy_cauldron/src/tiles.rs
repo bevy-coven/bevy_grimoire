@@ -672,6 +672,30 @@ impl CellEdit {
     pub fn typing(&self) -> bool {
         self.active.is_some()
     }
+
+    /// **Whether the grid's cursor is already where an operation answered.** Compared first by the caller, because a write
+    /// through a `ResMut` marks the resource changed and every system gated on a change redoes its work for a call that
+    /// moved nothing.
+    pub(crate) fn is_at(&self, cursor: &crate::ops_view::LatticeCursor) -> bool {
+        self.layer == cursor.layer && self.at == cursor.at
+    }
+
+    /// **Put the grid's cursor where an operation answered** (E-002, #129 slice 27). Opening a token field and then moving
+    /// the cursor would leave the buffer pointed at a cell it was not typed for, so moving closes it — the same reason
+    /// `on_cell_click` clears it.
+    pub(crate) fn set_cursor(&mut self, cursor: &crate::ops_view::LatticeCursor) {
+        self.layer = cursor.layer;
+        self.at = cursor.at;
+        self.active = None;
+    }
+}
+
+/// **The grid's cursor as a value**, for the front ends that carry a view into an operation (E-002, #129 slice 27): the
+/// divisions of the lattice the focused piece stands on, and where the cursor is on it. `None` when no piece is
+/// selected, or its lattice cannot be held — there is no grid to step on.
+pub(crate) fn lattice_cursor(edit: &CellEdit, state: &ImportState, project: &Project) -> Option<crate::ops_view::LatticeCursor> {
+    let div = focused_div(state, project).ok()?;
+    Some(crate::ops_view::LatticeCursor { div, layer: edit.layer, at: edit.at })
 }
 
 /// The clickable description field.
@@ -2662,50 +2686,42 @@ fn lattice_keys(
         }
     }
 
-    let mut layer = edit.layer.min(dy - 1);
-    if pressed(Action::LayerDown) {
-        layer = layer.saturating_sub(1);
+    // **The cursor's keys dispatch `lattice_cursor_step`, the operation an agent calls** (E-002, #129 slice 27), and the
+    // rules — a step stops at the grid's edges, the cursor rides the layer, a layer step that goes nowhere writes nothing —
+    // live there once. One context carries the cursor across the keys pressed in the same frame, in the order they are
+    // listed, and the answer is applied once, compared before writing: a write through a `ResMut` marks it changed.
+    let mut ctx = crate::ops::Ctx {
+        root: Some(project.root.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View {
+            lattice: Some(crate::ops_view::LatticeCursor { div: (dx, dy, dz), layer: edit.layer, at: edit.at }),
+            ..Default::default()
+        }),
+        ..crate::ops::Ctx::default()
+    };
+    for (action, by) in [
+        (Action::LayerDown, "down"),
+        (Action::LayerUp, "up"),
+        (Action::CellLeft, "left"),
+        (Action::CellRight, "right"),
+        (Action::CellForward, "forward"),
+        (Action::CellBack, "back"),
+    ] {
+        if pressed(action) {
+            // A refusal leaves the cursor where it was, as the key always did; there is nothing to say about a selection.
+            let _ = crate::ops::dispatch(&mut ctx, "lattice_cursor_step", &serde_json::json!({ "by": by }));
+        }
     }
-    if pressed(Action::LayerUp) {
-        layer = (layer + 1).min(dy - 1);
+    if let Some(cursor) = ctx.view.and_then(|v| v.lattice)
+        && !edit.is_at(&cursor)
+    {
+        // **No status line for a selection.** The line under the grid already says what the selected cell
+        // holds, and `refresh_cells` repaints it in place — whereas writing `status` mutates
+        // `ImportState`, which is what `rebuild_detail` watches, so saying it twice is what made picking a
+        // cell respawn the whole detail block. One fact, one place, no bounce.
+        edit.set_cursor(&cursor);
     }
-    let moved = pressed(Action::CellLeft)
-        || pressed(Action::CellRight)
-        || pressed(Action::CellForward)
-        || pressed(Action::CellBack);
-    if layer == edit.layer && !moved {
-        return;
-    }
-
-    // **The cursor rides the layer rather than being dropped by it.** Both this and `on_layer_click`
-    // keep (x, z) and move y, so walking up a lattice column stays on the column an author is
-    // looking at instead of clearing the selection every step.
-    let mut at = edit.at.unwrap_or((0, layer, 0));
-    at.1 = layer;
-    if pressed(Action::CellLeft) {
-        at.0 = at.0.saturating_sub(1);
-    }
-    if pressed(Action::CellRight) {
-        at.0 = (at.0 + 1).min(dx - 1);
-    }
-    if pressed(Action::CellForward) {
-        at.2 = (at.2 + 1).min(dz - 1);
-    }
-    if pressed(Action::CellBack) {
-        at.2 = at.2.saturating_sub(1);
-    }
-    at.0 = at.0.min(dx - 1);
-    at.2 = at.2.min(dz - 1);
-
-    edit.layer = layer;
-    edit.at = Some(at);
-    // Opening a token field and then moving the cursor would leave the buffer pointed at a cell it
-    // was not typed for, so moving closes it — the same reason `on_cell_click` clears it.
-    edit.active = None;
-    // **No status line for a selection.** The line under the grid already says what the selected cell
-    // holds, and `refresh_cells` repaints it in place — whereas writing `status` mutates
-    // `ImportState`, which is what `rebuild_detail` watches, so saying it twice is what made picking a
-    // cell respawn the whole detail block. One fact, one place, no bounce.
 }
 
 /// Typing an edge or anchor token.

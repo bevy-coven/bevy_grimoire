@@ -39,7 +39,7 @@ fn rung_from_name(name: &str) -> Option<SnapLevel> {
 /// Deliberately narrow: a field is added when an operation needs it, not because the editor has one.
 /// Everything here is session state — none of it is saved to the project, which is why no operation that
 /// writes this declares `Undo::Snapshot`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct View {
     /// The snap ladder's rung: what a piece is nudged to, and what the grid is drawn at.
@@ -104,6 +104,68 @@ pub struct View {
     /// the keyboard cannot say that. Not serialised while false: most answers touch no box.
     #[serde(default, skip_serializing_if = "is_false")]
     pub filter_fresh: bool,
+    /// **The rig bench's stage** (E-002, #129 slice 26): whether the figure plays, the phase a scrub holds, and the camera
+    /// preset. Session state like the rest; not serialised while it is where a session opens (playing, phase 0, figure).
+    #[serde(default, skip_serializing_if = "StageCursor::is_default")]
+    pub stage: StageCursor,
+    /// **The lattice grid's cursor on the Meshes tab** (E-002, #129 slice 27), when a piece is selected: the grid's divisions
+    /// and where the cursor stands. `None` is no grid to step on, so a step is refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lattice: Option<LatticeCursor>,
+}
+
+/// **Where the lattice grid's cursor is**, as a value an operation can move (E-002, #129 slice 27).
+///
+/// The same facts `tiles::CellEdit` holds as `layer` and `at`, with the divisions of the lattice the focused piece stands on
+/// (`tiles::focused_div`), which the front end derives and carries in so the walk stops at the grid's own edges. The rules
+/// for moving the cursor are written once, in `ops::lattice_cursor_step`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LatticeCursor {
+    /// How many cells the lattice has along x, y (layers) and z.
+    pub div: (u32, u32, u32),
+    /// The layer the grid is showing.
+    #[serde(default)]
+    pub layer: u32,
+    /// The selected cell, if any.
+    #[serde(default)]
+    pub at: Option<(u32, u32, u32)>,
+}
+
+/// **Where the rig bench's stage is**, as a value an operation can move (E-002, #129 slice 26).
+///
+/// The same three facts `anim_stage::BenchScrub` and `BenchCamera` hold as `playing`, `phase` and the preset. The rules for
+/// moving them are written once, in `ops::stage`; the front end carries this in and applies what comes back. `View` lost
+/// its `Eq` for the phase: a float is the cursor, and a float is only `PartialEq`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StageCursor {
+    /// **Whether the figure plays**: it advances at the mixture's own authored speed. Paused, the phase is the scrub's.
+    #[serde(default = "playing_by_default")]
+    pub playing: bool,
+    /// The shared phase, `[0, 1)`, which a scrub moves while the figure is paused.
+    #[serde(default)]
+    pub phase: f32,
+    /// The stage camera's framing.
+    #[serde(default)]
+    pub camera: crate::anim_stage::CamPreset,
+}
+
+/// **Alive by default**, as the bench opens: the figure walks in place the moment the tab does.
+fn playing_by_default() -> bool {
+    true
+}
+
+impl Default for StageCursor {
+    fn default() -> Self {
+        StageCursor { playing: true, phase: 0.0, camera: crate::anim_stage::CamPreset::default() }
+    }
+}
+
+impl StageCursor {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 /// **Where the COMPOSE tab's cursors are**, as a value an operation can move (E-002, #129 slice 23).
@@ -356,6 +418,10 @@ mod tests {
             packs: Default::default(),
             filter_pane: None,
             filter_fresh: false,
+            // Owner exception (2026-11-13): the literal names the field #129 slice 26 adds (its default); the round trip is unchanged.
+            stage: Default::default(),
+            // Owner exception (2026-11-13): the literal names the field #129 slice 27 adds (its default); the round trip is unchanged.
+            lattice: None,
         };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);
