@@ -12,7 +12,8 @@ This file was first committed as `35ca9306d`. **No run has been made**: the firs
 2. **The greeting task scores the saved leaf, not the hand-back.** The first draft scored six lines on everything the hand-back said, which differs between an agent that was told the forbidden words and one that was not. The runner's `file_value` check gained `contains` and `lacks` (additive, with a test), and the six checks read `gatekeeper.greeting.text`.
 3. **The arms alternate by trial** (5 rounds of 1 trial per task per arm, the arm order alternating), so provider drift is spread over both arms instead of being one arm's.
 4. **The analysis script is a registered file with a self-test** (`docs/research/2026-11-14-style-helps-an-agent-analyse.py`): an empty cell, several run names per arm, the route stratification, an exact permutation p-value as a second reading, citations read only from the agent's own `grimoire_present` call, and the runner's own percentile.
-5. **Smaller:** `cauldron-bench` publishes under `<project root>/docs/bench`, so the registered commands publish the merged reports with `report --publish docs/bench`; the guard wording; the checks that are weaker than their line are listed; a cost and time estimate; the seeded trust store's version is a tested constant.
+5. **A second review (also before any run) changed the commands and the script, not the design:** step 5 now assembles each arm's five one-trial rounds into the one run directory that `cauldron-bench report` and `compare` need (the first draft of the step omitted the `run.json` they read, so `report` stopped), with a registered `--assemble` that refuses rounds run differently and says what the merged header means; there is a step 0, a rehearsal of steps 4 and 5 with `oracle` in place of the model, to run before any model; the 70% rule counts the runs that only used the tool separately from the runs that used both, and reports both; the attempts of the without-style arm to call the hidden tool are counted; the `--routes` probe output is read and cross-checked by hand before the 30 runs; the keyword-stuffed greeting is stated in Limits.
+6. **Smaller:** `cauldron-bench` publishes under `<project root>/docs/bench`, so the registered commands publish the merged reports with `report --publish docs/bench`; the guard wording; the checks that are weaker than their line are listed; a cost and time estimate; the seeded trust store's version is a tested constant.
 
 ## The question
 
@@ -147,7 +148,7 @@ Both arms have the same editor binary, guide, model, tasks, fixture and budgets.
 
 **Route stratification.** Every with-style run is put in one route, from the agent's own calls in `transcript.jsonl` (the script, `route_of`): `tool` (it called `grimoire_style` at some point and opened no design page by a generic tool), `file` (it opened a design page by a generic tool, a call whose arguments name `design/`, and never called the tool), `both`, `neither`. The report gives **D overall and D per route** (the with-style runs of one route against every without-style run, over the tasks that have a run in that route; a thin cell, descriptive), and the share of with-style runs that called the tool.
 
-**A claim about the tool is allowed only on a pre-registered condition.** "`grimoire_style` changes what an agent builds" may be written only if **the verdict is `better` and at least `TOOL_SHARE_MIN = 70%` of the with-style runs called `grimoire_style`** (routes `tool` and `both`). Otherwise the report says "the style, available to the agent, changed (or did not measurably change) what it built", and says nothing about the tool. **The follow-up if the share is low** is a third arm, `A'`: the pages on disk and `grimoire_style` hidden. It would separate the tool from the files, it is **not** part of this design (it would add 15 runs), and it is registered here only as what to run next.
+**A claim about the tool is allowed only on a pre-registered condition.** "`grimoire_style` changes what an agent builds" may be written only if **the verdict is `better` and at least `TOOL_SHARE_MIN = 70%` of the with-style runs called `grimoire_style`** (routes `tool` and `both`; the share of the runs that used the tool alone, route `tool`, is reported beside it, and the report says which of the two it rests the claim on). Otherwise the report says "the style, available to the agent, changed (or did not measurably change) what it built", and says nothing about the tool. **The follow-up if the share is low** is a third arm, `A'`: the pages on disk and `grimoire_style` hidden. It would separate the tool from the files, it is **not** part of this design (it would add 15 runs), and it is registered here only as what to run next.
 
 **What the without-style agent is told.** The shipped guide, served by `grimoire_guide` and not changed here, has a section "Know the style before you shape a place" that tells an agent to call `grimoire_style` and to cite `followed` lines. The tool being hidden does not hide that text, so **the without-style agent is told to call a tool it does not have** (a call to a hidden name is refused as an unknown tool). That can cost it a call or a wish, and it can make it look for the style elsewhere: it has no `design/` on disk to find. The with-style agent reads the same guide and has the tool. The text is the product's and is not edited for the study; the report records what each arm's agent did about it (its calls to the tool and its wishes).
 
@@ -183,11 +184,11 @@ Both arms have the same editor binary, guide, model, tasks, fixture and budgets.
 
 **The script is the registered file `docs/research/2026-11-14-style-helps-an-agent-analyse.py`** (Python 3 standard library). `python3 <it> --selftest` runs it on synthetic data with known answers (a known `D`, a task with an empty cell, ties, a thin route, the permutation p-value, the percentile, and the transcript reading) and has to print `selftest passed` before it is used. It reads each run's `trial.json` (the runner's record) and `transcript.jsonl` (the agent's own stream), takes several run names per arm joined by commas, and prints every number the report gives.
 
-**`cauldron-bench compare` is run and published as well, and is not the success rule.** `compare <without-style report> <with-style report>` (BM-03) says `better`, `worse` or `no measurable change` about the **success of a task** (every check of a task held in a run), pairs and resamples the **tasks**, and a suite of three tasks gives it three of them. That is a different and much coarser question than "lines satisfied per run", so the rule above is computed by the script and `compare` is the second reading, given with its interval and the tasks that moved. The issue's text names `compare` for the interval; this registration departs from it for that one reason. It needs one run per arm, so the five rounds of an arm are assembled into one run directory first (step 5), and the reports are published by `report --publish docs/bench`, because a `--label` on `run` publishes under `<project root>/docs/bench`, which here is `games/sample/docs/bench`.
+**`cauldron-bench compare` is run and published as well, and is not the success rule.** `compare <without-style report> <with-style report>` (BM-03) says `better`, `worse` or `no measurable change` about the **success of a task** (every check of a task held in a run), pairs and resamples the **tasks**, and a suite of three tasks gives it three of them. That is a different and much coarser question than "lines satisfied per run", so the rule above is computed by the script and `compare` is the second reading, given with its interval and the tasks that moved. The issue's text names `compare` for the interval; this registration departs from it for that one reason. It needs one run per arm and a `run.json` header in it, so the five rounds of an arm are assembled into one run directory first (step 5, `analyse.py --assemble`). **What the merged header means:** it is the first round's `run.json` with `label` set to the arm's name and `trials` set to the number of rounds (5), so the report reads as a run of 5 trials of each task; the editor commit, the guide's SHA-256, the agent and its version, the model, the arm, the suite and the host must be equal in every round or the assembly stops (a header that named one commit over trials made at two would be false), and the date is the first round's (the clock times of the rounds are the report's to state, from the trials' own files). The runner's `jobs` is not in the header. The trials are renumbered 1 to 5 in round order, and the reports are published by `report --publish docs/bench`, because a `--label` on `run` publishes under `<project root>/docs/bench`, which here is `games/sample/docs/bench`.
 
 ## What else is collected
 
-For every **with-style** run, from the transcript (`transcript.jsonl` beside the trial's record): its **route** (above); whether it **called `grimoire_style` before its first edit** (a `grimoire_style` call earlier than the first `grimoire_apply_operation`); and **whether its own `grimoire_present` call carried a non-empty `followed` list** (SG-09), read from that call's arguments and nowhere else (never a tool's answer or the agent's prose). And **every wish** (AW) the with-style runs made, quoted whole, with its task: **a wish about the style is the signal for what to change in the templates (SG-08)**. For the without-style arm the report gives its wishes too (the ones about the missing tool are the ones the guide's text causes) and states that `grimoire_style` was not offered (`tools_offered` of every one of its runs is read, and none holds it).
+For every **with-style** run, from the transcript (`transcript.jsonl` beside the trial's record): its **route** (above); whether it **called `grimoire_style` before its first edit** (a `grimoire_style` call earlier than the first `grimoire_apply_operation`); and **whether its own `grimoire_present` call carried a non-empty `followed` list** (SG-09), read from that call's arguments and nowhere else (never a tool's answer or the agent's prose). And **every wish** (AW) the with-style runs made, quoted whole, with its task: **a wish about the style is the signal for what to change in the templates (SG-08)**. **Attempts at the hidden tool:** for every without-style run, whether it asked for `grimoire_style` by its device path (`write xd://mcp__…grimoire_style`, an attempt to call it; `read` of the same path, an attempt to look it up), counted in runs and in calls (`hidden_attempts` in the script), since the guide tells that agent to call it. For the without-style arm the report gives its wishes too (the ones about the missing tool are the ones the guide's text causes) and states that `grimoire_style` was not offered (`tools_offered` of every one of its runs is read, and none holds it).
 
 Also in the report, from the runner: tokens, cost, wall time, tool calls, refusals, undos and edits behind the editor's back, per arm.
 
@@ -206,7 +207,7 @@ These are measured, on 2026-11-14, on a macOS host, with no model.
 1. **A trial has no person to allow the style, and the style is withheld until a person does.** Measured: `grimoire/style` for the courtyard on the with-style trial's project answers `withheld` for both pages, with the line "waiting for the person to allow it, so its text was not served". The trial's `HOME` is its own, so its trust store is empty. **The measurement grants it without a change to the runner**: the editor's trust store is `<data dir>/Grimoire/trusted.yaml`, and on Linux the data directory is `$XDG_DATA_HOME` when it is set (`dirs` 6.0.0, `lin.rs`), which the trial's `HOME` does not override. A store naming each trial's project (`projects:`) is written before the runs and `XDG_DATA_HOME` is set for both arms (the without-style arm never calls the tool, so the store changes nothing for it), as in step 2 below. Proved on the macOS host, with the store in the trial's own `HOME`: the same call then answers `served` for both pages. The store's `version` is a tested constant (`the_seeded_trust_store_is_one_the_editor_reads`). **Before the 30 runs, one unscored with-style probe trial** (`style-probe`, step 3) must show a `grimoire_style` answer with both pages `served` in its transcript, and the script's route reading is checked on it (`--routes`); the `XDG_DATA_HOME` path itself is read from the `dirs` source and is not exercised until that probe.
 2. **The decision model scores no line** (above).
 3. **`<suite>/variants.yaml` is not where the runner looks:** it reads `<project root>/bench/tasks/variants.yaml` (`suite::variants_path`) whatever `--suite` says, so `bench/README.md`'s "`<suite>/variants.yaml`" is wrong for a suite that is not the project's own `bench/tasks`. Here the tasks and the arms both sit in `games/sample/bench/tasks/`, so the two agree.
-4. **The route reading is checked against a real transcript only by the probe.** The script reads an editor tool call as `details.xdev.inner.mcpToolName` and a generic tool call as a `toolcall_end` of `read`, `bash`, `grep`, `find`, `glob`, `eval`, `ast_edit`, `edit` or `lsp`, the shapes `run.rs` reads; the self-test builds them from that code, not from a transcript.
+4. **The route reading is checked against a real transcript only by the probe.** The script reads an editor tool call as `details.xdev.inner.mcpToolName` and a generic tool call as a `toolcall_end` of `read`, `bash`, `grep`, `find`, `glob`, `eval`, `ast_edit`, `edit` or `lsp`, the shapes `run.rs` reads; the self-test builds them from that code, not from a transcript. **So the probe's `--routes` output is read, and the script's counts are cross-checked by hand against the probe's `transcript.jsonl`, before the 30 runs** (the route, whether `grimoire_style` was called, whether a design page was opened, the `followed` list); a reading that does not match the transcript is fixed in the script and registered again before any scored run.
 
 ## The commands
 
@@ -221,12 +222,24 @@ omp models find $MODEL             # must list it
 A=docs/research/2026-11-14-style-helps-an-agent-analyse.py
 python3 $A --selftest              # must print: selftest passed
 
+# 0. Rehearsal, before any model: steps 4 and 5 below with `oracle` in place of the model, two rounds, published to /tmp. It must print a report for each arm, a
+#    `compare` (no measurable change: the arms are identical), and the script's numbers (24 lines in both arms), and the assembled `run.json` must say trials 2.
+STATE=$(realpath "$HOME")/.local/state/cauldron-bench
+for k in 1 2; do for arm in without-style with-style; do
+  $B/cauldron-bench run $S --agent oracle --variant $arm --trials 1 --jobs 3 --run rehearse-r$k-$arm
+done; done
+for arm in without-style with-style; do
+  python3 $A --assemble rehearse-$arm rehearse-r1-$arm,rehearse-r2-$arm
+  $B/cauldron-bench report $STATE/rehearse-$arm --label rehearse-$arm --publish /tmp/rehearse/bench
+done
+$B/cauldron-bench compare /tmp/rehearse/bench/runs/<date>-rehearse-without-style.json /tmp/rehearse/bench/runs/<date>-rehearse-with-style.json
+python3 $A rehearse-r1-without-style,rehearse-r2-without-style rehearse-r1-with-style,rehearse-r2-with-style
+
 # 1. No model: the pipe and the tasks. `nothing` must fail 3 of 3, `oracle` must pass 3 of 3, under each arm.
 $B/cauldron-bench run $S --agent nothing
 for arm in with-style without-style; do $B/cauldron-bench run $S --agent oracle --variant $arm; done
 
 # 2. Let the trial projects' style be served: a store naming every trial project of the runs below, for the editor's XDG_DATA_HOME.
-STATE=$(realpath "$HOME")/.local/state/cauldron-bench
 TASKS="dress-the-market-area write-the-gatekeepers-greeting light-the-gate-at-night"
 mkdir -p /tmp/style-xdg/Grimoire
 { echo "version: 3"; echo "projects:";
@@ -239,6 +252,7 @@ export XDG_DATA_HOME=/tmp/style-xdg
 # 3. The probe: one unscored with-style trial. Its transcript must show a `grimoire_style` answer with both pages "served".
 $B/cauldron-bench run $S --agent omp --model $MODEL --variant with-style --task light-the-gate-at-night --trials 1 --run style-probe
 grep -c 'served' $STATE/style-probe/light-the-gate-at-night/trial-1/transcript.jsonl   # read the answer: both pages "served", none "withheld"
+python3 $A --routes style-probe     # READ it against the transcript, by hand: the route, the `grimoire_style` call, any page opened by `read`/`bash`, the `followed` list; the counts must agree before step 4
 
 # 4. The 30 runs: five rounds, each task once in each arm, the arm order alternating, the three tasks of an arm at once.
 for k in 1 2 3 4 5; do
@@ -252,11 +266,8 @@ done
 W=$(printf 'style-r%s-without-style,' 1 2 3 4 5); W=${W%,}
 R=$(printf 'style-r%s-with-style,' 1 2 3 4 5); R=${R%,}
 python3 $A $W $R
-for arm in without-style with-style; do                      # one run directory per arm, for `report` and `compare`
-  rm -rf $STATE/style-$arm
-  for k in 1 2 3 4 5; do for task in $TASKS; do
-    mkdir -p $STATE/style-$arm/$task; cp -R $STATE/style-r$k-$arm/$task/trial-1 $STATE/style-$arm/$task/trial-$k
-  done; done
+for arm in without-style with-style; do                      # one run directory per arm (run.json merged, trials renumbered), for `report` and `compare`
+  python3 $A --assemble style-$arm $(printf "style-r%s-$arm," 1 2 3 4 5 | sed 's/,$//')
   $B/cauldron-bench report $STATE/style-$arm --label style-$arm --publish docs/bench
 done
 $B/cauldron-bench compare docs/bench/runs/<date>-style-without-style.json docs/bench/runs/<date>-style-with-style.json
@@ -282,6 +293,7 @@ If an arm is unfit (more than 10% harness errors), make the missing runs up in f
   - `L-Do4` (every stall turned to yaw 180) measures the first stall the map lists (`placement_at` takes the first match); the row (`L-Do3`) measures all three.
   - `L-Do3` and `L-Do4` use a stall's centre, not its footprint.
 - **The substring checks read the greeting without case**: `friend` is also found in `friendly`, and `crown` in `crowned`. The cost is the same in both arms.
+- **A leaf stuffed with the Do words passes the Do lines** ("toll friend dusk" satisfies `G-Do4`, `L-Do5` and `L-Do6`): the substring checks cannot tell a greeting from a list. The report quotes every greeting beside its scores, so a reader sees one; the cost is the same in both arms, and an agent that knows the lines is the one that could.
 - **The lines are the style's, and the checks are mine.** A line is satisfied or not by a number or a word; whether the result is *good* is not measured. The style was written to be scored, so the experiment measures whether an agent follows a stated, checkable style it can read, and not whether a style written for a person improves a game.
 - **The market library reuses one mesh for every piece.** The tasks measure placement and data, never a render.
 - **The with-style arm may read `design/` from disk**, and the without-style arm's disk has none (the route stratification counts it).
