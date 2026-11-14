@@ -127,6 +127,19 @@ pub const POLL_INTERVAL_MS: u64 = 50;
 /// found while the agent runs, not minutes later when the budget ends.
 pub const AGENT_POLL_INTERVAL_MS: u64 = 250;
 
+/// **The directory under a run's output where the pre-flight turn's isolated HOME is made**, and deleted again.
+pub const PREFLIGHT_DIR: &str = "preflight";
+
+/// **What the pre-flight turn says**: a few words, so the model's answer costs next to nothing.
+pub const PREFLIGHT_PROMPT: &str = "reply ok";
+
+/// **How long omp itself is given for the pre-flight turn** (`--max-time`), seconds. A trial's own turn took ~35 s
+/// to be refused on a spent quota (#432), and an answering model needs a few: this is several times either.
+pub const PREFLIGHT_WALL_S: u64 = 90;
+
+/// **How long past [`PREFLIGHT_WALL_S`] the harness waits before killing an omp that ignored its own flag**, seconds.
+pub const PREFLIGHT_GRACE_S: u64 = 15;
+
 /// **The harness's own tools**, which an agent is offered beside the editor's and which are not a leak.
 ///
 /// Measured on this host (omp 18.18.9, 2026-11-13) from the registry of an isolated trial: twenty names.
@@ -917,12 +930,18 @@ pub fn run(options: &Options, held_out: Option<&Path>) -> Result<Vec<TrialRecord
     // **The runner refuses a model this host does not have** (BM-02): a run whose harness could not start
     // would report every trial as a harness error and say nothing about the editor.
     match options.agent {
-        Agent::Omp => check_model(&options.model)?,
+        Agent::Omp => check_model(OMP_PROGRAM, &options.model)?,
         Agent::ClaudeCode => check_claude()?,
         Agent::Oracle | Agent::Nothing => {}
     }
     std::fs::create_dir_all(&options.out)
         .map_err(|e| format!("{}: {e}", options.out.display()))?;
+    // **One real turn before any trial** (#432, D2): a model the host lists can still have a provider with no
+    // quota left or a key that is refused, and finding that out trial by trial costs 35 s each, for every
+    // trial of the run. The turn runs in the same kind of isolated HOME a trial uses, with the same credential.
+    if options.agent == Agent::Omp {
+        preflight_turn(OMP_PROGRAM, &options.model, &options.out.join(PREFLIGHT_DIR))?;
+    }
     // **A model is only scored on held-out tasks that are valid** (BM-04): the scripted agents are the proof
     // themselves, so they skip it.
     let held_selected: Vec<&Task> = selected.iter().filter(|t| t.split == crate::task::Split::HeldOut).collect();
@@ -952,38 +971,102 @@ pub fn run(options: &Options, held_out: Option<&Path>) -> Result<Vec<TrialRecord
             work.push((task.clone(), label.clone(), trial));
         }
     }
-    let next = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let records = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-    let mut handles = Vec::new();
-    let workers = options.jobs.max(1) as usize;
-    for _ in 0..workers {
-        let next = next.clone();
-        let records = records.clone();
-        let work = work.clone();
-        let options = options.clone();
-        let variant = variant.clone();
-        handles.push(std::thread::spawn(move || {
-            loop {
-                let i = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                let Some((task, label, trial)) = work.get(i) else {
-                    return;
-                };
-                let record = one_trial(&options, task, label, *trial, variant.as_ref());
-                if let Ok(mut records) = records.lock() {
-                    records.push(record);
-                }
-            }
-        }));
+    let records = run_work(
+        &work,
+        options.jobs,
+        &|task, label, trial| one_trial(options, task, label, trial, variant.as_ref()),
+        &|task, label, trial, reason| not_run(options, task, label, trial, variant.as_ref(), reason),
+    )?;
+    Ok(records)
+}
+
+/// **One unit of a run's work**: a task, the name its trials are filed under, and which trial of it.
+pub type Work = (Task, String, u32);
+
+/// **How many provider refusals in a row stop a run** (#432, D2). Three in a row is not a flaky network and not
+/// the agent's doing: it is a provider that is not answering, and every later trial would say the same thing.
+pub const PROVIDER_REFUSALS_MAX: u32 = 3;
+
+/// **How a trial's reason begins when the model's provider refused a turn** (an HTTP 429 for a spent quota, a
+/// refused key), which is what the run's circuit breaker counts.
+pub const PROVIDER_REFUSAL: &str = "the model provider refused a turn";
+
+/// **Whether a trial ended because the provider refused**, and for no other reason.
+pub fn is_provider_refusal(record: &TrialRecord) -> bool {
+    record.outcome == Outcome::HarnessError && record.reason.starts_with(PROVIDER_REFUSAL)
+}
+
+/// **Run a work list on `jobs` workers, and stop it when the provider has stopped answering.**
+///
+/// `run_one` makes one trial. After [`PROVIDER_REFUSALS_MAX`] provider refusals **in a row** (a success, a
+/// failure or any other harness error resets the count) no worker takes another trial: those in flight finish,
+/// and every trial that was not started gets a record from `not_run` carrying the reason, so the run's report
+/// counts all of them and says why they are harness errors rather than leaving them out.
+pub fn run_work(
+    work: &[Work],
+    jobs: u32,
+    run_one: &(dyn Fn(&Task, &str, u32) -> TrialRecord + Sync),
+    not_run: &(dyn Fn(&Task, &str, u32, String) -> TrialRecord + Sync),
+) -> Result<Vec<TrialRecord>, String> {
+    use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering::SeqCst};
+    let next = AtomicUsize::new(0);
+    let consecutive = AtomicU32::new(0);
+    let stopped = AtomicBool::new(false);
+    let last_refusal: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+    let finished: std::sync::Mutex<Vec<(usize, TrialRecord)>> = std::sync::Mutex::new(Vec::new());
+    let panicked = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..jobs.max(1))
+            .map(|_| {
+                scope.spawn(|| {
+                    loop {
+                        if stopped.load(SeqCst) {
+                            return;
+                        }
+                        let i = next.fetch_add(1, SeqCst);
+                        let Some((task, label, trial)) = work.get(i) else {
+                            return;
+                        };
+                        let record = run_one(task, label, *trial);
+                        if is_provider_refusal(&record) {
+                            if let Ok(mut last) = last_refusal.lock() {
+                                *last = Some(record.reason.clone());
+                            }
+                            if consecutive.fetch_add(1, SeqCst) + 1 >= PROVIDER_REFUSALS_MAX {
+                                stopped.store(true, SeqCst);
+                            }
+                        } else {
+                            consecutive.store(0, SeqCst);
+                        }
+                        if let Ok(mut finished) = finished.lock() {
+                            finished.push((i, record));
+                        }
+                    }
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().is_err()).fold(false, |any, p| any || p)
+    });
+    if panicked {
+        return Err("a trial's worker panicked".to_owned());
     }
-    for handle in handles {
-        if handle.join().is_err() {
-            return Err("a trial's worker panicked".to_owned());
+    let mut finished = finished.into_inner().map_err(|_| "a trial's records were poisoned".to_owned())?;
+    if stopped.load(SeqCst) {
+        let why = last_refusal
+            .into_inner()
+            .map_err(|_| "a trial's records were poisoned".to_owned())?
+            .unwrap_or_default();
+        let started: std::collections::BTreeSet<usize> = finished.iter().map(|(i, _)| *i).collect();
+        for (i, (task, label, trial)) in work.iter().enumerate() {
+            if !started.contains(&i) {
+                let reason = format!(
+                    "not run: the run was stopped after {PROVIDER_REFUSALS_MAX} consecutive provider refusals, so this \
+                     trial was never started. The last refusal: {why}"
+                );
+                finished.push((i, not_run(task, label, *trial, reason)));
+            }
         }
     }
-    let mut records = std::sync::Arc::try_unwrap(records)
-        .map_err(|_| "a trial's records were still held".to_owned())?
-        .into_inner()
-        .map_err(|_| "a trial's records were poisoned".to_owned())?;
+    let mut records: Vec<TrialRecord> = finished.into_iter().map(|(_, record)| record).collect();
     records.sort_by(|a, b| a.task.cmp(&b.task).then(a.trial.cmp(&b.trial)));
     Ok(records)
 }
@@ -1132,8 +1215,10 @@ fn stop_group(child: &mut Child) {
 }
 
 /// **Refuse a model this host does not list**, before any trial runs.
-fn check_model(model: &str) -> Result<(), String> {
-    let out = Command::new("omp")
+///
+/// Listing proves the name and nothing about the provider behind it; [`preflight_turn`] asks the provider.
+pub fn check_model(omp: &str, model: &str) -> Result<(), String> {
+    let out = Command::new(omp)
         .args(["models", "find", model])
         .output()
         .map_err(|e| format!("`omp models find` could not be run: {e}"))?;
@@ -1153,6 +1238,125 @@ fn check_model(model: &str) -> Result<(), String> {
          `omp models find {last}` said: {}",
         text.lines().next().unwrap_or("nothing")
     ))
+}
+
+/// **One real turn of the model, before any trial** (#432, D2): `omp -p --model <m> "reply ok"`.
+///
+/// It runs the way a trial does, in an isolated HOME made under `scratch` that holds the model's provider's
+/// credential and is deleted before this returns, so it also proves the credential a trial would carry. A
+/// provider with no quota left (HTTP 429), a refused key or a model that does not answer is an error naming
+/// the model and quoting the provider; a run that would have found it out 35 s at a time, trial by trial,
+/// finds it out here, once.
+pub fn preflight_turn(omp: &str, model: &str, scratch: &Path) -> Result<(), String> {
+    let home = scratch.join("home");
+    let _secrets = TrialSecrets::new([scratch.to_path_buf()]);
+    seed_credentials(omp, &home, model)?;
+    let wall = format!("{PREFLIGHT_WALL_S}s");
+    let mut command = Command::new(omp);
+    command
+        .args([
+            "-p",
+            "--mode",
+            "json",
+            "--model",
+            model,
+            "--no-session",
+            "--no-context-files",
+            "--no-skills",
+            "--no-rules",
+            "--no-extensions",
+            "--max-time",
+            &wall,
+            "--cwd",
+        ])
+        .arg(scratch)
+        .arg(PREFLIGHT_PROMPT)
+        .env("HOME", &home)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let child = detach(&mut command)
+        .spawn()
+        .map_err(|e| format!("omp did not start for the pre-flight turn: {e}"))?;
+    let (stdout, stderr) = output_within(child, Duration::from_secs(PREFLIGHT_WALL_S + PREFLIGHT_GRACE_S))?;
+    turn_verdict(&stdout, &stderr).map_err(|why| {
+        format!(
+            "`{model}` is listed, but a one-turn pre-flight (`{PREFLIGHT_PROMPT}`) got no answer, so no trial of \
+             this run could: {why}"
+        )
+    })
+}
+
+/// **What a one-turn run printed, read as omp's JSON events**: `Ok` when an assistant message came back and the
+/// provider did not refuse it, and otherwise the reason, in the provider's own words when it gave them.
+fn turn_verdict(stdout: &str, stderr: &str) -> Result<(), String> {
+    let mut spoke = false;
+    for line in stdout.lines() {
+        let Ok(event) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        if event.get("type").and_then(Value::as_str) != Some("message_end") {
+            continue;
+        }
+        let Some(message) = event.get("message").filter(|m| m.get("role").and_then(Value::as_str) == Some("assistant")) else {
+            continue;
+        };
+        if let Some(why) = provider_words(message) {
+            return Err(format!("the provider refused the turn: {why}"));
+        }
+        spoke = true;
+    }
+    if spoke {
+        return Ok(());
+    }
+    let lines: Vec<&str> = stderr.lines().filter(|l| !l.trim().is_empty()).collect();
+    let from = lines.len().saturating_sub(4);
+    Err(format!("omp never reached the model. Its stderr ends: {}", lines[from..].join(" | ")))
+}
+
+/// **The provider's own words for an assistant message it refused**, or `None` for a message it answered.
+///
+/// An assistant message whose `stopReason` is `error` (an HTTP 429 for a spent usage limit, a dropped
+/// connection) holds no content and no tokens.
+fn provider_words(message: &Value) -> Option<String> {
+    if message.get("stopReason").and_then(Value::as_str) != Some("error") {
+        return None;
+    }
+    let why = message.get("errorMessage").and_then(Value::as_str).unwrap_or("it gave no reason");
+    Some(why.lines().collect::<Vec<_>>().join(" "))
+}
+
+/// **A child's stdout and stderr, read whole, or an error when it is still running after `within`** (and killed).
+fn output_within(mut child: Child, within: Duration) -> Result<(String, String), String> {
+    use std::io::Read;
+    fn drain(pipe: Option<impl Read + Send + 'static>) -> std::thread::JoinHandle<String> {
+        std::thread::spawn(move || {
+            let mut text = String::new();
+            if let Some(mut pipe) = pipe {
+                let mut bytes = Vec::new();
+                let _ = pipe.read_to_end(&mut bytes);
+                text = String::from_utf8_lossy(&bytes).into_owned();
+            }
+            text
+        })
+    }
+    let out = drain(child.stdout.take());
+    let err = drain(child.stderr.take());
+    let deadline = Instant::now() + within;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(AGENT_POLL_INTERVAL_MS)),
+            Ok(None) => {
+                stop_group(&mut child);
+                return Err(format!("it was still running after {} s, and was stopped", within.as_secs()));
+            }
+            Err(e) => return Err(format!("it could not be waited on: {e}")),
+        }
+    }
+    let stdout = out.join().map_err(|_| "its output could not be read".to_owned())?;
+    let stderr = err.join().map_err(|_| "its error output could not be read".to_owned())?;
+    Ok((stdout, stderr))
 }
 
 /// **What a held-out record puts where a call, a file or a wish was**: a record keeps how many there were, not what they said.
@@ -1183,14 +1387,22 @@ pub fn held_out_refusal(root: &Path, dir: &Path, known: &[&str]) -> String {
         .to_owned()
 }
 
-/// **One trial, from the copy to its `trial.json`**, and never a `pass` for a harness that failed.
-///
-/// `label` is what the trial is filed and recorded under: the task's id for a dev task, and
-/// [`held_out_label`] for a held-out one, whose id is not to reach a path an agent can read.
-fn one_trial(options: &Options, task: &Task, label: &str, trial: u32, variant: Option<&Variant>) -> TrialRecord {
-    let dir = options.out.join(label).join(format!("trial-{trial}"));
-    let _ = std::fs::remove_dir_all(&dir);
-    let record = |outcome: Outcome, reason: String| TrialRecord {
+/// **Where one trial is filed** under a run's output directory.
+fn trial_dir(options: &Options, label: &str, trial: u32) -> PathBuf {
+    options.out.join(label).join(format!("trial-{trial}"))
+}
+
+/// **A trial's record before anything has been measured**: no checks, no calls, no tokens.
+fn blank_record(
+    options: &Options,
+    task: &Task,
+    label: &str,
+    trial: u32,
+    variant: Option<&Variant>,
+    outcome: Outcome,
+    reason: String,
+) -> TrialRecord {
+    TrialRecord {
         task: label.to_owned(),
         trial,
         agent: options.agent.name().to_owned(),
@@ -1207,9 +1419,29 @@ fn one_trial(options: &Options, task: &Task, label: &str, trial: u32, variant: O
         wall_s: 0.0,
         tools_offered: Vec::new(),
         wishes: Vec::new(),
-        dir: dir.clone(),
+        dir: trial_dir(options, label, trial),
         held_out: task.split == crate::task::Split::HeldOut,
-    };
+    }
+}
+
+/// **A trial the run never started**, filed as the harness error it is, with `reason` (the run's own stop).
+fn not_run(options: &Options, task: &Task, label: &str, trial: u32, variant: Option<&Variant>, reason: String) -> TrialRecord {
+    let record = blank_record(options, task, label, trial, variant, Outcome::HarnessError, reason.clone());
+    let _ = std::fs::remove_dir_all(&record.dir);
+    if std::fs::create_dir_all(&record.dir).is_ok() {
+        write_record(&record, task, &reason);
+    }
+    record
+}
+
+/// **One trial, from the copy to its `trial.json`**, and never a `pass` for a harness that failed.
+///
+/// `label` is what the trial is filed and recorded under: the task's id for a dev task, and
+/// [`held_out_label`] for a held-out one, whose id is not to reach a path an agent can read.
+fn one_trial(options: &Options, task: &Task, label: &str, trial: u32, variant: Option<&Variant>) -> TrialRecord {
+    let dir = trial_dir(options, label, trial);
+    let _ = std::fs::remove_dir_all(&dir);
+    let record = |outcome: Outcome, reason: String| blank_record(options, task, label, trial, variant, outcome, reason);
     let held_out = task.split == crate::task::Split::HeldOut;
     let harness = |reason: String| {
         let record = record(Outcome::HarnessError, reason.clone());
@@ -1819,16 +2051,9 @@ pub fn read_transcript(path: &Path, dir: &Path, server: &str) -> Result<AgentRun
             // measured on this host, 2026-11-13, a spent weekly limit scored a trial `fail` with 0 calls and
             // 0 tokens. That is the provider's answer with the agent's name on it, so it is a harness error
             // quoting the provider's own words.
-            if message.get("stopReason").and_then(Value::as_str) == Some("error") {
-                let why = message
-                    .get("errorMessage")
-                    .and_then(Value::as_str)
-                    .unwrap_or("it gave no reason");
-                return Err(format!(
-                    "the model provider refused a turn, so this trial measures the provider and not the \
-                     agent: {}",
-                    why.lines().collect::<Vec<_>>().join(" ")
-                ));
+            if let Some(why) = provider_words(message) {
+                // **Starts with [`PROVIDER_REFUSAL`]**, which is what the run's circuit breaker counts.
+                return Err(format!("{PROVIDER_REFUSAL}, so this trial measures the provider and not the agent: {why}"));
             }
             spoke = true;
             if let Some(usage) = message.get("usage") {
