@@ -737,7 +737,9 @@ fn frame_json(
 /// alternative was a second bundle and two ways to name the same call's side effects.
 #[derive(bevy::ecs::system::SystemParam)]
 struct Gates<'w, 's> {
-    confirm: Option<Res<'w, crate::confirm::Confirm>>,
+    /// **The labeller and the question it raises** (E-002, #129 slice 34): what `labels_suggest`, `labels_walk` and `labels_abandon`
+    /// read and what carries their answers out, the same body a key's request uses. Its `confirm` is also what says a question is up.
+    labeller: crate::labels::Labeller<'w>,
     pause: Option<Res<'w, crate::familiar::AgentPause>>,
     activity: Option<ResMut<'w, crate::familiar::AgentActivity>>,
     time: Option<Res<'w, Time<Real>>>,
@@ -771,9 +773,52 @@ struct Gates<'w, 's> {
     /// carried by the same view.
     bench: Option<ResMut<'w, crate::anim_tab::BenchState>>,
     build: Option<ResMut<'w, crate::build::Build>>,
+    /// **The rig bench's stage** (E-002, #129 slice 26): what `stage_play`, `stage_scrub` and `stage_camera` change,
+    /// carried by the same view.
+    scrub: Option<ResMut<'w, crate::anim_stage::BenchScrub>>,
+    camera: Option<ResMut<'w, crate::anim_stage::BenchCamera>>,
+    /// **The lattice grid's cursor** (E-002, #129 slice 27): what `lattice_cursor_step` changes, carried by the same view.
+    cells: Option<ResMut<'w, crate::tiles::CellEdit>>,
+    /// **The Tiles tab's history** (E-002, #129 slice 30): what `tile_history_step` steps, carried by the same view.
+    tile_history: Option<ResMut<'w, crate::build::TileHistory>>,
+    /// **The Map camera** (E-002, #129 slice 31): what `camera_pan` and `camera_turn` move, carried by the same view.
+    rig: Option<ResMut<'w, crate::view::Rig>>,
+    /// **The rig bench's measurements and the watcher's queue** (E-002, #129 slice 32): what `rig_check_all` reads (which rigs are
+    /// measured) and asks (which to measure next), carried by the same view.
+    reports: Option<ResMut<'w, crate::anim_watch::BenchReports>>,
+    measure: Option<ResMut<'w, crate::anim_watch::MeasureQueue>>,
+    /// **What a rig history step measures again and forgets** (E-002, #129 slice 35): the reports it invalidates and the bench's
+    /// trial exclusions, carried by the same view.
+    generation: Option<ResMut<'w, crate::anim_watch::BenchGeneration>>,
+    exclude: Option<ResMut<'w, crate::anim_tab::AdoptExclude>>,
+    /// **Where `right` lands** (E-002, #129 slice 37), read for `shelf_walk` and `shelf_focus` with the suggestions the labeller holds, as a
+    /// key reads them.
+    library_cursor: Option<Res<'w, crate::tiles::LibraryCursor>>,
 }
 
 impl Gates<'_, '_> {
+    /// **The shelf as `shelf_walk` and `shelf_focus` read it** (E-002, #129 slice 37), for a call and a preview alike: the library and
+    /// candidate lists as the Meshes or Tiles tab draws them. `None` on any other tab, so the operation is refused there.
+    fn shelf_in(
+        &self,
+        mode: Option<crate::tiles::Mode>,
+        project: Option<&crate::project::Project>,
+        import: Option<&crate::tiles::ImportState>,
+        filters: Option<&crate::filter::Filters>,
+    ) -> Option<crate::ops_view::ShelfCursor> {
+        use crate::tiles::Mode;
+        let mode = mode.filter(|m| matches!(m, Mode::Meshes | Mode::Tiles))?;
+        crate::tiles::shelf_cursor(
+            project?,
+            import?,
+            filters?,
+            self.labeller.suggestions()?,
+            self.library_cursor.as_deref()?,
+            mode == Mode::Tiles,
+        )
+        .into()
+    }
+
     /// **The view an agent's call to a view operation changes**, as the editor holds it now: the tool from
     /// the editor's state, the rest from the resources a person's key reads.
     /// **The candidate list's folds and the filter box that has the keyboard** (E-002, #129 slice 25) are read from
@@ -797,13 +842,26 @@ impl Gates<'_, '_> {
             picker_selected: self.picker.as_deref().map(|p| p.selected).unwrap_or_default(),
             picker_active: self.picker.as_deref().is_some_and(|p| p.active),
             compose: self.compose.as_deref().map(|c| c.cursor()).unwrap_or_default(),
-            rig: self.bench.as_deref().map(|b| b.cursor()).unwrap_or_default(),
+            rig: match (self.bench.as_deref(), self.reports.as_deref()) {
+                (Some(bench), Some(reports)) => bench.cursor_with(reports),
+                (Some(bench), None) => bench.cursor(),
+                _ => Default::default(),
+            },
             // **The page is "up" when `browsing` holds a row**, and its length is the page's own (`build::page_len`).
             tile_page: self.build.as_deref().zip(project).and_then(|(build, project)| {
                 build.browsing.map(|row| crate::ops_view::TilePage { row, rows: crate::build::page_len(project, build) })
             }),
             packs: import.map(|i| i.folds()).unwrap_or_default(),
             filter_pane: filters.and_then(|f| f.focus_name()),
+            lattice: self.cells.as_deref().zip(import).zip(project).and_then(|((edit, import), project)| crate::tiles::lattice_cursor(edit, import, project)),
+            tile_hand: self.build.as_deref().and_then(|b| b.hand()),
+            tile_history: self.tile_history.as_deref().zip(self.build.as_deref()).map(|(history, build)| history.cursor(build)),
+            camera: self.rig.as_deref().map(|r| r.cursor()).unwrap_or_default(),
+            stage: crate::ops_view::StageCursor {
+                playing: self.scrub.as_deref().is_none_or(|s| s.playing),
+                phase: self.scrub.as_deref().map(|s| s.phase).unwrap_or_default(),
+                camera: self.camera.as_deref().map(|c| c.0).unwrap_or_default(),
+            },
             ..Default::default()
         }
     }
@@ -873,6 +931,23 @@ impl Gates<'_, '_> {
         {
             bench.set_cursor(&view.rig);
         }
+        // **A project-wide rig check** (E-002, #129 slice 32): the rigs it named go to the watcher and the bench shows the summary.
+        if view.rig.check.made
+            && let Some(bench) = self.bench.as_deref_mut()
+            && let Some(queue) = self.measure.as_deref_mut()
+        {
+            bench.take_check(&view.rig, queue);
+        }
+        // **A step of the bench's history** (E-002, #129 slice 35): the manifest it wrote, the stacks it moved and what it
+        // measures again.
+        if view.rig.history.stepped.is_some()
+            && let Some(bench) = self.bench.as_deref_mut()
+            && let Some(reports) = self.reports.as_deref_mut()
+            && let Some(generation) = self.generation.as_deref_mut()
+            && let Some(exclude) = self.exclude.as_deref_mut()
+        {
+            bench.take_step(&view.rig.history, exclude, reports, generation);
+        }
         if let Some(page) = view.tile_page
             && let Some(build) = self.build.as_deref_mut()
             && build.browsing.is_some_and(|row| row != page.row)
@@ -892,6 +967,58 @@ impl Gates<'_, '_> {
             && let Some(pane) = filters.box_to_clear(view.filter_pane.as_deref(), view.filter_fresh)
         {
             filters.take_focus(pane);
+        }
+        // **The rig bench's stage** (E-002, #129 slice 26), written only when it moved: the scrub is rewritten every playing
+        // frame, and a write that changes nothing would still mark it changed.
+        if self.scrub.as_deref().is_some_and(|s| s.playing != view.stage.playing || s.phase != view.stage.phase)
+            && let Some(scrub) = self.scrub.as_deref_mut()
+        {
+            scrub.playing = view.stage.playing;
+            scrub.phase = view.stage.phase;
+        }
+        if self.camera.as_deref().is_some_and(|c| c.0 != view.stage.camera)
+            && let Some(camera) = self.camera.as_deref_mut()
+        {
+            camera.0 = view.stage.camera;
+        }
+        // **The lattice grid's cursor** (E-002, #129 slice 27), written only when it moved, and a moved cursor closes an open token field.
+        if let Some(cursor) = view.lattice
+            && self.cells.as_deref().is_some_and(|e| !e.is_at(&cursor))
+            && let Some(edit) = self.cells.as_deref_mut()
+        {
+            edit.set_cursor(&cursor);
+        }
+        // **The Tiles tab's history** (E-002, #129 slice 30), written only when it moved: the stacks and the tile they step.
+        // **Before the tile in hand**, which a history step keeps in step with its own answer: any other operation hands back
+        // the history as it found it, and applying the hand first would make that read as a step taken back.
+        if let Some(cursor) = view.tile_history
+            && self.tile_history.as_deref().zip(self.build.as_deref()).is_some_and(|(h, b)| !h.is_at(b, &cursor))
+            && let Some(history) = self.tile_history.as_deref_mut()
+            && let Some(build) = self.build.as_deref_mut()
+        {
+            history.set_cursor(build, &cursor);
+        }
+        // **The tile in hand** (E-002, #129 slice 28), written only when it moved: the draft is the tab's own, and the 3-D
+        // stage and the tile history rebuild on a change to it.
+        if let Some(hand) = view.tile_hand
+            && self.build.as_deref().is_some_and(|b| !b.is_hand(&hand))
+            && let Some(build) = self.build.as_deref_mut()
+        {
+            build.set_hand(&hand);
+        }
+        // **A Tiles-page operation's answer** (E-002, #129 slice 36): the page, the tile in hand opened or put down and the name
+        // prompt, written by the one body a key uses. Only an answer that was made touches the `Build`.
+        if view.page.made
+            && let Some(build) = self.build.as_deref_mut()
+        {
+            build.take_page(&view.page);
+        }
+        // **The Map camera** (E-002, #129 slice 31), written only when it moved: the focus and the yaw it is heading for. The
+        // eased yaw and the zoom are the camera's own, and a write through a `ResMut` marks the rig changed.
+        if self.rig.as_deref().is_some_and(|r| !r.is_at(&view.camera))
+            && let Some(rig) = self.rig.as_deref_mut()
+        {
+            rig.set_cursor(&view.camera);
         }
     }
 
@@ -2006,7 +2133,7 @@ fn operation_apply(
     mut state: Option<ResMut<crate::editor::EditorState>>,
     mut gates: Gates,
     door: Option<Res<crate::workspace::Workspace>>,
-    mode: Option<Res<crate::tiles::Mode>>,
+    mut mode: Option<ResMut<crate::tiles::Mode>>,
     mut filters: Option<ResMut<crate::filter::Filters>>,
     mut import: Option<ResMut<crate::tiles::ImportState>>,
     menu: Option<Res<crate::project_assets::PointedAt>>,
@@ -2051,7 +2178,7 @@ fn operation_apply(
     // 10 and 11).** A question on screen, a leaving question, or a door already waiting owns the next
     // frame. The refusal is the editor's own sentence, and nothing is written or logged.
     if p.operation == "door_open" {
-        let asking = gates.confirm.as_deref().is_some_and(|c| c.is_open());
+        let asking = gates.labeller.confirm.as_deref().is_some_and(|c| c.is_open());
         if let Some(why) = state
             .as_deref()
             .and_then(|s| crate::editor::door_refusal(s, asking))
@@ -2116,8 +2243,29 @@ fn operation_apply(
     if p.dry_run {
         let read_project = project.as_deref();
         let read_open = open.as_deref();
+        let mut view = op.changes_view().then(|| gates.view_in(state.as_deref(), read_project, import.as_deref(), filters.as_deref()));
+        // **A label operation reads the labeller** (E-002, #129 slice 34). A preview asks no endpoint whether it is reachable:
+        // that is a probe over the network, and a preview is the plan and nothing else.
+        if p.operation.starts_with("labels_")
+            && let (Some(view), Some(project), Some(import), Some(filters)) = (view.as_mut(), read_project, import.as_deref(), filters.as_deref())
+            && let Some((cursor, _)) = gates.labeller.cursor(false, project, import, filters)
+        {
+            view.labels = cursor;
+        }
+        if p.operation.starts_with("shelf_")
+            && let Some(view) = view.as_mut()
+            && let Some(shelf) = gates.shelf_in(mode.as_deref().copied(), read_project, import.as_deref(), filters.as_deref())
+        {
+            view.shelf = shelf;
+        }
+        // **A step of the bench's history reads the history** (E-002, #129 slice 35), for a preview and a call alike.
+        if p.operation == "rig_history_step"
+            && let (Some(view), Some(bench)) = (view.as_mut(), gates.bench.as_deref())
+        {
+            view.rig.history = bench.history();
+        }
         let ctx = Ctx {
-        view: op.changes_view().then(|| gates.view_in(state.as_deref(), read_project, import.as_deref(), filters.as_deref())), trust_file: None,
+        view, trust_file: None,
             root: menu.as_ref().map(|m| m.root.clone()),
             project: read_project.cloned(),
             open: read_open.cloned(),
@@ -2148,6 +2296,29 @@ fn operation_apply(
     // **The menu's root, when the menu is up**, so `map_create` has a directory before any door.
     ctx.root = menu.as_ref().map(|m| m.root.clone());
     ctx.view = op.changes_view().then(|| gates.view_in(state.as_deref(), ctx.project.as_ref(), import.as_deref(), filters.as_deref()));
+    // **A label operation reads the labeller, and its answer is carried out below** (E-002, #129 slice 34), by the body a key's
+    // request uses. A walk also asks whether the endpoint is reachable: it would otherwise burn its queue learning that.
+    let mut gathered = None;
+    if p.operation.starts_with("labels_")
+        && let (Some(view), Some(project), Some(import), Some(filters)) =
+            (ctx.view.as_mut(), ctx.project.as_ref(), import.as_deref(), filters.as_deref())
+        && let Some((cursor, taken)) = gates.labeller.cursor(p.operation == "labels_walk", project, import, filters)
+    {
+        view.labels = cursor;
+        gathered = Some(taken);
+    }
+    // **A shelf operation reads the shelf, and its answer is carried out below** (E-002, #129 slice 37), by the body a key's request uses.
+    if p.operation.starts_with("shelf_")
+        && let Some(view) = ctx.view.as_mut()
+        && let Some(shelf) = gates.shelf_in(mode.as_deref().copied(), ctx.project.as_ref(), import.as_deref(), filters.as_deref())
+    {
+        view.shelf = shelf;
+    }
+    if p.operation == "rig_history_step"
+        && let (Some(view), Some(bench)) = (ctx.view.as_mut(), gates.bench.as_deref())
+    {
+        view.rig.history = bench.history();
+    }
     // **The proposal travels by value**, in and out, because it is not map data.
     ctx.proposal = proposal.as_deref_mut().and_then(|r| r.0.take());
     // **A proposal with no seed named gets the editor's own next one.** This is what makes two
@@ -2172,9 +2343,44 @@ fn operation_apply(
         .then(|| crate::checks::find(&ctx).map(|after| crate::checks::report(before.as_ref(), &after)))
         .flatten();
     let carried = ctx.proposal.take();
-    // **The view the operation answered with goes back to the editor's own** (E-002, #129), as a key's does.
-    if let Some(view) = ctx.view.take() {
+    // **The view the operation answered with goes back to the editor's own** (E-002, #129), as a key's does, **and only when the
+    // dispatch applied**: a call refused after its commit (a log line that could not be written takes the change back) told the
+    // agent "refused" and must not move the camera, rescan or queue rigs either (#129 review of slices 31-33).
+    let view = ctx.view.take().filter(|_| matches!(applied, Ok(ops::Applied::Done { .. })));
+    if let Some(mut view) = view {
+        // **A rescan is a request** (E-002, #129 slice 33): the operation says the directory is wanted and the scan is the
+        // Meshes tab's own, run against the project the operation held.
+        let rescan = view.rescan;
+        let edit = view.edit.take();
+        let labels_answer = std::mem::take(&mut view.labels.answer);
+        let shelf_answer = std::mem::take(&mut view.shelf.answer);
+        let tiles_tab = view.shelf.tiles_tab;
         gates.apply_view(view, state.as_deref_mut(), import.as_deref_mut(), filters.as_deref_mut());
+        if rescan
+            && let (Some(import), Some(project)) = (import.as_deref_mut(), ctx.project.as_ref())
+        {
+            crate::tiles::scan(project, import);
+        }
+        // **A label request is carried out** (E-002, #129 slice 34): the answer and the operation's own sentence.
+        if let (Some(taken), Ok(ops::Applied::Done { outcome, .. }), Some(import), Some(project)) =
+            (gathered, &applied, import.as_deref_mut(), ctx.project.as_ref())
+        {
+            gates.labeller.take(labels_answer, &outcome.summary, taken, project, import);
+        }
+        // **A shelf request is carried out** (E-002, #129 slice 37): the answer and the operation's own sentence, by the body a key's
+        // request uses, under the agent's name.
+        if p.operation.starts_with("shelf_")
+            && let (Ok(ops::Applied::Done { outcome, .. }), Some(import), Some(project)) = (&applied, import.as_deref_mut(), ctx.project.as_ref())
+        {
+            crate::tiles::take_shelf(import, project, &shelf_answer, &outcome.summary, tiles_tab, ops::Source::Agent);
+        }
+        // **A piece sent to the Meshes tab** (E-002, #129 slice 38): the answer and the operation's own sentence, written by the
+        // body a key's `piece_edit` uses.
+        if let (Some(id), Ok(ops::Applied::Done { outcome, .. }), Some(state), Some(mode), Some(import)) =
+            (edit, &applied, state.as_deref_mut(), mode.as_deref_mut(), import.as_deref_mut())
+        {
+            crate::editor::take_edit(&id, &outcome.summary, state, mode, import);
+        }
     }
     // **A project the operation LOADED is installed here, before the map goes back.** `map_open` can
     // load the project from the menu's root — that is what lets an agent make a map and then work in

@@ -3713,6 +3713,1773 @@ pub mod shelf_cursors {
             }
         }
     }
+
+    /// **What the two shelf operations share** (E-002, #129 slice 37): the cursor read off the view, the sentences, and the one reading
+    /// of where `right` lands.
+    pub mod shelf {
+        use super::*;
+        use crate::ops_view::{ShelfAnswer, ShelfCursor, ShelfHand};
+
+        /// **What a walk says when the library has nothing to land on**, as a note: guidance, not a refusal.
+        pub const LIBRARY_EMPTY_NOTE: &str = "the library is empty";
+
+        /// **What the Tiles tab says when its one list is empty**, as a problem: nothing can be built from no library.
+        pub const LIBRARY_EMPTY_PROBLEM: &str = "the library is empty — import a mesh on the Meshes tab before building";
+
+        /// **What a walk says when the candidate list has no rows and the front end gave no reason.**
+        pub const NOTHING_TO_WALK: &str = "nothing to walk";
+
+        /// **The shelf in hand**, or the refusal that says no shelf is up.
+        pub fn shelf_in<'a>(ctx: &'a Ctx, what: &str) -> Result<&'a ShelfCursor, Refusal> {
+            let shelf = &need_view(ctx, what)?.shelf;
+            if !shelf.up {
+                return Err(Refusal::new(format!(
+                    "no shelf is up, so there is nothing to {what}. The library and candidate lists are on the Meshes tab, and the Tiles tab has the library."
+                )));
+            }
+            Ok(shelf)
+        }
+
+        /// **The sentence for a selection**: which piece, and the key that removes it.
+        pub fn selected_says(id: &str) -> String {
+            format!("`{id}` selected — {} removes it", crate::keys::chord(crate::keys::Action::RemoveTile))
+        }
+
+        /// **Where entering the library shelf lands**: the row the cursor last stood on when the shelf still holds it, and otherwise the
+        /// first row.
+        pub fn landing(shelf: &ShelfCursor) -> Option<String> {
+            shelf
+                .remembered
+                .as_deref()
+                .filter(|id| shelf.library.iter().any(|had| had == id))
+                .map(str::to_owned)
+                .or_else(|| shelf.library.first().cloned())
+        }
+
+        /// **An answer that changes nothing and says why.**
+        pub fn nothing(said: impl Into<String>) -> (ShelfAnswer, String) {
+            (ShelfAnswer { say: true, ..ShelfAnswer::default() }, said.into())
+        }
+
+        /// **An answer that selects a library piece**: the Tiles tab says it (it writes the selection itself), and the Meshes tab's
+        /// selection says it through `piece_select`.
+        pub fn selects(shelf: &ShelfCursor, id: &str) -> (ShelfAnswer, String) {
+            (
+                ShelfAnswer { made: true, hand: Some(ShelfHand::Library(id.to_owned())), say: shelf.tiles_tab, ..ShelfAnswer::default() },
+                selected_says(id),
+            )
+        }
+
+        /// **The outcome of an answer**, written into the view the operation was handed.
+        pub fn settle(ctx: &mut Ctx, answer: ShelfAnswer, summary: String) -> Result<Outcome, Refusal> {
+            let Some(view) = ctx.view.as_mut() else {
+                return Err(Refusal::new("no view is in hand, so there is no shelf to change."));
+            };
+            let after = json!({ "selected": answer.selects(), "row": answer.row.clone() });
+            view.shelf.answer = answer;
+            Ok(Outcome { summary, affected: 0, saved: false, inverse: None, after: Some(after) })
+        }
+    }
+
+    /// **Choose which shelf list the arrows walk**, as `left` and `right` do and as the `CANDIDATES` and `LIBRARY` chips do.
+    pub mod shelf_focus {
+        use super::shelf::{LIBRARY_EMPTY_NOTE, NOTHING_TO_WALK, landing, nothing, settle, shelf_in};
+        use super::*;
+        use crate::ops_view::{ShelfAnswer, ShelfHand};
+
+        /// The two lists an agent names, beside the schema so the parse and the schema cannot disagree.
+        pub const LISTS: &[&str] = &["candidates", "library"];
+
+        #[derive(Debug, Clone, PartialEq, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `candidates` or `library`.
+            pub to: String,
+        }
+
+        pub struct ShelfFocus;
+
+        impl ShelfFocus {
+            fn decide(ctx: &Ctx, params: &serde_json::Value) -> Result<(ShelfAnswer, String), Refusal> {
+                let p: Params = serde_json::from_value(params.clone())
+                    .map_err(|e| Refusal::new(format!("this is not a list: {e}. The only field is `to`: {}.", LISTS.join(" or "))))?;
+                let shelf = shelf_in(ctx, "focus")?;
+                match p.to.as_str() {
+                    "candidates" => {
+                        let said = if shelf.rows.is_empty() {
+                            if shelf.empty.is_empty() { NOTHING_TO_WALK.to_owned() } else { shelf.empty.clone() }
+                        } else {
+                            "candidates".to_owned()
+                        };
+                        Ok((ShelfAnswer { made: true, hand: Some(ShelfHand::Candidates), say: true, ..ShelfAnswer::default() }, said))
+                    }
+                    "library" => match landing(shelf) {
+                        // **Arriving on the library is a selection only when none is made**: the seed is the arrival, and a selection
+                        // that is already made is left alone.
+                        Some(land) => Ok((
+                            ShelfAnswer {
+                                made: true,
+                                hand: shelf.selected.is_none().then_some(ShelfHand::Library(land)),
+                                clear_pack: true,
+                                say: true,
+                                ..ShelfAnswer::default()
+                            },
+                            "library".to_owned(),
+                        )),
+                        None => Ok(nothing(LIBRARY_EMPTY_NOTE)),
+                    },
+                    other => Err(Refusal::new(format!("`{other}` is not a list; say one of {}", LISTS.join(", ")))),
+                }
+            }
+        }
+
+        impl Operation for ShelfFocus {
+            fn name(&self) -> &'static str {
+                "shelf_focus"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["to"],
+                    "properties": {
+                        "to": {"type": "string", "enum": LISTS, "description": "Which list the arrows walk on the Meshes tab: the candidates (meshes not in the library yet) or the library shelf. Choosing the library selects the row the cursor last stood on (or the first) when none is selected."}
+                    }
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let (answer, said) = Self::decide(ctx, params)?;
+                Ok(json!({ "says": said, "selects": answer.selects() }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let (answer, said) = Self::decide(ctx, params)?;
+                settle(ctx, answer, said)
+            }
+        }
+    }
+
+    /// **Walk the shelf one step or a stride**, as `up` and `down` do on the Meshes tab (the library or the candidates, whichever has the
+    /// arrows) and on the Tiles tab (its one list, a tile's source).
+    pub mod shelf_walk {
+        use super::list_walk::{check_rows, direction, one_row};
+        use super::shelf::{LIBRARY_EMPTY_NOTE, LIBRARY_EMPTY_PROBLEM, NOTHING_TO_WALK, landing, nothing, selects, settle, shelf_in};
+        use super::*;
+        use crate::ops_view::ShelfAnswer;
+
+        #[derive(Debug, Clone, PartialEq, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `prev` or `next`.
+            pub by: String,
+            /// How many rows one step is: one, or the long stride a held Shift walks.
+            #[serde(default = "one_row")]
+            pub rows: usize,
+        }
+
+        pub struct ShelfWalk;
+
+        impl ShelfWalk {
+            fn decide(ctx: &Ctx, params: &serde_json::Value) -> Result<(ShelfAnswer, String), Refusal> {
+                let p: Params = serde_json::from_value(params.clone())
+                    .map_err(|e| Refusal::new(format!("this is not a walk: {e}. The fields are `by` (prev or next) and `rows`, which is optional.")))?;
+                let step = direction(&p.by)?;
+                let stride = check_rows(p.rows)?;
+                let shelf = shelf_in(ctx, "walk")?;
+                // **On the Tiles tab there is only one list**: a tile member must name a library descriptor, and a candidate is not a
+                // legal source, so walking it there would move a focus the tile author cannot spend.
+                if shelf.tiles_tab && shelf.selected.is_none() {
+                    // **The press that establishes the selection lands ON the first row, and stops there**: a seed is not a step.
+                    return match shelf.library.first() {
+                        Some(first) => Ok(selects(shelf, first)),
+                        None => Err(Refusal::new(LIBRARY_EMPTY_PROBLEM)),
+                    };
+                }
+                match &shelf.selected {
+                    Some(id) => {
+                        let Some(at) = shelf.library.iter().position(|d| d == id) else {
+                            // **The selection was filtered out of the list: land on the row the cursor would land on** and keep going,
+                            // rather than going dead.
+                            return Ok(match landing(shelf) {
+                                Some(land) => selects(shelf, &land),
+                                None => nothing(LIBRARY_EMPTY_NOTE),
+                            });
+                        };
+                        let want = if step > 0 { at.saturating_add(stride) } else { at.saturating_sub(stride) };
+                        let last = shelf.library.len().saturating_sub(1);
+                        match shelf.library.get(want.min(last)) {
+                            Some(next) => Ok(selects(shelf, next)),
+                            None => Ok(nothing(LIBRARY_EMPTY_NOTE)),
+                        }
+                    }
+                    None => {
+                        // **Every row on screen, headings included**, so nothing visible is unreachable.
+                        let Some(top) = shelf.rows.first() else {
+                            return Ok(nothing(if shelf.empty.is_empty() { NOTHING_TO_WALK } else { shelf.empty.as_str() }));
+                        };
+                        let (row, said) = match shelf.here {
+                            Some(at) => {
+                                let want = if step > 0 { at.saturating_add(stride).min(shelf.rows.len() - 1) } else { at.saturating_sub(stride) };
+                                (shelf.rows[want].clone(), format!("row {} of {}", want + 1, shelf.rows.len()))
+                            }
+                            // **Not on screen at all** (a filter or a fold moved out from under the cursor): start from the top of what
+                            // can be seen, which is where the eye already is.
+                            None => (top.clone(), "back at the top of the list".to_owned()),
+                        };
+                        Ok((ShelfAnswer { made: true, row: Some(row), ..ShelfAnswer::default() }, said))
+                    }
+                }
+            }
+        }
+
+        impl Operation for ShelfWalk {
+            fn name(&self) -> &'static str {
+                "shelf_walk"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            /// A walk that lands on a library piece moves the shelf's highlighted row and the detail pane to it; a walk of the
+            /// candidates, or one with no view to read, has no piece to name.
+            fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+                match Self::decide(ctx, params) {
+                    Ok((answer, _)) => answer.selects().map_or(Shown::Nowhere, |id| Shown::Piece { id: id.to_owned() }),
+                    Err(_) => Shown::Nowhere,
+                }
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["by"],
+                    "properties": {
+                        "by": {"type": "string", "enum": list_walk::DIRECTIONS, "description": "The direction along the list the arrows have: the library shelf or the candidate list on the Meshes tab, the library on the Tiles tab."},
+                        "rows": {"type": "integer", "minimum": 1, "maximum": list_walk::MAX_ROWS, "description": "How many rows the step is; one by default. Five is the long stride a held Shift walks."}
+                    }
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let (answer, said) = Self::decide(ctx, params)?;
+                Ok(json!({ "says": said, "selects": answer.selects() }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let (answer, said) = Self::decide(ctx, params)?;
+                settle(ctx, answer, said)
+            }
+        }
+    }
+}
+
+/// **The rig bench's stage** (E-002, #129 slice 26): whether the figure plays, the phase a scrub holds while it is
+/// paused, and the camera preset it is framed by. Three view operations on one body of rules, so `Space`, the held left
+/// and right arrows, `V` and an agent's call cannot disagree about what a toggle, a sweep or a cycle means. The stage is
+/// what a person is looking at: none of these writes a file or takes an undo step.
+pub mod stage {
+    use super::list_walk::need_view;
+    use super::*;
+    use crate::anim_stage::{CamPreset, FINE_DIVISOR, SCRUB_RATE};
+    use crate::ops_view::StageCursor;
+    use serde_json::json;
+
+    /// **The longest scrub one call may make**, in seconds of the key being held: far past any frame, so a request is a
+    /// sweep and not a spin.
+    pub const MAX_SCRUB_SECONDS: f32 = 60.0;
+
+    /// **A scrub's default length**, in seconds of the key being held: a quarter of a second is a short tap.
+    pub const DEFAULT_SCRUB_SECONDS: f32 = 0.25;
+
+    /// The two directions of a scrub, named as the keys are (`ScrubBack`, `ScrubFwd`).
+    pub const DIRECTIONS: &[&str] = &["back", "fwd"];
+
+    fn stage_in<'a>(ctx: &'a Ctx, what: &str) -> Result<&'a StageCursor, Refusal> {
+        Ok(&need_view(ctx, what)?.stage)
+    }
+
+    /// **Put the stage where an operation answered**, and say what happened.
+    fn settle(ctx: &mut Ctx, landed: StageCursor, summary: String, after: serde_json::Value) -> Result<Outcome, Refusal> {
+        let Some(view) = ctx.view.as_mut() else {
+            return Err(Refusal::new("no view is in hand, so there is no stage to change."));
+        };
+        view.stage = landed;
+        Ok(Outcome { summary, affected: 0, saved: false, inverse: None, after: Some(after) })
+    }
+
+    /// **Play the figure, or pause it into a scrub**, as `Space` does. The phase carries across the change.
+    pub mod stage_play {
+        use super::*;
+
+        #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `true` plays, `false` pauses; absent toggles, as `Space` does.
+            #[serde(default)]
+            pub playing: Option<bool>,
+        }
+
+        pub struct StagePlay;
+
+        impl StagePlay {
+            fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<StageCursor, Refusal> {
+                let p: Params = serde_json::from_value(params.clone())
+                    .map_err(|e| Refusal::new(format!("these are not a play: {e}. The only field is `playing`, true or false.")))?;
+                let now = stage_in(ctx, "play or pause")?;
+                Ok(StageCursor { playing: p.playing.unwrap_or(!now.playing), ..*now })
+            }
+        }
+
+        impl Operation for StagePlay {
+            fn name(&self) -> &'static str {
+                "stage_play"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "playing": {"type": "boolean", "description": "`true` plays the staged figure at its own authored speed; `false` pauses it, and the arrows then scrub its phase. Absent toggles, as Space does."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                Ok(json!({ "playing": Self::landing(ctx, params)?.playing }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let landed = Self::landing(ctx, params)?;
+                let summary = if landed.playing {
+                    "the figure plays"
+                } else {
+                    "the figure is paused: left and right scrub its phase"
+                };
+                settle(ctx, landed, summary.to_owned(), json!({ "playing": landed.playing }))
+            }
+        }
+    }
+
+    /// **Scrub the paused figure's phase**, for as long as a key would be held.
+    pub mod stage_scrub {
+        use super::*;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `"back"` or `"fwd"`.
+            pub by: String,
+            /// For how long the key would be held, in seconds. The sweep is a quarter of the cycle per second.
+            #[serde(default = "default_seconds")]
+            pub seconds: f32,
+            /// `true` is Shift: a fifth of the sweep.
+            #[serde(default)]
+            pub fine: bool,
+        }
+
+        fn default_seconds() -> f32 {
+            DEFAULT_SCRUB_SECONDS
+        }
+
+        pub struct StageScrub;
+
+        impl StageScrub {
+            fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<StageCursor, Refusal> {
+                let p: Params = serde_json::from_value(params.clone()).map_err(|e| {
+                    Refusal::new(format!("these are not a scrub: {e}. The fields are `by`, `back` or `fwd`, `seconds` and `fine`."))
+                })?;
+                let by = match p.by.as_str() {
+                    "back" => -1.0,
+                    "fwd" => 1.0,
+                    other => {
+                        return Err(Refusal::new(format!("`{other}` is not a direction; say one of {}", DIRECTIONS.join(", "))));
+                    }
+                };
+                if !(p.seconds > 0.0 && p.seconds <= MAX_SCRUB_SECONDS) {
+                    return Err(Refusal::new(format!("`seconds` is {}, and a scrub is longer than 0 and at most {MAX_SCRUB_SECONDS}", p.seconds)));
+                }
+                let now = stage_in(ctx, "scrub")?;
+                if now.playing {
+                    return Err(Refusal::new(
+                        "the figure is playing, and it keeps its own phase; there is nothing to scrub. Pause it first (`stage_play`).",
+                    ));
+                }
+                let fine = if p.fine { FINE_DIVISOR } else { 1.0 };
+                let phase = bevy_grimoire_anim::wrap01(now.phase + by * SCRUB_RATE / fine * p.seconds);
+                Ok(StageCursor { phase, ..*now })
+            }
+        }
+
+        impl Operation for StageScrub {
+            fn name(&self) -> &'static str {
+                "stage_scrub"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["by"],
+                    "properties": {
+                        "by": {"type": "string", "enum": DIRECTIONS, "description": "Which way to scrub the paused figure's phase: `back` is the left arrow and `fwd` the right. Refused while the figure is playing (`stage_play` pauses it)."},
+                        "seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": MAX_SCRUB_SECONDS, "description": "For how long the key would be held, in seconds: the phase moves a quarter of the cycle per second. A quarter of a second unless given."},
+                        "fine": {"type": "boolean", "description": "`true` is Shift held: a fifth of the sweep."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                Ok(json!({ "phase": Self::landing(ctx, params)?.phase }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let landed = Self::landing(ctx, params)?;
+                settle(ctx, landed, format!("the phase is {:.3}", landed.phase), json!({ "phase": landed.phase }))
+            }
+        }
+    }
+
+    /// **Frame the stage camera**: the next preset, or the one named.
+    pub mod stage_camera {
+        use super::*;
+
+        #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `figure`, `feet`, `side` or `ground`; absent steps to the next, as `V` does.
+            #[serde(default)]
+            pub preset: Option<String>,
+        }
+
+        pub struct StageCamera;
+
+        fn names() -> Vec<&'static str> {
+            CamPreset::ALL.into_iter().map(CamPreset::label).collect()
+        }
+
+        impl StageCamera {
+            fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<StageCursor, Refusal> {
+                let p: Params = serde_json::from_value(params.clone())
+                    .map_err(|e| Refusal::new(format!("these are not a framing: {e}. The only field is `preset`.")))?;
+                let now = stage_in(ctx, "frame")?;
+                let camera = match p.preset {
+                    None => now.camera.next(),
+                    Some(name) => CamPreset::from_label(&name)
+                        .ok_or_else(|| Refusal::new(format!("`{name}` is not a camera preset; say one of {}", names().join(", "))))?,
+                };
+                Ok(StageCursor { camera, ..*now })
+            }
+        }
+
+        impl Operation for StageCamera {
+            fn name(&self) -> &'static str {
+                "stage_camera"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "preset": {"type": "string", "enum": names(), "description": "How the rig bench's stage camera frames the figure: the whole figure, its feet, a low side profile, or near ground level. Absent steps to the next, as V does."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                Ok(json!({ "preset": Self::landing(ctx, params)?.camera.label() }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let landed = Self::landing(ctx, params)?;
+                let preset = landed.camera.label();
+                settle(ctx, landed, format!("the stage camera frames the {preset}"), json!({ "preset": preset }))
+            }
+        }
+    }
+}
+
+/// **The Map camera, panned and turned** (E-002, #129 slice 31): `W`, `A`, `S` and `D` pan the view along the screen's own axes and
+/// `Q` and `E` turn it in quarters. Two view operations on one body of rules each, so a held key, a tap and an agent's call cannot
+/// disagree about how far a second of panning is or what a quarter turn means. The camera is what a person is looking through:
+/// none of these writes a file or takes an undo step.
+pub mod camera {
+    use super::list_walk::need_view;
+    use super::*;
+    use crate::ops_view::CameraCursor;
+    use crate::view::{PAN_SPEED, PANS, ROTATION_STEPS};
+    use serde_json::json;
+
+    /// **The longest pan one call may make**, in seconds of the key being held: far past any frame, so a request is a sweep
+    /// and not a flight across the map.
+    pub const MAX_PAN_SECONDS: f32 = 10.0;
+
+    /// **A pan's default length**, in seconds of the key being held: a quarter of a second is a short tap.
+    pub const DEFAULT_PAN_SECONDS: f32 = 0.25;
+
+    fn camera_in<'a>(ctx: &'a Ctx, what: &str) -> Result<&'a CameraCursor, Refusal> {
+        Ok(&need_view(ctx, what)?.camera)
+    }
+
+    /// **Put the camera where an operation answered**, and say what happened.
+    fn settle(ctx: &mut Ctx, landed: CameraCursor, summary: String, after: serde_json::Value) -> Result<Outcome, Refusal> {
+        let Some(view) = ctx.view.as_mut() else {
+            return Err(Refusal::new("no view is in hand, so there is no camera to move."));
+        };
+        view.camera = landed;
+        Ok(Outcome { summary, affected: 0, saved: false, inverse: None, after: Some(after) })
+    }
+
+    /// **Pan the view** along the screen's axes, as `W`, `A`, `S` and `D` do.
+    pub mod camera_pan {
+        use super::*;
+        use bevy::math::{Vec2, Vec3};
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// The keys held, by name: `forward`, `back`, `left` and `right`. Two at once are the diagonal.
+            pub directions: Vec<String>,
+            /// For how long the keys would be held, in seconds.
+            #[serde(default = "default_seconds")]
+            pub seconds: f32,
+        }
+
+        fn default_seconds() -> f32 {
+            DEFAULT_PAN_SECONDS
+        }
+
+        pub struct CameraPan;
+
+        impl CameraPan {
+            fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<CameraCursor, Refusal> {
+                let p: Params = serde_json::from_value(params.clone()).map_err(|e| {
+                    Refusal::new(format!("these are not a pan: {e}. The fields are `directions`, a list of forward, back, left and right, and `seconds`."))
+                })?;
+                if !(p.seconds > 0.0 && p.seconds <= MAX_PAN_SECONDS) {
+                    return Err(Refusal::new(format!("`seconds` is {}, and a pan is longer than 0 and at most {MAX_PAN_SECONDS}", p.seconds)));
+                }
+                // **A key is held or it is not**, so a name said twice is one key.
+                let mut wish = Vec2::ZERO;
+                let mut named: Vec<&str> = Vec::new();
+                for name in &p.directions {
+                    let Some(&(_, said, dir)) = PANS.iter().find(|(_, said, _)| *said == name.as_str()) else {
+                        return Err(Refusal::new(format!("`{name}` is not a direction; say any of {}", names().join(", "))));
+                    };
+                    if !named.contains(&said) {
+                        named.push(said);
+                        wish += dir;
+                    }
+                }
+                if wish == Vec2::ZERO {
+                    return Err(Refusal::new(if named.is_empty() {
+                        "name at least one direction to pan: forward, back, left or right.".to_owned()
+                    } else {
+                        format!("{} cancel each other, so the view would not move.", named.join(" and "))
+                    }));
+                }
+                let now = camera_in(ctx, "pan")?;
+                // **A fraction of what is on screen, not a fixed number of metres**: the rule the keys always had.
+                let moved = crate::view::pan_direction(wish, now.yaw) * PAN_SPEED * now.height * p.seconds;
+                Ok(CameraCursor { focus: (Vec3::from(now.focus) + moved).to_array(), ..*now })
+            }
+        }
+
+        /// The four names an agent says, in the order of the keys, from the table the key loop reads.
+        pub fn names() -> Vec<&'static str> {
+            PANS.iter().map(|(_, said, _)| *said).collect()
+        }
+
+        impl Operation for CameraPan {
+            fn name(&self) -> &'static str {
+                "camera_pan"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["directions"],
+                    "properties": {
+                        "directions": {"type": "array", "minItems": 1, "items": {"type": "string", "enum": names()}, "description": "Which pan keys are held: `forward` is W, `left` A, `back` S and `right` D, along the screen's axes at the view's current turn. Two at once are the diagonal; opposite keys cancel and are refused."},
+                        "seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": MAX_PAN_SECONDS, "description": "For how long the keys would be held, in seconds: the view moves 16/18 of what it shows per second. A quarter of a second unless given."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                Ok(json!({ "focus": Self::landing(ctx, params)?.focus }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let landed = Self::landing(ctx, params)?;
+                let [x, _, z] = landed.focus;
+                settle(ctx, landed, format!("the camera looks at ({x:.1}, {z:.1})"), json!({ "focus": landed.focus }))
+            }
+        }
+    }
+
+    /// **Turn the view** in quarters, as `Q` and `E` do.
+    pub mod camera_turn {
+        use super::*;
+        use std::f32::consts::TAU;
+
+        /// The two ways to turn, named as the keys are (`TurnViewLeft`, `TurnViewRight`).
+        pub const DIRECTIONS: &[&str] = &["left", "right"];
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `"left"` or `"right"`.
+            pub by: String,
+            /// How many quarter turns, one unless given: at most a full turn.
+            #[serde(default = "one_quarter")]
+            pub quarters: u32,
+        }
+
+        fn one_quarter() -> u32 {
+            1
+        }
+
+        pub struct CameraTurn;
+
+        impl CameraTurn {
+            fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<CameraCursor, Refusal> {
+                let p: Params = serde_json::from_value(params.clone())
+                    .map_err(|e| Refusal::new(format!("these are not a turn: {e}. The fields are `by`, `left` or `right`, and `quarters`.")))?;
+                let sign = match p.by.as_str() {
+                    "left" => 1.0,
+                    "right" => -1.0,
+                    other => return Err(Refusal::new(format!("`{other}` is not a way to turn; say one of {}", DIRECTIONS.join(", ")))),
+                };
+                if !(1..=ROTATION_STEPS).contains(&p.quarters) {
+                    return Err(Refusal::new(format!("`quarters` is {}, and a turn is from 1 to {ROTATION_STEPS} quarters", p.quarters)));
+                }
+                let now = camera_in(ctx, "turn")?;
+                let goal_yaw = now.goal_yaw + sign * p.quarters as f32 * TAU / ROTATION_STEPS as f32;
+                Ok(CameraCursor { goal_yaw, ..*now })
+            }
+        }
+
+        impl Operation for CameraTurn {
+            fn name(&self) -> &'static str {
+                "camera_turn"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["by"],
+                    "properties": {
+                        "by": {"type": "string", "enum": DIRECTIONS, "description": "Which way to turn the view: `left` is Q and `right` is E."},
+                        "quarters": {"type": "integer", "minimum": 1, "maximum": ROTATION_STEPS, "description": "How many quarter turns: one unless given."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                Ok(json!({ "goal_yaw": Self::landing(ctx, params)?.goal_yaw }))
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let landed = Self::landing(ctx, params)?;
+                settle(ctx, landed, "the view turns".to_owned(), json!({ "goal_yaw": landed.goal_yaw }))
+            }
+        }
+    }
+}
+
+/// **Check every rig on the bench**, as `C` does on the Anim tab (E-002, #129 slice 32): show the project-wide summary and ask
+/// the watcher to measure each rig that has no measurement yet. Reports persist for the session and the watcher re-measures on a
+/// real change, so only what is unmeasured is queued, and a second check is an instant summary. What a person is looking at (the
+/// summary face) and a request to the watcher; nothing is written to `rigs.yaml` and no undo step is taken.
+pub mod rig_check_all {
+    use super::list_walk::need_view;
+    use super::*;
+    use serde_json::json;
+
+    /// **The sentence for a check**: what the key has always said, written once for the operation's answer and the status line.
+    pub fn says(queued: usize) -> String {
+        if queued == 0 { "all rigs measured".to_owned() } else { format!("measuring {queued} rig(s)...") }
+    }
+
+    pub struct RigCheckAll;
+
+    impl RigCheckAll {
+        /// The rigs with no measurement yet, in manifest order: the rule, one copy for plan and commit.
+        fn unmeasured(ctx: &Ctx, params: &serde_json::Value) -> Result<Vec<String>, Refusal> {
+            match params {
+                serde_json::Value::Null => {}
+                serde_json::Value::Object(o) if o.is_empty() => {}
+                _ => return Err(Refusal::new("these are not a check: it takes no fields. Every rig on the bench is what it checks.")),
+            }
+            let rigs = &need_view(ctx, "check")?.rig;
+            Ok(rigs.names.iter().filter(|n| !rigs.measured.contains(n)).cloned().collect())
+        }
+    }
+
+    impl Operation for RigCheckAll {
+        fn name(&self) -> &'static str {
+            "rig_check_all"
+        }
+        fn changes_view(&self) -> bool {
+            true
+        }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::Nowhere
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &[]
+        }
+        fn undo(&self) -> Undo {
+            Undo::None
+        }
+        fn schema(&self) -> serde_json::Value {
+            json!({"type": "object", "additionalProperties": false, "properties": {}})
+        }
+        fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+            Ok(json!({ "queued": Self::unmeasured(ctx, params)? }))
+        }
+        fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+            let queued = Self::unmeasured(ctx, params)?;
+            let Some(view) = ctx.view.as_mut() else {
+                return Err(Refusal::new("no view is in hand, so there is no rig bench to check."));
+            };
+            view.rig.all = true;
+            view.rig.check = crate::ops_view::CheckAnswer { made: true, queued: queued.clone() };
+            Ok(Outcome { summary: says(queued.len()), affected: 0, saved: false, inverse: None, after: Some(json!({ "queued": queued })) })
+        }
+    }
+}
+
+/// **Rescan the kit's mesh directory**, as `R` does on the Meshes tab (E-002, #129 slice 33): meshes arrive while the editor is
+/// open, and an importer that only sees what was on disk at launch is one you have to restart to use. The operation answers
+/// that a scan is asked for and the front end reads the directory; what comes back is the tab's candidate list, which is what a
+/// person is looking at. It writes no file and takes no undo step.
+pub mod kit_rescan {
+    use super::list_walk::need_view;
+    use super::*;
+    use serde_json::json;
+
+    pub struct KitRescan;
+
+    impl KitRescan {
+        fn check(ctx: &Ctx, params: &serde_json::Value) -> Result<(), Refusal> {
+            match params {
+                serde_json::Value::Null => {}
+                serde_json::Value::Object(o) if o.is_empty() => {}
+                _ => return Err(Refusal::new("these are not a rescan: it takes no fields. The open project's mesh directory is what it reads.")),
+            }
+            need_view(ctx, "rescan")?;
+            if ctx.project.is_none() {
+                return Err(Refusal::new("no project is open, so there is no mesh directory to rescan."));
+            }
+            Ok(())
+        }
+    }
+
+    impl Operation for KitRescan {
+        fn name(&self) -> &'static str {
+            "kit_rescan"
+        }
+        fn changes_view(&self) -> bool {
+            true
+        }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::Nowhere
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &[]
+        }
+        fn undo(&self) -> Undo {
+            Undo::None
+        }
+        fn schema(&self) -> serde_json::Value {
+            json!({"type": "object", "additionalProperties": false, "properties": {}})
+        }
+        fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+            Self::check(ctx, params)?;
+            Ok(json!({ "rescan": true }))
+        }
+        fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+            Self::check(ctx, params)?;
+            if let Some(view) = ctx.view.as_mut() {
+                view.rescan = true;
+            }
+            Ok(Outcome { summary: "the mesh directory is read again".to_owned(), affected: 0, saved: false, inverse: None, after: Some(json!({ "rescan": true })) })
+        }
+    }
+}
+
+/// **Step the rig bench's history of `rigs.yaml`**, as Cmd+Z and Cmd+Shift+Z do on the Anim tab (E-002, #129 slice 35): the
+/// manifest the bench held before its newest write is written back, or the one a step back took away is put again. The bench
+/// records each manifest it replaces (an adopt, or an edit made under the tab), and the history is session state: the step takes
+/// the top of one stack, writes it through the one door to disk ([`crate::anim_tab::write_manifest`]: parsed first, saved
+/// atomically) and puts the text it replaced on the other, so **its inverse is the step the other way**. The answer is the
+/// stacks and the manifest now held ([`crate::ops_view::RigHistory`]), which the front end applies to the bench only when the
+/// write landed: a refused step costs no entry.
+pub mod rig_history_step {
+    use super::list_walk::need_view;
+    use super::*;
+    use crate::ops_view::RigHistory;
+    use serde_json::json;
+
+    /// **What a step says when the stack is empty**: guidance on the key and a refusal for an agent.
+    pub const NOTHING_TO_UNDO: &str = "nothing to undo on this tab";
+    pub const NOTHING_TO_REDO: &str = "nothing to redo on this tab";
+
+    /// **The sentence for a step**, written once for the operation's answer and the bench's status line.
+    pub fn says(back: bool) -> &'static str {
+        if back { "undid the last bench write" } else { "put the bench write back" }
+    }
+
+    #[derive(Debug, Clone, PartialEq, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Params {
+        /// `back` or `forward`.
+        by: String,
+    }
+
+    /// **Which way a step goes**, `true` for back, or the refusal that says what a direction is.
+    fn direction(params: &serde_json::Value) -> Result<bool, Refusal> {
+        let p: Params = serde_json::from_value(params.clone())
+            .map_err(|e| Refusal::new(format!("this is not a step: {e}. The field is `by`: `back` or `forward`.")))?;
+        match p.by.as_str() {
+            "back" => Ok(true),
+            "forward" => Ok(false),
+            other => Err(Refusal::new(format!("`{other}` is not a direction: `by` is `back` or `forward`."))),
+        }
+    }
+
+    pub struct RigHistoryStep;
+
+    impl RigHistoryStep {
+        /// **The step, computed and checked and not made**, so a preview refuses what the commit would: the direction, the
+        /// manifest to write, and the history after it.
+        fn step(ctx: &Ctx, params: &serde_json::Value) -> Result<(bool, String, RigHistory), Refusal> {
+            let back = direction(params)?;
+            let held = &need_view(ctx, "step")?.rig.history;
+            let (mut undo, mut redo) = (held.undo.clone(), held.redo.clone());
+            let Some(target) = (if back { undo.pop() } else { redo.pop() }) else {
+                return Err(Refusal::new(if back { NOTHING_TO_UNDO } else { NOTHING_TO_REDO }));
+            };
+            bevy_grimoire_core::rigs::Rigs::parse(&target).map_err(|e| Refusal::new(format!("NOT WRITTEN: {e}")))?;
+            if let Some(now) = &held.text {
+                if back { redo.push(now.clone()) } else { undo.push(now.clone()) }
+            }
+            let after = RigHistory { text: Some(target.clone()), undo, redo, stepped: Some(back) };
+            Ok((back, target, after))
+        }
+    }
+
+    impl Operation for RigHistoryStep {
+        fn name(&self) -> &'static str {
+            "rig_history_step"
+        }
+        fn changes_view(&self) -> bool {
+            true
+        }
+        /// **The manifest the step rewrites.**
+        fn shows(&self, ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            shown_named(ctx, crate::anim_tab::RIGS_FILE)
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &["rigs"]
+        }
+        /// **No inverse of its own**: the step the other way is the inverse, from the same history.
+        fn undo(&self) -> Undo {
+            Undo::None
+        }
+        fn schema(&self) -> serde_json::Value {
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["by"],
+                "properties": {
+                    "by": {"type": "string", "enum": ["back", "forward"], "description": "back restores the manifest the bench held before its newest write; forward puts back what a step back took away."}
+                }
+            })
+        }
+        fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+            let (back, _, after) = Self::step(ctx, params)?;
+            Ok(json!({ "writes": crate::anim_tab::RIGS_FILE, "back": back, "undo_left": after.undo.len(), "redo_left": after.redo.len() }))
+        }
+        fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+            let (back, target, after) = Self::step(ctx, params)?;
+            let Some(project) = ctx.project.as_ref() else {
+                return Err(Refusal::new("no project is open, so there is no rig manifest to write."));
+            };
+            crate::anim_tab::write_manifest(&project.root, &target).map_err(|e| Refusal::new(format!("NOT WRITTEN: {e}")))?;
+            let (undo_left, redo_left) = (after.undo.len(), after.redo.len());
+            if let Some(view) = ctx.view.as_mut() {
+                view.rig.history = after;
+            }
+            Ok(Outcome {
+                summary: says(back).to_owned(),
+                affected: 1,
+                saved: false,
+                // **The step the other way is its inverse**, so a log line that cannot be written takes the step back: `take_back` runs
+                // `commit` again over the history this one left in the view, which restores `rigs.yaml` and the stacks together. The
+                // line is `Undo::None`, so `undo_target` never reads this; it exists for that one failure.
+                inverse: Some(json!({ "by": if back { "forward" } else { "back" } })),
+                after: Some(json!({ "back": back, "undo_left": undo_left, "redo_left": redo_left })),
+            })
+        }
+    }
+}
+
+/// **The lattice grid's cursor, stepped** (E-002, #129 slice 27): `F`, `H`, `T` and `G` step the selected cell along a
+/// layer and `[` and `]` step the layer the grid shows, on the Meshes tab. One view operation for the six keys, on the rules
+/// the keys always had: a step stops at the grid's edges, the cursor rides the layer instead of being dropped by it, and a
+/// layer step that goes nowhere changes nothing. A cursor is what a person is looking at, so it writes no file and takes no
+/// undo step.
+pub mod lattice_cursor_step {
+    use super::*;
+    use crate::ops_view::LatticeCursor;
+    use serde_json::json;
+
+    /// **The six steps an agent names**, in the order of the keys that make them, beside the schema so the parse and the
+    /// schema cannot disagree.
+    pub const STEPS: &[&str] = &["left", "right", "forward", "back", "down", "up"];
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Params {
+        /// One of [`STEPS`].
+        pub by: String,
+    }
+
+    pub struct LatticeCursorStep;
+
+    impl LatticeCursorStep {
+        /// **Where the cursor lands**: the one rule, for `plan` and `commit`.
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<LatticeCursor, Refusal> {
+            let p: Params = serde_json::from_value(params.clone())
+                .map_err(|e| Refusal::new(format!("these are not a step: {e}. The only field is `by`, one of {}.", STEPS.join(", "))))?;
+            if !STEPS.contains(&p.by.as_str()) {
+                return Err(Refusal::new(format!("`{}` is not a step; say one of {}", p.by, STEPS.join(", "))));
+            }
+            let cursor = super::list_walk::need_view(ctx, "step")?.lattice.ok_or_else(|| {
+                Refusal::new(
+                    "no piece's lattice is up, so there is no grid cursor to step. Select a library piece on the Meshes tab (`piece_select`).",
+                )
+            })?;
+            let (dx, dy, dz) = cursor.div;
+            // A lattice with no cells in one direction has no cell to stand on; `divisions` refuses a zero, but this is a
+            // cursor and `dy - 1` on one would wrap to `u32::MAX`.
+            if dx == 0 || dy == 0 || dz == 0 {
+                return Err(Refusal::new(format!("the lattice is {dx}x{dy}x{dz}, which has no cell to stand on.")));
+            }
+            let mut layer = cursor.layer.min(dy - 1);
+            match p.by.as_str() {
+                "down" => layer = layer.saturating_sub(1),
+                "up" => layer = (layer + 1).min(dy - 1),
+                _ => {}
+            }
+            let layer_step = matches!(p.by.as_str(), "down" | "up");
+            // **A layer step that goes nowhere writes nothing**: the cursor stays where it was, including no cell at all.
+            if layer_step && layer == cursor.layer {
+                return Ok(cursor);
+            }
+            // **The cursor rides the layer rather than being dropped by it**: (x, z) stay and y moves, so walking up a
+            // lattice column stays on the column an author is looking at instead of clearing the selection every step.
+            let mut at = cursor.at.unwrap_or((0, layer, 0));
+            at.1 = layer;
+            match p.by.as_str() {
+                "left" => at.0 = at.0.saturating_sub(1),
+                "right" => at.0 = (at.0 + 1).min(dx - 1),
+                "forward" => at.2 = (at.2 + 1).min(dz - 1),
+                "back" => at.2 = at.2.saturating_sub(1),
+                _ => {}
+            }
+            at.0 = at.0.min(dx - 1);
+            at.2 = at.2.min(dz - 1);
+            Ok(LatticeCursor { layer, at: Some(at), ..cursor })
+        }
+    }
+
+    impl Operation for LatticeCursorStep {
+        fn name(&self) -> &'static str {
+            "lattice_cursor_step"
+        }
+        fn changes_view(&self) -> bool {
+            true
+        }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::Nowhere
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &[]
+        }
+        fn undo(&self) -> Undo {
+            Undo::None
+        }
+        fn schema(&self) -> serde_json::Value {
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["by"],
+                "properties": {
+                    "by": {"type": "string", "enum": STEPS, "description": "Which way to step the lattice grid's cursor on the Meshes tab: `left`, `right`, `forward` and `back` move the selected cell along the layer shown (F, H, T and G), `down` and `up` show the previous or next layer (`[` and `]`) and the cursor rides it. Every step stops at the grid's edge. Refused unless a library piece is selected."},
+                },
+            })
+        }
+        fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+            let landed = Self::landing(ctx, params)?;
+            Ok(json!({ "layer": landed.layer, "at": landed.at }))
+        }
+        fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+            let landed = Self::landing(ctx, params)?;
+            let Some(view) = ctx.view.as_mut() else {
+                return Err(Refusal::new("no view is in hand, so there is no grid cursor to step."));
+            };
+            view.lattice = Some(landed);
+            let summary = match landed.at {
+                Some((x, y, z)) => format!("the grid's cursor is on cell ({x}, {y}, {z})"),
+                None => format!("the grid shows layer {}", landed.layer),
+            };
+            Ok(Outcome { summary, affected: 0, saved: false, inverse: None, after: Some(json!({ "layer": landed.layer, "at": landed.at })) })
+        }
+    }
+}
+
+/// **The tile in hand, shaped** (E-002, #129 slice 28): `Space` takes the piece or puts it back, `,` and `.` walk the focus
+/// through the members, `J` makes the arrow ladder finer, `R` turns the focused member a quarter, the remove key takes it
+/// out and Shift and the remove key empty the tile, on the Tiles tab (slice 28), and the arrows nudge it, Shift and the arrows put it
+/// flush, Enter drops the picked piece and the hole key drops a hole (slice 29). Ten operations on the rules the keys always had,
+/// each on the tile the view carries.
+///
+/// **The draft is session state, not the project**: the tile is written to `compositions.yaml` only when `Cmd+S` saves it
+/// (`composition_define`), so none of these writes a file or takes an undo step of its own — the tab keeps a tile history of
+/// its own that `Cmd+Z` walks. Every change to the members goes through `build::edit_open`, the one door that re-resolves
+/// the hosts and keeps the result only if it still stands up, so a refusal leaves the tile as it was.
+///
+/// **They declare `Shown::Nowhere`** (`hand_operation!` hard-codes it): no `Shown` variant names the Tiles tab's draft, so the
+/// editor will not follow an agent's edit of it. The person sees the change where they already look, the tile's own panel.
+pub mod tile_hand {
+    use super::list_walk::{DIRECTIONS, direction, need_view};
+    use super::*;
+    use crate::ops_view::TileHand;
+    use bevy_grimoire_core::composition::Envelope;
+    use serde_json::json;
+
+    /// **The tile in hand**, or the refusal that says why there is none: no tile open, or one that claims no tile and so has
+    /// no grid to shape.
+    fn hand_of<'a>(ctx: &'a Ctx, what: &str) -> Result<&'a TileHand, Refusal> {
+        let hand = need_view(ctx, what)?
+            .tile_hand
+            .as_ref()
+            .ok_or_else(|| Refusal::new(crate::build::NO_TILE))?;
+        match hand.open.envelope {
+            Envelope::Bounded { .. } => Ok(hand),
+            _ => Err(Refusal::new(crate::build::claims_no_tile(&hand.open.id))),
+        }
+    }
+
+    fn library_of(ctx: &Ctx) -> Result<&bevy_grimoire_core::library::Library, Refusal> {
+        ctx.project
+            .as_ref()
+            .map(|p| &*p.library)
+            .ok_or_else(|| Refusal::new("no project is open, so the tile has no library to stand its members on."))
+    }
+
+    /// **Put the tile where an operation answered**, and say what happened.
+    fn settle(ctx: &mut Ctx, landed: TileHand, summary: String, after: serde_json::Value) -> Result<Outcome, Refusal> {
+        let Some(view) = ctx.view.as_mut() else {
+            return Err(Refusal::new("no view is in hand, so there is no tile to shape."));
+        };
+        view.tile_hand = Some(landed);
+        Ok(Outcome { summary, affected: 0, saved: false, inverse: None, after: Some(after) })
+    }
+
+    /// **Implement [`Operation`] for a tile-in-hand verb** from its name, its schema and its `landing`: the tile as it stands
+    /// after the call, the sentence for it and the answer. `plan` and `commit` read one `landing`, so a preview and an apply
+    /// cannot disagree.
+    macro_rules! hand_operation {
+        ($ty:ident, $name:literal, $schema:expr, $landing:path) => {
+            pub struct $ty;
+
+            impl Operation for $ty {
+                fn name(&self) -> &'static str {
+                    $name
+                }
+                fn changes_view(&self) -> bool {
+                    true
+                }
+                fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                    Shown::Nowhere
+                }
+                fn writes(&self) -> &'static [&'static str] {
+                    &[]
+                }
+                fn undo(&self) -> Undo {
+                    Undo::None
+                }
+                fn schema(&self) -> serde_json::Value {
+                    $schema
+                }
+                fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                    let (_, _, after) = $landing(ctx, params)?;
+                    Ok(after)
+                }
+                fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                    let (landed, summary, after) = $landing(ctx, params)?;
+                    settle(ctx, landed, summary, after)
+                }
+            }
+        };
+    }
+
+    /// **The one schema of a verb that takes nothing**: the tile in hand is what it acts on.
+    fn no_parameters() -> serde_json::Value {
+        json!({"type": "object", "additionalProperties": false, "properties": {}})
+    }
+
+    /// **A verb that takes nothing refuses anything it is given**, so a field an agent meant is never silently dropped. No
+    /// parameters at all, or an empty object, are both nothing.
+    fn no_fields(params: &serde_json::Value, what: &str) -> Result<(), Refusal> {
+        match params {
+            serde_json::Value::Null => Ok(()),
+            serde_json::Value::Object(o) if o.is_empty() => Ok(()),
+            _ => Err(Refusal::new(format!("these are not {what}: it takes no fields. The tile in hand is what it acts on."))),
+        }
+    }
+
+    /// **Take the piece, or put it back**, as `Space` does: whether the arrows steer the tile or walk the library list.
+    pub mod tile_hand_arm {
+        use super::*;
+
+        #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `true` takes the piece, `false` puts it back; absent toggles, as `Space` does.
+            #[serde(default)]
+            pub placing: Option<bool>,
+        }
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            let p: Params = serde_json::from_value(params.clone())
+                .map_err(|e| Refusal::new(format!("these are not an arm: {e}. The only field is `placing`, true or false.")))?;
+            let hand = hand_of(ctx, "take or put back")?;
+            let placing = p.placing.unwrap_or(!hand.placing);
+            let said = if placing {
+                "placing — arrows move the tile, Enter drops, Esc puts it back"
+            } else {
+                "arrows walk the library"
+            };
+            Ok((TileHand { placing, ..hand.clone() }, said.to_owned(), json!({ "placing": placing })))
+        }
+
+        hand_operation!(
+            TileHandArm,
+            "tile_hand_arm",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "placing": {"type": "boolean", "description": "`true` takes the piece, so the arrows steer the tile in hand; `false` puts it back, so they walk the library list. Absent toggles, as Space does. Refused unless a bounded tile is open."},
+                },
+            }),
+            landing
+        );
+    }
+
+    /// **Walk the focus through the tile's members**, clamped at the ends, as `,` and `.` do.
+    pub mod tile_member_focus {
+        use super::*;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `"prev"` or `"next"`.
+            pub by: String,
+        }
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            let p: Params = serde_json::from_value(params.clone())
+                .map_err(|e| Refusal::new(format!("these are not a walk: {e}. The only field is `by`, `prev` or `next`.")))?;
+            let by = direction(&p.by)?;
+            let hand = hand_of(ctx, "walk")?;
+            let n = hand.open.members.len();
+            let Some(last) = n.checked_sub(1) else {
+                return Err(Refusal::new("nothing in the tile yet — Enter brings the picked mesh in"));
+            };
+            // **Clamped rather than wrapped**: the ends of a short list are somewhere an author can feel, and a focus that
+            // jumps from the last member to the first is the largest possible move on the smallest possible keystroke.
+            let focus = (hand.focus as i64 + by).clamp(0, last as i64) as usize;
+            let id = hand.open.members.get(focus).map(|m| m.id.clone()).unwrap_or_default();
+            Ok((TileHand { focus, ..hand.clone() }, format!("`{id}` — {} of {n}", focus + 1), json!({ "focus": focus, "member": id })))
+        }
+
+        hand_operation!(
+            TileMemberFocus,
+            "tile_member_focus",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["by"],
+                "properties": {
+                    "by": {"type": "string", "enum": DIRECTIONS, "description": "Which way to move the focus through the open tile's members (`,` and `.`). It stops at the ends of the list. Refused when the tile has no members."},
+                },
+            }),
+            landing
+        );
+    }
+
+    /// **Make the arrow ladder finer by thirds, wrapping**, as `J` does: coarse is the span itself, then thirds, then ninths.
+    pub mod tile_grid_deepen {
+        use super::*;
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            no_fields(params, "a deepening")?;
+            let hand = hand_of(ctx, "deepen")?;
+            let project = ctx.project.as_ref().ok_or_else(|| Refusal::new("no project is open, so there is no snap divisor to deepen by."))?;
+            let depth = (hand.depth + 1) % crate::build::DEPTHS;
+            let n = project.lattice.snap_divisor.saturating_pow(depth).max(1);
+            let said = match depth {
+                0 => "grid: centre and flush — one press spans the tile".to_owned(),
+                _ => format!("grid: centre to flush in {n} steps — J deepens, and wraps"),
+            };
+            Ok((TileHand { depth, ..hand.clone() }, said, json!({ "depth": depth, "steps": n })))
+        }
+
+        hand_operation!(TileGridDeepen, "tile_grid_deepen", no_parameters(), landing);
+    }
+
+    /// **Turn the focused member a quarter**, as `R` does: a tile is a quarter-turn object, and anything between is a tile
+    /// the solver cannot reproduce.
+    pub mod tile_member_turn {
+        use super::*;
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            no_fields(params, "a turn")?;
+            let hand = hand_of(ctx, "turn")?;
+            if hand.focus >= hand.open.members.len() {
+                return Err(Refusal::new("nothing to turn yet — Enter brings the picked mesh in"));
+            }
+            let library = library_of(ctx)?;
+            let focus = hand.focus;
+            let mut open = Some(hand.open.clone());
+            // Through the door like every other verb: a quarter turn changes `brush_span`, so it changes what a piece touches
+            // and therefore what is mounted on it.
+            let (said, yaw) = crate::build::edit_open(&mut open, library, |comp| {
+                let Some(m) = comp.members.get_mut(focus) else {
+                    return Err("the focused member went away".to_owned());
+                };
+                m.yaw = (m.yaw + 90.0).rem_euclid(360.0);
+                Ok((format!("`{}` turned to {:.0}", m.id, m.yaw), m.yaw))
+            })
+            .map_err(Refusal::new)?;
+            let open = open.ok_or_else(|| Refusal::new(crate::build::NO_TILE))?;
+            Ok((TileHand { open, ..hand.clone() }, said, json!({ "yaw": yaw })))
+        }
+
+        hand_operation!(TileMemberTurn, "tile_member_turn", no_parameters(), landing);
+    }
+
+    /// **Take the focused member out of the tile**, as the remove key does. A host cannot be removed out from under what
+    /// rests on it: the door refuses, the tile is untouched, and the refusal names the fixture.
+    pub mod tile_member_remove {
+        use super::*;
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            no_fields(params, "a removal")?;
+            let hand = hand_of(ctx, "remove")?;
+            if hand.focus >= hand.open.members.len() {
+                return Err(Refusal::new("nothing to remove"));
+            }
+            let library = library_of(ctx)?;
+            let focus = hand.focus;
+            let mut open = Some(hand.open.clone());
+            let id = crate::build::edit_open(&mut open, library, |comp| {
+                if focus >= comp.members.len() {
+                    return Err("the focused member went away".to_owned());
+                }
+                Ok(comp.members.remove(focus).id)
+            })
+            .map_err(Refusal::new)?;
+            let open = open.ok_or_else(|| Refusal::new(crate::build::NO_TILE))?;
+            // **Clamped to what is left rather than stepped back**: removing the first member should leave the focus on the
+            // new first, not underflow to the last.
+            let left = open.members.len();
+            let focus = hand.focus.min(left.saturating_sub(1));
+            Ok((TileHand { open, focus, ..hand.clone() }, format!("`{id}` removed"), json!({ "removed": id, "members": left })))
+        }
+
+        hand_operation!(TileMemberRemove, "tile_member_remove", no_parameters(), landing);
+    }
+
+    /// **Empty the tile**, as Shift and the remove key do: one door call, so the tab's history records it as one step.
+    pub mod tile_clear {
+        use super::*;
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            no_fields(params, "a clearing")?;
+            let hand = hand_of(ctx, "empty")?;
+            let n = hand.open.members.len();
+            if n == 0 {
+                return Err(Refusal::new("the tile is already empty"));
+            }
+            let library = library_of(ctx)?;
+            let mut open = Some(hand.open.clone());
+            crate::build::edit_open(&mut open, library, |comp| {
+                comp.members.clear();
+                Ok(())
+            })
+            .map_err(Refusal::new)?;
+            let open = open.ok_or_else(|| Refusal::new(crate::build::NO_TILE))?;
+            let said = format!("emptied — {n} taken out, {} puts them back", crate::keys::chord(crate::keys::Action::UndoBuild));
+            Ok((TileHand { open, focus: 0, ..hand.clone() }, said, json!({ "taken_out": n })))
+        }
+
+        hand_operation!(TileClear, "tile_clear", no_parameters(), landing);
+    }
+
+    /// **A step along one axis**: `-1`, `0` or `1`, refused for anything else so a wild number is never silently clamped.
+    fn step_of(value: i32, field: &str) -> Result<i32, Refusal> {
+        if (-1..=1).contains(&value) {
+            Ok(value)
+        } else {
+            Err(Refusal::new(format!("`{field}` is {value}, and a step is -1, 0 or 1")))
+        }
+    }
+
+    /// **The project the tile stands in**: its library to measure the members against, its lattice for the ladder's
+    /// divisor and its vocabulary for a hole's token.
+    fn project_of(ctx: &Ctx) -> Result<&crate::project::Project, Refusal> {
+        ctx.project
+            .as_ref()
+            .ok_or_else(|| Refusal::new("no project is open, so the tile has no library to stand its members on."))
+    }
+
+    /// **The focused member and the tile's size**, or the guidance that there is none: an empty tile is told what to press.
+    fn focused_member<'a>(hand: &'a TileHand, what: &str) -> Result<(&'a bevy_grimoire_core::composition::Member, (f32, f32, f32)), Refusal> {
+        let Envelope::Bounded { size } = hand.open.envelope else {
+            return Err(Refusal::new(crate::build::claims_no_tile(&hand.open.id)));
+        };
+        hand.open
+            .members
+            .get(hand.focus)
+            .map(|m| (m, size))
+            .ok_or_else(|| Refusal::new(format!("nothing to {what} yet — Enter brings the picked mesh in")))
+    }
+
+    /// **Move the focused member to the next stop on its ladder**, as the four arrows and `[` and `]` do: sideways along
+    /// the tile's two axes (`x` and `z`, `-1` or `1`) and up or down a layer (`lift`). The stops divide the span between the
+    /// tile's centre and the flush position, so both are exactly reachable at every depth. A move that goes nowhere is
+    /// answered, not refused: the piece fills the tile on that axis, or the ladder ends where the piece meets the tile.
+    pub mod tile_member_nudge {
+        use super::*;
+
+        #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// The step along the tile's X axis: `-1`, `0` or `1`.
+            #[serde(default)]
+            pub x: i32,
+            /// The step along the tile's Z axis: `-1`, `0` or `1`.
+            #[serde(default)]
+            pub z: i32,
+            /// The step in layers: `-1` down, `1` up. A layer is the ladder's pitch at the depth the tile is on.
+            #[serde(default)]
+            pub lift: i32,
+        }
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            let p: Params = serde_json::from_value(params.clone())
+                .map_err(|e| Refusal::new(format!("these are not a nudge: {e}. The fields are `x`, `z` and `lift`, each -1, 0 or 1.")))?;
+            let (dx, dz, lift_by) = (step_of(p.x, "x")?, step_of(p.z, "z")?, step_of(p.lift, "lift")?);
+            if (dx, dz, lift_by) == (0, 0, 0) {
+                return Err(Refusal::new("a nudge moves somewhere: give `x`, `z` or `lift` as -1 or 1"));
+            }
+            let hand = hand_of(ctx, "move")?;
+            let (member, size) = focused_member(hand, "move")?;
+            let project = project_of(ctx)?;
+            let library = &*project.library;
+            let span = crate::build::member_span(member, library).unwrap_or((0.0, 0.0));
+            // **A hole has no width, so its ladder spans the whole tile**; its boundary stop is the one place the door
+            // refuses, by name, which is the honest answer for a slot that must sit strictly inside.
+            let f = (crate::build::flush_reach(size.0, span.0).max(0.0), crate::build::flush_reach(size.2, span.1).max(0.0));
+            let was = (member.at, member.lift);
+            let unmoved = |said: &str| Ok((hand.clone(), said.to_owned(), json!({ "moved": false, "at": [was.0.0, was.0.1], "lift": was.1 })));
+            // **A piece that fills the tile on the pressed axis has no travel there**: guidance, not a refusal. The floor is
+            // the usual case, a one-cell piece in a one-cell tile has nowhere to go that would not grow the tile.
+            let travel = (dx != 0 && f.0 > crate::build::ON_STOP) || (dz != 0 && f.1 > crate::build::ON_STOP);
+            if !travel && lift_by == 0 {
+                return unmoved("this piece fills the tile on that axis — [ and ] move layers instead");
+            }
+            let (divisor, depth, focus) = (project.lattice.snap_divisor, hand.depth, hand.focus);
+            let mut open = Some(hand.open.clone());
+            let (at, lift) = crate::build::edit_open(&mut open, library, |comp| {
+                let Some(m) = comp.members.get_mut(focus) else {
+                    return Err("the focused member went away".to_owned());
+                };
+                // **The next stop on the ladder, not a fixed pitch**: `ladder_step` carries the rationale.
+                m.at.0 = crate::build::ladder_step(m.at.0, f.0, divisor, depth, dx);
+                m.at.1 = crate::build::ladder_step(m.at.1, f.1, divisor, depth, dz);
+                // The floor is the floor: a member cannot be nudged under the tile it is in.
+                m.lift = (m.lift + lift_by as f32 * crate::build::lift_pitch(divisor, depth)).max(0.0);
+                Ok((m.at, m.lift))
+            })
+            .map_err(Refusal::new)?;
+            if (at, lift) == was {
+                // The terminal stop: a press outward there moves nothing, said because it is a dead key otherwise.
+                return unmoved("already at the flush stop — the ladder ends where the piece meets the tile");
+            }
+            let open = open.ok_or_else(|| Refusal::new(crate::build::NO_TILE))?;
+            let said = format!("({:+.3}, {:+.3}) at {:.3} m", at.0, at.1, lift);
+            Ok((TileHand { open, ..hand.clone() }, said, json!({ "moved": true, "at": [at.0, at.1], "lift": lift })))
+        }
+
+        hand_operation!(
+            TileMemberNudge,
+            "tile_member_nudge",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "x": {"type": "integer", "minimum": -1, "maximum": 1, "description": "The step along the tile's X axis: -1 or 1; absent is none. The arrow keys' direction depends on the camera, so an agent names the tile's own axis."},
+                    "z": {"type": "integer", "minimum": -1, "maximum": 1, "description": "The step along the tile's Z axis: -1 or 1; absent is none."},
+                    "lift": {"type": "integer", "minimum": -1, "maximum": 1, "description": "The step in layers, as `]` (1) and `[` (-1) do; absent is none."},
+                },
+            }),
+            landing
+        );
+    }
+
+    /// **Put the focused member flush against one side of the tile**, as Shift and an arrow do: `x` or `z`, `-1` or `1`, one
+    /// of them. The position is a function of the piece's own width, which is why it is a verb the ladder's arithmetic
+    /// agrees with. A hole has no width, so it is refused; a flush that moves nothing says why.
+    pub mod tile_member_flush {
+        use super::*;
+
+        #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// The side along the tile's X axis: `-1` or `1`.
+            #[serde(default)]
+            pub x: i32,
+            /// The side along the tile's Z axis: `-1` or `1`.
+            #[serde(default)]
+            pub z: i32,
+        }
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            let p: Params = serde_json::from_value(params.clone())
+                .map_err(|e| Refusal::new(format!("these are not a flush: {e}. The fields are `x` and `z`, one of them -1 or 1.")))?;
+            let (x, z) = (step_of(p.x, "x")?, step_of(p.z, "z")?);
+            if (x != 0) == (z != 0) {
+                return Err(Refusal::new("a flush names one side: `x` or `z`, -1 or 1, and not both or neither"));
+            }
+            let hand = hand_of(ctx, "flush")?;
+            let (member, size) = focused_member(hand, "flush")?;
+            let library = library_of(ctx)?;
+            // The span is read before the door, because "this is a hole" is guidance too: a hole has no width, so "flush" is
+            // its position *on* the boundary, which `validate` refuses. Nudging is how a hole is placed.
+            let span = crate::build::member_span(member, library)
+                .ok_or_else(|| Refusal::new("a hole has no width to put flush — nudge it instead"))?;
+            let (was, focus) = (member.at, hand.focus);
+            let mut open = Some(hand.open.clone());
+            let to = crate::build::edit_open(&mut open, library, |comp| {
+                let Some(m) = comp.members.get_mut(focus) else {
+                    return Err("the focused member went away".to_owned());
+                };
+                m.at = crate::build::aligned(m.at, span, size, (x, z));
+                Ok(m.at)
+            })
+            .map_err(Refusal::new)?;
+            if was == to {
+                // **A flush that moves nothing says why**: a 0.1 x 1.0 m wall flushed along its length is a genuine no-op,
+                // which is indistinguishable from a key that never arrived. It names the axis that would move instead.
+                let across = if x != 0 { "up/down" } else { "left/right" };
+                let said = format!("already flush that way — this piece spans the tile on that axis. Shift+{across} moves it across instead");
+                return Ok((hand.clone(), said, json!({ "moved": false, "at": [to.0, to.1] })));
+            }
+            let open = open.ok_or_else(|| Refusal::new(crate::build::NO_TILE))?;
+            Ok((TileHand { open, ..hand.clone() }, format!("flush — ({:+.3}, {:+.3})", to.0, to.1), json!({ "moved": true, "at": [to.0, to.1] })))
+        }
+
+        hand_operation!(
+            TileMemberFlush,
+            "tile_member_flush",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "x": {"type": "integer", "minimum": -1, "maximum": 1, "description": "Flush against the tile's -X (-1) or +X (1) side. Give `x` or `z`, not both."},
+                    "z": {"type": "integer", "minimum": -1, "maximum": 1, "description": "Flush against the tile's -Z (-1) or +Z (1) side. Give `x` or `z`, not both."},
+                },
+            }),
+            landing
+        );
+    }
+
+    /// **Drop a library piece into the open tile**, as Enter on the Meshes page does: it lands in the middle, the focus
+    /// follows it and it is taken in hand, so the arrows adjust what was just dropped. A member must name a library
+    /// descriptor: one measured but not imported would write a tile naming an id the library does not carry.
+    pub mod tile_member_drop {
+        use super::*;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// The library piece to drop, by its id.
+            pub descriptor: String,
+        }
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            let p: Params = serde_json::from_value(params.clone())
+                .map_err(|e| Refusal::new(format!("these are not a drop: {e}. The only field is `descriptor`, a library piece's id.")))?;
+            let hand = hand_of(ctx, "drop into")?;
+            let library = library_of(ctx)?;
+            let Some(guest) = library.get(&p.descriptor) else {
+                return Err(Refusal::new(format!("`{}` is not in the library yet — accept it on the Meshes tab first", p.descriptor)));
+            };
+            let mut open = Some(hand.open.clone());
+            let (focus, id) = crate::build::edit_open(&mut open, library, |comp| {
+                let i = crate::build::place(comp, guest)?;
+                Ok((i, comp.members[i].id.clone()))
+            })
+            .map_err(Refusal::new)?;
+            let open = open.ok_or_else(|| Refusal::new(crate::build::NO_TILE))?;
+            let n = open.members.len();
+            // **Focus follows the drop**, because turn and remove mean the one just put down; and **a drop leaves the piece
+            // in hand**, so the arrows adjust it rather than walking the library list.
+            let said = format!("`{}` dropped — {n} in the tile. Arrows move it, Esc goes back to the list", p.descriptor);
+            Ok((TileHand { open, focus, placing: true, ..hand.clone() }, said, json!({ "member": id, "members": n })))
+        }
+
+        hand_operation!(
+            TileMemberDrop,
+            "tile_member_drop",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["descriptor"],
+                "properties": {
+                    "descriptor": {"type": "string", "description": "The library piece to drop into the open tile, by its id. Refused unless the library carries it, and unless a bounded tile is open."},
+                },
+            }),
+            landing
+        );
+    }
+
+    /// **Drop a hole into the open tile**: a position that says what may go there without saying what does. `accepts` is a
+    /// token of the project's slot axis, and absent is the first one, as the key always took.
+    pub mod tile_slot_drop {
+        use super::*;
+
+        #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// The slot token the hole accepts; absent is the axis's first.
+            #[serde(default)]
+            pub accepts: Option<String>,
+        }
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            let p: Params = serde_json::from_value(params.clone())
+                .map_err(|e| Refusal::new(format!("these are not a hole: {e}. The only field is `accepts`, a slot token.")))?;
+            let hand = hand_of(ctx, "drop a hole into")?;
+            let project = project_of(ctx)?;
+            let Some(first) = project.vocab.slot.names().next() else {
+                return Err(Refusal::new("no `slot` tokens declared — add one to vocab.yaml before dropping a hole"));
+            };
+            let accepts = match p.accepts {
+                None => first.to_owned(),
+                Some(named) if project.vocab.slot.names().any(|n| n == named) => named,
+                Some(named) => {
+                    let known: Vec<&str> = project.vocab.slot.names().collect();
+                    return Err(Refusal::new(format!("`{named}` is not a slot token in vocab.yaml; the declared ones are {}", known.join(", "))));
+                }
+            };
+            let mut open = Some(hand.open.clone());
+            let (focus, id) = crate::build::edit_open(&mut open, &project.library, |comp| {
+                let i = crate::build::place_slot(comp, &accepts)?;
+                Ok((i, comp.members[i].id.clone()))
+            })
+            .map_err(Refusal::new)?;
+            let open = open.ok_or_else(|| Refusal::new(crate::build::NO_TILE))?;
+            let n = open.members.len();
+            Ok((TileHand { open, focus, ..hand.clone() }, format!("hole for `{accepts}` dropped"), json!({ "member": id, "accepts": accepts, "members": n })))
+        }
+
+        hand_operation!(
+            TileSlotDrop,
+            "tile_slot_drop",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "accepts": {"type": "string", "description": "The slot token the hole accepts, from vocab.yaml's slot axis; absent is the axis's first. Refused when the project declares none."},
+                },
+            }),
+            landing
+        );
+    }
+
+    /// **Step the Tiles tab's own history**, back or forward, as `Cmd+Z` and `Cmd+Shift+Z` do (E-002, #129 slice 30): the tile
+    /// as it stood before the last change, or after the last one taken back. The tab's history records every change to the
+    /// tile in hand, whoever made it, so this takes back an agent's nudge as it takes back a key's; it is its own inverse, and
+    /// the two directions are one body so they cannot drift apart. Nothing to step is refused, in the tab's own words.
+    pub mod tile_history_step {
+        use super::*;
+        use crate::ops_view::TileHistoryCursor;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `"back"` undoes, `"forward"` redoes.
+            pub by: String,
+        }
+
+        /// What a step back is refused with when the history holds nothing before the tile. The key says it as a note: it is
+        /// guidance, and every other refusal is a problem.
+        pub const NOTHING_TO_UNDO: &str = "nothing to undo";
+        /// What a step forward is refused with when nothing was taken back.
+        pub const NOTHING_TO_REDO: &str = "nothing to redo";
+
+        /// The history after the step, the sentence for it and the answer.
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHistoryCursor, String, serde_json::Value), Refusal> {
+            let p: Params = serde_json::from_value(params.clone())
+                .map_err(|e| Refusal::new(format!("these are not a step: {e}. The only field is `by`, `back` or `forward`.")))?;
+            let back = match p.by.as_str() {
+                "back" => true,
+                "forward" => false,
+                other => return Err(Refusal::new(format!("`{other}` is not a direction; say `back` or `forward`"))),
+            };
+            let now = need_view(ctx, "step the history of")?
+                .tile_history
+                .as_ref()
+                .ok_or_else(|| Refusal::new("no tile history is in hand, so there is nothing to step."))?;
+            let (mut past, mut future) = (now.past.clone(), now.future.clone());
+            let Some(to) = (if back { past.pop() } else { future.pop() }) else {
+                return Err(Refusal::new(if back { NOTHING_TO_UNDO } else { NOTHING_TO_REDO }));
+            };
+            // The description is made from copies: the stacks take the value.
+            let said = crate::build::step_says(&now.open, &to);
+            if back {
+                future.push(now.open.clone());
+            } else {
+                past.push(now.open.clone());
+            }
+            let n = to.as_ref().map_or(0, |c| c.members.len());
+            // The focus can outlive the members it indexed.
+            let focus = now.focus.min(n.saturating_sub(1));
+            let what = if back { "undo" } else { "redo" };
+            let after = json!({ "members": n, "past": past.len(), "future": future.len() });
+            Ok((TileHistoryCursor { open: to, focus, past, future }, format!("{what}: {said} — {n} in the tile"), after))
+        }
+
+        pub struct TileHistoryStep;
+
+        impl Operation for TileHistoryStep {
+            fn name(&self) -> &'static str {
+                "tile_history_step"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["by"],
+                    "properties": {
+                        "by": {"type": "string", "enum": ["back", "forward"], "description": "`back` takes back the last change to the tile in hand, as Cmd+Z does; `forward` puts back what was taken back, as Cmd+Shift+Z does. Refused when there is nothing to step."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let (_, _, after) = landing(ctx, params)?;
+                Ok(after)
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let (landed, summary, after) = landing(ctx, params)?;
+                let Some(view) = ctx.view.as_mut() else {
+                    return Err(Refusal::new("no view is in hand, so there is no tile history to step."));
+                };
+                // **The tile in hand is kept in step**, so a front end that applies it too does not put the old one back:
+                // a step that lands on no tile at all leaves none in hand.
+                view.tile_hand = landed.open.clone().map(|open| {
+                    let held = view.tile_hand.as_ref();
+                    TileHand { open, focus: landed.focus, depth: held.map_or(0, |h| h.depth), placing: held.is_some_and(|h| h.placing) }
+                });
+                view.tile_history = Some(landed);
+                Ok(Outcome { summary, affected: 0, saved: false, inverse: None, after: Some(after) })
+            }
+        }
+    }
 }
 
 pub mod view_cycle_grid {
@@ -6030,7 +7797,37 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(list_cursors::tile_page_walk::TilePageWalk),
         Box::new(shelf_cursors::pack_fold::PackFold),
         Box::new(shelf_cursors::filter_focus::FilterFocus),
+        Box::new(shelf_cursors::shelf_walk::ShelfWalk),
+        Box::new(shelf_cursors::shelf_focus::ShelfFocus),
+        Box::new(stage::stage_play::StagePlay),
+        Box::new(stage::stage_scrub::StageScrub),
+        Box::new(stage::stage_camera::StageCamera),
+        Box::new(camera::camera_pan::CameraPan),
+        Box::new(camera::camera_turn::CameraTurn),
+        Box::new(rig_check_all::RigCheckAll),
+        Box::new(kit_rescan::KitRescan),
+        Box::new(rig_history_step::RigHistoryStep),
+        Box::new(crate::ops_tile_page::TilePageEnter),
+        Box::new(crate::ops_tile_page::TilePageLeave),
+        Box::new(crate::ops_tile_page::TileOpen),
+        Box::new(crate::ops_tile_page::TileClose),
+        Box::new(crate::ops_tile_page::TileNew),
+        Box::new(crate::ops_labeller::LabelsSuggest),
+        Box::new(crate::ops_labeller::LabelsWalk),
+        Box::new(crate::ops_labeller::LabelsAbandon),
+        Box::new(lattice_cursor_step::LatticeCursorStep),
+        Box::new(tile_hand::tile_hand_arm::TileHandArm),
+        Box::new(tile_hand::tile_member_focus::TileMemberFocus),
+        Box::new(tile_hand::tile_grid_deepen::TileGridDeepen),
+        Box::new(tile_hand::tile_member_turn::TileMemberTurn),
+        Box::new(tile_hand::tile_member_remove::TileMemberRemove),
+        Box::new(tile_hand::tile_clear::TileClear),
+        Box::new(tile_hand::tile_member_nudge::TileMemberNudge),
+        Box::new(tile_hand::tile_member_flush::TileMemberFlush),
+        Box::new(tile_hand::tile_member_drop::TileMemberDrop),
+        Box::new(tile_hand::tile_slot_drop::TileSlotDrop),
         Box::new(tool_arm::ToolArm),
+        Box::new(tile_hand::tile_history_step::TileHistoryStep),
         Box::new(snip_arm::SnipArm),
         Box::new(map_create::MapCreate),
         Box::new(map_set_settings::MapSetSettings),
@@ -6071,6 +7868,7 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(crate::ops_kit::KitSetAuthoring),
         Box::new(crate::ops_piece::PieceSetNote),
         Box::new(crate::ops_piece::PieceSetWidth),
+        Box::new(crate::ops_piece::PieceEdit),
         Box::new(pack_set_excluded::PackSetExcluded),
         Box::new(crate::ops_label_vlm::LabelSuggest),
         Box::new(crate::ops_label_vlm::LabelApply),
@@ -6309,6 +8107,59 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // and the heading clicks), and `F` and `/` dispatch `filter_focus` (`tiles::focus_filter`).
     ("pack_fold", "\"pack_fold\""),
     ("filter_focus", "\"filter_focus\""),
+    // **The shelf's arrows and its two lists** (E-002, #129 slice 37): `up` and `down` (and Shift for the long stride) dispatch `shelf_walk`,
+    // and `left`, `right` and the `CANDIDATES` and `LIBRARY` chips dispatch `shelf_focus`, through `tiles::shelf_through_operation`.
+    ("shelf_walk", "\"shelf_walk\""),
+    ("shelf_focus", "\"shelf_focus\""),
+    // **The bench's stage keys** (E-002, #129 slice 26): `Space` dispatches `stage_play`, the held left and right arrows
+    // `stage_scrub`, and `V` `stage_camera`, through `anim_stage`'s `drive_bench_scrub` and `cycle_cam_preset`.
+    ("stage_play", "\"stage_play\""),
+    ("stage_scrub", "\"stage_scrub\""),
+    ("stage_camera", "\"stage_camera\""),
+    // **The Map camera keys** (E-002, #129 slice 31): `W`, `A`, `S` and `D` dispatch `camera_pan` and `Q` and `E` `camera_turn`,
+    // through `view::drive`.
+    ("camera_pan", "\"camera_pan\""),
+    ("camera_turn", "\"camera_turn\""),
+    // **The Anim tab's check key** (E-002, #129 slice 32): `C` dispatches `rig_check_all`, through `anim_tab::check_all_keys`.
+    ("rig_check_all", "\"rig_check_all\""),
+    // **The Meshes tab's rescan key** (E-002, #129 slice 33): `R` dispatches `kit_rescan`, through `tiles::rescan_key`.
+    ("kit_rescan", "\"kit_rescan\""),
+    // **The rig bench's history keys** (E-002, #129 slice 35): Cmd+Z and Cmd+Shift+Z on the Anim tab dispatch `rig_history_step`, through `anim_tab::bench_history_keys`.
+    ("rig_history_step", "\"rig_history_step\""),
+    // **The Tiles tab's page keys** (E-002, #129 slice 36): `right`, `left`, `Enter`, `C` and `N` (and the `+ New Tile` row's click)
+    // dispatch the page operations, through `build::page_through_operation`.
+    ("tile_page_enter", "\"tile_page_enter\""),
+    ("tile_page_leave", "\"tile_page_leave\""),
+    ("tile_open", "\"tile_open\""),
+    ("tile_close", "\"tile_close\""),
+    ("tile_new", "\"tile_new\""),
+    // **The labeller's keys** (E-002, #129 slice 34): `L` dispatches `labels_suggest`, `Shift+L` `labels_walk` and `Shift+Y`
+    // `labels_abandon`, through `labels::Labeller::dispatch`, the body an agent's call is carried out by too.
+    ("labels_suggest", "\"labels_suggest\""),
+    ("labels_walk", "\"labels_walk\""),
+    ("labels_abandon", "\"labels_abandon\""),
+    // **The lattice grid's cursor keys** (E-002, #129 slice 27): `F`, `H`, `T`, `G`, `[` and `]` dispatch `lattice_cursor_step`,
+    // through `tiles::lattice_keys`.
+    ("lattice_cursor_step", "\"lattice_cursor_step\""),
+    // **The tile-in-hand keys** (E-002, #129 slice 28): `Space` dispatches `tile_hand_arm`, `,` and `.` `tile_member_focus`,
+    // `J` `tile_grid_deepen`, `R` `tile_member_turn`, the remove key `tile_member_remove` and Shift with it `tile_clear`,
+    // through `build::build_keys`.
+    ("tile_hand_arm", "\"tile_hand_arm\""),
+    ("tile_member_focus", "\"tile_member_focus\""),
+    ("tile_grid_deepen", "\"tile_grid_deepen\""),
+    ("tile_member_turn", "\"tile_member_turn\""),
+    ("tile_member_remove", "\"tile_member_remove\""),
+    ("tile_clear", "\"tile_clear\""),
+    // **The tile's arrows, flush, drop and hole keys** (E-002, #129 slice 29): the arrows and `[` and `]` dispatch
+    // `tile_member_nudge`, Shift and the arrows `tile_member_flush`, Enter `tile_member_drop` and the hole key
+    // `tile_slot_drop`, through `build::build_keys`.
+    ("tile_member_nudge", "\"tile_member_nudge\""),
+    ("tile_member_flush", "\"tile_member_flush\""),
+    ("tile_member_drop", "\"tile_member_drop\""),
+    ("tile_slot_drop", "\"tile_slot_drop\""),
+    // **The tab's history keys** (E-002, #129 slice 30): `Cmd+Z` and `Cmd+Shift+Z` on the Tiles tab dispatch `tile_history_step`,
+    // through `build::tile_history`.
+    ("tile_history_step", "\"tile_history_step\""),
     // **The clone and run keys**, which dispatch `tool_arm` through `arm_tool` (E-002, #129). Two keys,
     // one rule: press to arm, press again to return to `Tool::Place`.
     ("tool_arm", "\"tool_arm\""),
@@ -6393,6 +8244,8 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // piece.
     ("piece_set_note", "set_note("),
     ("piece_set_width", "set_width("),
+    // **The define key** (E-002, #129 slice 38): `Cmd+Delete` on the Map dispatches `piece_edit` through `send_to_tiles`.
+    ("piece_edit", "\"piece_edit\""),
     // **The pack key (E-002, #129 slice 7)** — `Shift+R` on the Meshes tab calls `set_pack_excluded`
     // and dispatches `pack_set_excluded`, the same policy write an agent's `apply` makes.
     ("pack_set_excluded", "set_pack_excluded("),

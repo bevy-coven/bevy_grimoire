@@ -39,7 +39,7 @@ fn rung_from_name(name: &str) -> Option<SnapLevel> {
 /// Deliberately narrow: a field is added when an operation needs it, not because the editor has one.
 /// Everything here is session state — none of it is saved to the project, which is why no operation that
 /// writes this declares `Undo::Snapshot`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct View {
     /// The snap ladder's rung: what a piece is nudged to, and what the grid is drawn at.
@@ -104,6 +104,405 @@ pub struct View {
     /// the keyboard cannot say that. Not serialised while false: most answers touch no box.
     #[serde(default, skip_serializing_if = "is_false")]
     pub filter_fresh: bool,
+    /// **The rig bench's stage** (E-002, #129 slice 26): whether the figure plays, the phase a scrub holds, and the camera
+    /// preset. Session state like the rest; not serialised while it is where a session opens (playing, phase 0, figure).
+    #[serde(default, skip_serializing_if = "StageCursor::is_default")]
+    pub stage: StageCursor,
+    /// **The lattice grid's cursor on the Meshes tab** (E-002, #129 slice 27), when a piece is selected: the grid's divisions
+    /// and where the cursor stands. `None` is no grid to step on, so a step is refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lattice: Option<LatticeCursor>,
+    /// **The tile in hand on the Tiles tab** (E-002, #129 slice 28), when one is open: the draft, which member has the focus,
+    /// how deep the arrow ladder is, and whether the piece is taken. `None` is no tile open, so a verb that shapes one is refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tile_hand: Option<TileHand>,
+    /// **The Tiles tab's own history** (E-002, #129 slice 30): the tile as it stands, which member has the focus, and the
+    /// tiles `Cmd+Z` steps back to and `Cmd+Shift+Z` forward to. `None` is no history to step, so a step is refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tile_history: Option<TileHistoryCursor>,
+    /// **Where the Map camera looks from** (E-002, #129 slice 31): the ground point it is on, the yaw it is turned to and the zoom.
+    /// Session state like the rest; not serialised while it is where a session opens.
+    #[serde(default, skip_serializing_if = "CameraCursor::is_default")]
+    pub camera: CameraCursor,
+    /// **The answer of `kit_rescan`** (E-002, #129 slice 33): whether the Meshes tab is asked to read the pack's directory again. A
+    /// request, not state: the front end reads it, scans, and the view goes. Not serialised while false.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub rescan: bool,
+    /// **The labeller, as the three label operations read it and answer it** (E-002, #129 slice 34): which pieces are at the model,
+    /// how far a walk is, how many pieces a walk would take, and the answer the front end carries out. Session state and requests,
+    /// nothing the project keeps. Not serialised while it is where a session opens.
+    #[serde(default, skip_serializing_if = "LabelsCursor::is_default")]
+    pub labels: LabelsCursor,
+    /// **The answer of a Tiles-page operation** (E-002, #129 slice 36): which page the Tiles tab shows after it, what became of the
+    /// tile in hand and whether the name prompt is raised. A request the front end carries out; not serialised while it is
+    /// where a session opens (no answer).
+    #[serde(default, skip_serializing_if = "PageAnswer::is_default")]
+    pub page: PageAnswer,
+    /// **The shelf's rows and where its cursor is, and what a walk of it answered** (E-002, #129 slice 37): the library list and the
+    /// candidate list as the Meshes and Tiles tabs draw them, read by `shelf_walk` and `shelf_focus`. Gathered by the front end only
+    /// for those two; not serialised while it is where a session opens (no shelf in hand).
+    #[serde(default, skip_serializing_if = "ShelfCursor::is_default")]
+    pub shelf: ShelfCursor,
+    /// **The answer of `piece_edit`** (E-002, #129 slice 38): the library piece the Meshes tab is asked to focus and open on. A request,
+    /// not state: the front end reads it and the view goes. Not serialised while absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edit: Option<String>,
+}
+
+/// **One row of the candidate list as it is drawn** (E-002, #129 slice 37): a pack's heading, a mesh under an open heading (by
+/// index into the tab's candidates), or the `EXCLUDED` band. The wire form of `tiles::ListRow`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShelfRow {
+    /// A pack's heading, by the folder it spells.
+    Header { pack: String },
+    /// A mesh, by its index in the candidate list.
+    Mesh { index: usize },
+    /// The `EXCLUDED` band's own heading.
+    Excluded,
+}
+
+/// **The shelf, as `shelf_walk` and `shelf_focus` read it and answer it** (E-002, #129 slice 37).
+///
+/// The Meshes tab has two lists and one pair of arrows (the library shelf and the candidates, `left` and `right` choosing which the
+/// arrows walk) and the Tiles tab has the library alone, as a tile's source. What a walk lands on depends on what is drawn (the
+/// filter, the folds, the excluded band) and where the cursor is, so the front end reads the drawn lists in and takes the answer
+/// out ([`ShelfAnswer`]): a key, a chip and an agent's call read the same facts and carry out the same answer.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ShelfCursor {
+    /// Whether a shelf is on screen at all (the Meshes or the Tiles tab): a walk or a focus anywhere else is refused.
+    #[serde(default)]
+    pub up: bool,
+    /// Whether this is the Tiles tab's one list (a tile's source) and not the Meshes tab's two.
+    #[serde(default)]
+    pub tiles_tab: bool,
+    /// The library shelf's ids, in the order it draws them (the filter applied).
+    #[serde(default)]
+    pub library: Vec<String>,
+    /// The library row the arrows have, or `None` when the candidates have them.
+    #[serde(default)]
+    pub selected: Option<String>,
+    /// The library row the cursor last stood on, where `right` lands when it is still on the shelf.
+    #[serde(default)]
+    pub remembered: Option<String>,
+    /// The candidate list's rows in the order they are drawn, headings included.
+    #[serde(default)]
+    pub rows: Vec<ShelfRow>,
+    /// Where the candidate cursor stands in `rows`, or `None` when it is not on a row that is drawn.
+    #[serde(default)]
+    pub here: Option<usize>,
+    /// What to say when the candidate list has no rows to walk: the reason it is empty.
+    #[serde(default)]
+    pub empty: String,
+    /// **The answer**: what the front end is asked to do. Nothing for every other operation.
+    #[serde(default)]
+    pub answer: ShelfAnswer,
+}
+
+impl ShelfCursor {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// **Which shelf list has the arrows** (E-002, #129 slice 37): an enum and not an `Option<Option<String>>`, because serde reads a
+/// `null` as the outer `None`, so the nested form would not survive a round trip.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShelfHand {
+    /// The candidates have the arrows, and no library piece is selected.
+    Candidates,
+    /// The library has the arrows, with this piece selected.
+    Library(String),
+}
+
+/// **What a shelf operation answers** (E-002, #129 slice 37), carried out by `tiles::take_shelf` for a key, a chip and an agent.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ShelfAnswer {
+    /// Whether an operation answered with a change at all.
+    #[serde(default)]
+    pub made: bool,
+    /// Which list has the arrows after it, when the answer changes that.
+    #[serde(default)]
+    pub hand: Option<ShelfHand>,
+    /// The candidate row the cursor goes to.
+    #[serde(default)]
+    pub row: Option<ShelfRow>,
+    /// Whether the pack heading's cursor goes (the library takes over from it).
+    #[serde(default)]
+    pub clear_pack: bool,
+    /// Whether the operation's summary is the status line's sentence. A walk that selects a Meshes piece does not say it: the
+    /// selection says it itself.
+    #[serde(default)]
+    pub say: bool,
+}
+
+impl ShelfAnswer {
+    /// The library piece the answer selects, if it does.
+    pub fn selects(&self) -> Option<&str> {
+        match &self.hand {
+            Some(ShelfHand::Library(id)) => Some(id),
+            _ => None,
+        }
+    }
+}
+
+/// **What a Tiles-page operation answers** (E-002, #129 slice 36): `tile_page_enter`, `tile_page_leave`, `tile_open`, `tile_close` and
+/// `tile_new` read where the page is (`View::tile_page`) and the tile in hand (`View::tile_hand`) and answer with this. The draft is
+/// session state until `Cmd+S` saves it, so none of it is written to `compositions.yaml`; the front end carries it out in
+/// `Build::take_page`, one body for a key and an agent's call.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PageAnswer {
+    /// Whether an operation answered at all.
+    #[serde(default)]
+    pub made: bool,
+    /// Which page the tab shows after it: `Some(row)` is the Tiles page with the cursor on `row`, `None` the Meshes page.
+    #[serde(default)]
+    pub browsing: Option<usize>,
+    /// What became of the tile in hand.
+    #[serde(default)]
+    pub tile: TileAnswer,
+    /// Whether the prompt for a new tile's name is raised.
+    #[serde(default)]
+    pub name: bool,
+}
+
+impl PageAnswer {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// **What became of the tile in hand** (E-002, #129 slice 36).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TileAnswer {
+    /// The tile in hand stays as it is.
+    #[default]
+    Keep,
+    /// Open this tile, with the arrows steering it (`placing`) or walking the library list. A different document: its history starts afresh.
+    Open { tile: bevy_grimoire_core::composition::Composition, placing: bool },
+    /// Put the tile in hand down.
+    Close,
+}
+
+/// **The labeller's state and request, as a value an operation reads and answers** (E-002, #129 slice 34).
+///
+/// The labeller is a background worker (a photo booth, a queue and the model's endpoint), so a request to it is a view operation
+/// that answers what is wanted ([`LabelsAnswer`]) and the front end carries it out: the editor's key and an agent's call read the
+/// same facts in and take the same answer out, and the sentence either says is the operation's own. What a walk would take (the
+/// counts) is gathered by the front end from the library, the candidates, the filter box and what is already at the model.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LabelsCursor {
+    /// The mesh paths of the Meshes tab's candidates: pieces not in the library yet that the labeller can be asked about.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub candidates: Vec<String>,
+    /// The pieces at the model now, by library id or candidate mesh path.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub busy: Vec<String>,
+    /// Whether a walk has pieces still queued, and whether it is held.
+    #[serde(default)]
+    pub running: bool,
+    #[serde(default)]
+    pub paused: bool,
+    /// Whether a question is on screen: the one "re-label what is already labelled?" raises, or any other the editor asked.
+    #[serde(default)]
+    pub asking: bool,
+    /// How many of the walk's pieces are done, and how many it began with.
+    #[serde(default)]
+    pub done: usize,
+    #[serde(default)]
+    pub total: usize,
+    /// What the candidate filter box narrows a walk to; empty is everything.
+    #[serde(default)]
+    pub scope: String,
+    /// The pieces in scope with no judgement yet, and every piece in scope.
+    #[serde(default)]
+    pub unjudged: usize,
+    #[serde(default)]
+    pub everything: usize,
+    /// The remedy the endpoint's probe named, when it cannot be reached: a walk would burn its queue learning that.
+    #[serde(default)]
+    pub unreachable: Option<String>,
+    /// What abandoning the labeller would drop: proposals standing, pieces queued, requests in flight.
+    #[serde(default)]
+    pub proposals: usize,
+    #[serde(default)]
+    pub queued: usize,
+    #[serde(default)]
+    pub in_flight: usize,
+    /// **The answer**: what the front end is asked to do. Nothing for every other operation.
+    #[serde(default)]
+    pub answer: LabelsAnswer,
+}
+
+impl LabelsCursor {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// **What a label operation asks the front end to do** (E-002, #129 slice 34).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelsAnswer {
+    /// Nothing but the sentence (the piece is already at the model, or nothing is missing labels).
+    #[default]
+    Nothing,
+    /// Photograph this piece and ask the model for its labels.
+    Photograph { piece: String, candidate: bool },
+    /// Hold the running walk.
+    Hold,
+    /// Let the held walk go on.
+    Resume,
+    /// Ask the person which pieces to walk, because some in scope are labelled already.
+    Ask,
+    /// Begin a walk over the pieces in scope that have no judgement, or over every piece in scope.
+    Start { all: bool },
+    /// Drop the proposals, the queue, the booth's shots and everything in flight.
+    Abandon,
+}
+
+/// **Where the Map camera is**, as a value an operation can move (E-002, #129 slice 31).
+///
+/// The same facts `view::Rig` holds: the point looked at, the yaw it is easing to and has reached, and how much of the map is on
+/// screen. `camera_pan` moves the focus along the screen's own axes, which depend on the yaw it stands at, and `camera_turn` moves
+/// the yaw the camera is heading for; the front end carries this in and writes the focus and the goal back when they moved. The
+/// eased yaw and the zoom are read, never written: easing and the wheel are the camera's own.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CameraCursor {
+    /// The point the camera looks at, in map metres: `[x, y, z]`.
+    #[serde(default)]
+    pub focus: [f32; 3],
+    /// The yaw the camera has eased to, in radians: the screen's axes are measured against it.
+    #[serde(default)]
+    pub yaw: f32,
+    /// The yaw the camera is heading for, in radians: a quarter turn moves it.
+    #[serde(default)]
+    pub goal_yaw: f32,
+    /// The height of the map the camera shows, in metres: a pan's speed is a fraction of it.
+    #[serde(default = "default_zoom")]
+    pub height: f32,
+}
+
+/// **The zoom a session opens at**: the one `view::Rig` starts with.
+fn default_zoom() -> f32 {
+    crate::view::DEFAULT_VIEW_HEIGHT
+}
+
+impl Default for CameraCursor {
+    fn default() -> Self {
+        CameraCursor { focus: [0.0; 3], yaw: 0.0, goal_yaw: 0.0, height: crate::view::DEFAULT_VIEW_HEIGHT }
+    }
+}
+
+impl CameraCursor {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// **Where the Tiles tab's history stands**, as a value an operation can step (E-002, #129 slice 30).
+///
+/// The same facts `build::TileHistory` holds as its two stacks, with the tile and the focus they step against. A step takes
+/// the top of one stack, puts the tile as it stands on the other and makes the one taken the tile in hand; the front end
+/// applies the answer to the `Build` and the stacks, written only when it moved. The history is session state, like the
+/// draft it records: nothing is written to `compositions.yaml`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TileHistoryCursor {
+    /// The tile as it stands, or `None` when none is open (stepping back past the first edit lands there).
+    pub open: Option<bevy_grimoire_core::composition::Composition>,
+    /// Which member has the focus, as an index into `open`'s members.
+    #[serde(default)]
+    pub focus: usize,
+    /// The tiles a step back lands on, the nearest last.
+    #[serde(default)]
+    pub past: Vec<Option<bevy_grimoire_core::composition::Composition>>,
+    /// The tiles a step forward lands on, the nearest last.
+    #[serde(default)]
+    pub future: Vec<Option<bevy_grimoire_core::composition::Composition>>,
+}
+
+/// **The tile being assembled**, as a value an operation can change (E-002, #129 slice 28).
+///
+/// The same facts `build::Build` holds as `open`, `focus`, `depth` and `placing`. The draft is session state, not the
+/// project: nothing is written to `compositions.yaml` until `Cmd+S` saves it (`composition_define`), so an operation on it
+/// writes no file and takes no undo step of its own. The front end carries it in and applies what comes back, written only
+/// when it moved.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TileHand {
+    /// The tile as it stands: its envelope, its members and their places.
+    pub open: bevy_grimoire_core::composition::Composition,
+    /// Which member has the focus, as an index into `open`'s members. Out of range reads as none.
+    #[serde(default)]
+    pub focus: usize,
+    /// How deep the arrow ladder is, latched: `0` walks centre to flush in one press.
+    #[serde(default)]
+    pub depth: u32,
+    /// Whether the arrows steer the tile rather than the library list: the piece is taken.
+    #[serde(default)]
+    pub placing: bool,
+}
+
+/// **Where the lattice grid's cursor is**, as a value an operation can move (E-002, #129 slice 27).
+///
+/// The same facts `tiles::CellEdit` holds as `layer` and `at`, with the divisions of the lattice the focused piece stands on
+/// (`tiles::focused_div`), which the front end derives and carries in so the walk stops at the grid's own edges. The rules
+/// for moving the cursor are written once, in `ops::lattice_cursor_step`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LatticeCursor {
+    /// How many cells the lattice has along x, y (layers) and z.
+    pub div: (u32, u32, u32),
+    /// The layer the grid is showing.
+    #[serde(default)]
+    pub layer: u32,
+    /// The selected cell, if any.
+    #[serde(default)]
+    pub at: Option<(u32, u32, u32)>,
+}
+
+/// **Where the rig bench's stage is**, as a value an operation can move (E-002, #129 slice 26).
+///
+/// The same three facts `anim_stage::BenchScrub` and `BenchCamera` hold as `playing`, `phase` and the preset. The rules for
+/// moving them are written once, in `ops::stage`; the front end carries this in and applies what comes back. `View` lost
+/// its `Eq` for the phase: a float is the cursor, and a float is only `PartialEq`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StageCursor {
+    /// **Whether the figure plays**: it advances at the mixture's own authored speed. Paused, the phase is the scrub's.
+    #[serde(default = "playing_by_default")]
+    pub playing: bool,
+    /// The shared phase, `[0, 1)`, which a scrub moves while the figure is paused.
+    #[serde(default)]
+    pub phase: f32,
+    /// The stage camera's framing.
+    #[serde(default)]
+    pub camera: crate::anim_stage::CamPreset,
+}
+
+/// **Alive by default**, as the bench opens: the figure walks in place the moment the tab does.
+fn playing_by_default() -> bool {
+    true
+}
+
+impl Default for StageCursor {
+    fn default() -> Self {
+        StageCursor { playing: true, phase: 0.0, camera: crate::anim_stage::CamPreset::default() }
+    }
+}
+
+impl StageCursor {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 /// **Where the COMPOSE tab's cursors are**, as a value an operation can move (E-002, #129 slice 23).
@@ -147,6 +546,64 @@ pub struct RigCursor {
     /// **Whether the bench shows the project-wide summary** rather than one rig. Walking to a rig puts it back on one.
     #[serde(default)]
     pub all: bool,
+    /// **The rigs whose measurement is already in hand**, carried in so `rig_check_all` can say which are left (E-002, #129
+    /// slice 32). Read, never written back; not serialised while empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub measured: Vec<String>,
+    /// **The answer of `rig_check_all`**: whether a check was made and the rigs it queued to measure. The front end reads
+    /// this and nothing else of a check; both are the default for every other operation.
+    #[serde(default, skip_serializing_if = "CheckAnswer::is_default")]
+    pub check: CheckAnswer,
+    /// **The bench's own history of `rigs.yaml`**, carried in for `rig_history_step` (E-002, #129 slice 35) and answered by it. Not
+    /// serialised while empty: every other operation carries none.
+    #[serde(default, skip_serializing_if = "RigHistory::is_default")]
+    pub history: RigHistory,
+}
+
+/// **What a project-wide rig check answered** (E-002, #129 slice 32): that it ran, and which rigs it queued.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CheckAnswer {
+    /// Whether a check was made at all.
+    #[serde(default)]
+    pub made: bool,
+    /// The rigs with no measurement yet, in manifest order: the ones the watcher is asked to measure.
+    #[serde(default)]
+    pub queued: Vec<String>,
+}
+
+impl CheckAnswer {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// **The rig bench's own history**, as a value `rig_history_step` can step (E-002, #129 slice 35).
+///
+/// The same facts `anim_tab::BenchState` keeps: the manifest as the bench holds it now and the manifests a step back and a step
+/// forward restore, the nearest last. The step takes the top of one stack, writes it as the manifest and puts the text it
+/// replaced on the other; the front end applies the answer to the bench.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RigHistory {
+    /// The manifest as the bench holds it now, or `None` when none was read.
+    #[serde(default)]
+    pub text: Option<String>,
+    /// The manifests a step back restores, the nearest last.
+    #[serde(default)]
+    pub undo: Vec<String>,
+    /// The manifests a step forward restores, the nearest last.
+    #[serde(default)]
+    pub redo: Vec<String>,
+    /// **The answer**: which way the bench stepped, `Some(true)` back and `Some(false)` forward; `None` when it did not.
+    #[serde(default)]
+    pub stepped: Option<bool>,
+}
+
+impl RigHistory {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 impl RigCursor {
@@ -356,9 +813,40 @@ mod tests {
             packs: Default::default(),
             filter_pane: None,
             filter_fresh: false,
+            // Owner exception (2026-11-13): the literal names the field #129 slice 26 adds (its default); the round trip is unchanged.
+            stage: Default::default(),
+            // Owner exception (2026-11-13): the literal names the field #129 slice 27 adds (its default); the round trip is unchanged.
+            lattice: None,
+            // Owner exception (2026-11-13): the literal names the field #129 slice 28 adds (its default); the round trip is unchanged.
+            tile_hand: None,
+            // Owner exception (2026-11-13): the literal names the field #129 slice 30 adds (its default); the round trip is unchanged.
+            tile_history: None,
+            // Owner exception (2026-11-13): the literal names the field #129 slice 31 adds (its default); the round trip is unchanged.
+            camera: CameraCursor::default(),
+            // Owner exception (2026-11-13): the literal names the field #129 slice 33 adds (its default); the round trip is unchanged.
+            rescan: false,
+            // Owner exception (2026-11-13): the literal names the field #129 slice 34 adds (its default); the round trip is unchanged.
+            labels: LabelsCursor::default(),
+            // Owner exception (2026-11-13): the literal names the field #129 slice 36 adds (its default); the round trip is unchanged.
+            page: PageAnswer::default(),
+            // Owner exception (2026-11-13): the literal names the field #129 slice 37 adds (its default); the round trip is unchanged.
+            shelf: ShelfCursor::default(),
+            // Owner exception (2026-11-13): the literal names the field #129 slice 38 adds (its default); the round trip is unchanged.
+            edit: None,
         };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);
+    }
+
+    /// **A shelf answer survives a round trip in each of its forms**, the candidates' hand included (a nested `Option` reads its
+    /// `null` back as the outer `None`, which is why the hand is an enum).
+    #[test]
+    fn a_shelf_answer_round_trips_through_json() {
+        for hand in [None, Some(ShelfHand::Candidates), Some(ShelfHand::Library("floor".to_owned()))] {
+            let answer = ShelfAnswer { made: true, hand, row: Some(ShelfRow::Excluded), clear_pack: true, say: true };
+            let text = serde_json::to_string(&answer).unwrap();
+            assert_eq!(serde_json::from_str::<ShelfAnswer>(&text).unwrap(), answer, "{text}");
+        }
     }
 
     /// **The journal toggles, and says which way it went.**

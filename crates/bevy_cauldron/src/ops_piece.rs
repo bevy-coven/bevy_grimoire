@@ -360,3 +360,88 @@ impl Operation for PieceSetWidth {
         })
     }
 }
+
+// ── piece_edit ───────────────────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EditParams {
+    /// The library piece's id, as `grimoire/pieces` names it.
+    id: String,
+}
+
+fn edit_params(raw: &serde_json::Value) -> Result<EditParams, Refusal> {
+    serde_json::from_value(raw.clone())
+        .map_err(|e| Refusal::new(format!("this is not a piece to edit: {e}. The field is `id`, a library piece's id (see `grimoire/pieces`).")))
+}
+
+/// **Send a library piece to the Meshes tab to be defined**, as the define key does on the Map (E-002, #129 slice 37): the tab
+/// opens on the piece, so the detail pane, the preview, the lattice and the fields all follow it. A map is where you *notice* a
+/// piece is wrong (too big, floating, facing the wrong way), and what the Meshes tab edits is the definition, so every copy on the
+/// map moves with the edit. **Which piece is the front end's question**: the key answers it from the piece under the cursor or the
+/// one armed in PLACE and names the id; an agent names it. The operation answers [`crate::ops_view::View::edit`], and the editor's
+/// own tab and selection are what move. It writes no file, so it has no undo of its own.
+pub struct PieceEdit;
+
+impl PieceEdit {
+    /// The piece, or the refusal: a placement naming a descriptor the library does not have is a map/library mismatch, and switching
+    /// tabs to show an empty pane would report it as nothing happening.
+    fn check(ctx: &Ctx, params: &serde_json::Value) -> Result<String, Refusal> {
+        let id = edit_params(params)?.id;
+        let Some(project) = ctx.project.as_ref() else {
+            return Err(Refusal::new("no project is open, so there is no library to edit a piece of."));
+        };
+        if project.library.get(&id).is_none() {
+            return Err(Refusal::new(format!("`{id}` is not in this library, so there is nothing to edit")));
+        }
+        Ok(id)
+    }
+}
+
+impl Operation for PieceEdit {
+    fn name(&self) -> &'static str {
+        "piece_edit"
+    }
+    fn changes_view(&self) -> bool {
+        true
+    }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        match params.get("id").and_then(serde_json::Value::as_str) {
+            Some(id) => Shown::Piece { id: id.to_owned() },
+            None => Shown::Nowhere,
+        }
+    }
+    fn writes(&self) -> &'static [&'static str] {
+        &[]
+    }
+    fn undo(&self) -> Undo {
+        Undo::None
+    }
+    fn schema(&self) -> serde_json::Value {
+        json!({
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id"],
+            "properties": {
+                "id": {"type": "string", "description": "The library piece's id, as grimoire/pieces names it."}
+            }
+        })
+    }
+    fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+        Ok(json!({ "id": Self::check(ctx, params)?, "opens": "the Meshes tab" }))
+    }
+    fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+        let id = Self::check(ctx, params)?;
+        let Some(view) = ctx.view.as_mut() else {
+            return Err(Refusal::new("no view is in hand, so there is no tab to open the piece on. An editor front end carries one in `Ctx::view`."));
+        };
+        view.edit = Some(id.clone());
+        Ok(Outcome {
+            summary: format!("`{id}` — opened on the Meshes tab"),
+            affected: 0,
+            saved: false,
+            inverse: None,
+            after: Some(json!({ "id": id })),
+        })
+    }
+}

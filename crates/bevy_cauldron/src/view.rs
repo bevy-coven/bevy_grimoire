@@ -20,6 +20,8 @@
 //! when a second 3D camera appears, so a thumbnail booth or a gizmo overlay can kill nine unrelated
 //! systems with no error anywhere. Filter positively on the marker, never on `Camera3d` alone.
 
+// The camera's quarter turn is `ops::camera`'s now; the detent tests below still measure against a full turn.
+#[cfg(test)]
 use std::f32::consts::TAU;
 
 use bevy::input::mouse::{AccumulatedMouseScroll, MouseScrollPixelsPerLine, MouseScrollUnit};
@@ -50,7 +52,7 @@ pub const ISO_ELEVATION: f32 = 0.615_479_7;
 const ISO_DISTANCE: f32 = 20.784_609; // |(12, 12, 12)| = 12 * sqrt 3
 
 /// Quarter turns, so the grid stays square to the screen at every detent.
-const ROTATION_STEPS: u32 = 4;
+pub(crate) const ROTATION_STEPS: u32 = 4;
 
 /// **The closest the rig goes.** Was 4.0 — the same as `tiles::TILE_VIEW_HEIGHT` — which made the
 /// floor of the wheel equal to the whole framing of the mesh stage: a 12 cm mug could not be zoomed
@@ -126,7 +128,20 @@ fn wheel_is_the_maps(pointer: Option<Vec2>, viewport: Option<Rect>) -> bool {
 ///
 /// The number is the old one over the height it was tuned at — 16 m/s at an 18 m map view — so the
 /// Map tab is unchanged to the metre and every closer framing scales with what is on screen.
-const PAN_SPEED: f32 = 16.0 / 18.0;
+pub(crate) const PAN_SPEED: f32 = 16.0 / 18.0;
+
+/// **The four pans**: the key, the name an agent says, and which way it wishes the view to go in screen terms (`+x` is right and
+/// `-y` is up the screen, away from the viewer, as [`pan_direction`] reads them). The key loop below and `ops::camera::camera_pan`
+/// both read this one table, so a key and an agent's `directions` cannot disagree about what `forward` is.
+pub(crate) const PANS: [(Action, &str, Vec2); 4] = [
+    (Action::PanForward, "forward", Vec2::new(0.0, -1.0)),
+    (Action::PanBack, "back", Vec2::new(0.0, 1.0)),
+    (Action::PanLeft, "left", Vec2::new(-1.0, 0.0)),
+    (Action::PanRight, "right", Vec2::new(1.0, 0.0)),
+];
+
+/// **The zoom a session opens at**, in metres of map the viewport's height shows: the Map view the pan speed was tuned at.
+pub(crate) const DEFAULT_VIEW_HEIGHT: f32 = 18.0;
 
 /// Where the camera is looking and how far out.
 #[derive(Resource)]
@@ -147,7 +162,7 @@ impl Default for Rig {
     fn default() -> Self {
         Rig {
             focus: Vec3::ZERO,
-            height: 18.0,
+            height: DEFAULT_VIEW_HEIGHT,
             yaw: 0.0,
             goal_yaw: 0.0,
             elevation: ISO_ELEVATION,
@@ -163,6 +178,29 @@ impl Rig {
         let horizontal = self.elevation.cos() * std::f32::consts::FRAC_1_SQRT_2;
         let before_yaw = Vec3::new(horizontal, self.elevation.sin(), horizontal) * ISO_DISTANCE;
         Quat::from_rotation_y(self.yaw) * before_yaw
+    }
+
+    /// **The camera as a value an operation can move** (E-002, #129 slice 31).
+    pub(crate) fn cursor(&self) -> crate::ops_view::CameraCursor {
+        crate::ops_view::CameraCursor {
+            focus: self.focus.to_array(),
+            yaw: self.yaw,
+            goal_yaw: self.goal_yaw,
+            height: self.height,
+        }
+    }
+
+    /// **Whether the focus and the yaw it is heading for are where the cursor says**: the only two an operation moves, so
+    /// they are the only two compared before a write (a write through a `ResMut` marks the rig changed).
+    pub(crate) fn is_at(&self, cursor: &crate::ops_view::CameraCursor) -> bool {
+        self.focus.to_array() == cursor.focus && self.goal_yaw == cursor.goal_yaw
+    }
+
+    /// **Put the camera where an operation answered**: the focus and the goal yaw. The eased yaw follows the goal by itself, and
+    /// the zoom is the wheel's.
+    pub(crate) fn set_cursor(&mut self, cursor: &crate::ops_view::CameraCursor) {
+        self.focus = Vec3::from(cursor.focus);
+        self.goal_yaw = cursor.goal_yaw;
     }
 }
 
@@ -458,6 +496,8 @@ pub(crate) fn drive(
     viewport: Option<Single<&Camera, With<MainCamera>>>,
     // The Maps door has one; the other doors have none and keep the plain ceiling.
     open: Option<Res<crate::project::OpenMap>>,
+    // The project's root, so a press has a log to be written to.
+    project: Option<Res<crate::project::Project>>,
 ) {
     let Some(camera) = camera else { return };
     let over_ui = over_ui.0;
@@ -478,12 +518,16 @@ pub(crate) fn drive(
             .clamp(MIN_ZOOM, max_zoom(open.as_deref(), aspect));
     }
 
-    let step = TAU / ROTATION_STEPS as f32;
-    if keys::just_pressed(&keys, *live, Action::TurnViewLeft) {
-        rig.goal_yaw += step;
-    }
-    if keys::just_pressed(&keys, *live, Action::TurnViewRight) {
-        rig.goal_yaw -= step;
+    // **A quarter turn is `camera_turn`, the operation an agent calls** (E-002, #129 slice 31). Compared before writing: a write
+    // through a `ResMut` marks the rig changed.
+    let root = project.as_deref().map(|p| p.root.clone());
+    for (action, by) in [(Action::TurnViewLeft, "left"), (Action::TurnViewRight, "right")] {
+        if keys::just_pressed(&keys, *live, action)
+            && let Some(after) = dispatch_camera(rig.cursor(), root.clone(), "camera_turn", serde_json::json!({ "by": by }), false)
+            && rig.goal_yaw != after.goal_yaw
+        {
+            rig.goal_yaw = after.goal_yaw;
+        }
     }
     // Ease toward the detent rather than snapping, so a rapid double-tap reads as one smooth turn.
     let to_goal = rig.goal_yaw - rig.yaw;
@@ -496,30 +540,68 @@ pub(crate) fn drive(
     // Pan along the SCREEN axes, not the world's, so "up" always means away from the viewer no matter
     // which detent the view is at.
     let mut wish = Vec2::ZERO;
-    for (action, dir) in [
-        (Action::PanForward, Vec2::new(0.0, -1.0)),
-        (Action::PanBack, Vec2::new(0.0, 1.0)),
-        (Action::PanLeft, Vec2::new(-1.0, 0.0)),
-        (Action::PanRight, Vec2::new(1.0, 0.0)),
-    ] {
+    let mut held = Vec::new();
+    for (action, name, dir) in PANS {
         if keys::pressed(&keys, *live, action) {
             wish += dir;
+            held.push(name);
         }
     }
     // Where the camera sits this frame. Needed by the pan basis below as well as by the transform at
     // the end, so it is computed once here rather than derived twice from the same two values.
     let iso = rig.offset();
-    if wish != Vec2::ZERO {
-        let screen = pan_direction(wish, rig.yaw);
-        // **A fraction of what is on screen, not a fixed number of metres.** Read out first: this is
-        // one statement over a `ResMut`, and `rig.focus +=` takes the mutable borrow.
-        let height = rig.height;
-        rig.focus += screen * PAN_SPEED * height * dt;
+    // **A held pan is `camera_pan` every frame**, for the seconds the frame lasted: the rate, the screen axes and the fraction of
+    // what is on screen are the operation's. The press is the change and logs a line; the frames after it are it continuing
+    // (`dispatch_repeat`). Keys that cancel each other (forward and back) move nothing and are not dispatched. **The press
+    // dispatches whatever its frame lasted**, as a scrub does: a frame of no time moves no more than
+    // [`crate::anim_stage::PRESS_FLOOR_SECONDS`], but the next frame is no longer `just_pressed`.
+    let fresh = PANS.iter().any(|(action, ..)| keys::just_pressed(&keys, *live, *action));
+    if wish != Vec2::ZERO && (fresh || dt > 0.0) {
+        let seconds = if fresh { dt.max(crate::anim_stage::PRESS_FLOOR_SECONDS) } else { dt };
+        let params = serde_json::json!({ "directions": held, "seconds": seconds.min(crate::ops::camera::MAX_PAN_SECONDS) });
+        if let Some(after) = dispatch_camera(rig.cursor(), root, "camera_pan", params, !fresh)
+            && rig.focus.to_array() != after.focus
+        {
+            rig.focus = Vec3::from(after.focus);
+        }
     }
 
     let (mut tf, mut proj) = camera.into_inner();
     *tf = Transform::from_translation(rig.focus + iso).looking_at(rig.focus, Vec3::Y);
     *proj = map_projection(rig.height, &tf, open.as_deref());
+}
+
+/// **Dispatch a camera operation for a key** (E-002, #129 slice 31), and answer the camera as the operation left it, or `None`
+/// when it refused.
+///
+/// **The project's root travels with it**, because the operation is logged and a log with no place to be written is a refusal that
+/// takes the change back (#224). `repeat` is a held key's later frames: the same operation without a second log line
+/// (`ops::dispatch_repeat`), because "I held the key" is one act. **A camera with no project has no log to write**, so its
+/// every frame is the repeat: the view moves, and nothing is recorded that nobody could read.
+fn dispatch_camera(
+    camera: crate::ops_view::CameraCursor,
+    root: Option<std::path::PathBuf>,
+    operation: &str,
+    params: serde_json::Value,
+    repeat: bool,
+) -> Option<crate::ops_view::CameraCursor> {
+    let repeat = repeat || root.is_none();
+    let mut ctx = crate::ops::Ctx {
+        root,
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View { camera, ..Default::default() }),
+        ..crate::ops::Ctx::default()
+    };
+    let applied = if repeat {
+        crate::ops::dispatch_repeat(&mut ctx, operation, &params)
+    } else {
+        crate::ops::dispatch(&mut ctx, operation, &params)
+    };
+    match applied {
+        Ok(crate::ops::Applied::Done { .. }) => ctx.view.map(|v| v.camera),
+        Ok(crate::ops::Applied::Refused(_)) | Err(_) => None,
+    }
 }
 
 /// **Where the editor's pointer is**, in surface pixels: the window's logical position times its scale

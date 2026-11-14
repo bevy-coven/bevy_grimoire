@@ -109,9 +109,15 @@ const REFUSALS: &[Site] = &[
     // `labels.rs` still files: an endpoint that is not answering before a walk is armed, a walk
     // whose warm-up failed with nothing sent, and a walk stopped because the endpoint went away
     // mid-batch.
+    // Owner exception (2026-11-13): re-pointed, because #129 slice 34 moved the sentence `no batch: {remedy}` into `labels_walk`
+    // (`ops_labeller.rs`), the operation the Shift+L key now dispatches, which refuses with it. **This row is weak, and says so**: its
+    // marker is the problem call itself, in `Labeller::dispatch`, where every refusal of the three label operations is filed, so it
+    // cannot fail for `no batch:` alone. The sentence and its slot are pinned by
+    // `labeller_requests_are_operations::a_walk_with_no_endpoint_is_refused_as_no_batch_for_the_key_and_for_an_agent`, which presses
+    // Shift+L over a port nothing listens on and reads the problem the author is shown.
     Site {
         file: "labels.rs",
-        marker: "no batch: {remedy}",
+        marker: "state.status.problem(e.0)",
     },
     Site {
         file: "labels.rs",
@@ -121,9 +127,15 @@ const REFUSALS: &[Site] = &[
         file: "labels.rs",
         marker: "Bring the decision endpoint up (GRIMOIRE_DECIDE_ENDPOINT) and press Shift+L again",
     },
+    // Owner exception (2026-11-13): re-pointed, because #129 slice 29 moved the refusal "a hole has no width to put flush" into
+    // `tile_member_flush`, the operation the Shift+arrow key now dispatches. **This row is weak, and says so**: its marker is
+    // the problem call itself, so the scan finds a `problem` slot for it wherever `build.rs` has the text at all, and it would
+    // not notice one particular `Err` arm being changed to a note. The protection of the hole's refusal is the assertion in
+    // `tile_pieces_are_operations::shift_and_an_arrow_and_an_agent_put_the_member_flush`, which reads the problem slot of the
+    // status after the refused key.
     Site {
         file: "build.rs",
-        marker: "a hole has no width to put flush",
+        marker: "Err(e) => state.status.problem(e),",
     },
 ];
 

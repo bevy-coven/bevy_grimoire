@@ -676,6 +676,30 @@ impl CellEdit {
     pub fn typing(&self) -> bool {
         self.active.is_some()
     }
+
+    /// **Whether the grid's cursor is already where an operation answered.** Compared first by the caller, because a write
+    /// through a `ResMut` marks the resource changed and every system gated on a change redoes its work for a call that
+    /// moved nothing.
+    pub(crate) fn is_at(&self, cursor: &crate::ops_view::LatticeCursor) -> bool {
+        self.layer == cursor.layer && self.at == cursor.at
+    }
+
+    /// **Put the grid's cursor where an operation answered** (E-002, #129 slice 27). Opening a token field and then moving
+    /// the cursor would leave the buffer pointed at a cell it was not typed for, so moving closes it — the same reason
+    /// `on_cell_click` clears it.
+    pub(crate) fn set_cursor(&mut self, cursor: &crate::ops_view::LatticeCursor) {
+        self.layer = cursor.layer;
+        self.at = cursor.at;
+        self.active = None;
+    }
+}
+
+/// **The grid's cursor as a value**, for the front ends that carry a view into an operation (E-002, #129 slice 27): the
+/// divisions of the lattice the focused piece stands on, and where the cursor is on it. `None` when no piece is
+/// selected, or its lattice cannot be held — there is no grid to step on.
+pub(crate) fn lattice_cursor(edit: &CellEdit, state: &ImportState, project: &Project) -> Option<crate::ops_view::LatticeCursor> {
+    let div = focused_div(state, project).ok()?;
+    Some(crate::ops_view::LatticeCursor { div, layer: edit.layer, at: edit.at })
 }
 
 /// The clickable description field.
@@ -2666,50 +2690,50 @@ fn lattice_keys(
         }
     }
 
-    let mut layer = edit.layer.min(dy - 1);
-    if pressed(Action::LayerDown) {
-        layer = layer.saturating_sub(1);
+    // **The cursor's keys dispatch `lattice_cursor_step`, the operation an agent calls** (E-002, #129 slice 27), and the
+    // rules — a step stops at the grid's edges, the cursor rides the layer, a layer step that goes nowhere writes nothing —
+    // live there once. One context carries the cursor across the keys pressed in the same frame, in the order they are
+    // listed, and the answer is applied once, compared before writing: a write through a `ResMut` marks it changed.
+    let mut ctx = crate::ops::Ctx {
+        root: Some(project.root.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View {
+            lattice: Some(crate::ops_view::LatticeCursor { div: (dx, dy, dz), layer: edit.layer, at: edit.at }),
+            ..Default::default()
+        }),
+        ..crate::ops::Ctx::default()
+    };
+    for (action, by) in [
+        (Action::LayerDown, "down"),
+        (Action::LayerUp, "up"),
+        (Action::CellLeft, "left"),
+        (Action::CellRight, "right"),
+        (Action::CellForward, "forward"),
+        (Action::CellBack, "back"),
+    ] {
+        if pressed(action) {
+            // **Applied only when the operation was**: a refusal leaves the cursor where it was, as the key always did, and
+            // so does a step whose log line could not be written, which the dispatch takes back after its commit has already
+            // moved the view's copy. There is nothing to say about a selection.
+            let before = ctx.view.as_ref().and_then(|v| v.lattice);
+            let applied = crate::ops::dispatch(&mut ctx, "lattice_cursor_step", &serde_json::json!({ "by": by }));
+            if !matches!(applied, Ok(crate::ops::Applied::Done { .. }))
+                && let Some(view) = ctx.view.as_mut()
+            {
+                view.lattice = before;
+            }
+        }
     }
-    if pressed(Action::LayerUp) {
-        layer = (layer + 1).min(dy - 1);
+    if let Some(cursor) = ctx.view.and_then(|v| v.lattice)
+        && !edit.is_at(&cursor)
+    {
+        // **No status line for a selection.** The line under the grid already says what the selected cell
+        // holds, and `refresh_cells` repaints it in place — whereas writing `status` mutates
+        // `ImportState`, which is what `rebuild_detail` watches, so saying it twice is what made picking a
+        // cell respawn the whole detail block. One fact, one place, no bounce.
+        edit.set_cursor(&cursor);
     }
-    let moved = pressed(Action::CellLeft)
-        || pressed(Action::CellRight)
-        || pressed(Action::CellForward)
-        || pressed(Action::CellBack);
-    if layer == edit.layer && !moved {
-        return;
-    }
-
-    // **The cursor rides the layer rather than being dropped by it.** Both this and `on_layer_click`
-    // keep (x, z) and move y, so walking up a lattice column stays on the column an author is
-    // looking at instead of clearing the selection every step.
-    let mut at = edit.at.unwrap_or((0, layer, 0));
-    at.1 = layer;
-    if pressed(Action::CellLeft) {
-        at.0 = at.0.saturating_sub(1);
-    }
-    if pressed(Action::CellRight) {
-        at.0 = (at.0 + 1).min(dx - 1);
-    }
-    if pressed(Action::CellForward) {
-        at.2 = (at.2 + 1).min(dz - 1);
-    }
-    if pressed(Action::CellBack) {
-        at.2 = at.2.saturating_sub(1);
-    }
-    at.0 = at.0.min(dx - 1);
-    at.2 = at.2.min(dz - 1);
-
-    edit.layer = layer;
-    edit.at = Some(at);
-    // Opening a token field and then moving the cursor would leave the buffer pointed at a cell it
-    // was not typed for, so moving closes it — the same reason `on_cell_click` clears it.
-    edit.active = None;
-    // **No status line for a selection.** The line under the grid already says what the selected cell
-    // holds, and `refresh_cells` repaints it in place — whereas writing `status` mutates
-    // `ImportState`, which is what `rebuild_detail` watches, so saying it twice is what made picking a
-    // cell respawn the whole detail block. One fact, one place, no bounce.
 }
 
 /// Typing an edge or anchor token.
@@ -4808,7 +4832,8 @@ fn click_tab(click: On<PointerClick>, tabs: Query<&Tab>, mut commands: Commands)
 }
 
 /// **`R` rescans**, because meshes arrive while the editor is open — an importer that only sees what
-/// was on disk at launch is one you have to restart to use.
+/// was on disk at launch is one you have to restart to use. **Through `kit_rescan`** (E-002, #129 slice 33), the operation an
+/// agent calls: the key asks, the answer says a scan is wanted, and the scan is [`scan`], the one reader of the directory.
 fn rescan_key(
     keyboard: Res<ButtonInput<KeyCode>>,
     live: Res<crate::keys::Live>,
@@ -4816,8 +4841,20 @@ fn rescan_key(
     mode: Res<Mode>,
     mut state: ResMut<ImportState>,
 ) {
-    if *mode == Mode::Meshes && keys::just_pressed(&keyboard, *live, Action::Rescan) {
-        scan(&project, &mut state);
+    if *mode != Mode::Meshes || !keys::just_pressed(&keyboard, *live, Action::Rescan) {
+        return;
+    }
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View::default()),
+        ..crate::ops::Ctx::default()
+    };
+    match crate::ops::dispatch(&mut ctx, "kit_rescan", &serde_json::json!({})) {
+        Ok(crate::ops::Applied::Done { .. }) if ctx.view.as_ref().is_some_and(|v| v.rescan) => scan(&project, &mut state),
+        Ok(crate::ops::Applied::Done { .. }) => {}
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => state.status.problem(e.0),
     }
 }
 
@@ -5718,37 +5755,18 @@ fn step_mount(project: &mut Project, state: &mut ImportState) {
 fn suggestion_keys(
     keyboard: Res<ButtonInput<KeyCode>>,
     live: Res<crate::keys::Live>,
+    project: Option<Res<Project>>,
     mut state: ResMut<ImportState>,
-    stores: LabelStores<'_>,
+    filters: Res<crate::filter::Filters>,
+    mut labeller: crate::labels::Labeller,
 ) {
     if !keys::just_pressed(&keyboard, *live, Action::DiscardAllSuggestions) {
         return;
     }
-    let LabelStores {
-        mut suggestions,
-        mut generation,
-        mut label_queue,
-        mut label_tasks,
-        mut rig,
-    } = stores;
-    state.status.note(crate::labels::clear_all_labels(
-        &mut suggestions,
-        &mut generation,
-        &mut label_queue,
-        &mut label_tasks,
-        &mut rig,
-    ));
-}
-
-/// The label stores the discard-all key clears together, bundled so the system stays under the
-/// parameter cap. Each field is the access the bare parameter had.
-#[derive(bevy::ecs::system::SystemParam)]
-struct LabelStores<'w> {
-    suggestions: ResMut<'w, crate::labels::Suggestions>,
-    generation: ResMut<'w, crate::labels::LabelGeneration>,
-    label_queue: ResMut<'w, crate::labels::LabelQueue>,
-    label_tasks: ResMut<'w, crate::labels::LabelTasks>,
-    rig: ResMut<'w, crate::label_booth::ShotRig>,
+    let Some(project) = project else { return };
+    // **Through `labels_abandon`** (E-002, #129 slice 34), the operation an agent calls: what the labeller holds, counted and
+    // dropped by the one body behind the key and the call.
+    labeller.dispatch("labels_abandon", serde_json::json!({}), &project, &mut state, &filters);
 }
 
 /// **A label that arrives is a label that lands**, one per frame.
@@ -6667,21 +6685,6 @@ fn remember_library_row(state: Res<ImportState>, mut cursor: ResMut<LibraryCurso
     }
 }
 
-/// **Where entering the library shelf should land**, given what it holds and where you were.
-///
-/// The remembered row when it is still on the shelf — a piece can be sent back to `NOT IMPORTED`,
-/// renamed, or filtered out from under the cursor — and otherwise the first row, which since the
-/// order was reversed is the most recently defined piece. Both entrances ask this, because a chip
-/// and a key that disagreed about where they land would be two answers to one question.
-fn library_landing(ids: &[String], cursor: &LibraryCursor) -> Option<String> {
-    cursor
-        .0
-        .as_deref()
-        .filter(|id| ids.iter().any(|had| had == id))
-        .map(str::to_owned)
-        .or_else(|| ids.first().cloned())
-}
-
 /// Does anything under this entity carry a drawable mesh? The watchdog's one question.
 fn holds_a_mesh(
     root: Entity,
@@ -6848,6 +6851,130 @@ fn wire_axis(axis: Axis) -> &'static str {
     }
 }
 
+/// **The shelf, read as the operations read it** (E-002, #129 slice 37): the library shelf's ids, the candidate list's drawn rows and
+/// where the cursor stands on them, and where `right` lands. One reader for a key, a chip and an agent's call.
+pub(crate) fn shelf_cursor(
+    project: &Project,
+    state: &ImportState,
+    filters: &crate::filter::Filters,
+    suggestions: &crate::labels::Suggestions,
+    cursor: &LibraryCursor,
+    tiles_tab: bool,
+) -> crate::ops_view::ShelfCursor {
+    let rows = candidate_list_rows(state, filters, &project.policy);
+    let here = rows.iter().position(|r| match r {
+        ListRow::Header(p) => state.focused_pack.as_deref() == Some(p.as_str()),
+        ListRow::Mesh(i) => state.focused_pack.is_none() && !state.excluded_focused && *i == state.selected,
+        ListRow::Excluded => state.excluded_focused,
+    });
+    crate::ops_view::ShelfCursor {
+        up: true,
+        tiles_tab,
+        library: library_ids(project, filters, tiles_tab, Some(suggestions)),
+        selected: state.selected_library_id.clone(),
+        remembered: cursor.0.clone(),
+        rows: rows.iter().map(shelf_row).collect(),
+        here,
+        empty: nothing_to_walk(state, filters),
+        answer: Default::default(),
+    }
+}
+
+/// A drawn row, in the operations' wire form.
+fn shelf_row(row: &ListRow) -> crate::ops_view::ShelfRow {
+    use crate::ops_view::ShelfRow;
+    match row {
+        ListRow::Header(pack) => ShelfRow::Header { pack: pack.clone() },
+        ListRow::Mesh(index) => ShelfRow::Mesh { index: *index },
+        ListRow::Excluded => ShelfRow::Excluded,
+    }
+}
+
+/// A row an operation answered with, as the list draws it.
+fn list_row(row: &crate::ops_view::ShelfRow) -> ListRow {
+    use crate::ops_view::ShelfRow;
+    match row {
+        ShelfRow::Header { pack } => ListRow::Header(pack.clone()),
+        ShelfRow::Mesh { index } => ListRow::Mesh(*index),
+        ShelfRow::Excluded => ListRow::Excluded,
+    }
+}
+
+/// **Carry out what a shelf operation answered**, the one body behind a key, a chip and an agent's call: which list has the arrows
+/// (a library piece selected, through `piece_select` on the Meshes tab and by the Tiles tab's own write there, where the list is a tile's
+/// source that no operation names), the candidate row the cursor goes to, the heading cursor that goes when the library takes over, and
+/// the sentence when the operation says one.
+pub(crate) fn take_shelf(
+    state: &mut ImportState,
+    project: &Project,
+    answer: &crate::ops_view::ShelfAnswer,
+    said: &str,
+    tiles_tab: bool,
+    source: crate::ops::Source,
+) {
+    if answer.made {
+        match &answer.hand {
+            Some(crate::ops_view::ShelfHand::Library(id)) if tiles_tab => state.selected_library_id = Some(id.clone()),
+            Some(crate::ops_view::ShelfHand::Library(id)) => crate::editor::select_piece_as(state, project, id, source),
+            Some(crate::ops_view::ShelfHand::Candidates) => state.selected_library_id = None,
+            None => {}
+        }
+        if let Some(row) = &answer.row {
+            put_cursor(state, &list_row(row));
+        }
+        if answer.clear_pack {
+            state.focused_pack = None;
+        }
+    }
+    if answer.say {
+        state.status.note(said.to_owned());
+    }
+}
+
+/// **What a key or a chip needs to ask the shelf operations**: the project, the filter box, the suggestions that decide what can be
+/// composed, where `right` lands, and which tab this is.
+pub(crate) struct ShelfAsk<'a> {
+    pub project: &'a Project,
+    pub filters: &'a crate::filter::Filters,
+    pub suggestions: &'a crate::labels::Suggestions,
+    pub cursor: &'a LibraryCursor,
+    pub tiles_tab: bool,
+}
+
+/// **Dispatch a shelf operation for a key or a chip** (E-002, #129 slice 37), the operation an agent calls: read the shelf in, take
+/// the answer out and say what it said. A refusal is a problem where the author looks. A held key's repeat is the same change again
+/// and writes no second log line (`ops::dispatch_repeat`).
+pub(crate) fn shelf_through_operation(
+    ask: &ShelfAsk<'_>,
+    state: &mut ImportState,
+    operation: &str,
+    params: serde_json::Value,
+    repeating: bool,
+) {
+    let mut ctx = crate::ops::Ctx {
+        project: Some(ask.project.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View {
+            shelf: shelf_cursor(ask.project, state, ask.filters, ask.suggestions, ask.cursor, ask.tiles_tab),
+            ..Default::default()
+        }),
+        ..crate::ops::Ctx::default()
+    };
+    let applied = if repeating {
+        crate::ops::dispatch_repeat(&mut ctx, operation, &params)
+    } else {
+        crate::ops::dispatch(&mut ctx, operation, &params)
+    };
+    match applied {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => {
+            let answer = ctx.view.take().map(|v| v.shelf.answer).unwrap_or_default();
+            take_shelf(state, ask.project, &answer, &outcome.summary, ask.tiles_tab, crate::ops::Source::Human);
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => state.status.problem(e.0),
+    }
+}
+
 // **No `Res<Build>` any more.** This system used to read `build.placing` to decide whether the arrows
 // were its business; the census answers that now, so the dependency went with the guard.
 fn move_selection(
@@ -6897,191 +7024,37 @@ fn move_selection(
     let up = keys::repeating(&keyboard, *live, prev, &mut repeat, dt);
     let to_library = keys::just_pressed(&keyboard, *live, Action::FocusLibrary);
     let to_candidates = keys::just_pressed(&keyboard, *live, Action::FocusCandidates);
+    if !(down || up || to_library || to_candidates) {
+        return;
+    }
+    let ask = ShelfAsk { project: &project, filters: &filters, suggestions: &suggestions, cursor: &cursor, tiles_tab };
 
     // Left/right choose which list the arrows walk. `selected_library_id` is already the one
-    // discriminant the detail pane reads, so this sets it and everything else follows.
+    // discriminant the detail pane reads, so the operation's answer sets it and everything else follows.
+    // **Through `shelf_focus`**, the operation an agent calls and the shelf's chips dispatch.
     if to_candidates {
-        state.selected_library_id = None;
-        // **The same refusal `↑`/`↓` give**, because `←` onto an empty shelf is the same question.
-        // It always said `candidates`, however empty the shelf was — the audit's M16.
-        if candidate_list_rows(&state, &filters, &project.policy).is_empty() {
-            let say = nothing_to_walk(&state, &filters);
-            state.status.note(say);
-        } else {
-            state.status.note("candidates".to_owned());
-        }
+        shelf_through_operation(&ask, &mut state, "shelf_focus", serde_json::json!({ "to": "candidates" }), false);
     }
     if to_library {
-        let ids = library_ids(
-            project.as_ref(),
-            &filters,
-            tiles_tab,
-            Some(&suggestions),
-        );
-        match library_landing(&ids, &cursor) {
-            Some(land) => {
-                // **Arriving on the shelf is a selection, so it is the operation** (E-050). `right`
-                // used to write `selected_library_id` by hand, so the press that points the shelf
-                // at a piece left no `piece_select` line while the very next `down` did — one
-                // question, two answers depending on which key asked it. A selection that is
-                // already made is left alone: the seed is the arrival, not a re-selection.
-                //
-                // **On the Meshes shelf only.** `piece_select` names the Meshes shelf; on the Tiles
-                // tab this list is a tile's source, which no operation names yet, and logging a
-                // Meshes-shelf selection for it would make the log say something that did not
-                // happen.
-                if state.selected_library_id.is_none() {
-                    if tiles_tab {
-                        state.selected_library_id = Some(land);
-                    } else {
-                        crate::editor::select_piece(&mut state, &project, &land);
-                    }
-                }
-                // **The heading cursor goes when the library takes over.** Leaving it set meant two
-                // highlights on screen and two readers disagreeing about which was live.
-                state.focused_pack = None;
-                // **The note still says which list the arrows walk**, not which row they landed
-                // on: this press asked for the shelf, and the row is the answer to a question the
-                // author did not ask yet.
-                state.status.note("library".to_owned());
-            }
-            None => state.status.note("the library is empty".to_owned()),
-        }
+        shelf_through_operation(&ask, &mut state, "shelf_focus", serde_json::json!({ "to": "library" }), false);
     }
     if !down && !up {
         return;
     }
 
-    // **On the Tiles tab there is only one list.** A tile member must name a `library.yaml`
-    // descriptor; a candidate is a mesh that has been measured and not imported, so it is not a
-    // legal source and walking it here would move a focus the tile author cannot spend. This is one
-    // path rather than two — the tab does not *prefer* the library, it is the only list it has.
-    if tiles_tab && state.selected_library_id.is_none() {
-        match library_ids(project.as_ref(), &filters, tiles_tab, Some(&suggestions)).first()
-        {
-            // **The press that establishes the selection lands ON the first row**, and stops there.
-            //
-            // It used to seed row 0 and then fall through into the walk below, which read `at = 0`
-            // and stepped to row 1 — so the first `down` an author pressed on this tab skipped the
-            // first piece entirely, and the only way to reach it was to press `up` afterwards. One
-            // key press did two things, which is the same shape as every other list defect this
-            // file has produced: a seed is not a step.
-            //
-            // Found on 2026-08-16 through `the_tile_feedback_script_can_actually_be_followed`,
-            // which had been passing for the wrong reason and started measuring this the moment a
-            // candidate's proposed id stopped colliding with a library one.
-            Some(first) => {
-                state.selected_library_id = Some(first.clone());
-                state.status.note(format!(
-                    "`{first}` selected — {} removes it",
-                    keys::binding(Action::RemoveTile).chord
-                ));
-                return;
-            }
-            None => {
-                state.status.problem(
-                    "the library is empty — import a mesh on the Meshes tab before building"
-                        .to_owned(),
-                );
-                return;
-            }
-        }
-    }
     // Shift is the long stride: five rows per step, same key, same direction — a 300-candidate
     // scan at one row a step is a scroll wheel pretending to be a cursor.
-    let stride = if held_shift(&keyboard) { 5 } else { 1 };
-
-    // Walk whichever list has the focus. Two lists, one pair of keys — the alternative was a second
-    // pair nobody would remember, on a tab already carrying ten rows of its twelve.
-    match state.selected_library_id.clone() {
-        Some(id) => {
-            let ids = library_ids(project.as_ref(), &filters, tiles_tab, Some(&suggestions));
-            let Some(at) = ids.iter().position(|d| *d == id) else {
-                // **The selection was filtered out of the list — re-arm, don't go dead.** The old
-                // `return` here was a silent no-op: the filter box is exactly the thing that can
-                // move a row off-screen while its id is still selected, and an arrow then did
-                // nothing — no note, no move — until the box was cleared. Land on the row the
-                // cursor would land on, same shape as the seed arm below, and keep walking.
-                if let Some(land) = library_landing(&ids, &cursor) {
-                    if tiles_tab {
-                        state.status.note(format!(
-                            "`{land}` selected — {} removes it",
-                            crate::keys::binding(Action::RemoveTile).chord
-                        ));
-                        state.selected_library_id = Some(land);
-                    } else {
-                        crate::editor::select_piece(&mut state, &project, &land);
-                    }
-                }
-                return;
-            };
-            let want = if down {
-                at + stride
-            } else {
-                at.saturating_sub(stride)
-            };
-            if let Some(next) = ids.get(want.min(ids.len().saturating_sub(1))) {
-                // **On the Meshes shelf the walk is a selection, so it is the operation** (E-044):
-                // `piece_select` writes the log line a row click and an agent write. The Tiles tab
-                // keeps the direct write, because `piece_select` is a Meshes-shelf operation and
-                // that tab's walk picks a tile's source, which no operation names yet.
-                if tiles_tab {
-                    state.selected_library_id = Some(next.clone());
-                    state.status.note(format!(
-                        "`{next}` selected — {} removes it",
-                        keys::binding(Action::RemoveTile).chord
-                    ));
-                } else {
-                    crate::editor::select_piece(&mut state, &project, next);
-                }
-            }
-        }
-        None => {
-            // **Every row on screen, headings included**, so nothing visible is unreachable and a
-            // collapsed pack can be walked onto and opened without the mouse. The old walk stepped
-            // mesh rows only: at the top of the first open pack `Up` had nowhere to go while 33
-            // headings sat above it, which is the bug reported three times.
-            //
-            // It also walks the DRAWN order rather than candidate indices. Inside one pack those
-            // agree; at a group boundary they do not, and excluded packs are drawn last however
-            // early their meshes were scanned.
-            let rows = candidate_list_rows(&state, &filters, &project.policy);
-            if rows.is_empty() {
-                // **Out loud, like the library branch.** The candidate walk used to return with
-                // nothing said while its sibling said `the library is empty` twice (N19).
-                let say = nothing_to_walk(&state, &filters);
-                state.status.note(say);
-                return;
-            }
-            let here = rows.iter().position(|r| match r {
-                ListRow::Header(p) => state.focused_pack.as_deref() == Some(p.as_str()),
-                ListRow::Mesh(i) => {
-                    state.focused_pack.is_none() && !state.excluded_focused && *i == state.selected
-                }
-                ListRow::Excluded => state.excluded_focused,
-            });
-            let at = match here {
-                Some(at) => at,
-                // Not on screen at all — a filter or a fold moved out from under the cursor. An
-                // arrow then means "start from the top of what I can see", which is where the eye
-                // already is.
-                None => {
-                    if let Some(row) = rows.first() {
-                        put_cursor(&mut state, row);
-                    }
-                    return;
-                }
-            };
-            let want = if down {
-                (at + stride).min(rows.len() - 1)
-            } else {
-                at.saturating_sub(stride)
-            };
-            if let Some(row) = rows.get(want) {
-                put_cursor(&mut state, row);
-            }
-        }
-    }
+    let rows = if held_shift(&keyboard) { crate::ops::list_walk::STRIDE_ROWS } else { 1 };
+    // **The first press is a change of its own; a held key's repeats are the same change again** and write no line of theirs.
+    let first = keys::just_pressed(&keyboard, *live, prev) || keys::just_pressed(&keyboard, *live, next);
+    // **Through `shelf_walk`**, the operation an agent calls: which list has the arrows, the row it lands on and the sentence are its own.
+    shelf_through_operation(
+        &ask,
+        &mut state,
+        "shelf_walk",
+        serde_json::json!({ "by": if down { "next" } else { "prev" }, "rows": rows }),
+        !first,
+    );
 }
 
 /// What the arrows walk: the project and filter they read, the suggestions that decide what can be
@@ -8479,35 +8452,18 @@ fn on_shelf_click(
         bevy_grimoire_core::census::of_catalog(&project.library, &project.compositions.compositions)
             .compositions;
     match chip.0 {
+        // **The chips and the keys are one press** (E-002, #129 slice 37): `left`, `right` and these two chips dispatch `shelf_focus`, the
+        // operation an agent calls, so a click on `CANDIDATES` or `MESHES` leaves the same line, picks the same row and says the same
+        // sentence the key does (E-050's seed still goes through `piece_select` on the Meshes tab).
         Shelf::Candidates => {
             build.browsing = None;
-            state.selected_library_id = None;
-            state.status.note("candidates".to_owned());
+            let ask = ShelfAsk { project: &project, filters: &filters, suggestions: &suggestions, cursor: &cursor, tiles_tab: *mode == Mode::Tiles };
+            shelf_through_operation(&ask, state, "shelf_focus", serde_json::json!({ "to": "candidates" }), false);
         }
-        // **The shape `Action::FocusLibrary` already has**, arm for arm — including the refusal.
-        // A chip that answered an empty library with nothing at all was the same press saying two
-        // different things depending on how it was made.
         Shelf::Library => {
             build.browsing = None;
-            let ids = library_ids(&project, &filters, *mode == Mode::Tiles, Some(&suggestions));
-            match library_landing(&ids, &cursor) {
-                Some(land) => {
-                    // **The chip and the key are one press** (E-050): the seed goes through
-                    // `piece_select`, so a click on `MESHES` leaves the same line the arrow does —
-                    // and on the Tiles tab it stays a direct write, for the reason the key's arm
-                    // gives.
-                    if state.selected_library_id.is_none() {
-                        if *mode == Mode::Tiles {
-                            state.selected_library_id = Some(land);
-                        } else {
-                            crate::editor::select_piece(&mut *state, &project, &land);
-                        }
-                    }
-                    state.focused_pack = None;
-                    state.status.note("library".to_owned());
-                }
-                None => state.status.note("the library is empty".to_owned()),
-            }
+            let ask = ShelfAsk { project: &project, filters: &filters, suggestions: &suggestions, cursor: &cursor, tiles_tab: *mode == Mode::Tiles };
+            shelf_through_operation(&ask, state, "shelf_focus", serde_json::json!({ "to": "library" }), false);
         }
         // The Tiles page, landing where the arrival seed lands (`build::landing_row`): the first
         // real tile, or `+ New Tile` when the kit is empty. The refusal that stood here guarded a
@@ -8538,17 +8494,18 @@ fn on_new_tile_click(
     click: On<PointerClick>,
     rows: Query<&NewTileRow>,
     build: Option<ResMut<crate::build::Build>>,
+    project: Option<Res<Project>>,
+    state: Option<ResMut<ImportState>>,
 ) {
     if rows.get(click.entity).is_err() {
         return;
     }
-    let Some(mut build) = build else {
+    let (Some(mut build), Some(project), Some(mut state)) = (build, project, state) else {
         return;
     };
-    build.naming = Some(crate::build::NamePrompt {
-        raw: String::new(),
-        then: crate::build::NameThen::Open,
-    });
+    // **Through `tile_new`** (E-002, #129 slice 36), the operation `N` and an agent's call dispatch: with no name it raises the
+    // prompt, so the pointer and the key ask the same question.
+    crate::build::page_through_operation(&project, &mut build, &mut state, "tile_new", serde_json::json!({}));
 }
 
 /// **A trailing number, in a column of its own.**

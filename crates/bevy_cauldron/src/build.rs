@@ -618,19 +618,90 @@ pub const NO_TILE: &str = "no tile open — press N to start one";
 /// what the nudge, the flush, the turn and the removal each did not. Deleting a wall left the sconce
 /// on it naming a member that no longer existed, and `validate_shape` then refused the whole
 /// composition with no verb able to repair it.
+///
+/// **Kept for the unit tests that pin the door's rule**: the keys dispatch an operation, and the operation applies its
+/// change through [`edit_open`].
+#[cfg(test)]
 fn edit<T>(
     build: &mut Build,
     library: &bevy_grimoire_core::library::Library,
     act: impl FnOnce(&mut Composition) -> Result<T, String>,
 ) -> Result<T, String> {
-    let Some(open) = build.open.as_ref() else {
+    edit_open(&mut build.open, library, act)
+}
+
+/// **[`edit`] on a tile held as a value** (E-002, #129 slice 28): the one door, for a front end that holds the tile in a
+/// `Build` and for an operation that holds it in a view. The door's rule — apply to a copy, re-resolve the hosts, keep the
+/// result only if it stands up — is stated once, here.
+pub(crate) fn edit_open<T>(
+    open: &mut Option<Composition>,
+    library: &bevy_grimoire_core::library::Library,
+    act: impl FnOnce(&mut Composition) -> Result<T, String>,
+) -> Result<T, String> {
+    let Some(held) = open.as_ref() else {
         return Err(NO_TILE.to_owned());
     };
-    let mut next = open.clone();
+    let mut next = held.clone();
     let out = act(&mut next)?;
     rebind_hosts(&mut next, library)?;
-    build.open = Some(next);
+    *open = Some(next);
     Ok(out)
+}
+
+impl Build {
+    /// **The tile in hand as a value**, or `None` when nothing is open (E-002, #129 slice 28): what the tile-in-hand
+    /// operations are given and what they answer with.
+    pub(crate) fn hand(&self) -> Option<crate::ops_view::TileHand> {
+        self.open.clone().map(|open| crate::ops_view::TileHand { open, focus: self.focus, depth: self.depth, placing: self.placing })
+    }
+
+    /// **Whether the tile in hand is already as an operation answered.** Compared first by the caller, because a write
+    /// through a `ResMut` marks the resource changed, and the 3-D stage and the tile history rebuild on a change.
+    pub(crate) fn is_hand(&self, hand: &crate::ops_view::TileHand) -> bool {
+        self.open.as_ref() == Some(&hand.open) && self.focus == hand.focus && self.depth == hand.depth && self.placing == hand.placing
+    }
+
+    /// **Put the tile in hand where an operation answered**, writing only what differs.
+    pub(crate) fn set_hand(&mut self, hand: &crate::ops_view::TileHand) {
+        if self.open.as_ref() != Some(&hand.open) {
+            self.open = Some(hand.open.clone());
+        }
+        self.focus = hand.focus;
+        self.depth = hand.depth;
+        self.placing = hand.placing;
+    }
+}
+
+/// **Dispatch a tile-in-hand operation for a key** (E-002, #129 slice 28), apply the answer to the `Build`, and say what it
+/// said: its summary, or the refusal's sentence. The key's own guidance (a note for an empty tile) is asked before this, as
+/// it always was; what comes back as an `Err` here is a refusal of the operation itself.
+fn hand_through_operation(
+    project: &crate::project::Project,
+    build: &mut ResMut<Build>,
+    operation: &str,
+    params: serde_json::Value,
+) -> Result<String, String> {
+    let Some(hand) = build.hand() else {
+        return Err(NO_TILE.to_owned());
+    };
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View { tile_hand: Some(hand), ..Default::default() }),
+        ..crate::ops::Ctx::default()
+    };
+    match crate::ops::dispatch(&mut ctx, operation, &params) {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => {
+            if let Some(hand) = ctx.view.and_then(|v| v.tile_hand)
+                && !build.is_hand(&hand)
+            {
+                build.set_hand(&hand);
+            }
+            Ok(outcome.summary)
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => Err(e.0),
+    }
 }
 
 /// Whether the arrows have anything to act on — a member under the focus.
@@ -644,6 +715,17 @@ pub fn focused(build: &Build) -> bool {
         .open
         .as_ref()
         .is_some_and(|c| build.focus < c.members.len())
+}
+
+/// **How wide a member is on the tile's two axes**, as the span the flush and the ladder measure against: a piece the
+/// library carries, turned as it stands. `None` for a hole, which has no width, and for a descriptor the library lacks.
+pub(crate) fn member_span(member: &Member, library: &bevy_grimoire_core::library::Library) -> Option<(f32, f32)> {
+    match &member.body {
+        Body::Descriptor { id, .. } => library
+            .get(id)
+            .map(|d| crate::editor::brush_span(d, member.yaw, MEMBERS_STAND_UP)),
+        _ => None,
+    }
 }
 
 /// Bring a descriptor into the tile, returning the index it landed at.
@@ -967,6 +1049,41 @@ pub struct TileHistory {
     run: Option<usize>,
 }
 
+impl TileHistory {
+    /// **The history as a value an operation can step** (E-002, #129 slice 30): the tile as it stands, the focus and the two
+    /// stacks.
+    pub(crate) fn cursor(&self, build: &Build) -> crate::ops_view::TileHistoryCursor {
+        crate::ops_view::TileHistoryCursor {
+            open: build.open.clone(),
+            focus: build.focus,
+            past: self.past.clone(),
+            future: self.future.clone(),
+        }
+    }
+
+    /// **Whether the history and the tile are already as an operation answered.** Compared first by the caller, because a write
+    /// through a `ResMut` marks the resource changed, and the 3-D stage and the panels rebuild on a change to the tile.
+    pub(crate) fn is_at(&self, build: &Build, cursor: &crate::ops_view::TileHistoryCursor) -> bool {
+        build.open == cursor.open && build.focus == cursor.focus && self.past == cursor.past && self.future == cursor.future
+    }
+
+    /// **Put the tile and its history where an operation answered.** Stepping through history ends the run — the next
+    /// nudge is a new act, not a continuation of one the author has already walked away from — and the tile it lands on is
+    /// the one the next change is measured against, so the step is not recorded as an edit of its own.
+    pub(crate) fn set_cursor(&mut self, build: &mut Build, cursor: &crate::ops_view::TileHistoryCursor) {
+        if build.open != cursor.open {
+            build.open = cursor.open.clone();
+        }
+        if build.focus != cursor.focus {
+            build.focus = cursor.focus;
+        }
+        self.past = cursor.past.clone();
+        self.future = cursor.future.clone();
+        self.seen = Some(cursor.open.clone());
+        self.run = None;
+    }
+}
+
 /// **Which single member two tiles differ by, if they differ only by adjusting one.**
 ///
 /// `Some(i)` when both hold the same members in the same order and exactly one of them has moved,
@@ -1014,7 +1131,7 @@ fn adjusted_member(before: &Option<Composition>, after: &Option<Composition>) ->
 ///
 /// Naming the piece removes the ambiguity without touching the ordering, which exists so the file is
 /// the same on every machine.
-fn step_says(from: &Option<Composition>, to: &Option<Composition>) -> String {
+pub(crate) fn step_says(from: &Option<Composition>, to: &Option<Composition>) -> String {
     let names = |c: &Option<Composition>| -> Vec<String> {
         c.as_ref()
             .map(|c| c.members.iter().map(|m| m.id.clone()).collect())
@@ -1057,6 +1174,7 @@ pub fn tile_history(
     mut build: ResMut<Build>,
     mut history: ResMut<TileHistory>,
     mut state: ResMut<crate::tiles::ImportState>,
+    project: Option<Res<crate::project::Project>>,
 ) {
     if *mode != crate::tiles::Mode::Tiles {
         return;
@@ -1091,43 +1209,35 @@ pub fn tile_history(
     let back = crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::UndoBuild);
     let forward = crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::RedoBuild);
     if back || forward {
-        let step = if back {
-            history.past.pop()
-        } else {
-            history.future.pop()
+        // **Through `tile_history_step`** (E-002, #129 slice 30), the operation an agent calls: the stacks, the tile, the
+        // focus that can outlive the members it indexed and the sentence for the step are its. What `Cmd+Z` finds to undo
+        // is whatever changed the tile, whoever it was, because this system records every change to it.
+        let mut ctx = crate::ops::Ctx {
+            project: project.as_deref().cloned(),
+            source: crate::ops::Source::Human,
+            session: crate::ops::session_id(),
+            view: Some(crate::ops_view::View { tile_history: Some(history.cursor(&build)), ..Default::default() }),
+            ..crate::ops::Ctx::default()
         };
-        match step {
-            Some(to) => {
-                let from = build.open.clone();
-                // Kept for the readout below — the stacks take the value, so the description has to
-                // be made from a copy rather than from what was just pushed.
-                let said = step_says(&from, &to);
-                if back {
-                    history.future.push(from);
-                } else {
-                    history.past.push(from);
+        let params = serde_json::json!({ "by": if back { "back" } else { "forward" } });
+        match crate::ops::dispatch(&mut ctx, "tile_history_step", &params) {
+            Ok(crate::ops::Applied::Done { outcome, .. }) => {
+                if let Some(landed) = ctx.view.and_then(|v| v.tile_history) {
+                    history.set_cursor(&mut build, &landed);
                 }
-                build.open = to.clone();
-                // The focus can outlive the members it indexed.
-                let n = build.open.as_ref().map_or(0, |c| c.members.len());
-                build.focus = build.focus.min(n.saturating_sub(1));
-                history.seen = Some(to);
-                // Stepping through history ends the run: the next nudge is a new act, not a
-                // continuation of one the author has already walked away from.
-                history.run = None;
-                let what = if back { "undo" } else { "redo" };
-                state
-                    .status
-                    .note(format!("{what}: {said} — {n} in the tile"));
+                state.status.note(outcome.summary);
             }
-            None => state.status.note(
-                if back {
-                    "nothing to undo"
+            // Nothing to step is guidance, as it always was: a note the next keystroke replaces. **Any other refusal is a
+            // problem**: a project whose log cannot be written, or no tile history in hand, is not "nothing to undo", and the
+            // old `Cmd+Z` depended on neither.
+            Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+                use crate::ops::tile_hand::tile_history_step::{NOTHING_TO_REDO, NOTHING_TO_UNDO};
+                if e.0 == NOTHING_TO_UNDO || e.0 == NOTHING_TO_REDO {
+                    state.status.note(e.0);
                 } else {
-                    "nothing to redo"
+                    state.status.problem(e.0);
                 }
-                .to_owned(),
-            ),
+            }
         }
         return;
     }
@@ -1253,24 +1363,44 @@ pub fn refit_tile(
     }
 }
 
-/// **Up one page, to the Tiles list** — the landing `left` and `Esc` share.
-///
-/// One function because two keys mean it, and the pair has already drifted once: `Esc` cleared
-/// `browsing` (descending to the Meshes page) while `left` set it, so the tab's two back-out keys
-/// went opposite ways. Written twice, that is two decisions to keep in step; written here, it is
-/// one.
-///
-/// A note rather than a problem when nothing is authored yet: the answer is to make one, and the
-/// `New Tile +` row is where that starts.
-fn ascend(build: &mut Build, state: &mut crate::tiles::ImportState, page: usize, landing: usize) {
-    // `page` counts the `+ New Tile` row, so a page of exactly one is an empty kit.
-    if page <= 1 {
-        state
-            .status
-            .note("no tiles in the kit yet — New Tile +, or build and press Cmd+S".to_owned());
-        build.browsing = Some(NEW_TILE_ROW);
-    } else {
-        build.browsing = Some(landing);
+/// **Dispatch a Tiles-page operation for a key or a click** (E-002, #129 slice 36), apply the answer to the `Build` and say what it
+/// said: its summary, or the refusal's sentence. `right`, `left`, `Enter`, `C` and `N` (and `Esc` on the Meshes page, and the
+/// `+ New Tile` row's click) all come through here, and an agent's call is carried out by the same [`Build::take_page`]. **Nothing to
+/// close is guidance, a note; any other refusal is a problem** where the author looks. Returns whether the operation applied.
+pub(crate) fn page_through_operation(
+    project: &crate::project::Project,
+    build: &mut Build,
+    state: &mut crate::tiles::ImportState,
+    operation: &str,
+    params: serde_json::Value,
+) -> bool {
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View {
+            tile_page: build.browsing.map(|row| crate::ops_view::TilePage { row, rows: page_len(project, build) }),
+            tile_hand: build.hand(),
+            ..Default::default()
+        }),
+        ..crate::ops::Ctx::default()
+    };
+    match crate::ops::dispatch(&mut ctx, operation, &params) {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => {
+            if let Some(view) = ctx.view.take() {
+                build.take_page(&view.page);
+            }
+            state.status.note(outcome.summary);
+            true
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+            if e.0 == crate::ops_tile_page::NOTHING_TO_CLOSE {
+                state.status.note(e.0);
+            } else {
+                state.status.problem(e.0);
+            }
+            false
+        }
     }
 }
 
@@ -1433,144 +1563,21 @@ pub fn build_keys(
         // return to the Meshes page without reopening it, so an undo stack is not a collateral
         // casualty.
         if pressed(Action::PageEnter) {
-            // **Row zero drills and says so.** `row_composition(NEW_TILE_ROW)` is `None`, so this
-            // used to fall through to *"nothing to open yet"* for ANY kit without a draft in hand —
-            // two keystrokes from the landing row, claiming a kit of forty tiles was empty (N17).
-            // The drill is still the drill (`right` means the Meshes page and needs no tile), and
-            // the note names what is true.
-            if row == NEW_TILE_ROW {
-                build.browsing = None;
-                state.status.note(if page > 1 {
-                    format!(
-                        "meshes — nothing in hand; {} on a tile row opens one",
-                        crate::keys::chord(Action::TileOpen)
-                    )
-                } else {
-                    format!(
-                        "no tiles in the kit yet — {} on + New Tile names one",
-                        crate::keys::chord(Action::TileOpen)
-                    )
-                });
-                return;
-            }
-            // **Row zero is NOT a name prompt here, and that distinction cost a test cluster.**
-            //
-            // `right` means *drill to the Meshes page* — the drill's own note above is right that it
-            // needs no tile. Raising the naming prompt on `right` put the editor into
-            // `Context::Typing`, which is a keyboard-wide mode: the arrows stopped walking the
-            // library and `F` stopped reaching the filter box, on a tab the author had only asked to
-            // drill into. `Enter` (`TileOpen`) is the key that acts on the row, and that is where
-            // `+ New Tile` answers.
-            //
-            // The draft row is the one case the kit has no tile for — a named, unsaved tile in
-            // hand is a row the author walked to, and it opens by re-arming the page: the draft is
-            // already open, so this is the `already` branch below doing the drill alone.
-            let Some(comp) = row_composition(row)
-                .and_then(|i| project.compositions.compositions.get(i))
-                .cloned()
-                .or_else(|| draft(&build, &project).cloned())
-            else {
-                // The row is drawn from the same source this indexes, so this is unreachable
-                // rather than unlikely — `TileOpen`'s own precedent below.
-                state
-                    .status
-                    .problem(format!("no tile at row {row}; the page has {page}"));
-                return;
-            };
-            // **A composition with no box is refused by name, and the row stays where it is.**
-            //
-            // `Envelope::Anchored` is what the Map's `M` captures — a table and its chairs, holding
-            // no tile — and this tab assembles tiles. Putting one into `build.open` is what bricked
-            // the tab (the 2026-09-03 review's T2): the size guard below then refused every verb,
-            // and there was no close key, so the only way out was opening a different tile.
-            //
-            // The refusal comes from [`open_saved`], the one writer of `build.open`, rather than
-            // from a check here — the alternatives to refusing are both worse: hiding the row lies
-            // about what is in the kit, and converting it silently rewrites what the author
-            // captured. `tiles::list_ink` marks the row, so the refusal is not the first they hear
-            // of it.
-            //
-            // **And the page does not flip.** The drill's own note above is right that the drill
-            // needs no tile — that is the empty-kit case — and wrong for this one: the author
-            // pointed at a row, and landing on the meshes with a *different* tile in hand would
-            // answer a question they did not ask.
-            let already = build
-                .open
-                .as_ref()
-                .is_some_and(|c| c.id == comp.id);
-            if !already {
-                let id = comp.id.clone();
-                let n = comp.members.len();
-                if let Err(e) = open_saved(&mut build, comp) {
-                    state.status.problem(e);
-                    return;
-                }
-                state.status.note(format!(
-                    "`{id}` opened — {n} member(s), Cmd+S saves over it"
-                ));
-            }
-            build.browsing = None;
+            // **Through `tile_page_enter`** (E-002, #129 slice 36), the operation an agent calls: row zero drills and says so, the
+            // draft row re-arms the page, a tile already in hand is not reopened, and a composition with no box is refused by
+            // name with the page left where it is. The writer of `build.open` is `Build::take_page`.
+            page_through_operation(&project, &mut build, &mut state, "tile_page_enter", serde_json::json!({}));
             return;
         }
         if pressed(Action::TileOpen) {
-            // **Row zero makes one**, the same door `right` and the row's click use.
-            if row == NEW_TILE_ROW {
-                build.naming = Some(NamePrompt { raw: String::new(), then: NameThen::Open });
-                return;
-            }
-            // **The tile in hand is not reopened.** `open_saved` takes the COMMITTED copy, so
-            // reopening the tile you are editing throws away every unsaved member edit and both
-            // undo stacks — and nothing on the page said which tile was open (N20). `right` has
-            // asked this since T2; `Enter` did not (N4). The draft row is the same case: it IS
-            // `build.open`, and reopening it kept the members but bumped `opened`, which cleared
-            // the history under it.
-            let at_row = row_composition(row)
-                .and_then(|i| project.compositions.compositions.get(i))
-                .map(|c| c.id.as_str())
-                .or_else(|| draft(&build, &project).map(|d| d.id.as_str()));
-            if let (Some(open), Some(id)) = (build.open.as_ref(), at_row)
-                && open.id == id
-            {
-                let (id, n) = (open.id.clone(), open.members.len());
-                build.browsing = None;
-                state
-                    .status
-                    .note(format!("`{id}` is already open — {n} member(s)"));
-                return;
-            }
-            // The draft is the last row of the page, and it is in hand by construction — the
-            // row the author just named. Committed rows come from the kit.
-            match row_composition(row)
-                .and_then(|i| project.compositions.compositions.get(i))
-                .cloned()
-                .or_else(|| draft(&build, &project).cloned())
-            {
-                // Refused by the same door `right` opens through, so the two keys cannot come to
-                // disagree about which rows this tab can open.
-                Some(comp) => {
-                    let id = comp.id.clone();
-                    let n = comp.members.len();
-                    match open_saved(&mut build, comp) {
-                        Ok(()) => state.status.note(format!(
-                            "`{id}` opened — {n} member(s), Cmd+S saves over it"
-                        )),
-                        Err(e) => state.status.problem(e),
-                    }
-                }
-                // The row is drawn from this same source this indexes, so this is unreachable
-                // rather than unlikely — said out loud because the alternative is an `unwrap`.
-                None => state
-                    .status
-                    .problem(format!("no tile at row {row}; the page has {page}")),
-            }
+            // **Through `tile_open`** (E-002, #129 slice 36): the row under the cursor, and on `+ New Tile` the name prompt.
+            page_through_operation(&project, &mut build, &mut state, "tile_open", serde_json::json!({}));
             return;
         }
     } else if pressed(Action::PageLeave) {
-        // **`left` walks back to the Tiles page** from the Meshes page. A note, not a problem,
-        // when nothing is authored yet: the answer is to make one, and the `New Tile +` row is
-        // where that starts.
-        let landing = landing_row(&project, &build);
-        ascend(&mut build, &mut state, page, landing);
+        // **`left` walks back to the Tiles page** from the Meshes page, through `tile_page_leave` (E-002, #129 slice 36): a note,
+        // not a problem, when nothing is authored yet.
+        page_through_operation(&project, &mut build, &mut state, "tile_page_leave", serde_json::json!({}));
         return;
     }
 
@@ -1581,40 +1588,9 @@ pub fn build_keys(
     // the one an author most needs to put down, and a close verb behind the guard that refuses it
     // would be the same trap one key further in.
     if pressed(Action::CloseTile) {
-        // Bound rather than matched in place, so the borrow of `build` ends before the writes.
-        let held = build.open.as_ref().map(|c| (c.id.clone(), c.members.len()));
-        match held {
-            Some((id, n)) => {
-                build.open = None;
-                build.focus = 0;
-                build.placing = false;
-                // **Back to the page**, which is where an author who has finished with a tile is
-                // standing. Leaving the Meshes page up over no tile is T1's dead state, and this
-                // verb exists to leave it rather than to arrive in it.
-                //
-                // **The cursor stays where it was, clamped to what is left.** Closing a *draft* —
-                // a tile named this session and never saved — takes its row off the page with it
-                // (`page_len` counts it), so a cursor on the last row would be left pointing past
-                // the end. Clamped to the committed count for that reason rather than reset to
-                // row 0, which would throw away a walk the author had just done.
-                // `kit` counts committed compositions; the page is that plus the draft plus the
-                // `+ New Tile` row at index 0, so the last valid row is `kit` and not `kit - 1`.
-                build.browsing = Some(build.browsing.unwrap_or(NEW_TILE_ROW).min(kit));
-                // **A closed tile is a document boundary**, so the undo stack goes with it:
-                // `tile_history` clears on `opened` changing, and an undo that reached across a
-                // close would put back a tile the author had deliberately put down — under a name
-                // `Cmd+S` would then save it over. See [`Build::opened`], which makes the same
-                // argument about opening a different one.
-                build.opened = build.opened.wrapping_add(1);
-                state.status.note(format!(
-                    "`{id}` closed — {n} member(s) in it, {} on its row opens it again",
-                    crate::keys::chord(Action::TileOpen)
-                ));
-            }
-            None => state
-                .status
-                .note("nothing open to close — the kit's tiles are on this page".to_owned()),
-        }
+        // **Through `tile_close`** (E-002, #129 slice 36), the operation an agent calls: back to the page with the cursor clamped
+        // to what is left, and a closed tile is a document boundary (`Build::opened`), so the undo stack goes with it.
+        page_through_operation(&project, &mut build, &mut state, "tile_close", serde_json::json!({}));
         return;
     }
 
@@ -1688,8 +1664,7 @@ pub fn build_keys(
                 ));
             }
             (false, _) => {
-                let landing = landing_row(&project, &build);
-                ascend(&mut build, &mut state, page, landing)
+                page_through_operation(&project, &mut build, &mut state, "tile_page_leave", serde_json::json!({}));
             }
         }
         return;
@@ -1702,13 +1677,8 @@ pub fn build_keys(
     // not by this press. Reachable with no tile in hand: the page is where the author decides
     // between reusing one and making a new one.
     if pressed(Action::BuildNew) {
-        build.naming = Some(NamePrompt {
-            raw: String::new(),
-            then: NameThen::Open,
-        });
-        state
-            .status
-            .note("name the tile — Enter opens it, Esc leaves things as they are".to_owned());
+        // **Through `tile_new`** (E-002, #129 slice 36): with no name it raises the prompt, and `Enter` in the prompt names it.
+        page_through_operation(&project, &mut build, &mut state, "tile_new", serde_json::json!({}));
         return;
     }
 
@@ -1729,8 +1699,8 @@ pub fn build_keys(
     //
     // The chord is read from the census (`keys::chord`) rather than written out, so naming the
     // refused verb cannot become a lie the day a key moves.
-    let size = match build.open.as_ref().map(|c| c.envelope) {
-        Some(Envelope::Bounded { size }) => size,
+    match build.open.as_ref().map(|c| c.envelope) {
+        Some(Envelope::Bounded { .. }) => {}
         envelope => {
             // **Every verb the guard stands in front of, in one list**, so a verb added below
             // cannot quietly return to declining in silence. The `Stance::Holding` rows — the four
@@ -1774,18 +1744,17 @@ pub fn build_keys(
             }
             return;
         }
-    };
+    }
 
     // **Take the piece, or put it back.** The door between the arrows walking the library list and
     // the arrows walking the tile — the author's *"a key to start the placement so the arrows don't
     // get elsewhere"*. `Esc` is the Global put-back verb and already means exactly this.
     if pressed(Action::BuildArm) {
-        build.placing = !build.placing;
-        state.status.note(if build.placing {
-            "placing — arrows move the tile, Enter drops, Esc puts it back".to_owned()
-        } else {
-            "arrows walk the library".to_owned()
-        });
+        // **Through `tile_hand_arm`**, the operation an agent calls (E-002, #129 slice 28): the rule is its own.
+        match hand_through_operation(&project, &mut build, "tile_hand_arm", serde_json::json!({})) {
+            Ok(said) => state.status.note(said),
+            Err(e) => state.status.problem(e),
+        }
         return;
     }
     // Same reason as the branch above: the tab is asked of `Live`, so an `Esc` that belongs to the
@@ -1827,64 +1796,16 @@ pub fn build_keys(
                 .note("nothing to flush — Enter brings the picked mesh in".to_owned());
             return;
         }
-        let dir = step_in_view(align, rig.yaw);
-        let focus = build.focus;
-        // The span is read before the door, because "this is a hole" is the same kind of guidance:
-        // a hole has no width, so "flush" is its position *on* the boundary — which `validate`
-        // refuses. Nudging is how a hole is placed; there is nothing to align.
-        let span = build
-            .open
-            .as_ref()
-            .and_then(|c| c.members.get(focus))
-            .and_then(|m| match &m.body {
-                Body::Descriptor { id, .. } => project
-                    .library
-                    .get(id)
-                    .map(|d| crate::editor::brush_span(d, m.yaw, MEMBERS_STAND_UP)),
-                _ => None,
-            });
-        let Some(span) = span else {
-            state
-                .status
-                .problem("a hole has no width to put flush — nudge it instead".to_owned());
-            return;
-        };
-        let was = build
-            .open
-            .as_ref()
-            .and_then(|c| c.members.get(focus))
-            .map(|m| m.at);
-        let moved = edit(&mut build, &project.library, |comp| {
-            let Some(m) = comp.members.get_mut(focus) else {
-                return Err("the focused member went away".to_owned());
-            };
-            m.at = aligned(m.at, span, size, dir);
-            Ok(m.at)
-        });
-        match moved {
-            // **A flush that moves nothing says why.**
-            //
-            // Found by authoring: a 0.1 x 1.0 m wall flushed *along its length* is a genuine no-op —
-            // `aligned` returns `(size/2 - span/2) * dir`, and a piece already spanning the tile on
-            // that axis is already as flush as it can be. The arithmetic is right and the picture
-            // does not move, which is indistinguishable from a key that never arrived. I did it twice
-            // in a row with the source open, and only found out by reading the RON afterwards.
-            //
-            // This is the `refused`-versus-`did nothing` gap `docs/2026-08-11-editor-visual-inspection.md`
-            // names as D2, in a new place: *"The information exists; only the channel is missing."*
-            // A note rather than a problem, because nothing went wrong — it names the axis that would
-            // move instead, which is the thing the author actually wants to know.
-            Ok(to) if was == Some(to) => {
-                let across = if dir.0 != 0 { "up/down" } else { "left/right" };
-                state.status.note(format!(
-                    "already flush that way — this piece spans the tile on that axis. Shift+{across} \
-                     moves it across instead"
-                ));
+        // **Through `tile_member_flush`** (E-002, #129 slice 29), the operation an agent calls. The camera's yaw is
+        // the front end's: it turns the screen wish into one of the tile's four axes here, and what a flush means — a
+        // hole has no width to put flush, a flush that moves nothing says why — is the operation's, once. Two opposite
+        // keys down at once cancel out, as they always did.
+        let (x, z) = step_in_view(align, rig.yaw);
+        if (x, z) != (0, 0) {
+            match hand_through_operation(&project, &mut build, "tile_member_flush", serde_json::json!({ "x": x, "z": z })) {
+                Ok(said) => state.status.note(said),
+                Err(e) => state.status.problem(e),
             }
-            Ok(to) => state
-                .status
-                .note(format!("flush — ({:+.3}, {:+.3})", to.0, to.1)),
-            Err(e) => state.status.problem(e),
         }
         return;
     }
@@ -1901,24 +1822,11 @@ pub fn build_keys(
     let step_focus =
         i32::from(pressed(Action::MemberNext)) - i32::from(pressed(Action::MemberPrev));
     if step_focus != 0 {
-        let n = build.open.as_ref().map_or(0, |c| c.members.len());
-        if n == 0 {
-            state
-                .status
-                .note("nothing in the tile yet — Enter brings the picked mesh in".to_owned());
-            return;
-        }
-        let want = (build.focus as i32 + step_focus).clamp(0, n as i32 - 1) as usize;
-        build.focus = want;
-        let named = build
-            .open
-            .as_ref()
-            .and_then(|c| c.members.get(want))
-            .map(|m| m.id.clone())
-            .unwrap_or_default();
-        state
-            .status
-            .note(format!("`{named}` — {} of {n}", want + 1));
+        // **Through `tile_member_focus`** (E-002, #129 slice 28), which clamps at the ends. Its only refusal is an empty
+        // tile, which is guidance, so it stays a note the next keystroke replaces.
+        let by = if step_focus > 0 { "next" } else { "prev" };
+        let (Ok(said) | Err(said)) = hand_through_operation(&project, &mut build, "tile_member_focus", serde_json::json!({ "by": by }));
+        state.status.note(said);
         return;
     }
 
@@ -1931,17 +1839,8 @@ pub fn build_keys(
             state.status.note("the tile is already empty".to_owned());
             return;
         }
-        match edit(&mut build, &project.library, |comp| {
-            comp.members.clear();
-            Ok(())
-        }) {
-            Ok(()) => {
-                build.focus = 0;
-                state.status.note(format!(
-                    "emptied — {n} taken out, {} puts them back",
-                    crate::keys::chord(Action::UndoBuild)
-                ));
-            }
+        match hand_through_operation(&project, &mut build, "tile_clear", serde_json::json!({})) {
+            Ok(said) => state.status.note(said),
             Err(e) => state.status.problem(e),
         }
         return;
@@ -1995,71 +1894,15 @@ pub fn build_keys(
         } else {
             step_in_view(wish, rig.yaw)
         };
-        let focus = build.focus;
-        // **The ladder is the piece's own**: its stops divide the span between the tile's centre
-        // and the flush position [`aligned`] reaches, so both are exactly reachable at every depth
-        // — the two verbs land on the same outermost stop by construction. A hole has no width, so
-        // its ladder spans the whole tile; its boundary stop is the one place the door refuses, by
-        // name, which is the honest answer for a slot that must sit strictly inside.
-        let span = build
-            .open
-            .as_ref()
-            .and_then(|c| c.members.get(focus))
-            .map(|m| match &m.body {
-                Body::Descriptor { id, .. } => project
-                    .library
-                    .get(id)
-                    .map(|d| crate::editor::brush_span(d, m.yaw, MEMBERS_STAND_UP))
-                    .unwrap_or((0.0, 0.0)),
-                _ => (0.0, 0.0),
-            })
-            .unwrap_or((0.0, 0.0));
-        let f = (
-            flush_reach(size.0, span.0).max(0.0),
-            flush_reach(size.2, span.1).max(0.0),
-        );
-        // **A piece that fills the tile on the pressed axis has no travel there** — guidance, not a
-        // refusal, the same door-manners as the flush no-op. The floor is the usual case: a
-        // one-cell piece in a one-cell tile has nowhere to go that would not grow the tile.
-        let travel = (dx != 0 && f.0 > ON_STOP) || (dz != 0 && f.1 > ON_STOP);
-        if !travel && lift_by == 0 {
-            state.status.note(
-                "this piece fills the tile on that axis — [ and ] move layers instead".to_owned(),
-            );
-            return;
-        }
-        let divisor = project.lattice.snap_divisor;
-        let depth = build.depth;
-        let was = build
-            .open
-            .as_ref()
-            .and_then(|c| c.members.get(focus))
-            .map(|m| (m.at, m.lift));
-        let moved = edit(&mut build, &project.library, |comp| {
-            let Some(m) = comp.members.get_mut(focus) else {
-                return Err("the focused member went away".to_owned());
-            };
-            // **The next stop on the ladder, not a fixed pitch** — [`ladder_step`] carries the
-            // rationale and the keyboard report that asked for it.
-            m.at.0 = ladder_step(m.at.0, f.0, divisor, depth, dx);
-            m.at.1 = ladder_step(m.at.1, f.1, divisor, depth, dz);
-            // The floor is the floor: a member cannot be nudged under the tile it is in.
-            m.lift = (m.lift + lift_by as f32 * lift_pitch(divisor, depth)).max(0.0);
-            Ok((m.at, m.lift))
-        });
-        match moved {
-            // The terminal stop: the ladder ends where the piece meets the tile, so a press outward
-            // there moves nothing — said, because it is indistinguishable from a dead key otherwise.
-            Ok(now) if was == Some(now) => state.status.note(
-                "already at the flush stop — the ladder ends where the piece meets the tile"
-                    .to_owned(),
-            ),
-            Ok(((x, z), lift)) => {
-                state
-                    .status
-                    .note(format!("({:+.3}, {:+.3}) at {:.3} m", x, z, lift));
+        // **Through `tile_member_nudge`** (E-002, #129 slice 29), the operation an agent calls: the next stop on the
+        // piece's own ladder, whose rule lives there once. A piece that fills the tile on the pressed axis, and a press
+        // at the terminal stop, are answers the operation gives as notes rather than refusals, as they always were.
+        if (dx, dz, lift_by) != (0, 0, 0) {
+            let params = serde_json::json!({ "x": dx, "z": dz, "lift": lift_by });
+            match hand_through_operation(&project, &mut build, "tile_member_nudge", params) {
+                Ok(said) => state.status.note(said),
+                Err(e) => state.status.problem(e),
             }
-            Err(e) => state.status.problem(e),
         }
         return;
     }
@@ -2069,16 +1912,10 @@ pub fn build_keys(
     // again. Asked for at the keyboard: *"press J once for smaller grid ... a third press would
     // reset to original."*
     if pressed(Action::BuildRung) {
-        build.depth = (build.depth + 1) % DEPTHS;
-        let n = project
-            .lattice
-            .snap_divisor
-            .saturating_pow(build.depth)
-            .max(1);
-        state.status.note(match build.depth {
-            0 => "grid: centre and flush — one press spans the tile".to_owned(),
-            _ => format!("grid: centre to flush in {n} steps — J deepens, and wraps"),
-        });
+        match hand_through_operation(&project, &mut build, "tile_grid_deepen", serde_json::json!({})) {
+            Ok(said) => state.status.note(said),
+            Err(e) => state.status.problem(e),
+        }
         return;
     }
 
@@ -2092,35 +1929,10 @@ pub fn build_keys(
                 .problem("nothing picked — choose a piece in the list first".to_owned());
             return;
         };
-        // **A member must name a library descriptor.** `ImportState::editing` falls back to the
-        // focused *candidate* when nothing in the library is selected, and a candidate is a mesh
-        // measured but not imported — so dropping one writes a tile naming an id `library.yaml` does
-        // not carry, which expands to nothing at stamp time. Refused at the door rather than
-        // written and discovered later, which is this crate's rule for staged edits.
-        if project.library.get(&d.id).is_none() {
-            state.status.problem(format!(
-                "`{}` is not in the library yet — accept it on the Meshes tab first",
-                d.id
-            ));
-            return;
-        }
-        match edit(&mut build, &project.library, |comp| place(comp, &d)) {
-            Ok(i) => {
-                // **Focus follows the drop.** `insert_sorted` answers where it landed, and the two
-                // verbs that act on "this member" — turn and remove — mean the one you just put
-                // down. Ignoring the index left them acting on whatever sorted first, which is a
-                // different piece as soon as a tile holds two.
-                build.focus = i;
-                // **A drop leaves you adjusting what you dropped**, whichever key brought it in.
-                // `Enter` alone used to leave `placing` false and the arrows dead over a focused
-                // member — the author's first report. `Esc` is the way back to the library list.
-                build.placing = true;
-                let n = build.open.as_ref().map_or(0, |c| c.members.len());
-                state.status.note(format!(
-                    "`{}` dropped — {n} in the tile. Arrows move it, Esc goes back to the list",
-                    d.id
-                ));
-            }
+        // **Through `tile_member_drop`** (E-002, #129 slice 29): the piece is the list's pick, and the operation holds the
+        // rules — a member must name a library descriptor, focus follows the drop, and a drop leaves the piece in hand.
+        match hand_through_operation(&project, &mut build, "tile_member_drop", serde_json::json!({ "descriptor": d.id })) {
+            Ok(said) => state.status.note(said),
             Err(e) => state.status.problem(e),
         }
         return;
@@ -2129,20 +1941,10 @@ pub fn build_keys(
     // A hole instead of a piece. `accepts` comes from the project's slot axis, first token — the
     // vocabulary is the closed list, so there is nothing here to invent.
     if pressed(Action::BuildSlot) {
-        let Some(accepts) = project.vocab.slot.names().next().map(str::to_owned) else {
-            state.status.problem(
-                "no `slot` tokens declared — add one to vocab.yaml before dropping a hole"
-                    .to_owned(),
-            );
-            return;
-        };
-        match edit(&mut build, &project.library, |comp| {
-            place_slot(comp, &accepts)
-        }) {
-            Ok(i) => {
-                build.focus = i;
-                state.status.note(format!("hole for `{accepts}` dropped"));
-            }
+        // **Through `tile_slot_drop`** (E-002, #129 slice 29): with no token named it takes the slot axis's first, as the
+        // key always did, and refuses when the project declares none.
+        match hand_through_operation(&project, &mut build, "tile_slot_drop", serde_json::json!({})) {
+            Ok(said) => state.status.note(said),
             Err(e) => state.status.problem(e),
         }
         return;
@@ -2158,18 +1960,10 @@ pub fn build_keys(
                 .note("nothing to turn yet — Enter brings the picked mesh in".to_owned());
             return;
         }
-        // `focus` read before the mutable borrow — the closure would otherwise hold `build` twice.
-        // Through the door like every other verb: a quarter turn changes `brush_span`, so it changes
-        // what a piece touches and therefore what is mounted on it.
-        let focus = build.focus;
-        let turned = edit(&mut build, &project.library, |comp| {
-            let Some(m) = comp.members.get_mut(focus) else {
-                return Err("the focused member went away".to_owned());
-            };
-            m.yaw = (m.yaw + 90.0).rem_euclid(360.0);
-            Ok(format!("`{}` turned to {:.0}", m.id, m.yaw))
-        });
-        match turned {
+        // Through `tile_member_turn` (E-002, #129 slice 28), the operation an agent calls: a quarter turn changes
+        // `brush_span`, so it changes what a piece touches and therefore what is mounted on it, and the door the operation
+        // goes through (`edit_open`) is the one every other verb uses.
+        match hand_through_operation(&project, &mut build, "tile_member_turn", serde_json::json!({})) {
             Ok(said) => state.status.note(said),
             Err(e) => state.status.problem(e),
         }
@@ -2180,26 +1974,10 @@ pub fn build_keys(
             state.status.note("nothing to remove".to_owned());
             return;
         }
-        let focus = build.focus;
-        let removed = edit(&mut build, &project.library, |comp| {
-            if focus >= comp.members.len() {
-                return Err("the focused member went away".to_owned());
-            }
-            Ok(comp.members.remove(focus).id)
-        });
-        match removed {
-            Ok(id) => {
-                // Clamped to what is left rather than stepped back: removing the first member should
-                // leave the focus on the new first, not underflow to the last.
-                let left = build.open.as_ref().map_or(0, |c| c.members.len());
-                build.focus = build.focus.min(left.saturating_sub(1));
-                state.status.note(format!("`{id}` removed"));
-            }
-            // **A host cannot be removed out from under what rests on it.** `rebind_hosts` refuses
-            // inside the door, so the tile is untouched and the refusal names the fixture — where
-            // before, the removal went through and left the sibling pointing at a member that no
-            // longer existed. `validate_shape` then refused the whole composition, `expand` blanked
-            // the stage, and no verb in the tab could put it back.
+        // **Through `tile_member_remove`** (E-002, #129 slice 28). A host cannot be removed out from under what rests on it:
+        // `rebind_hosts` refuses inside the door, so the tile is untouched and the refusal names the fixture.
+        match hand_through_operation(&project, &mut build, "tile_member_remove", serde_json::json!({})) {
+            Ok(said) => state.status.note(said),
             Err(e) => state.status.problem(e),
         }
     }
@@ -2268,24 +2046,11 @@ pub fn naming_keys(
                 let Some(prompt) = build.naming.clone() else {
                     return;
                 };
-                let name = bevy_grimoire_core::naming::to_snake_case(&prompt.raw);
-                if name.is_empty() {
-                    state
-                        .status
-                        .problem("a tile needs a name — type one, or Esc to leave it".to_owned());
-                    return;
+                // **Through `tile_new`** (E-002, #129 slice 36), the operation an agent calls with the name: an empty name and a name
+                // the kit has are refused by it, and the prompt stays up for the person to fix.
+                if page_through_operation(&project, &mut build, &mut state, "tile_new", serde_json::json!({ "name": prompt.raw })) {
+                    build.naming = None;
                 }
-                let id = format!("{}/{}", project.namespace, name);
-                if project.compositions.compositions.iter().any(|c| c.id == id) {
-                    // Refused by name rather than silently replacing somebody's tile.
-                    state
-                        .status
-                        .problem(format!("`{id}` is already in the kit — pick another name"));
-                    return;
-                }
-                build.naming = None;
-                                open_named(&mut build, &project, &id);
-                state.status.note(format!("building `{id}`"));
                 return;
             }
             bevy::input::keyboard::Key::Escape => {
@@ -2312,18 +2077,6 @@ pub fn naming_keys(
     }
 }
 
-/// **Open a blank tile under the name the author just typed.**
-fn open_named(build: &mut Build, project: &crate::project::Project, id: &str) {
-    let comp = blank(id, project.lattice.cell_height);
-    build.depth = DEFAULT_DEPTH;
-    build.open = Some(comp);
-    build.focus = 0;
-    // A freshly named tile lands on the Meshes page, exactly like a reopened one — the naming
-    // prompt was raised from the Tiles page, and the point of naming is to start filling it.
-    build.placing = false;
-    build.browsing = None;
-    build.opened = build.opened.wrapping_add(1);
-}
 
 /// **The tile in hand that is not yet in the kit** — the draft.
 ///
@@ -2384,9 +2137,10 @@ pub fn landing_row(project: &crate::project::Project, build: &Build) -> usize {
 ///
 /// # The refusal is here because this is the one writer
 ///
-/// `build.open` is written by exactly two functions — [`open_named`], which makes a [`blank`], and
-/// this one, which takes whatever it is handed. So this is where *"an anchored composition cannot
-/// enter `build.open`"* is enforceable rather than merely observed: both key paths used to check
+/// `build.open` is set by exactly one function, [`Build::begin`], which two callers share: this one, which takes whatever it is
+/// handed, and [`Build::take_page`], which carries out what `tile_open`, `tile_page_enter` and `tile_new` answered (the first two
+/// refuse a tile with no box by the same [`claims_no_tile`] before they answer, and `tile_new` makes a [`blank`]). So this is where
+/// *"an anchored composition cannot enter `build.open`"* is enforceable rather than merely observed: both key paths used to check
 /// nothing, and one `Enter` on a composition captured with the Map's `M` left the tab holding a
 /// group with no box, where the size guard refused every verb and no key could put it down (the
 /// 2026-09-03 review's T2).
@@ -2399,22 +2153,53 @@ pub fn open_saved(build: &mut Build, comp: Composition) -> Result<(), String> {
     if !has_a_box(&comp) {
         return Err(claims_no_tile(&comp.id));
     }
-    build.depth = DEFAULT_DEPTH;
-    build.open = Some(comp);
-    build.focus = 0;
-    // **Reopening a tile IS holding it**, and the first version of this said the opposite: "the
-    // arrows should walk, not move, until something is picked up". There is nothing to pick up in a
-    // reopened tile -- the members are already in it -- so that landed the author in `Idle` with a
-    // tile on screen they could not touch, and `,`/`.` bound at `Holding` did nothing at all. They
-    // reported it within a minute of the verb existing.
-    //
-    // The third time this tab has keyed the stance on how you ARRIVED rather than on what there is
-    // to do; `docs/tiles_tab_contract.md` carries the other two. `focused` still decides, so a tile
-    // reopened with no members is `Idle`, which is right -- there is genuinely nothing to move.
-    build.placing = true;
-    build.browsing = None;
-    build.opened = build.opened.wrapping_add(1);
+    build.begin(comp, true);
     Ok(())
+}
+
+impl Build {
+    /// **Begin a different tile** (E-002, #129 slice 36): the one writer of `open`, which `open_saved` and [`Build::take_page`] share.
+    /// The ladder is at its default depth, the focus is on the first member and the Meshes page is up. `placing` is whether the arrows
+    /// steer the tile: a reopened tile IS held (there is nothing to pick up in it, and `,`/`.` bound at `Holding` would do nothing),
+    /// a freshly named blank one is not. A different document, so `opened` moves and the tile's history starts afresh.
+    fn begin(&mut self, tile: Composition, placing: bool) {
+        self.depth = DEFAULT_DEPTH;
+        self.open = Some(tile);
+        self.focus = 0;
+        self.placing = placing;
+        self.browsing = None;
+        self.opened = self.opened.wrapping_add(1);
+    }
+
+    /// **Take what a Tiles-page operation answered**: the tile in hand opened or put down, the page the tab shows and the name
+    /// prompt. The key and an agent's call both come through here; an answer that made nothing is left alone.
+    pub(crate) fn take_page(&mut self, answer: &crate::ops_view::PageAnswer) {
+        use crate::ops_view::TileAnswer;
+        if !answer.made {
+            return;
+        }
+        match &answer.tile {
+            TileAnswer::Keep => {}
+            // **A tile named or opened takes the name prompt down**: it is the answer the prompt was waiting for (`tile_new` with a
+            // name), or a tile now in hand that the prompt's name no longer applies to. `open_saved` leaves the prompt alone, as it did.
+            TileAnswer::Open { tile, placing } => {
+                self.begin(tile.clone(), *placing);
+                self.naming = None;
+            }
+            TileAnswer::Close => {
+                self.open = None;
+                self.focus = 0;
+                self.placing = false;
+                self.opened = self.opened.wrapping_add(1);
+            }
+        }
+        if self.browsing != answer.browsing {
+            self.browsing = answer.browsing;
+        }
+        if answer.name && self.naming.is_none() {
+            self.naming = Some(NamePrompt { raw: String::new(), then: NameThen::Open });
+        }
+    }
 }
 
 /// One member of the tile as it currently stands on the stage.

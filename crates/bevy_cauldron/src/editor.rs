@@ -4788,11 +4788,17 @@ pub fn apply_selected(import: &mut crate::tiles::ImportState, after: Option<&ser
 /// so a click and an agent cannot disagree about what selecting a piece does. The note names the
 /// removal chord, because the row is where a person goes to remove a piece.
 pub fn select_piece(import: &mut crate::tiles::ImportState, project: &Project, id: &str) {
+    select_piece_as(import, project, id, crate::ops::Source::Human);
+}
+
+/// **[`select_piece`], for whoever made the selection** (E-002, #129 slice 37): a walk an agent asked for through `shelf_walk` leaves its
+/// `piece_select` line under the agent's name, as a person's walk leaves it under theirs.
+pub fn select_piece_as(import: &mut crate::tiles::ImportState, project: &Project, id: &str, source: crate::ops::Source) {
     let mut ctx = crate::ops::Ctx {
         view: None, trust_file: None,
         project: Some(project.clone()),
         open: None,
-        source: crate::ops::Source::Human,
+        source,
         root: None,
         session: crate::ops::session_id(),
         proposal: None,
@@ -15889,26 +15895,43 @@ fn send_to_tiles(
             return;
         }
     };
-    // A placement naming a descriptor the library does not have is a map/library mismatch, and
-    // switching tabs to show an empty pane would report it as nothing happening.
-    if project.library.get(&id).is_none() {
-        state.status.problem(format!(
-            "`{id}` is not in this library, so there is nothing to edit"
-        ));
-        return;
+    // **Through `piece_edit`** (E-002, #129 slice 38), the operation an agent calls with the piece's id: a placement naming a
+    // descriptor the library does not have is a map/library mismatch (switching tabs to show an empty pane would report it as
+    // nothing happening), and the operation refuses it by name. Which piece is the key's question, answered above from the
+    // pointer and the PLACE list; the refusal and the sentence are the operation's.
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View::default()),
+        ..crate::ops::Ctx::default()
+    };
+    match crate::ops::dispatch(&mut ctx, "piece_edit", &serde_json::json!({ "id": id })) {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => {
+            if let Some(edit) = ctx.view.take().and_then(|v| v.edit) {
+                take_edit(&edit, &outcome.summary, state, mode, import);
+            }
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => state.status.problem(e.0),
     }
-    // `selected_library_id` is the discriminant `ImportState::editing` follows, so setting it is the
-    // whole of "focus this piece" — the detail pane, the preview, the lattice and the fields all read
-    // through that one accessor.
-    import.selected_library_id = Some(id.clone());
-    // "from the map" was true of the only subject there used to be, and is a lie about the other
-    // one. The tab an author lands on says what they are editing; where it came from is the thing
-    // they just did.
+}
+
+/// **Take what `piece_edit` answered**: focus the piece on the Meshes tab and say so. `selected_library_id` is the discriminant
+/// `ImportState::editing` follows, so setting it is the whole of "focus this piece" — the detail pane, the preview, the lattice and
+/// the fields all read through that one accessor. The key and an agent's call both come through here.
+pub(crate) fn take_edit(
+    id: &str,
+    said: &str,
+    state: &mut EditorState,
+    mode: &mut crate::tiles::Mode,
+    import: &mut crate::tiles::ImportState,
+) {
+    import.selected_library_id = Some(id.to_owned());
+    // "from the map" was true of the only subject there used to be, and is a lie about the other one. The tab an author lands on
+    // says what they are editing; where it came from is the thing they just did.
     import.status.note(format!("editing `{id}`"));
     *mode = crate::tiles::Mode::Meshes;
-    state
-        .status
-        .note(format!("`{id}` — opened on the tiles tab"));
+    state.status.note(said.to_owned());
 }
 
 /// **Pick a piece up, and put it down** — the whole of [`Tool::Move`].

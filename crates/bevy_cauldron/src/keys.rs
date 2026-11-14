@@ -1039,59 +1039,85 @@ impl Action {
             | Action::PrevRig
             | Action::NextRig
             // **The candidate list's fold** (E-002, #129 slice 25): view state, migrated to `pack_fold`.
-            | Action::FoldPack => Change::View,
-
-            // **Held, not pressed.** The effect is the hold: things fade, a pick is live, the overlay is
-            // up. An operation whose effect reverses when a key is released is not a value an agent can
-            // set once, so these stay keys. `Shortcuts` is the clearest: four systems read `pressed`.
-            Action::PanForward
+            | Action::FoldPack
+            // **The rig bench's stage** (E-002, #129 slice 26): whether the figure plays, the phase a scrub holds and the
+            // camera framing are what a person is looking at, migrated to `stage_play`, `stage_scrub` and `stage_camera`.
+            | Action::PlayPause
+            | Action::ScrubBack
+            | Action::ScrubFwd
+            | Action::CycleCamPreset
+            // **The lattice grid's cursor** (E-002, #129 slice 27): the cell and layer a person is looking at, migrated to
+            // `lattice_cursor_step`.
+            | Action::CellLeft
+            | Action::CellRight
+            | Action::CellForward
+            | Action::CellBack
+            | Action::LayerDown
+            | Action::LayerUp
+            // **The tile in hand** (E-002, #129 slice 28): the draft on the Tiles tab, its focus, its ladder and whether the
+            // piece is taken are session state until `Cmd+S` saves it; migrated to the `tile_*` operations.
+            | Action::BuildArm
+            | Action::MemberPrev
+            | Action::MemberNext
+            | Action::BuildRung
+            | Action::BuildTurn
+            | Action::BuildDropMember
+            | Action::ClearTile
+            // **The tile's arrows, flush, drop and hole keys** (E-002, #129 slice 29): they edit the draft on the Tiles
+            // tab, session state until `Cmd+S` saves it (`Cmd+Z` there takes each back); migrated to the `tile_*` operations.
+            | Action::BuildForward
+            | Action::BuildBack
+            | Action::BuildLeft
+            | Action::BuildRight
+            | Action::BuildUp
+            | Action::BuildDown
+            | Action::AlignForward
+            | Action::AlignBack
+            | Action::AlignLeft
+            | Action::AlignRight
+            | Action::BuildDrop
+            | Action::BuildSlot
+            // **The Tiles tab's own history** (E-002, #129 slice 30): `Cmd+Z` and `Cmd+Shift+Z` step the draft's record of
+            // itself, session state like the draft; migrated to `tile_history_step`.
+            | Action::UndoBuild
+            | Action::RedoBuild
+            // **The Map camera** (E-002, #129 slice 31): where the view looks and how it is turned are what a person is looking
+            // through, session state; migrated to `camera_pan` and `camera_turn`. A held pan is the operation repeated every
+            // frame (`ops::dispatch_repeat`), which is the model `ScrubBack` and `ScrubFwd` already follow.
+            | Action::PanForward
             | Action::PanBack
             | Action::PanLeft
             | Action::PanRight
             | Action::TurnViewLeft
             | Action::TurnViewRight
-            | Action::FrameView
-            | Action::LookAtAgentChange
-            | Action::CycleCamPreset
-            | Action::ToggleGhost
-            | Action::PlayPause
-            // **Read with `pressed`, every frame.** A key held down is not a one-shot `Outcome`:
-            // the arrows walk a tile, the four `Align*` keys slide a member, and `CellLeft`/`LayerDown`
-            // step the tile's editor — each changes for as long as the key stays down. Measured by
-            // scanning every handler for `pressed` vs `just_pressed`; the 33 verbs below are the ones
-            // that were on `UNMIGRATED` and are `pressed`-only.
-            | Action::AlignBack
-            | Action::AlignForward
-            | Action::AlignLeft
-            | Action::AlignRight
-            | Action::BuildArm
-            | Action::BuildBack
-            | Action::BuildDown
-            | Action::BuildDrop
-            | Action::BuildDropMember
-            | Action::BuildForward
-            | Action::BuildLeft
+            // **The Anim tab's project-wide check** (E-002, #129 slice 32): the summary face and a request to measure what has no
+            // report yet, session state; migrated to `rig_check_all`.
+            | Action::CheckAllRigs
+            // **The Meshes tab's rescan** (E-002, #129 slice 33): the candidate list a person is looking at, read from the pack's
+            // directory again; migrated to `kit_rescan`.
+            | Action::Rescan
+            // **The labeller's three requests** (E-002, #129 slice 34): photograph the focused piece, walk or hold the batch, and
+            // drop everything the labeller holds. Requests to a background worker, not document changes (the labels that arrive
+            // land through their own undoable write); migrated to `labels_suggest`, `labels_walk` and `labels_abandon`.
+            | Action::SuggestLabels
+            | Action::SuggestAll
+            | Action::DiscardAllSuggestions
+            // **The Tiles tab's page keys** (E-002, #129 slice 36): which page is up, the tile in hand opened or put down and the name
+            // prompt, session state until `Cmd+S` saves the tile. They were classified `Camera` on a note that they were "read with
+            // `pressed`, every frame": the `pressed` in `build::build_keys` is `just_pressed`, so each is a one-shot; migrated to
+            // `tile_page_enter`, `tile_page_leave`, `tile_open`, `tile_close` and `tile_new`.
             | Action::BuildNew
-            | Action::BuildRight
-            | Action::BuildRung
-            | Action::BuildSlot
-            | Action::BuildTurn
-            | Action::BuildUp
-            | Action::CellBack
-            | Action::CellForward
-            | Action::CellLeft
-            | Action::CellRight
-            | Action::ClearTile
             | Action::CloseTile
-            | Action::LayerDown
-            | Action::LayerUp
-            | Action::MemberNext
-            | Action::MemberPrev
             | Action::PageEnter
             | Action::PageLeave
-            | Action::ScrubBack
-            | Action::ScrubFwd
-            | Action::TileOpen => Change::Camera,
+            | Action::TileOpen => Change::View,
+
+            // **Held, not pressed.** The effect is the hold: things fade, a pick is live, the overlay is
+            // up. An operation whose effect reverses when a key is released is not a value an agent can
+            // set once, so these stay keys. `Shortcuts` is the clearest: four systems read `pressed`.
+            Action::FrameView
+            | Action::LookAtAgentChange
+            | Action::ToggleGhost => Change::Camera,
 
             Action::Shortcuts => Change::Held,
 
@@ -1103,16 +1129,8 @@ impl Action {
             Action::Undo
             | Action::Redo
             | Action::UndoTile
-            | Action::RedoTile
-            | Action::UndoBuild
-            | Action::RedoBuild
-            | Action::UndoBench
-            | Action::RedoBench
-            | Action::Rescan
-            | Action::SuggestLabels
-            | Action::SuggestAll
-            | Action::DiscardAllSuggestions
-            | Action::CheckAllRigs => Change::World,
+            | Action::RedoTile => Change::World,
+            // (`UndoBench` and `RedoBench` left this list for `rig_history_step`: they write `rigs.yaml`, so they are `Project`.)
 
             // Everything else writes the grimoire and owes an operation.
             _ => Change::Project,
@@ -1153,6 +1171,75 @@ impl Action {
             // take a box, through the operations an agent calls.
             Action::FoldPack => Some("pack_fold"),
             Action::FocusFilter | Action::FocusTagFilter => Some("filter_focus"),
+            // **The rig bench's stage is view state** (E-002, #129 slice 26): `Space` plays and pauses, the held left and right
+            // arrows scrub the paused figure's phase and `V` frames the camera, through the operations an agent calls.
+            Action::PlayPause => Some("stage_play"),
+            Action::ScrubBack | Action::ScrubFwd => Some("stage_scrub"),
+            Action::CycleCamPreset => Some("stage_camera"),
+            // **The lattice grid's cursor is view state** (E-002, #129 slice 27): `F`, `H`, `T` and `G` step the selected cell
+            // and `[` and `]` the layer, through the operation an agent calls.
+            Action::CellLeft
+            | Action::CellRight
+            | Action::CellForward
+            | Action::CellBack
+            | Action::LayerDown
+            | Action::LayerUp => Some("lattice_cursor_step"),
+            // **The tile in hand is session state** (E-002, #129 slice 28): `Space` takes the piece, `,` and `.` walk the
+            // members, `J` deepens the ladder, `R` turns, the remove key removes and Shift with it empties, through the
+            // operations an agent calls.
+            Action::BuildArm => Some("tile_hand_arm"),
+            Action::MemberPrev | Action::MemberNext => Some("tile_member_focus"),
+            Action::BuildRung => Some("tile_grid_deepen"),
+            Action::BuildTurn => Some("tile_member_turn"),
+            Action::BuildDropMember => Some("tile_member_remove"),
+            Action::ClearTile => Some("tile_clear"),
+            // **The tile's arrows and what they do to a piece** (E-002, #129 slice 29): the four arrows and `[` and `]` nudge
+            // the focused member along its ladder, Shift with an arrow puts it flush, Enter drops the picked piece and the
+            // hole key drops a hole, through the operations an agent calls.
+            Action::BuildForward
+            | Action::BuildBack
+            | Action::BuildLeft
+            | Action::BuildRight
+            | Action::BuildUp
+            | Action::BuildDown => Some("tile_member_nudge"),
+            Action::AlignForward | Action::AlignBack | Action::AlignLeft | Action::AlignRight => Some("tile_member_flush"),
+            Action::BuildDrop => Some("tile_member_drop"),
+            Action::BuildSlot => Some("tile_slot_drop"),
+            // **The tab's history** (E-002, #129 slice 30): `Cmd+Z` and `Cmd+Shift+Z` on the Tiles tab step it back and forward,
+            // through the operation an agent calls.
+            Action::UndoBuild | Action::RedoBuild => Some("tile_history_step"),
+            // **The Map camera is view state** (E-002, #129 slice 31): `W`, `A`, `S` and `D` pan the view, held, and `Q` and `E`
+            // turn it a quarter, through the operations an agent calls.
+            Action::PanForward | Action::PanBack | Action::PanLeft | Action::PanRight => Some("camera_pan"),
+            Action::TurnViewLeft | Action::TurnViewRight => Some("camera_turn"),
+            // **The Anim tab's project-wide check is view state and a request to the watcher** (E-002, #129 slice 32): `C` shows
+            // the summary and queues what has no report, through the operation an agent calls.
+            Action::CheckAllRigs => Some("rig_check_all"),
+            // **The Meshes tab's rescan is a request to read the pack's directory again** (E-002, #129 slice 33): `R` asks for it
+            // through the operation an agent calls.
+            Action::Rescan => Some("kit_rescan"),
+            // **The labeller's three requests** (E-002, #129 slice 34): `L`, `Shift+L` and `Shift+Y` ask the labeller through the
+            // operations an agent calls.
+            Action::SuggestLabels => Some("labels_suggest"),
+            Action::SuggestAll => Some("labels_walk"),
+            Action::DiscardAllSuggestions => Some("labels_abandon"),
+            // **The rig bench's history** (E-002, #129 slice 35): `Cmd+Z` and `Cmd+Shift+Z` on the Anim tab step the bench's record
+            // of `rigs.yaml` back and forward through the operation an agent calls.
+            Action::UndoBench | Action::RedoBench => Some("rig_history_step"),
+            // **The Tiles tab's page keys** (E-002, #129 slice 36): `right`, `left`, `Enter`, `C` and `N` move between the pages, open
+            // and close the tile in hand and name a new one, through the operations an agent calls.
+            Action::PageEnter => Some("tile_page_enter"),
+            Action::PageLeave => Some("tile_page_leave"),
+            Action::TileOpen => Some("tile_open"),
+            Action::CloseTile => Some("tile_close"),
+            Action::BuildNew => Some("tile_new"),
+            // **The shelf's arrows and its two lists** (E-002, #129 slice 37): `up` and `down` walk the list that has the arrows (the
+            // Meshes tab's library or candidates, the Tiles tab's library) and `left` and `right` choose which, through the operations
+            // an agent calls.
+            Action::PrevCandidate | Action::NextCandidate | Action::TileListPrev | Action::TileListNext => Some("shelf_walk"),
+            Action::FocusCandidates | Action::FocusLibrary => Some("shelf_focus"),
+            // **The define key** (E-002, #129 slice 38): `Cmd+Delete` on the Map sends a piece to the Meshes tab through `piece_edit`.
+            Action::EditTile => Some("piece_edit"),
             // **The tool keys** (E-002, #129): `B`, `Shift+B` and the run chord arm a tool through `tool_arm`.
             // **`Remove` and `NoteTool` arm a tool, so they name the arming operation** (E-002,
             // #129). They named `placement_remove` and `note_add`: a write neither key makes — its

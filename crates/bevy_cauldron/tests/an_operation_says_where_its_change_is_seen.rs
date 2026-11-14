@@ -61,11 +61,65 @@ const PINNED_NOWHERE: &[&str] = &[
     // Assumed owner exception (2026-11-12): the list grows by the two operations #129 slice 24 registers, the rig bench's
     // cursor and the Tiles page's, which a person's own view holds, like the picker's above.
     "rig_walk",
+    // Assumed owner exception (2026-11-13): the list grows by the operation #129 slice 32 registers, which shows the rig bench's
+    // project-wide summary and asks the watcher to measure: what a person's own view holds, like the rig bench's cursor above.
+    "rig_check_all",
     "tile_page_walk",
     // Assumed owner exception (2026-11-12): the list grows by the two operations #129 slice 25 registers, which of the candidate
     // list's groups are folded and which filter box has the keyboard, which a person's own view holds, like the picker's above.
     "pack_fold",
     "filter_focus",
+    // Assumed owner exception (2026-11-13): the list grows by the three operations #129 slice 26 registers, whether the rig
+    // bench's figure plays, the phase a scrub holds and the stage camera's framing, which a person's own view holds, like the picker's above.
+    "stage_play",
+    "stage_scrub",
+    "stage_camera",
+    // Assumed owner exception (2026-11-13): the list grows by the operation #129 slice 33 registers, which reads the Meshes tab's
+    // pack directory again: the candidate list a person is looking at, like the lattice cursor below.
+    "kit_rescan",
+    // Assumed owner exception (2026-11-13): the list grows by the two operations #129 slice 34 registers, which hold or drop the
+    // labeller's batch: the status band and the Meshes tab's tab badge a person is looking at, like the stage's controls above.
+    "labels_walk",
+    "labels_abandon",
+    // Assumed owner exception (2026-11-13): the list grows by the five operations #129 slice 36 registers, which move the Tiles tab
+    // between its pages, open and close the tile in hand and name a new one: a draft in the tab's own state until `Cmd+S` saves
+    // it, which a person's own view holds, like the tile in hand's operations above.
+    "tile_page_enter",
+    "tile_page_leave",
+    "tile_open",
+    "tile_close",
+    "tile_new",
+    // Assumed owner exception (2026-11-13): the list grows by the two operations #129 slice 37 registers, which walk the shelf's
+    // lists and choose which has the arrows: a cursor, which a person's own view holds, like the picker's above. The piece a walk
+    // selects is named by the `piece_select` line it leaves.
+    "shelf_walk",
+    "shelf_focus",
+    // Assumed owner exception (2026-11-13): the list grows by the operation #129 slice 27 registers, the lattice grid's cursor,
+    // which a person's own view holds, like the picker's above.
+    "lattice_cursor_step",
+    // Assumed owner exception (2026-11-13): the list grows by the six operations #129 slice 28 registers, which shape the
+    // tile in hand on the Tiles tab (take the piece, walk the members, deepen the ladder, turn, remove, empty): a draft in
+    // the tab's own state until it is saved, which a person's own view holds, like the picker's above.
+    "tile_hand_arm",
+    "tile_member_focus",
+    "tile_grid_deepen",
+    "tile_member_turn",
+    "tile_member_remove",
+    "tile_clear",
+    // Assumed owner exception (2026-11-13): the list grows by the four operations #129 slice 29 registers, which edit the
+    // draft on the Tiles tab (nudge the focused member, put it flush, drop a piece, drop a hole): the same draft as the six
+    // above, which a person's own view holds.
+    "tile_member_nudge",
+    "tile_member_flush",
+    "tile_member_drop",
+    "tile_slot_drop",
+    // Assumed owner exception (2026-11-13): the list grows by the operation #129 slice 30 registers, which steps the Tiles tab's
+    // own history of the draft back and forward: the same draft as the ten above, which a person's own view holds.
+    "tile_history_step",
+    // Assumed owner exception (2026-11-13): the list grows by the two operations #129 slice 31 registers, which pan and turn the
+    // Map camera: where a person looks from, which a person's own view holds, like the picker's above.
+    "camera_pan",
+    "camera_turn",
     "tool_arm",
     "snip_arm",
     "brush_arm",

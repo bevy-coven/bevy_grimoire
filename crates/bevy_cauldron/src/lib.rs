@@ -144,6 +144,8 @@ pub mod ops_crowd;
 pub mod ops_destructible;
 pub mod ops_data;
 pub mod ops_label_vlm;
+pub mod ops_labeller;
+pub mod ops_tile_page;
 #[cfg(feature = "bevy_speech_bubbles")]
 pub mod ops_dialogue;
 #[cfg(feature = "bevy_siren")]

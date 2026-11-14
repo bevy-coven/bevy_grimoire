@@ -227,18 +227,16 @@ fn every_mcp_tool_is_prefixed_and_unique() {
 /// list, and it is explicit: a verb is on the list or it goes through an operation, and there is
 /// no third thing.
 const UNMIGRATED: &[Action] = &[
-    // **Why the verbs that are left stay here (E-002, #129 slices 23 to 25).** `EditTile` and `CycleTarget` read the pointer's
-    // position (the piece under the cursor), so an agent has no equivalent of the verb. `MainMenu` raises the unsaved-work
-    // question and leaves for the menu screen: a modal conversation with a person. `CopyInfo` reads the drawn screen into the
-    // system clipboard. `PrevCandidate`, `NextCandidate`, `TileListPrev`, `TileListNext`, `FocusLibrary` and `FocusCandidates`
-    // walk the shelf's drawn rows, which depend on the filter, the folds, the excluded policy and the cursor's own heading
-    // state, and the Meshes shelf's selection already goes through `piece_select`; a walk operation needs the drawn row list
-    // in the view, which is its own slice.
+    // **Why the verbs that are left stay here (E-002, #129 slices 23 to 38).** `CycleTarget` reads the pointer's position (the
+    // piece under the cursor), so an agent has no equivalent of the verb. `MainMenu` autosaves and crosses to the menu screen (only
+    // `Esc` raises the unsaved-work question); whether an agent may close the project is the owner's call. `CopyInfo` reads the
+    // drawn screen into the system clipboard. (`PrevCandidate`, `NextCandidate`, `TileListPrev`, `TileListNext`, `FocusLibrary` and
+    // `FocusCandidates` left this list for `shelf_walk` and `shelf_focus` in #129 slice 37: the view carries the drawn row lists.
+    // `EditTile` left it for `piece_edit` in slice 38: the key keeps the question of which piece, the operation owns the refusal.)
     Action::MainMenu,
     Action::Undo,
     Action::Redo,
     Action::Shortcuts,
-    Action::EditTile,
     Action::CycleTarget,
     Action::FrameView,
     // Owner exception (2026-11-10): the allowlist follows the new row `Action::LookAtAgentChange`
@@ -247,66 +245,11 @@ const UNMIGRATED: &[Action] = &[
     // 87, re-pinned in the same commit rather than left to fail.
     Action::LookAtAgentChange,
     Action::Cancel,
-    Action::PageEnter,
-    Action::PageLeave,
-    Action::TileOpen,
-    Action::CloseTile,
-    Action::PanForward,
-    Action::PanBack,
-    Action::PanLeft,
-    Action::PanRight,
-    Action::TurnViewLeft,
-    Action::TurnViewRight,
-    Action::PrevCandidate,
-    Action::NextCandidate,
     Action::TypeId,
     Action::Accept,
-    Action::Rescan,
     Action::UndoTile,
     Action::RedoTile,
-    Action::CellLeft,
-    Action::CellRight,
-    Action::CellForward,
-    Action::CellBack,
-    Action::LayerDown,
-    Action::LayerUp,
-    Action::TileListPrev,
-    Action::TileListNext,
-    Action::BuildForward,
-    Action::BuildLeft,
-    Action::BuildRight,
-    Action::BuildBack,
-    Action::MemberPrev,
-    Action::MemberNext,
-    Action::BuildDown,
-    Action::BuildUp,
-    Action::BuildDrop,
-    Action::BuildSlot,
-    Action::BuildArm,
-    Action::UndoBuild,
-    Action::RedoBuild,
-    Action::AlignForward,
-    Action::AlignBack,
-    Action::AlignLeft,
-    Action::AlignRight,
-    Action::BuildNew,
-    Action::BuildDropMember,
-    Action::ClearTile,
-    Action::BuildTurn,
-    Action::BuildRung,
-    Action::FocusCandidates,
     Action::CopyInfo,
-    Action::FocusLibrary,
-    Action::SuggestLabels,
-    Action::SuggestAll,
-    Action::DiscardAllSuggestions,
-    Action::UndoBench,
-    Action::RedoBench,
-    Action::ScrubBack,
-    Action::ScrubFwd,
-    Action::PlayPause,
-    Action::CheckAllRigs,
-    Action::CycleCamPreset,
 ];
 
 /// **The ratchet.** It is lowered in the same commit that migrates an action, and it is the only
@@ -345,7 +288,20 @@ const UNMIGRATED: &[Action] = &[
 // 82 -> 76: `ComposePrev`, `ComposeNext`, `ComposeMemberPrev`, `ComposeMemberNext`, `CarouselPrev` and `CarouselNext` -> `compose_walk`, `compose_focus` and `compose_carousel_step` (E-002, #129 slice 23): up and down walk the COMPOSE tab's focused list, left and right choose it, and `O` and `P` step the carousel, through the operations an agent calls. Assumed owner exception (2026-11-12): the ratchet number the slice's own work lowers; nothing is skipped.
 // 76 -> 72: `PrevRig`, `NextRig`, `TilePrev` and `TileNext` -> `rig_walk` and `tile_page_walk` (E-002, #129 slice 24): up and down walk the rig bench's list and the Tiles page's rows through the operations an agent calls. Assumed owner exception (2026-11-12): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `TilePrev` and `TileNext` from the `View` set for the same reason; nothing is skipped.
 // 72 -> 69: `FoldPack`, `FocusFilter` and `FocusTagFilter` -> `pack_fold` and `filter_focus` (E-002, #129 slice 25): `Space` opens or closes a pack heading or the EXCLUDED band, and `F` and `/` take a filter box, through the operations an agent calls. Assumed owner exception (2026-11-12): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `FocusFilter` and `FocusTagFilter` from the `View` set for the same reason; nothing is skipped.
-const UNMIGRATED_MAX: usize = 69;
+// 69 -> 65: `PlayPause`, `ScrubBack`, `ScrubFwd` and `CycleCamPreset` -> `stage_play`, `stage_scrub` and `stage_camera` (E-002, #129 slice 26): `Space` plays and pauses the rig bench's figure, the held left and right arrows scrub its phase, and `V` frames the stage camera, through the operations an agent calls. Assumed owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the four from the `Camera` set for the same reason; nothing is skipped.
+// 65 -> 59: `CellLeft`, `CellRight`, `CellForward`, `CellBack`, `LayerDown` and `LayerUp` -> `lattice_cursor_step` (E-002, #129 slice 27): `F`, `H`, `T` and `G` step the lattice grid's selected cell and `[` and `]` the layer it shows, through the operation an agent calls. Assumed owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the six from the `Camera` set for the same reason; nothing is skipped.
+// 59 -> 52: `BuildArm`, `MemberPrev`, `MemberNext`, `BuildRung`, `BuildTurn`, `BuildDropMember` and `ClearTile` -> `tile_hand_arm`, `tile_member_focus`, `tile_grid_deepen`, `tile_member_turn`, `tile_member_remove` and `tile_clear` (E-002, #129 slice 28): `Space` takes the piece, `,` and `.` walk the tile's members, `J` deepens the ladder, `R` turns, the remove key removes and Shift with it empties the tile in hand, through the operations an agent calls. Assumed owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the seven from the `Camera` set for the same reason; nothing is skipped.
+// 52 -> 40: `BuildForward`, `BuildBack`, `BuildLeft`, `BuildRight`, `BuildUp`, `BuildDown`, `AlignForward`, `AlignBack`, `AlignLeft`, `AlignRight`, `BuildDrop` and `BuildSlot` -> `tile_member_nudge`, `tile_member_flush`, `tile_member_drop` and `tile_slot_drop` (E-002, #129 slice 29): the arrows and `[` and `]` nudge the focused member along its ladder, Shift with an arrow puts it flush, Enter drops the picked piece and the hole key drops a hole, through the operations an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the twelve from the `Camera` set for the same reason; nothing is skipped.
+// 40 -> 38: `UndoBuild` and `RedoBuild` -> `tile_history_step` (E-002, #129 slice 30): `Cmd+Z` and `Cmd+Shift+Z` on the Tiles tab step the draft's own history back and forward through the operation an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the two from the `World` set for the same reason; nothing is skipped.
+// 38 -> 32: `PanForward`, `PanBack`, `PanLeft`, `PanRight`, `TurnViewLeft` and `TurnViewRight` -> `camera_pan` and `camera_turn` (E-002, #129 slice 31): `W`, `A`, `S` and `D` pan the Map view along the screen's axes, held, and `Q` and `E` turn it a quarter, through the operations an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the six from the `Camera` set for the same reason; nothing is skipped.
+// 32 -> 31: `CheckAllRigs` -> `rig_check_all` (E-002, #129 slice 32): `C` on the Anim tab shows the project-wide summary and asks the watcher to measure the rigs with no report, through the operation an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `CheckAllRigs` from the `World` set for the same reason; nothing is skipped.
+// 31 -> 30: `Rescan` -> `kit_rescan` (E-002, #129 slice 33): `R` on the Meshes tab reads the pack's directory again through the operation an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `Rescan` from the `World` set for the same reason; nothing is skipped.
+// 30 -> 27: `SuggestLabels`, `SuggestAll` and `DiscardAllSuggestions` -> `labels_suggest`, `labels_walk` and `labels_abandon` (E-002, #129 slice 34): `L` photographs the focused piece, `Shift+L` walks, holds or resumes the batch and `Shift+Y` drops everything the labeller holds, through the operations an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the three from the `World` set for the same reason; nothing is skipped.
+// 27 -> 25: `UndoBench` and `RedoBench` -> `rig_history_step` (E-002, #129 slice 35): `Cmd+Z` and `Cmd+Shift+Z` on the Anim tab step the bench's record of `rigs.yaml` back and forward through the operation an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the two from the `World` set for the same reason; nothing is skipped.
+// 25 -> 20: `PageEnter`, `PageLeave`, `TileOpen`, `CloseTile` and `BuildNew` -> `tile_page_enter`, `tile_page_leave`, `tile_open`, `tile_close` and `tile_new` (E-002, #129 slice 36): `right` opens the tile under the Tiles page's cursor and drills to the Meshes page, `left` comes back, `Enter` opens a tile or raises the name prompt, `C` puts the tile in hand down and `N` names a new one, through the operations an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the five from the `Camera` set for the same reason; nothing is skipped.
+// 20 -> 14: `PrevCandidate`, `NextCandidate`, `TileListPrev`, `TileListNext`, `FocusCandidates` and `FocusLibrary` -> `shelf_walk` and `shelf_focus` (E-002, #129 slice 37): up and down walk the shelf's list (the Meshes tab's library or candidates, the Tiles tab's library) and left, right and the two chips choose which, through the operations an agent calls. Assumed owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `PrevCandidate`, `NextCandidate`, `FocusCandidates` and `FocusLibrary` from the `View` set for the same reason (as slices 24 and 25 did for theirs); nothing is skipped.
+// 14 -> 13: `EditTile` -> `piece_edit` (E-002, #129 slice 38): the define key on the Map sends the piece under the cursor (or the one armed in PLACE) to the Meshes tab through the operation an agent calls with the piece's id; which piece is the key's question, answered from the pointer, and the refusal and the sentence are the operation's. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` re-points its `project > 0` assertion to `project == 0`: the last `Project` verb is migrated, so the debt assertion becomes a zero ratchet; nothing is skipped.
+const UNMIGRATED_MAX: usize = 13;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///
@@ -681,8 +637,7 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     assert_eq!(
         world,
         [
-            "Undo", "Redo", "Rescan", "UndoTile", "RedoTile", "UndoBuild", "RedoBuild", "SuggestLabels",
-            "SuggestAll", "DiscardAllSuggestions", "UndoBench", "RedoBench", "CheckAllRigs",
+            "Undo", "Redo", "UndoTile", "RedoTile",
         ],
         "the `World` set changed. A verb belongs here when its handler takes `Commands`, an \
          `AssetServer` or a `Query` — `Ctx` cannot carry those, so the operation would need a different \
@@ -692,18 +647,12 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     // **`Camera` verbs are already reachable by an agent.** `grimoire/frame_view` says in its own doc
     // that it is "not an operation, it is not in the registry or the operation log, and it is not
     // undoable" — the key and the method already dispatch one thing, so a `Ctx` operation would be a
-    // second name for it. The continuous arrows (pan, orbit) are read every frame and cannot be a
-    // one-shot `Outcome` at all.
+    // second name for it. The held pan and turn keys it used to name here are operations now (`camera_pan`, `camera_turn`,
+    // #129 slice 31): a held key is the operation repeated every frame (`ops::dispatch_repeat`).
     assert_eq!(
         camera,
         [
-            "FrameView", "LookAtAgentChange", "PageEnter", "PageLeave", "TileOpen", "CloseTile", "PanForward", "PanBack",
-            "PanLeft", "PanRight", "TurnViewLeft", "TurnViewRight", "CellLeft", "CellRight",
-            "CellForward", "CellBack", "LayerDown", "LayerUp", "BuildForward", "BuildLeft",
-            "BuildRight", "BuildBack", "MemberPrev", "MemberNext", "BuildDown", "BuildUp",
-            "BuildDrop", "BuildSlot", "BuildArm", "AlignForward", "AlignBack", "AlignLeft",
-            "AlignRight", "BuildNew", "BuildDropMember", "ClearTile", "BuildTurn", "BuildRung",
-            "ScrubBack", "ScrubFwd", "PlayPause", "CycleCamPreset",
+            "FrameView", "LookAtAgentChange",
         ],
         "the `Camera` set changed. A verb belongs here when a BRP method already moves the camera \
          (`grimoire/frame_view`) or when a front end reads it every frame; neither can be a `Ctx` \
@@ -715,16 +664,15 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     assert_eq!(
         view,
         [
-            "MainMenu", "CycleTarget", "PrevCandidate", "NextCandidate", "FocusCandidates", "CopyInfo",
-            "FocusLibrary",
+            "MainMenu", "CycleTarget", "CopyInfo",
         ],
         "the `View` set changed. That is allowed — but it is a deliberate act: a verb moves here only \
          when its whole effect is what a person is looking through, and it is then a candidate for a \
          view operation like `view_cycle_grid`. A verb that writes the grimoire belongs in `Project`."
     );
 
-    // **And `Project` is what is left, which is the debt.** It must be non-zero: a classification whose
-    // project bucket was empty would be hiding every migration still owed.
+    // **`Project` is paid off (E-002, #129 slice 38): `EditTile` was the last verb that wrote through the old path.** The bucket is
+    // counted so the classification covers the allowlist exactly, and a `Project` verb back on the list is a regression.
     assert_eq!(
         project + view.len() + held.len() + modal.len() + camera.len() + world.len(),
         UNMIGRATED.len(),
@@ -737,9 +685,9 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
         world.len(),
         UNMIGRATED.len()
     );
-    assert!(
-        project > 0,
-        "not one unmigrated verb writes the grimoire, so this classification proves nothing"
+    assert_eq!(
+        project, 0,
+        "the Project debt is paid: a Project verb back on the list is a regression"
     );
     for action in UNMIGRATED {
         assert!(

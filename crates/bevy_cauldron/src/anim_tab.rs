@@ -468,17 +468,24 @@ fn load_on_entry(
     }
 }
 
-/// **The one door to disk.** Parse and validate the candidate text, write it atomically, and only
-/// then adopt it in memory — the `tiles::commit_measured` shape. A failure leaves both the file and
-/// the in-memory state exactly as they were.
+/// **The one door to disk for the manifest.** Parse and validate the candidate text, then write it atomically; the parsed
+/// manifest comes back so the caller can adopt it once the write has landed, and a failure leaves the file as it was. The
+/// bench's history step (`ops::rig_history_step`) and [`commit_text`] both write through here.
+pub(crate) fn write_manifest(root: &std::path::Path, new_text: &str) -> Result<Rigs, String> {
+    let parsed = Rigs::parse(new_text)?;
+    bevy_grimoire_core::save::save_atomic(&root.join(RIGS_FILE), new_text)?;
+    Ok(parsed)
+}
+
+/// **Write a manifest and adopt it in memory**, the `tiles::commit_measured` shape, for the unit tests below that drive the
+/// bench without the operation. A failure leaves both the file and the in-memory state exactly as they were.
+#[cfg(test)]
 fn commit_text(
     root: &std::path::Path,
     bench: &mut BenchState,
     new_text: String,
 ) -> Result<(), String> {
-    let parsed = Rigs::parse(&new_text)?;
-    let path = root.join("assets/grimoire/rigs.yaml");
-    bevy_grimoire_core::save::save_atomic(&path, &new_text)?;
+    let parsed = write_manifest(root, &new_text)?;
     bench.rigs = Some(parsed);
     bench.text = Some(new_text);
     Ok(())
@@ -717,9 +724,9 @@ fn adopt_measured(
     }
 }
 
-/// Cmd+Z / Shift+Cmd+Z, in the Anim context. One body for both directions, restored **through**
-/// [`commit_text`] so an undo re-runs the same validation and atomic save as the write it takes
-/// back — and a refused restore pushes the entry back rather than eating it.
+/// Cmd+Z / Shift+Cmd+Z, in the Anim context. **Through `rig_history_step`** (E-002, #129 slice 35), the operation an agent calls:
+/// the stacks, the validation, the atomic write and the sentence are its, and a refused step costs no entry because the answer
+/// is applied only when the write landed. The bench's reports are measured again and the trial exclusions go, as after an adopt.
 fn bench_history_keys(
     keyboard: Res<ButtonInput<KeyCode>>,
     live: Res<crate::keys::Live>,
@@ -734,37 +741,32 @@ fn bench_history_keys(
     if !undo && !redo {
         return;
     }
-    let popped = if undo { bench.undo.pop() } else { bench.redo.pop() };
-    let Some(target) = popped else {
-        bench.status.note(format!("nothing to {} on this tab", if undo { "undo" } else { "redo" }));
-        return;
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View {
+            rig: crate::ops_view::RigCursor { history: bench.history(), ..bench.cursor() },
+            ..Default::default()
+        }),
+        ..crate::ops::Ctx::default()
     };
-    let now = bench.text.clone();
-    match commit_text(&project.root, &mut bench, target.clone()) {
-        Ok(()) => {
-            crate::anim_watch::invalidate(&mut reports, &mut generation);
-            // The manifest text changed under the excludes — same rule as adopt.
-            exclude.clear();
-            if let Some(now) = now {
-                if undo {
-                    bench.redo.push(now);
-                } else {
-                    bench.undo.push(now);
-                }
+    let params = serde_json::json!({ "by": if undo { "back" } else { "forward" } });
+    match crate::ops::dispatch(&mut ctx, "rig_history_step", &params) {
+        Ok(crate::ops::Applied::Done { .. }) => {
+            if let Some(view) = ctx.view.take() {
+                bench.take_step(&view.rig.history, &mut exclude, &mut reports, &mut generation);
             }
-            bench.status.note(if undo {
-                "undid the last bench write"
-            } else {
-                "put the bench write back"
-            });
         }
-        Err(e) => {
-            if undo {
-                bench.undo.push(target);
+        // Nothing to step is guidance, as it always was: a note the next keystroke replaces. Any other refusal (the manifest
+        // could not be written) is a problem.
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+            use crate::ops::rig_history_step::{NOTHING_TO_REDO, NOTHING_TO_UNDO};
+            if e.0 == NOTHING_TO_UNDO || e.0 == NOTHING_TO_REDO {
+                bench.status.note(e.0);
             } else {
-                bench.redo.push(target);
+                bench.status.problem(e.0);
             }
-            bench.status.problem(format!("NOT WRITTEN: {e}"));
         }
     }
 }
@@ -801,7 +803,30 @@ impl BenchState {
             names: self.names().into_iter().map(str::to_owned).collect(),
             selected: self.selected,
             all: self.view == View::All,
+            ..Default::default()
         }
+    }
+
+    /// **The cursor with the rigs already measured**, so `rig_check_all` can say which are left (E-002, #129 slice 32).
+    pub(crate) fn cursor_with(&self, reports: &crate::anim_watch::BenchReports) -> crate::ops_view::RigCursor {
+        let measured = self.names().into_iter().filter(|n| reports.by_rig.contains_key(*n)).map(str::to_owned).collect();
+        crate::ops_view::RigCursor { measured, ..self.cursor() }
+    }
+
+    /// **Take what `rig_check_all` answered**: queue the rigs it named for the watcher, show the project-wide summary and say
+    /// how many are being measured. The key and an agent's call both come through here, so the status line is the same.
+    /// A cursor that carries no check is left alone.
+    pub(crate) fn take_check(&mut self, cursor: &crate::ops_view::RigCursor, queue: &mut crate::anim_watch::MeasureQueue) {
+        if !cursor.check.made {
+            return;
+        }
+        for name in &cursor.check.queued {
+            queue.push_back_unique(name);
+        }
+        if self.view != View::All {
+            self.view = View::All;
+        }
+        self.status.note(crate::ops::rig_check_all::says(cursor.check.queued.len()));
     }
 
     /// **Whether the bench is already where an operation answered.** Compared first by the caller, because a write through
@@ -814,6 +839,47 @@ impl BenchState {
     pub(crate) fn set_cursor(&mut self, cursor: &crate::ops_view::RigCursor) {
         self.selected = cursor.selected;
         self.view = if cursor.all { View::All } else { View::One };
+    }
+
+    /// **The bench's own history as a value**, for `rig_history_step` to step (E-002, #129 slice 35), and for a test to read.
+    pub fn history(&self) -> crate::ops_view::RigHistory {
+        crate::ops_view::RigHistory { text: self.text.clone(), undo: self.undo.clone(), redo: self.redo.clone(), stepped: None }
+    }
+
+    /// **Take what `rig_history_step` answered**: the manifest it wrote, the stacks it moved and its sentence. The reports are
+    /// measured again and the trial exclusions go, because both were about the text that was just replaced. A history that did
+    /// not step is left alone, and the selection stays on the same rig by NAME, as an edit under the tab keeps it (a rig added ahead of
+    /// it moves its index): a rig the step removed leaves it at the same place in the list, or on the last rig if the list shrank.
+    pub(crate) fn take_step(
+        &mut self,
+        history: &crate::ops_view::RigHistory,
+        exclude: &mut AdoptExclude,
+        reports: &mut crate::anim_watch::BenchReports,
+        generation: &mut crate::anim_watch::BenchGeneration,
+    ) {
+        let (Some(back), Some(text)) = (history.stepped, history.text.as_ref()) else {
+            return;
+        };
+        // The operation validated the text before it wrote it; a text that no longer parses is a defect to say, not to swallow.
+        let rigs = match Rigs::parse(text) {
+            Ok(rigs) => rigs,
+            Err(e) => {
+                self.status.problem(format!("written, but the tab could not read rigs.yaml back: {e}"));
+                return;
+            }
+        };
+        let was = self.names().get(self.selected).map(|n| (*n).to_owned());
+        self.rigs = Some(rigs);
+        self.text = Some(text.clone());
+        self.undo = history.undo.clone();
+        self.redo = history.redo.clone();
+        self.selected = {
+            let names = self.names();
+            was.and_then(|name| names.iter().position(|n| *n == name)).unwrap_or_else(|| self.selected.min(names.len().saturating_sub(1)))
+        };
+        crate::anim_watch::invalidate(reports, generation);
+        exclude.clear();
+        self.status.note(crate::ops::rig_history_step::says(back));
     }
 }
 
@@ -924,27 +990,36 @@ fn check_all_keys(
     mut bench: ResMut<BenchState>,
     mut queue: ResMut<crate::anim_watch::MeasureQueue>,
     reports: Res<crate::anim_watch::BenchReports>,
+    project: Option<Res<crate::project::Project>>,
 ) {
     if !crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::CheckAllRigs) {
         return;
     }
-    // Only what is unmeasured: reports persist for the session and the watcher re-measures on a
-    // real change, so a second C is an instant summary, not a rescan that says nothing new.
-    let missing: Vec<String> = bench
-        .names()
-        .iter()
-        .filter(|n| !reports.by_rig.contains_key(**n))
-        .map(|n| (*n).to_owned())
-        .collect();
-    for name in &missing {
-        queue.push_back_unique(name);
-    }
-    bench.view = View::All;
-    bench.status.note(if missing.is_empty() {
-        "all rigs measured".to_owned()
+    // **Through `rig_check_all`**, the operation an agent calls (E-002, #129 slice 32): which rigs are unmeasured, the summary
+    // face and the sentence are its. Only what is unmeasured: reports persist for the session and the watcher re-measures on a
+    // real change, so a second C is an instant summary, not a rescan that says nothing new. **A bench with no project has no
+    // log to write**, so it dispatches without one, as the camera does.
+    let root = project.as_deref().map(|p| p.root.clone());
+    let mut ctx = crate::ops::Ctx {
+        root: root.clone(),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View { rig: bench.cursor_with(&reports), ..Default::default() }),
+        ..crate::ops::Ctx::default()
+    };
+    let applied = if root.is_some() {
+        crate::ops::dispatch(&mut ctx, "rig_check_all", &serde_json::json!({}))
     } else {
-        format!("measuring {} rig(s)...", missing.len())
-    });
+        crate::ops::dispatch_repeat(&mut ctx, "rig_check_all", &serde_json::json!({}))
+    };
+    match applied {
+        Ok(crate::ops::Applied::Done { .. }) => {
+            if let Some(view) = ctx.view.take() {
+                bench.take_check(&view.rig, &mut queue);
+            }
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => bench.status.problem(e.0),
+    }
 }
 
 /// **The rig bench's ink, from the editor's skin** (UI-02, #210).
