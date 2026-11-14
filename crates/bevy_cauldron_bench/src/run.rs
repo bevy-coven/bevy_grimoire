@@ -1893,7 +1893,7 @@ fn run_omp(
     // trial's agent is done, on every path out of this function (#432, D6 and D7). The guard is made first, so
     // a failed import leaves nothing behind either.
     let _secrets = TrialSecrets::new([dir.join("home")]);
-    seed_credentials(OMP_PROGRAM, &dir.join("home"), &options.model)?;
+    let secrets = seed_credentials(OMP_PROGRAM, &dir.join("home"), &options.model)?;
     let transcript = dir.join("transcript.jsonl");
     let stdout = std::fs::File::create(&transcript).map_err(|e| format!("{}: {e}", transcript.display()))?;
     let stderr = std::fs::File::create(dir.join("agent.err")).map_err(|e| format!("{e}"))?;
@@ -1938,7 +1938,11 @@ fn run_omp(
     // ignores its own flag, and it is the same number so a trial is one budget and not two. **The calls it
     // was given are the other bound** (#432, D3): the transcript is counted while the agent runs.
     let mut calls = ToolBudget::new(transcript.clone(), omp_calls, task.budget.tool_calls);
-    let end = wait_for_agent(child, editor, task.budget.wall_s, "omp", Some(&mut calls))?;
+    let waited = wait_for_agent(child, editor, task.budget.wall_s, "omp", Some(&mut calls));
+    // **The credential strings the trial was given are scrubbed from the files it keeps** (#433), whichever way the wait
+    // ended: an agent that read its own `agent.db` printed it into the transcript.
+    scrub_secrets(&[transcript.clone(), dir.join("agent.err")], &secrets);
+    let end = waited?;
     let server = config
         .get("mcpServers")
         .and_then(Value::as_object)
@@ -2130,7 +2134,7 @@ const AUTH_CARRIED_FILE: &str = "auth-carried.json";
 ///
 /// **The carrying file is removed on every path**, a failed import included: it holds the credentials in
 /// plain text. The caller holds a [`TrialSecrets`] over `home`, which removes what the import wrote.
-pub fn seed_credentials(omp: &str, home: &Path, model: &str) -> Result<(), String> {
+pub fn seed_credentials(omp: &str, home: &Path, model: &str) -> Result<Vec<String>, String> {
     let exported = Command::new(omp)
         .args(["auth", "export"])
         .output()
@@ -2145,12 +2149,88 @@ pub fn seed_credentials(omp: &str, home: &Path, model: &str) -> Result<(), Strin
     let carried = serde_json::from_slice::<Value>(&exported.stdout)
         .map_err(|e| format!("`omp auth export` did not print JSON: {e}"))?;
     let carried = credentials_for(&carried, model_provider(model), model)?;
+    let secrets = credential_strings(&carried);
     let file = home.join(AUTH_CARRIED_FILE);
     std::fs::create_dir_all(home).map_err(|e| format!("{}: {e}", home.display()))?;
     let imported = import_credentials(omp, home, &file, &carried);
     // **Removed whether or not the import worked**: the file is the secret in plain text.
     let _ = std::fs::remove_file(&file);
-    imported
+    imported.map(|()| secrets)
+}
+
+/// **What marks the place a secret was in a file the trial keeps.**
+pub const REDACTED: &str = "[redacted]";
+
+/// **The shortest string treated as a secret**, characters. A shorter value (`oauth`, `api_key`, a provider's name) is a
+/// word the files say elsewhere, and scrubbing it would damage them.
+pub const MIN_SECRET_LEN: usize = 8;
+
+/// **Every string value in `value`, however deep, that is long enough to be a secret.**
+pub fn secret_strings(value: &Value) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut stack = vec![value];
+    while let Some(next) = stack.pop() {
+        match next {
+            Value::String(s) if s.chars().count() >= MIN_SECRET_LEN => found.push(s.clone()),
+            Value::Array(items) => stack.extend(items),
+            Value::Object(map) => stack.extend(map.values()),
+            _ => {}
+        }
+    }
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// **The secret strings of an `omp auth export`**: every string value under each entry's `credential` (an access
+/// token, a refresh token, an API key), which is what the carried HOME holds and an agent in it can read.
+pub fn credential_strings(export: &Value) -> Vec<String> {
+    let mut found: Vec<String> = export
+        .get("credentials")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|c| c.get("credential"))
+        .flat_map(secret_strings)
+        .collect();
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// **Replace every secret in these files with [`REDACTED`]**, in place, and answer how many times (#433).
+///
+/// Each secret is looked for as it is and as it reads inside a JSON string (`"` and `\` escaped), because the
+/// transcript is JSON lines and an agent's output is a string in it. A file that is not there or is not UTF-8 is
+/// skipped. The retained transcript and `agent.err` are what this is for; the credential in HOME is deleted (#432).
+pub fn scrub_secrets(files: &[PathBuf], secrets: &[String]) -> usize {
+    let mut forms: Vec<String> = Vec::new();
+    for secret in secrets.iter().filter(|s| s.chars().count() >= MIN_SECRET_LEN) {
+        forms.push(secret.clone());
+        if let Ok(escaped) = serde_json::to_string(secret) {
+            forms.push(escaped.trim_matches('"').to_owned());
+        }
+    }
+    forms.sort();
+    forms.dedup();
+    let mut replaced = 0;
+    for file in files {
+        let Ok(text) = std::fs::read_to_string(file) else {
+            continue;
+        };
+        let mut scrubbed = text.clone();
+        for form in &forms {
+            let hits = scrubbed.matches(form.as_str()).count();
+            if hits > 0 {
+                scrubbed = scrubbed.replace(form.as_str(), REDACTED);
+                replaced += hits;
+            }
+        }
+        if scrubbed != text {
+            let _ = bevy_grimoire_core::atomic_file::write(file, scrubbed);
+        }
+    }
+    replaced
 }
 
 /// **Write the carrying file and run `omp auth import` on it** into `home`.
