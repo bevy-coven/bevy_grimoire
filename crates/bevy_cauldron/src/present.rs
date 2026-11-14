@@ -780,6 +780,7 @@ pub struct ClientName {
 /// **`false` (N, or Esc) keeps.** That is the safe default for a key that can arrive by reflex, and
 /// it is the one answer that changes nothing — so a presentation the person never read costs them
 /// nothing.
+#[allow(clippy::too_many_arguments)] // a Bevy system's parameters are its queries and resources, one each
 fn answer_presentation(
     mut confirm: ResMut<crate::confirm::Confirm>,
     mut reply: ResMut<PresentationReply>,
