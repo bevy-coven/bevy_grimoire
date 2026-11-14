@@ -11,7 +11,8 @@
 //!
 //! **When it ends, a report card** (UI-21, #222) lists every file of the project that does not read, one row each
 //! with the file, the field and why ([`report`]: [`bevy_grimoire_core::reload_check`] over the files the reload
-//! contract names), with **Open anyway** and **Back**. A project whose files all read goes straight to the editor.
+//! contract names), with **Open anyway** and **Back**. A project whose files all read goes straight to the editor
+//! (by way of the hand-over below).
 //!
 //! Cancel returns to the launcher. An open only reads, so there is nothing to undo: the thread is left to finish
 //! and its answer is dropped, and a test pins that the project's files are byte-identical afterwards. A project that
@@ -20,9 +21,18 @@
 //! The chooser's own open (a kit and a map picked on the menu) is still synchronous: it is one frame of a project
 //! already chosen, and it moves into the workbench (UI-30) rather than through here.
 //!
+//! # The hand-over is a stage too (#430)
+//!
+//! The editor builds its panels, strip and map on the main thread in the frames after this screen hands over, and
+//! that holds the window for longer than a frame (measured headless on an empty project: 105 ms and 27 ms for the first
+//! two frames, against 3 ms once idle; a real window adds drawing). It cannot move to a thread, so it is told before it
+//! starts: [`Stage::BuildEditor`], "Building the editor", is on screen for [`HANDOFF_FRAMES`] drawn frames
+//! ([`Entering`]) and **always shows**, past the 1 s threshold, because the stall is certain. **Open anyway** hands
+//! over the same way.
+//!
 //! # What is not a stage yet
 //!
-//! The issue names six stages. The four here are the ones an open runs; the thumbnails and the family crates are
+//! The issue names six stages. The five here are the ones an open runs; the thumbnails and the family crates are
 //! built after the editor's screen is up, by systems that do not run in the loader, so naming them here would be a
 //! stage with nothing in it.
 
@@ -151,9 +161,10 @@ impl Plugin for LoadingPlugin {
                 commands.remove_resource::<LoadJob>();
                 commands.remove_resource::<LoadFailed>();
                 commands.remove_resource::<LoadReport>();
+                commands.remove_resource::<Entering>();
                 commands.insert_resource(LoadPhase::Quiet);
             })
-            .add_systems(Update, (poll_the_load, show_the_report, show_the_phase).chain().run_if(in_state(Screen::Loading)));
+            .add_systems(Update, (poll_the_load, show_the_report, show_the_phase, enter_the_editor).chain().run_if(in_state(Screen::Loading)));
     }
 }
 
@@ -229,7 +240,7 @@ fn build_the_screen(mut commands: Commands) {
 }
 
 /// Takes the answer when the thread has one: into the editor on a door, or onto the screen as the reason.
-fn poll_the_load(mut commands: Commands, job: Option<Res<LoadJob>>, mut next: ResMut<NextState<Screen>>) {
+fn poll_the_load(mut commands: Commands, job: Option<Res<LoadJob>>) {
     let Some(job) = job else { return };
     let answer = match job.result.lock() {
         Ok(rx) => rx.try_recv(),
@@ -240,7 +251,7 @@ fn poll_the_load(mut commands: Commands, job: Option<Res<LoadJob>>, mut next: Re
             commands.insert_resource(crate::screen::Chosen(opened));
             commands.remove_resource::<LoadJob>();
             if problems.is_empty() {
-                next.set(Screen::Editor);
+                commands.insert_resource(Entering::new(job.name.clone()));
             } else {
                 commands.insert_resource(LoadReport(problems));
             }
@@ -248,6 +259,40 @@ fn poll_the_load(mut commands: Commands, job: Option<Res<LoadJob>>, mut next: Re
         Ok(Err(reason)) => fail(&mut commands, reason),
         Err(TryRecvError::Disconnected) => fail(&mut commands, "the project's opening stopped without an answer".to_owned()),
         Err(TryRecvError::Empty) => {}
+    }
+}
+
+/// How many drawn frames the screen says [`Stage::BuildEditor`] before it hands over: one for the words to be built and
+/// laid out, one for them to be drawn, one to be sure of it. The hand-over then runs the editor's first frames on the
+/// main thread, and the last thing on screen is the card that says why the window is not answering.
+pub const HANDOFF_FRAMES: u8 = 3;
+
+/// **The project is open and the screen is saying so before it hands over to the editor** (#430).
+#[derive(Resource, Clone, Debug, PartialEq, Eq)]
+pub struct Entering {
+    frames_left: u8,
+    /// What the project was asked to open, for the line under the heading.
+    name: String,
+}
+
+impl Entering {
+    fn new(name: String) -> Entering {
+        Entering { frames_left: HANDOFF_FRAMES, name }
+    }
+}
+
+/// Counts the frames [`Stage::BuildEditor`] has been on screen, then enters the editor. **A Cancel in the meantime wins**:
+/// it takes the chosen door away, and a hand-over with no door is dropped instead of entering an editor with no project.
+fn enter_the_editor(mut commands: Commands, entering: Option<ResMut<Entering>>, chosen: Option<Res<crate::screen::Chosen>>, mut next: ResMut<NextState<Screen>>) {
+    let Some(mut entering) = entering else { return };
+    if chosen.is_none() {
+        commands.remove_resource::<Entering>();
+        return;
+    }
+    entering.frames_left = entering.frames_left.saturating_sub(1);
+    if entering.frames_left == 0 {
+        commands.remove_resource::<Entering>();
+        next.set(Screen::Editor);
     }
 }
 
@@ -269,6 +314,7 @@ fn show_the_phase(
     job: Option<Res<LoadJob>>,
     failed: Option<Res<LoadFailed>>,
     report: Option<Res<LoadReport>>,
+    entering: Option<Res<Entering>>,
     timing: Res<LoadTiming>,
     time: Res<Time<Real>>,
     mut phase: ResMut<LoadPhase>,
@@ -277,9 +323,12 @@ fn show_the_phase(
     mut bars: Query<(&mut Node, &mut Progress, &mut ProgressText), BarNode>,
     mut lines: Query<&mut Text, With<StageLine>>,
 ) {
-    let (want, stage) = match (&job, &failed) {
-        (_, Some(_)) => (LoadPhase::Quiet, None),
-        (Some(job), None) => {
+    let (want, stage) = match (&job, &failed, &entering) {
+        (_, Some(_), _) => (LoadPhase::Quiet, None),
+        // **The hand-over is always said** (#430): the editor's first frames follow and hold the window, so a project that
+        // opened at once shows the stage too, as a spinner (a bar, when it was one already).
+        (_, None, Some(_)) => (if *phase == LoadPhase::Progress { LoadPhase::Progress } else { LoadPhase::Spinner }, Some(Stage::BuildEditor)),
+        (Some(job), None, None) => {
             let elapsed = time.elapsed().saturating_sub(job.started);
             let phase = if elapsed >= timing.progress_after {
                 LoadPhase::Progress
@@ -290,7 +339,7 @@ fn show_the_phase(
             };
             (phase, job.stage.lock().ok().and_then(|s| *s))
         }
-        (None, None) => (*phase, None),
+        (None, None, None) => (*phase, None),
     };
     if *phase != want {
         *phase = want;
@@ -308,10 +357,11 @@ fn show_the_phase(
     for mut node in &mut spinners {
         set(&mut node, failed.is_none() && want == LoadPhase::Spinner);
     }
-    let name = job.as_ref().map(|j| j.name.clone()).unwrap_or_default();
+    let name = job.as_ref().map(|j| j.name.clone()).or_else(|| entering.as_ref().map(|e| e.name.clone())).unwrap_or_default();
     for mut text in &mut lines {
         let said = match (failed.is_some(), stage) {
             (true, _) => String::new(),
+            (false, Some(stage)) if want != LoadPhase::Progress && name.is_empty() => stage.label().to_owned(),
             (false, Some(stage)) if want != LoadPhase::Progress => format!("{} ({name})", stage.label()),
             _ => String::new(),
         };
@@ -371,7 +421,16 @@ fn show_the_report(
                 if open_anyway {
                     row.spawn((
                         button("Open anyway"),
-                        observe(|_: On<bevy_gooey::Activate>, mut next: ResMut<NextState<Screen>>| next.set(Screen::Editor)),
+                        // **Open anyway hands over the way a clean open does** (#430): the card goes, and the screen says
+                        // "Building the editor" for the frames before the editor's own first frames hold the window.
+                        observe(|_: On<bevy_gooey::Activate>, mut commands: Commands, cards: Query<Entity, With<ReportCard>>, request: Option<Res<LoadRequest>>| {
+                            for card in &cards {
+                                commands.entity(card).despawn();
+                            }
+                            commands.remove_resource::<LoadReport>();
+                            let name = request.map_or_else(String::new, |r| crate::args::root_of(&r.0).file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned()));
+                            commands.insert_resource(Entering::new(name));
+                        }),
                     ));
                 }
                 // **The way out of the one refusal the editor can fix itself** (GD-03, #365): a project holding `.ron` files is
