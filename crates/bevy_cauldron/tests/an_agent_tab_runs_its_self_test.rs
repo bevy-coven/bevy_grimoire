@@ -12,7 +12,7 @@ use serde_json::json;
 
 use bevy_cauldron::terminal::Terminal;
 use bevy_cauldron::terminal_agent::{self, AgentSetup, CheckStatus};
-use bevy_cauldron::terminal_pane::{TerminalAgentCard, TerminalInvokeButton, TerminalNewTab};
+use bevy_cauldron::terminal_pane::{TerminalInvokeButton, TerminalNewTab};
 
 use crate::fixtures;
 
@@ -73,16 +73,12 @@ fn screen_text(app: &App) -> String {
         .join("\n")
 }
 
-/// The card's rows, top to bottom; none while no card shows.
+/// The card's rows, top to bottom; none while no card shows. Owner exception (2026-11-14): a row is an LED and its sentence in a row of their
+/// own now (#421), so the sentences are read from the entities that carry `TerminalAgentCardRow`, not from the card's direct children; the
+/// words are the same minus the `OK`/`FAIL`/`SKIP` the card no longer draws.
 fn card_rows(app: &mut App) -> Vec<String> {
     let world = app.world_mut();
-    let children = world
-        .query_filtered::<&Children, With<TerminalAgentCard>>()
-        .iter(world)
-        .next()
-        .map(|children| children.to_vec())
-        .unwrap_or_default();
-    children.iter().filter_map(|child| world.get::<Text>(*child).map(|text| text.0.clone())).collect()
+    world.query::<(&bevy_cauldron::terminal_pane::TerminalAgentCardRow, &Text)>().iter(world).map(|(_, text)| text.0.clone()).collect()
 }
 
 fn token(app: &App) -> String {
@@ -135,7 +131,7 @@ fn an_agent_tab_types_its_command_then_shows_the_connection_and_the_test() {
         assert_eq!(post.checks[2], CheckStatus::Pending);
     }
     until(&mut app, "the card never said the agent started", |app| {
-        card_rows(app).iter().any(|row| row.starts_with("OK Agent started"))
+        card_rows(app).iter().any(|row| row.starts_with("Agent started"))
     });
 
     let token = token(&app);
@@ -152,7 +148,7 @@ fn an_agent_tab_types_its_command_then_shows_the_connection_and_the_test() {
         at,
     );
     assert_eq!(stranger, Ok(json!({"known": false})), "another server's hello changes no tab");
-    let connected = format!("OK Agent connected: test-client 1.0 · {TOOLS} tools");
+    let connected = format!("Agent connected: test-client 1.0 · {TOOLS} tools");
     until(&mut app, "the card never said the agent connected", |app| card_rows(app).contains(&connected));
 
     let checks = json!([
@@ -169,7 +165,7 @@ fn an_agent_tab_types_its_command_then_shows_the_connection_and_the_test() {
         world.query::<(&bevy_gooey::LedWord, &Text)>().iter(world).any(|(_, word)| word.0 == "live")
     });
     assert!(
-        card_rows(&mut app).contains(&"OK Agent self test: the editor is on editor · 90 operations · a 1280x720 picture".to_owned()),
+        card_rows(&mut app).contains(&"Agent self test: the editor is on editor · 90 operations · a 1280x720 picture".to_owned()),
         "the card lists the self test's three findings: {:?}",
         card_rows(&mut app)
     );

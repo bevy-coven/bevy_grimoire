@@ -197,14 +197,14 @@ pub enum CheckStatus {
 }
 
 impl CheckStatus {
-    /// The word the card starts the check's row with. Words, not symbols: the terminal's face lacks
-    /// some, and `⌘` once drew as a missing-glyph box.
-    pub fn mark(&self) -> &'static str {
+    /// **The state a check's row lights its LED in** (#421): a check that passed is live, one that failed is failed, one that was
+    /// skipped is off, and one still waiting is busy. The row carries no word for it: the LED keeps its accessible state name.
+    pub fn led(&self) -> bevy_gooey::LedState {
         match self {
-            CheckStatus::Pending => "…",
-            CheckStatus::Passed(_) => "OK",
-            CheckStatus::Failed(_) => "FAIL",
-            CheckStatus::Skipped(_) => "SKIP",
+            CheckStatus::Pending => bevy_gooey::LedState::Busy,
+            CheckStatus::Passed(_) => bevy_gooey::LedState::Live,
+            CheckStatus::Failed(_) => bevy_gooey::LedState::Failed,
+            CheckStatus::Skipped(_) => bevy_gooey::LedState::Off,
         }
     }
 

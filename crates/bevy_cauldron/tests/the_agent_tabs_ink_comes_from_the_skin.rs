@@ -156,23 +156,15 @@ fn invoke_the_agent(app: &mut App) {
     }
 }
 
-/// **The card's rows and the bar's chip, as the running skin's ink**, read from the entities the
-/// editor draws: `(the heading, one per check)` for the card.
+/// **The card's rows as the running skin's ink**, read from the entities the editor draws: `(the heading, one per check)` for the card.
+/// Owner exception (2026-11-14): a row is an LED and its sentence in a row of their own now (#421), so the sentences are read from the
+/// entities that carry `TerminalAgentCardRow`, in the order they were drawn.
 fn drawn_card(app: &mut App) -> Vec<(String, Color)> {
     let world = app.world_mut();
-    let children = world
-        .query_filtered::<&Children, With<bevy_cauldron::terminal_pane::TerminalAgentCard>>()
+    world
+        .query::<(&bevy_cauldron::terminal_pane::TerminalAgentCardRow, &Text, &TextColor)>()
         .iter(world)
-        .next()
-        .map(|children| children.to_vec())
-        .unwrap_or_default();
-    children
-        .iter()
-        .filter_map(|child| {
-            let text = world.get::<Text>(*child)?;
-            let ink = world.get::<TextColor>(*child)?;
-            Some((text.0.clone(), ink.0))
-        })
+        .map(|(_, text, ink)| (text.0.clone(), ink.0))
         .collect()
 }
 

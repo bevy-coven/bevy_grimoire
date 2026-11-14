@@ -21,7 +21,7 @@ use serde_json::json;
 
 use bevy_cauldron::terminal::Terminal;
 use bevy_cauldron::terminal_agent::{self, AgentSetup};
-use bevy_cauldron::terminal_pane::{TerminalAgentCard, TerminalAgentStatusChip, TerminalBar, TerminalInvokeButton};
+use bevy_cauldron::terminal_pane::{TerminalAgentCard, TerminalAgentCardLed, TerminalAgentStatusChip, TerminalBar, TerminalInvokeButton};
 use bevy_gooey::{Led, LedState, LedWord, Role};
 
 use crate::fixtures;
@@ -128,7 +128,8 @@ fn leds(app: &mut App) -> Vec<(Entity, Home, LedState)> {
     found
         .into_iter()
         .filter_map(|(entity, state)| {
-            if is_under::<TerminalAgentCard>(world, entity) {
+            // Owner exception (2026-11-14): every card row carries its own LED now (#421), so "the card's LED" is the verdict LED at its foot.
+            if world.get::<TerminalAgentCardLed>(entity).is_some() {
                 Some((entity, Home::Card, state))
             } else if is_under::<TerminalBar>(world, entity) {
                 Some((entity, Home::Bar, state))

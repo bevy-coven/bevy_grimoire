@@ -511,6 +511,7 @@ impl Plugin for TerminalPanePlugin {
             .add_systems(PostUpdate, dress_the_agent_tab.run_if(the_pane_is_up))
             // **The LEDs' words read at the size of the text they stand with** (#422), after bevy_gooey has sized them.
             .add_systems(Update, size_the_leds.after(bevy_gooey::GooeySystems::Style).run_if(the_pane_is_up))
+            .add_systems(Update, quiet_the_row_leds.run_if(the_pane_is_up))
             // The two chords that are the pane's own. Read from `ButtonInput` here rather than
             // through `keys::BINDINGS`: the census is the table of what a *tab* does, and a chord
             // that belongs to the window is the case `command_palette::chords` already set the
@@ -1363,16 +1364,18 @@ fn spawn_the_find_box(commands: &mut Commands, body: Entity) {
     commands.entity(body).add_child(frame);
 }
 
-/// **The self-test card**: the harness, then each check's word, name and what it found, in the check's
-/// ink, and the agent's LED as the verdict they add up to. Floats where the find box does, and the pointer goes through it to
+/// **The self-test card** (#421): the harness, then one row per check, each starting with a small LED in the row's state (passed is
+/// live, failed is failed, skipped is off, and a check still running is busy) and the check's sentence beside it, in the check's ink,
+/// and the agent's LED as the verdict they add up to. There is no `OK`, `FAIL` or `SKIP`: a row's LED keeps its accessible state name
+/// ([`quiet_the_row_leds`] hides the word it draws, not the word). Floats where the find box does, and the pointer goes through it to
 /// the shell.
 ///
-/// **The ink is the running skin's** (UI-02, #210, slice 6a): every row carries
+/// **The ink is the running skin's** (UI-02, #210, slice 6a): every sentence carries
 /// [`TerminalAgentCardRow`], so [`dress_the_agent_tab`] repaints the card when a project's skin changes
 /// without the card being rebuilt.
 fn spawn_the_agent_card(commands: &mut Commands, body: Entity, post: &crate::terminal_agent::AgentPost) {
     let ink = crate::terminal_agent::AgentInk::of(None);
-    let row = |words: String, ink: Color, which: TerminalAgentCardRow| {
+    let sentence = |words: String, ink: Color, which: TerminalAgentCardRow| {
         (Text::new(words), TextColor(ink), chrome::typed(chrome::text::LABEL), which, Pickable::IGNORE)
     };
     let card = commands
@@ -1387,18 +1390,39 @@ fn spawn_the_agent_card(commands: &mut Commands, body: Entity, post: &crate::ter
             Name::new("terminal agent card"),
         ))
         .with_children(|card| {
-            card.spawn(row(format!("Agent self test · {}", post.harness.name()), ink.read, TerminalAgentCardRow(None)));
+            card.spawn(sentence(format!("Agent self test · {}", post.harness.name()), ink.read, TerminalAgentCardRow(None)));
             for (index, (label, check)) in crate::terminal_agent::CHECK_LABELS.iter().zip(&post.checks).enumerate() {
-                card.spawn(row(
-                    format!("{} {label}: {}", check.mark(), check.detail()),
-                    check.ink(&ink),
-                    TerminalAgentCardRow(Some(index)),
-                ));
+                card.spawn((
+                    bevy_gooey::row_with(chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { align: Some(AlignItems::Center), ..default() }),
+                    Pickable::IGNORE,
+                ))
+                .with_children(|row| {
+                    // The LED is named for the check, so a screen reader hears `Agent started live` and not a bare state.
+                    row.spawn((bevy_gooey::led(*label, check.led()), TerminalCardRowLed(index), PaneLed(chrome::text::LABEL)));
+                    row.spawn(sentence(format!("{label}: {}", check.detail()), check.ink(&ink), TerminalAgentCardRow(Some(index))));
+                });
             }
             card.spawn((bevy_gooey::led(AGENT_LED_LABEL, post.led()), TerminalAgentCardLed, PaneLed(chrome::text::LABEL)));
         })
         .id();
     commands.entity(body).add_child(card);
+}
+
+/// **A row of the self-test card starts with this LED** (#421), and which of the four checks it lights for.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TerminalCardRowLed(pub usize);
+
+/// **A row's LED draws its dot, not its words** (#421): the row's own sentence is beside it, and a state word on every row is the
+/// `OK` and `FAIL` the owner asked to be rid of. The words stay in the world (hidden, not removed), so the LED keeps the accessible name
+/// `bevy_gooey` gives it and a test still reads the state.
+fn quiet_the_row_leds(rows: Query<&Children, Added<TerminalCardRowLed>>, mut words: Query<&mut Node, With<Text>>) {
+    for children in &rows {
+        for child in children.iter() {
+            if let Ok(mut word) = words.get_mut(child) {
+                word.display = Display::None;
+            }
+        }
+    }
 }
 
 /// **The invitation**: a button in the middle of the empty terminal that starts the agent.
