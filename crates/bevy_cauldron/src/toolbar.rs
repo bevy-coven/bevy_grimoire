@@ -239,9 +239,8 @@ pub fn spawn_toolbar(
                         0,
                     ),
                 ));
-                if let Some(mut node) = modes.get_mut::<Node>() {
-                    node.margin.left = Val::Px(edge);
-                }
+                // The group stands off the window's edge by that gap, in logical px (`Space::Px`).
+                modes.insert(bevy_gooey::Spacing { margin: crate::chrome::margin_left(bevy_gooey::Space::Px(edge)), ..default() });
                 // **The one labelled button that is not a mode stands with the modes**, before the
                 // separator: `LABELLED_BUTTON`'s own doc says Fill is "which the brush's own row of
                 // tools stands beside". Spawning it in the command loop below put a 46.7-px worded

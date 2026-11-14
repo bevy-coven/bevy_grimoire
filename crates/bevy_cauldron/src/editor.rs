@@ -4238,13 +4238,10 @@ fn rebuild_palette(
                     //
                     // `align_items` is the one thing this row wants that a list row does not
                     // assume: a fixed-height thumbnail beside auto-height text has to be centred,
-                    // and it is set through `entry` rather than a second `Node`, because a bundle
-                    // carrying two of the same component panics at spawn in Bevy 0.19.
+                    // and it is a `RowLayout` laid over the row's own.
                     let mut palette_row =
                         crate::chrome::list_row(p, state.brush == Some(ix), PaletteRow(ix));
-                    palette_row
-                        .entry::<Node>()
-                        .and_modify(|mut n| n.align_items = AlignItems::Center);
+                    palette_row.insert(bevy_gooey::RowLayout { direction: Some(FlexDirection::Row), align: Some(AlignItems::Center), ..default() });
                     // **The id and the count's unit, where a person can find them** (#289): the row
                     // reads as words, and two kits may each have a `wall` that both read "Wall".
                     let tris = project.triangles.get(ix).copied().unwrap_or(0);
@@ -4255,7 +4252,7 @@ fn rebuild_palette(
                     palette_row.insert(bevy_gooey::DragPayload(PieceDrag(d.id.clone())));
                     palette_row.with_children(|row| {
                             let mut slot = row.spawn((
-                                // A row (`RowLayout` is written on rows, columns and placed nodes, not on a bare `sized` box) that never shrinks.
+                                // A row that never shrinks.
                                 bevy_gooey::row_with(0.0, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }),
                                 bevy_gooey::Sizing {
                                     width: Some(bevy_gooey::Extent::Px(crate::chrome::THUMB_SLOT)),

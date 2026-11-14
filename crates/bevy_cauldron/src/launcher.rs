@@ -535,9 +535,15 @@ pub(crate) fn card_line() -> bevy_gooey::Spacing {
     crate::chrome::spacing(crate::chrome::margin_bottom(crate::chrome::STEP_TIGHT))
 }
 
-/// A card's box on a card that is not a button: its width, padding and the gap between its lines.
-pub(crate) fn card_node() -> Node {
-    Node { flex_direction: FlexDirection::Column, width: Val::Px(CARD_PX), padding: UiRect::all(Val::Px(crate::chrome::PAD)), row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }
+/// A card's box on a card that is not a button (G-87): a sized column a card wide, `STEP_PAD` all round, its lines `GAP_TIGHT` px apart. A `Role::Card` writes only a colour, so the box is
+/// gooey's `sized` and the caller `.insert(Role::Card)`s over its role (a bundle cannot carry two).
+pub(crate) fn card_layout() -> impl Bundle {
+    (
+        bevy_gooey::sized(bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Px(CARD_PX)), ..default() }),
+        bevy_gooey::RowLayout { direction: Some(FlexDirection::Column), ..default() },
+        bevy_gooey::Spacing { padding: bevy_gooey::Sides::all(crate::chrome::STEP_PAD), ..default() },
+        bevy_gooey::GapPx(crate::chrome::GAP_TIGHT),
+    )
 }
 
 /// **The picture's box inside a card**: gooey's `image_box`, so it holds its room while the picture loads. A cropped picture is `.insert(picture)`ed over it:
@@ -597,8 +603,8 @@ pub(crate) fn spawn_shell(commands: &mut Commands, screen_of: Screen) -> Entity 
             root.spawn((
                 split(
                     SplitAxis::Horizontal,
-                    (Role::Surface(1), Node { flex_direction: FlexDirection::Column, padding: UiRect::all(Val::Px(crate::chrome::PAD)), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, SidebarRoot),
-                    (Role::Surface(0), Node { flex_direction: FlexDirection::Column, padding: UiRect::all(Val::Px(crate::chrome::PAD)), row_gap: Val::Px(crate::chrome::GAP_GROUP), min_height: Val::Px(0.0), ..default() }, HomeContent),
+                    (page_surface(1), SidebarRoot),
+                    (page_surface(0), bevy_gooey::Sizing { min_height: Some(bevy_gooey::Extent::Px(0.0)), ..default() }, HomeContent),
                 ),
                 SplitFraction(0.0),
                 SplitMin::new(SIDEBAR_PX, PAGE_MIN_PX),
@@ -1005,6 +1011,15 @@ pub(crate) fn project_picture(root: &Path, images: &mut Assets<Image>, splash: O
 /// The scale a project card is drawn at while it is pressed: gooey's `PRESS_SCALE`, named here because the card asks for it.
 const CARD_PRESS_SCALE: f32 = 0.97;
 
+/// A page's ground (G-87): a surface step with `STEP_PAD` all round and its children `GAP_GROUP` px apart, in a column (a surface writes only a colour).
+fn page_surface(level: u8) -> impl Bundle {
+    (
+        bevy_gooey::surface(level),
+        bevy_gooey::Spacing { padding: bevy_gooey::Sides::all(crate::chrome::STEP_PAD), ..default() },
+        bevy_gooey::GapPx(crate::chrome::GAP_GROUP),
+    )
+}
+
 fn project_card(grid: &mut ChildSpawnerCommands, row: &Listed, art: &mut Art) {
     let path = row.project.path.clone();
     let picture = project_picture(&path, art.images, art.splash.clone(), art.pictures);
@@ -1034,11 +1049,8 @@ fn project_card(grid: &mut ChildSpawnerCommands, row: &Listed, art: &mut Art) {
 fn missing_card(grid: &mut ChildSpawnerCommands, row: &Listed) {
     let path = row.project.path.clone();
     let key = card_key(&path);
-    grid.spawn((
-        card_node(),
-        Role::Card,
-        MissingCard { path: path.clone(), key },
-    ))
+    grid.spawn((card_layout(), MissingCard { path: path.clone(), key }))
+    .insert(Role::Card)
     .with_children(|card| {
         card.spawn(quiet(name_of(&path)));
         card.spawn(label("Folder not found"));

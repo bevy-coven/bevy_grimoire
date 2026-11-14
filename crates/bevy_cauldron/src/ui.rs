@@ -327,9 +327,9 @@ fn paint_marked_buttons(
     skin: Res<bevy_gooey::GooeySkin>,
     mut buttons: Query<
         (Entity, &mut BackgroundColor, Has<bevy::ui::Pressed>, Has<bevy::ui::InteractionDisabled>, Option<&Children>),
-        (With<bevy_gooey::Role>, With<bevy::ui::Selected>),
+        (With<bevy_gooey::Role>, With<bevy::ui::Selected>, Without<SelectedRail>),
     >,
-    mut rails: Query<&mut BackgroundColor, (With<SelectedRail>, Without<bevy_gooey::Role>)>,
+    mut rails: Query<&mut BackgroundColor, (With<SelectedRail>, With<bevy_gooey::InkFollow>)>,
     parents: Query<&ChildOf>,
     opacities: Query<&bevy_gooey::Opacity>,
     mut commands: Commands,
@@ -378,18 +378,16 @@ fn paint_marked_buttons(
             (true, false) => {
                 commands.entity(entity).with_child((
                     SelectedRail,
-                    Node {
-                        // PLACES-ITSELF-OK: a rail pinned to its own button's leading edge, the way
-                        // `crate::chrome::SELECT_RAIL_W` is drawn on a kit's row — it is not a panel.
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(0.0),
-                        top: Val::Px(0.0),
-                        width: Val::Px(crate::chrome::SELECT_RAIL_W),
-                        height: Val::Percent(100.0),
+                    // A rail pinned to its own button's leading edge, the way `crate::chrome::SELECT_RAIL_W` is drawn on a kit's row: placed at the corner, the rail wide and the
+                    // button tall. It has a `Role` like every gooey node, and its colour is `paint_marked_buttons`', not the skin's (`InkFollow`).
+                    bevy_gooey::placed_at(0.0, 0.0),
+                    bevy_gooey::Sizing {
+                        width: Some(bevy_gooey::Extent::Px(crate::chrome::SELECT_RAIL_W)),
+                        height: Some(bevy_gooey::Extent::Percent(100.0)),
                         ..default()
                     },
+                    bevy_gooey::InkFollow,
                     BackgroundColor(with_opacity(skin.accent)),
-                    bevy::picking::Pickable::IGNORE,
                 ));
             }
             (false, true) => {

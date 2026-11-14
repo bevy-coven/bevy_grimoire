@@ -1458,25 +1458,22 @@ pub fn spawn_frame(
         .as_deref()
         .and_then(|s| s.workspace_layout.get(workspace.id()).cloned())
         .unwrap_or_else(|| crate::ui::shell_layout(workspace));
-    let bar = |extra: Node| -> Node {
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Px(BAR_H),
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: Val::Px(GAP_GROUP),
-            padding: UiRect::axes(Val::Px(MARGIN), Val::Px(0.0)),
-            flex_shrink: 0.0,
-            ..extra
-        }
+    // **A bar** (G-87): a gooey row `BAR_H` tall and the window wide, its parts centred and `GAP_GROUP` px apart, `MARGIN` in from each end, that never shrinks, with a 1 px edge along
+    // the one side that faces the rest of the screen. Its colours are the editor's (`InkFollow`): `Ground`/`BandGround` paint the fill and the theme moves them.
+    let bar = |border: bevy_gooey::Sides<f32>| {
+        (
+            bevy_gooey::row_with(0.0, bevy_gooey::RowLayout { align: Some(AlignItems::Center), shrink: Some(0.0), ..default() }),
+            bevy_gooey::GapPx(GAP_GROUP),
+            bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(100.0)), height: Some(bevy_gooey::Extent::Px(BAR_H)), ..default() },
+            bevy_gooey::Spacing { padding: bevy_gooey::Sides::x(STEP_PAD), ..default() },
+            bevy_gooey::BorderPx(border),
+            bevy_gooey::InkFollow,
+        )
     };
 
     let chrome_bar = commands
         .spawn((
-            bar(Node {
-                border: UiRect::bottom(Val::Px(1.0)),
-                ..default()
-            }),
+            bar(bevy_gooey::Sides { bottom: Some(1.0), ..default() }),
             BackgroundColor(ink().bar_bg),
             Ground(ink().bar_bg),
             BandGround,
@@ -1489,15 +1486,11 @@ pub fn spawn_frame(
     // how tall the band is and where it starts.
     let door_strip = commands
         .spawn((
-            Node {
-                width: Val::Percent(100.0),
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Stretch,
-                column_gap: Val::Px(2.0),
-                padding: UiRect::left(Val::Px(MARGIN)),
-                flex_shrink: 0.0,
-                ..default()
-            },
+            // The door strip: a row the window wide with its tabs 2 px apart (`GapPx`), `MARGIN` in from the left, stretched to the strip's height, never shrinking.
+            bevy_gooey::row_with(0.0, bevy_gooey::RowLayout { align: Some(AlignItems::Stretch), shrink: Some(0.0), ..default() }),
+            bevy_gooey::GapPx(2.0),
+            bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(100.0)), ..default() },
+            bevy_gooey::Spacing { padding: bevy_gooey::Sides { left: Some(STEP_PAD), ..default() }, ..default() },
             bevy::picking::Pickable::IGNORE,
         ))
         .id();
@@ -1507,12 +1500,10 @@ pub fn spawn_frame(
     // (`CONTROLS_W` vs `TILES_CONTROLS_W`) without a dock-level table saying it twice.
     let dock = || {
         (
-            Node {
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::FlexStart,
-                flex_shrink: 0.0,
-                ..default()
-            },
+            // A column of its panels to the start that never shrinks. A `sized` box, not a gooey column: `Role::Column` gives a node a least width of 0, and a dock's width is its widest
+            // panel (its automatic minimum), which is what keeps a panel from being squeezed by the pane it stands in.
+            bevy_gooey::sized(bevy_gooey::Sizing::default()),
+            bevy_gooey::RowLayout { direction: Some(FlexDirection::Column), align: Some(AlignItems::FlexStart), shrink: Some(0.0), ..default() },
             bevy::picking::Pickable::IGNORE,
         )
     };
@@ -1550,15 +1541,11 @@ pub fn spawn_frame(
             // first widget, so a click or F6 puts focus here.
             bevy_gooey::FocusRegion::host(),
             bevy::input_focus::tab_navigation::TabIndex(0),
-            Node {
-                // **The centre is what is left**, which is the whole idea. `min_width: 0` because a
-                // flex item's automatic minimum size is its content, and without it a wide panel
-                // would push the viewport off the window instead of narrowing it.
-                flex_grow: 1.0,
-                min_width: Val::Px(0.0),
-                min_height: Val::Px(0.0),
-                ..default()
-            },
+            // **The centre is what is left**, which is the whole idea: a gooey fill column (it grows and never has a least width of its own, so a wide panel narrows it instead of pushing it
+            // off the window), still a row of what it holds.
+            bevy_gooey::fill_column(0.0),
+            bevy_gooey::RowLayout { direction: Some(FlexDirection::Row), align: Some(AlignItems::Stretch), ..default() },
+            bevy_gooey::Sizing { min_height: Some(bevy_gooey::Extent::Px(0.0)), ..default() },
             // No `BackgroundColor` at all: this is the hole the world shows through.
             bevy::picking::Pickable::IGNORE,
         ))
@@ -1566,14 +1553,10 @@ pub fn spawn_frame(
 
     let body = commands
         .spawn((
-            Node {
-                width: Val::Percent(100.0),
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Stretch,
-                flex_grow: 1.0,
-                min_height: Val::Px(0.0),
-                ..default()
-            },
+            // The body: what the bars leave, a row of the docks and the viewport.
+            bevy_gooey::fill_region(),
+            bevy_gooey::RowLayout { direction: Some(FlexDirection::Row), align: Some(AlignItems::Stretch), ..default() },
+            bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(100.0)), min_height: Some(bevy_gooey::Extent::Px(0.0)), ..default() },
             bevy::picking::Pickable::IGNORE,
         ))
         .id();
@@ -1623,10 +1606,7 @@ pub fn spawn_frame(
 
     let status = commands
         .spawn((
-            bar(Node {
-                border: UiRect::top(Val::Px(1.0)),
-                ..default()
-            }),
+            bar(bevy_gooey::Sides { top: Some(1.0), ..default() }),
             AccessibleLabel::new("Status bar"),
             BackgroundColor(ink().bar_bg),
             Ground(ink().bar_bg),
@@ -1663,7 +1643,7 @@ pub fn spawn_frame(
             // **The map is where a library piece may be let go** (UI-52, #238): the dock covers the viewport, so it is
             // the drop target, and `editor::drop_a_piece_on_the_map` places what lands on it.
             bevy_gooey::DropTarget::<crate::editor::PieceDrag>::new(),
-            Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+            bevy_gooey::sized(bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(100.0)), height: Some(bevy_gooey::Extent::Percent(100.0)), ..default() }),
         ))
         .id();
     // **The dock's own body is the host's, and it is not laid out** (bevy-coven/bevy_gooey#85).
@@ -1686,12 +1666,10 @@ pub fn spawn_frame(
     // layout is built into. A `Display::None` node has a zero rect, so nothing under it is laid out, drawn
     // or picked: the pages exist and are inert. **When the panels themselves move into this dock** (the rest
     // of UI-30, #224) this node becomes the real body and this paragraph goes with the change.
+    // A gooey box with the dock body's role put over its own (`dock_body()` is not public), hidden through `Shown`, which writes both `Display::None` and `Visibility::Hidden`.
     let silent_body = commands
-        .spawn((
-            Node { display: Display::None, ..default() },
-            Visibility::Hidden,
-            bevy_gooey::Role::DockBody,
-        ))
+        .spawn((bevy_gooey::sized(bevy_gooey::Sizing::default()), bevy_gooey::Shown(false)))
+        .insert(bevy_gooey::Role::DockBody)
         .id();
     commands.entity(dock).add_child(silent_body);
     commands.entity(viewport).add_child(dock);
@@ -2188,29 +2166,23 @@ pub fn problem_toast(mut commands: Commands, frame: Res<Frame>) {
     let stack = commands
         .spawn((
             Name::new("ToastStack"),
-            Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
-            bevy_gooey::Role::ToastStack,
+            // The stack is gooey's: a window-sized box (`sized`) with the toast stack's role put over its own.
+            bevy_gooey::sized(bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(100.0)), height: Some(bevy_gooey::Extent::Percent(100.0)), ..default() }),
             bevy_gooey::ToastStack,
             bevy::picking::Pickable::IGNORE,
             GlobalZIndex(TOAST_Z),
         ))
+        .insert(bevy_gooey::Role::ToastStack)
         .id();
     commands
         .spawn((
-            Node {
-                // PLACES-ITSELF-OK: a toast is not a panel. It is over the viewport rather than in
-                // the layout, which is the whole point — `Frame` owns where panels go and this is
-                // deliberately not one of them.
-                position_type: PositionType::Absolute,
-                top: Val::Px(GAP_GROUP),
-                left: Val::Px(0.0),
-                width: Val::Percent(100.0),
-                justify_content: JustifyContent::Center,
-                display: Display::None,
-                ..default()
-            },
+            // A toast is not a panel. It is over the viewport rather than in the layout, which is the whole point: `Frame` owns where panels go and this is deliberately not
+            // one of them. Placed `GAP_GROUP` down and the viewport wide with its stack centred, and hidden (through `Shown`) until a toast is raised.
+            bevy_gooey::placed(UiRect { left: Val::Px(0.0), top: Val::Px(GAP_GROUP), ..UiRect::all(Val::Auto) }),
+            bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(100.0)), ..default() },
+            bevy_gooey::RowLayout { justify: Some(JustifyContent::Center), ..default() },
+            bevy_gooey::Shown(false),
             ToastLayer,
-            bevy::picking::Pickable::IGNORE,
         ))
         .add_child(stack)
         .insert(ChildOf(frame.viewport));
@@ -2923,18 +2895,57 @@ pub fn the_words_of_a_quiet_item_are_a_control(commands: &mut Commands, item: En
     });
 }
 
-/// **The shape of a small box that holds one edge colour** (#260): a row of gooey's own with a row radius and a `px` border in `edge`, which is passed as `InkOverride` because the skin
+/// **The shape of a small box that holds one edge colour** (#260): a sized box laid out as a row, with a row radius and a `px` border in `edge`, which is passed as `InkOverride` because the skin
 /// paints any `BorderPx` edge in its outline unless the host's colour is pinned (so a box whose edge the host changes by state cannot be this: see the chip's GAP4). A row writes only what it is
 /// asked to, so a caller's `entry::<Node>()` stands; `shrink` is `Some(0.0)` for a box that never gives way to its neighbours.
 pub fn small_box(spacing: bevy_gooey::Spacing, border: bevy_gooey::Sides<f32>, edge: Color, shrink: Option<f32>) -> impl Bundle {
     (
-        bevy_gooey::row_with(0.0, bevy_gooey::RowLayout { shrink, ..default() }),
+        bevy_gooey::sized(bevy_gooey::Sizing::default()),
+        bevy_gooey::RowLayout { direction: Some(FlexDirection::Row), shrink, ..default() },
         spacing,
         bevy_gooey::BorderPx(border),
         bevy_gooey::InkOverride { edge: Some(edge), ..default() },
         bevy_gooey::Shape { radius: Some(bevy_gooey::Radius::Step(0)), ..default() },
     )
 }
+
+/// **The shape of a small box whose colours the editor paints** (#260, G-87): a sized box laid out as a row, with a row radius and a `px` border, marked `InkFollow`, so the skin writes neither its fill nor
+/// its edge and the editor's `RowRest`/`style_list_rows`, tag painters and `theme_ink::follow_the_skin` stay the one thing that colours it (by state: rest, hover, press, held, selected). A row writes
+/// only what it is asked to, so a caller's `entry::<Node>()` (a margin, a centred `align_items`) stands; `shrink` is `Some(0.0)` for a box that never gives way to its neighbours.
+pub fn held_box(spacing: bevy_gooey::Spacing, border: bevy_gooey::Sides<f32>, shrink: Option<f32>, sizing: bevy_gooey::Sizing) -> impl Bundle {
+    (
+        // A gooey `sized` box that is laid out as a row. Not a gooey row: `Role::Row` gives a node a least width of 0, and a chip, a button or a list row keeps its automatic least
+        // width (its content), so a row in a narrow lane is as wide as what it holds rather than squeezed under it.
+        bevy_gooey::sized(sizing),
+        bevy_gooey::RowLayout { direction: Some(FlexDirection::Row), shrink, ..default() },
+        spacing,
+        bevy_gooey::BorderPx(border),
+        bevy_gooey::InkFollow,
+        bevy_gooey::Shape { radius: Some(bevy_gooey::Radius::Step(0)), ..default() },
+    )
+}
+
+/// **A text field's inset as gooey's `Spacing`** (#260): 4 px across and 2 px down, the same box as [`FIELD_PAD`] (neither is a step of the skin's scale).
+pub const FIELD_SPACING: bevy_gooey::Spacing = bevy_gooey::Spacing {
+    margin: NO_MARGIN,
+    padding: bevy_gooey::Sides {
+        top: Some(bevy_gooey::Space::Px(2.0)),
+        right: Some(bevy_gooey::Space::Px(4.0)),
+        bottom: Some(bevy_gooey::Space::Px(2.0)),
+        left: Some(bevy_gooey::Space::Px(4.0)),
+    },
+};
+
+/// **A button's inset as gooey's `Spacing`** (#260): 10 px across and a row step down, the same box as [`BUTTON_PAD`].
+pub const BUTTON_SPACING: bevy_gooey::Spacing = bevy_gooey::Spacing {
+    margin: NO_MARGIN,
+    padding: bevy_gooey::Sides {
+        top: Some(STEP_ROW),
+        right: Some(bevy_gooey::Space::Px(10.0)),
+        bottom: Some(STEP_ROW),
+        left: Some(bevy_gooey::Space::Px(10.0)),
+    },
+};
 
 /// **A chip's inset as gooey's `Spacing`** (#260): 6 px a side and a tight step above and below, the same box as [`CHIP_PAD`]. The 6 px is not a step of the skin's scale, so it is a literal `Space::Px`.
 pub const CHIP_SPACING: bevy_gooey::Spacing = bevy_gooey::Spacing {
@@ -3069,14 +3080,7 @@ pub fn chip<'a>(
         // `style_list_rows` already keys on it and has never needed to know what it is painting.
         RowRest(fill),
         marker,
-        // GAP4: a raw node. A `BorderPx` edge is painted in the skin's outline over any `BorderColor` the host wrote (an `InkOverride` pins one colour), and a chip's
-        // edge is the host's to paint by state (a held chip's accent, a ghost proposal's suggest, hover): `style_list_rows` and the tag painters write it every frame.
-        Node {
-            padding: CHIP_PAD,
-            border: UiRect::all(Val::Px(EDGE_W)),
-            border_radius: BorderRadius::all(Val::Px(RADIUS_ROW)),
-            ..default()
-        },
+        held_box(CHIP_SPACING, bevy_gooey::Sides::all(EDGE_W), Some(0.0), bevy_gooey::Sizing::default()),
         BorderColor::all(border),
         BackgroundColor(fill),
     ));
@@ -3155,14 +3159,7 @@ fn row_shape(selected: bool) -> impl Bundle {
         Hovered::default(),
         RowRest(rest),
         RowSelected(selected),
-        // GAP4: a raw node, for the reason `chip` gives (the rail is an edge the host paints by selection).
-        Node {
-            width: Val::Percent(100.0),
-            padding: CHIP_PAD,
-            border: UiRect::left(Val::Px(SELECT_RAIL_W)),
-            border_radius: BorderRadius::all(Val::Px(RADIUS_ROW)),
-            ..default()
-        },
+        held_box(CHIP_SPACING, bevy_gooey::Sides { left: Some(SELECT_RAIL_W), ..default() }, None, bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Percent(100.0)), ..default() }),
         BorderColor::all(if selected { ink().accent } else { Color::NONE }),
         BackgroundColor(rest),
     )
@@ -3313,14 +3310,7 @@ pub fn button<'a>(
         Hovered::default(),
         RowRest(ink().row_bg),
         marker,
-        // GAP4: a raw node, for the reason `chip` gives (the host paints the edge by state).
-        Node {
-            padding: BUTTON_PAD,
-            border: UiRect::all(Val::Px(EDGE_W)),
-            border_radius: BorderRadius::all(Val::Px(RADIUS_ROW)),
-            flex_shrink: 0.0,
-            ..default()
-        },
+        held_box(BUTTON_SPACING, bevy_gooey::Sides::all(EDGE_W), Some(0.0), bevy_gooey::Sizing::default()),
         BorderColor::all(ink().panel_edge),
         BackgroundColor(ink().row_bg),
     ));
@@ -3435,13 +3425,20 @@ pub fn text_field<'a>(
         bevy::ui_widgets::Button,
         Hovered::default(),
         field,
-        Node {
-            width,
-            min_height: Val::Px(MIN_FIELD_H),
-            padding: FIELD_PAD,
-            flex_shrink: 0.0,
+        // The field's box (G-87): a gooey row that never shrinks, as wide as asked (`Auto` hugs its readout), `MIN_FIELD_H` tall at least, `FIELD_PAD` in from the edge (4 x 2 px, not
+        // a step of the scale). Its fill is the editor's (`InkFollow`), `Ink::row_bg`.
+        bevy_gooey::sized(bevy_gooey::Sizing {
+            width: match width {
+                Val::Px(px) => Some(bevy_gooey::Extent::Px(px)),
+                Val::Percent(percent) => Some(bevy_gooey::Extent::Percent(percent)),
+                _ => None,
+            },
+            min_height: Some(bevy_gooey::Extent::Px(MIN_FIELD_H)),
             ..default()
-        },
+        }),
+        bevy_gooey::RowLayout { direction: Some(FlexDirection::Row), shrink: Some(0.0), ..default() },
+        FIELD_SPACING,
+        bevy_gooey::InkFollow,
         BackgroundColor(ink().row_bg),
     ));
     boxed.with_children(|f| {
@@ -3527,21 +3524,13 @@ fn spawn_name_box(mut commands: Commands) {
     commands
         .spawn((
             NameBox,
-            Node {
-                position_type: PositionType::Absolute,
-                left: Val::Px(0.0),
-                top: Val::Px(0.0),
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                display: Display::None,
-                ..default()
-            },
-            // **Per `docs/ui.md` §5 trap 7.** A full-screen container without this eats every world
-            // click. It also means a click while naming falls through to the stage, which is right:
-            // the box is a prompt, not a modal that has to be dismissed before anything else works.
-            bevy::picking::Pickable::IGNORE,
+            // **Per `docs/ui.md` §5 trap 7.** A full-screen container without this eats every world click: gooey's `cover` is `Pickable::IGNORE`, so a click while naming
+            // falls through to the stage, which is right: the box is a prompt, not a modal that has to be dismissed before anything else works. Its card is centred in it,
+            // and it is hidden through `Shown` until a tab asks a name (`paint_name_box`). The dim is the editor's own (`InkFollow`), not the skin's scrim.
+            bevy_gooey::cover(),
+            bevy_gooey::RowLayout { align: Some(AlignItems::Center), justify: Some(JustifyContent::Center), ..default() },
+            bevy_gooey::Shown(false),
+            bevy_gooey::InkFollow,
             // Above the panels and the tab strip (101), and below the key badges (500) and the
             // confirm prompt (900) — the tier for "the screen is asking you something", which
             // outranks a panel and is outranked by a question you have to answer.
@@ -3550,13 +3539,12 @@ fn spawn_name_box(mut commands: Commands) {
         ))
         .with_children(|p| {
             p.spawn((
-                Node {
-                    flex_direction: FlexDirection::Column,
-                    padding: UiRect::all(Val::Px(PAD * 1.5)),
-                    row_gap: Val::Px(GAP_ROW * 2.0),
-                    min_width: Val::Px(360.0),
-                    ..default()
-                },
+                // The dialog card: a column 10 px between its lines (`GapPx`), 18 px in all round (neither is a step of the scale), 360 px at least, in the editor's panel colour.
+                bevy_gooey::column(0.0),
+                bevy_gooey::GapPx(GAP_ROW * 2.0),
+                bevy_gooey::Spacing { padding: bevy_gooey::Sides::all(bevy_gooey::Space::Px(PAD * 1.5)), ..default() },
+                bevy_gooey::Sizing { min_width: Some(bevy_gooey::Extent::Px(360.0)), ..default() },
+                bevy_gooey::InkFollow,
                 BackgroundColor(ink().panel_bg),
                 // **The dialog itself is UI; the dimmed backdrop behind it is not.**
                 //
@@ -3608,7 +3596,7 @@ fn paint_name_box(
     editor: Res<crate::editor::EditorState>,
     build: Res<crate::build::Build>,
     compose: Res<crate::compose::ComposeState>,
-    mut roots: Query<&mut Node, With<NameBox>>,
+    mut roots: Query<&mut bevy_gooey::Shown, With<NameBox>>,
     mut titles: NameLine<'_, '_, (With<NameBoxTitle>, Without<NameBoxValue>, Without<NameBoxHint>)>,
     mut values: NameLine<'_, '_, (With<NameBoxValue>, Without<NameBoxTitle>, Without<NameBoxHint>)>,
     mut hints: NameLine<'_, '_, (With<NameBoxHint>, Without<NameBoxTitle>, Without<NameBoxValue>)>,
@@ -3667,14 +3655,10 @@ fn paint_name_box(
                 )
             })
         });
-    let display = if asking.is_some() {
-        Display::Flex
-    } else {
-        Display::None
-    };
-    for mut node in &mut roots {
-        if node.display != display {
-            node.display = display;
+    let shown = asking.is_some();
+    for mut root in &mut roots {
+        if root.0 != shown {
+            root.0 = shown;
         }
     }
     let Some((title, value, hint)) = asking else {
@@ -3953,7 +3937,7 @@ impl Plugin for ChromePlugin {
             // **After `Phase::Text`, not in it.** The field consumes the keystroke there; painting
             // before it would show the box one character behind what has been typed.
             .add_systems(Update,
-                (paint_name_box.after(keys::Phase::Text))
+                (paint_name_box.after(keys::Phase::Text).before(bevy_gooey::GooeySystems::Style))
                     .run_if(in_state(crate::screen::Screen::Editor)),
             )
             // B-014: the docks answer to the window. Editor-only, because the menu's own columns
@@ -4396,13 +4380,11 @@ pub fn spawn_chrome_bar(
         bar.spawn((
             BackButton,
             Control(keys::ControlId::Back),
-            Node {
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                column_gap: Val::Px(GAP_ROW),
-                padding: CHIP_PAD,
-                ..default()
-            },
+            // A chip-sized row: its words a row step apart, a chip's inset, never shrinking, in the editor's own fill (`InkFollow`).
+            bevy_gooey::row_with(0.0, bevy_gooey::RowLayout { align: Some(AlignItems::Center), shrink: Some(0.0), ..default() }),
+            bevy_gooey::GapPx(GAP_ROW),
+            CHIP_SPACING,
+            bevy_gooey::InkFollow,
             BackgroundColor(ink().slot_bg),
             // The bar is `Pickable::IGNORE` so the frame answers no clicks; this narrows that for
             // the one node on it that is a button — the same move `spawn_name_box` makes.
@@ -4427,13 +4409,7 @@ pub fn spawn_chrome_bar(
 
         // Pushes the subject to the far end. A spacer rather than `SpaceBetween` on the bar, so a
         // third thing added later lands where it is put rather than being redistributed.
-        bar.spawn((
-            Node {
-                flex_grow: 1.0,
-                ..default()
-            },
-            bevy::picking::Pickable::IGNORE,
-        ));
+        bar.spawn(bevy_gooey::spacer());
 
         if let Some(here) = here {
             bar.spawn((
@@ -4541,13 +4517,7 @@ pub fn spawn_status_band(mut commands: Commands, frame: Res<Frame>, project: Opt
             typed(text::LABEL),
             bevy::picking::Pickable::IGNORE,
         ));
-        band.spawn((
-            Node {
-                flex_grow: 1.0,
-                ..default()
-            },
-            bevy::picking::Pickable::IGNORE,
-        ));
+        band.spawn(bevy_gooey::spacer());
         shortcut_hint(band, &back);
     });
 }

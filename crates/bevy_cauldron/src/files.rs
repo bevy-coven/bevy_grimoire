@@ -676,19 +676,18 @@ impl Plugin for FilesPlugin {
 /// spawned by [`keep_the_editor`] while a file is open, so a workspace with no file open holds no editor.
 /// **The node a workspace's central page stands in**: one card of the editor's panel look (padding, margin, edge, rounded corners) that fills what the
 /// docks leave. The Files workspace and the Design workspace both build their page host on it, so there is one such node and no second copy of it.
-pub(crate) fn page_host_node() -> Node {
-    Node {
-        flex_grow: 1.0,
-        min_width: Val::Px(0.0),
-        min_height: Val::Px(0.0),
-        flex_direction: FlexDirection::Column,
-        row_gap: Val::Px(chrome::GAP_ROW),
-        padding: UiRect::all(Val::Px(chrome::PAD)),
-        margin: UiRect::all(Val::Px(chrome::MARGIN)),
-        border: UiRect::all(Val::Px(chrome::EDGE_W)),
-        border_radius: BorderRadius::all(Val::Px(chrome::RADIUS_PANEL)),
-        ..default()
-    }
+pub(crate) fn page_host() -> impl Bundle {
+    (
+        // A gooey fill column (it grows into what the docks leave, with no least width of its own), `GAP_ROW` px between its parts, `PAD` in all round, `MARGIN` out all round,
+        // a 1 px edge and a panel radius. Its fill and edge are the editor's (`InkFollow`: `Ground`, `PanelEdge` lit by focus, and the theme move them).
+        bevy_gooey::fill_column(0.0),
+        bevy_gooey::GapPx(chrome::GAP_ROW),
+        bevy_gooey::Sizing { min_height: Some(bevy_gooey::Extent::Px(0.0)), ..default() },
+        bevy_gooey::Spacing { padding: bevy_gooey::Sides::all(chrome::STEP_PAD), margin: bevy_gooey::Sides::all(chrome::STEP_PAD) },
+        bevy_gooey::BorderPx(bevy_gooey::Sides::all(chrome::EDGE_W)),
+        bevy_gooey::Shape { radius: Some(bevy_gooey::Radius::Step(1)), ..default() },
+        bevy_gooey::InkFollow,
+    )
 }
 
 fn spawn_the_files_workspace(mut commands: Commands, frame: Res<Frame>) {
@@ -705,7 +704,7 @@ fn spawn_the_files_workspace(mut commands: Commands, frame: Res<Frame>) {
     let host = commands
         .spawn((
             FilesHost,
-            page_host_node(),
+            page_host(),
             BackgroundColor(ink.panel_bg),
             chrome::Ground(ink.panel_bg),
             chrome::PanelGround,

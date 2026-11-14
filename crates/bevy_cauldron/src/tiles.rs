@@ -3958,7 +3958,7 @@ impl Plugin for TilesPlugin {
                     ),
                     (
                         style_tabs,
-                        paint_label_progress,
+                        paint_label_progress.before(bevy_gooey::GooeySystems::Style),
                         apply_what_arrives,
                         hide_filter_on_the_tiles_page.run_if(in_tiles_panel),
                         // **The cue that names the other door.** It is written every frame it
@@ -4649,12 +4649,13 @@ fn spawn_tiles_panel(
     .with_children(|p| {
         crate::chrome::list_heading_in(p, "PIECES", heading);
         // **The batch, while it runs** — above the list it is filling. See `paint_label_progress`.
-        let mut batch = p.spawn((bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS), LabelProgress));
-        // Hidden until a walk exists, and a row of room under it when it shows: the two things a gooey column does not say.
-        batch.entry::<Node>().and_modify(|mut node| {
-            node.margin = UiRect::bottom(Val::Px(crate::chrome::GAP_ROW));
-            node.display = Display::None;
-        });
+        // Hidden (through `Shown`) until a walk exists, and a row of room under it when it shows.
+        let mut batch = p.spawn((
+            bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS),
+            LabelProgress,
+            crate::chrome::spacing(crate::chrome::margin_bottom(crate::chrome::STEP_ROW)),
+            bevy_gooey::Shown(false),
+        ));
         batch.with_children(|b| {
             b.spawn((
                 Text::new(""),
@@ -8526,7 +8527,7 @@ struct LabelProgressNow;
 /// indistinguishable from nothing happening — which is exactly how it was reported.
 fn paint_label_progress(
     queue: Res<crate::labels::LabelQueue>,
-    mut roots: Query<&mut Node, (With<LabelProgress>, Without<LabelProgressBar>)>,
+    mut roots: Query<&mut bevy_gooey::Shown, (With<LabelProgress>, Without<LabelProgressBar>)>,
     mut bars: Query<&mut bevy_gooey::Progress, With<LabelProgressBar>>,
     mut heads: Query<&mut Text, (With<LabelProgressText>, Without<LabelProgressNow>)>,
     mut nows: Query<&mut Text, (With<LabelProgressNow>, Without<LabelProgressText>)>,
@@ -8535,14 +8536,9 @@ fn paint_label_progress(
         return;
     }
     let running = queue.running();
-    let display = if running {
-        Display::Flex
-    } else {
-        Display::None
-    };
-    for mut node in &mut roots {
-        if node.display != display {
-            node.display = display;
+    for mut shown in &mut roots {
+        if shown.0 != running {
+            shown.0 = running;
         }
     }
     if !running {
@@ -8914,8 +8910,7 @@ fn draw_ink(
                 // bundle carrying two of the same component panics at spawn in Bevy 0.19.
                 let mut library_row = crate::chrome::list_row(p, false, LibraryRow(id.clone()));
                 library_row
-                    .entry::<Node>()
-                    .and_modify(|mut n| n.align_items = AlignItems::Center);
+                    .insert(bevy_gooey::RowLayout { direction: Some(FlexDirection::Row), align: Some(AlignItems::Center), ..default() });
                 library_row.with_children(|row| {
                     // **A gooey `image_box` of the slot's size**, holding its room while the thumbnail is baked. The ink carries only
                     // `portrait: bool` — a `Handle<Image>` in a compared value would make the comparison about handle identity — so
@@ -8923,11 +8918,11 @@ fn draw_ink(
                     // transparent image**, which the UI renderer skips: the default handle is a real white pixel and would paint
                     // white over the slot's fill.
                     let image = if *portrait { thumbs.and_then(|t| t.image(id)) } else { None };
-                    let mut slot = row.spawn((
+                    row.spawn((
                         bevy_gooey::image_box(image.unwrap_or(bevy::image::TRANSPARENT_IMAGE_HANDLE), Vec2::splat(crate::chrome::THUMB_SLOT)),
+                        crate::chrome::spacing(crate::chrome::margin_right(crate::chrome::STEP_ROW)),
                         BackgroundColor(crate::chrome::ink().slot_bg),
                     ));
-                    slot.entry::<Node>().and_modify(|mut n| n.margin = UiRect::right(Val::Px(crate::chrome::GAP_ROW)));
                     crate::chrome::fill_text(
                         row,
                         id.clone(),
@@ -9720,8 +9715,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 (note_text, note_tint),
                 NoteReadout,
             )
-            .entry::<Node>()
-            .and_modify(|mut n| n.margin.bottom = Val::Px(crate::chrome::GAP_ROW));
+            .insert(bevy_gooey::Spacing { margin: crate::chrome::margin_bottom(crate::chrome::STEP_ROW), ..crate::chrome::FIELD_SPACING });
 
             // **The proposal header** — machine-proposed, human-unconfirmed, and it says so with
             // its provenance and its verbs. Everything below in `SUGGEST` is part of this question.
@@ -10686,9 +10680,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         crate::chrome::Severity::Plain,
                     );
                     if i == 0 {
-                        turn.entry::<Node>().and_modify(|mut n| {
-                            n.margin.left = Val::Px(crate::chrome::GAP_GROUP)
-                        });
+                        turn.insert(bevy_gooey::Spacing { margin: crate::chrome::margin_left(crate::chrome::STEP_GROUP), ..crate::chrome::BUTTON_SPACING });
                     }
                 }
 
@@ -10706,8 +10698,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     "rescan mesh",
                     crate::chrome::Severity::Plain,
                 )
-                .entry::<Node>()
-                .and_modify(|mut n| n.margin.left = Val::Px(crate::chrome::GAP_GROUP));
+                .insert(bevy_gooey::Spacing { margin: crate::chrome::margin_left(crate::chrome::STEP_GROUP), ..crate::chrome::BUTTON_SPACING });
 
                 // **The triangle count, beside the mesh it counts.**
                 //

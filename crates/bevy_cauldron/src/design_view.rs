@@ -445,7 +445,7 @@ fn spawn_the_design_workspace(mut commands: Commands, frame: Res<Frame>) {
     let host = commands
         .spawn((
             DesignHost,
-            files::page_host_node(),
+            files::page_host(),
             BackgroundColor(ink.panel_bg),
             chrome::Ground(ink.panel_bg),
             chrome::PanelGround,

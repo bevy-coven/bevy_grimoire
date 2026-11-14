@@ -761,74 +761,30 @@ fn rebuild_badges(
                 };
                 let mut spawned = p.spawn((
                     BadgeCluster(*home),
-                    // A cluster stands where its anchor is, which flow has no opinion about —
-                    // `place_badges` computes it from a rect or a projection every frame.
-                    Node {
-                        // PLACES-ITSELF-OK: placed against its anchor — see above.
-                        position_type: PositionType::Absolute,
-                        flex_direction: if labelled {
-                            FlexDirection::Column
-                        } else {
-                            FlexDirection::Row
-                        },
-                        // **A cluster never wraps.** A labelled cluster is a column and a band cluster is
-                        // a row, so `NoWrap` holds either to one line whatever its labels measure. A band
-                        // that wrapped put its chords on a second row, and a band cannot hang a second
-                        // row below its control (B-035).
-                        flex_wrap: FlexWrap::NoWrap,
-                        // **A legend's rows are all one width**, so it reads as a block rather than
-                        // as a ragged stack of boxes — `Stretch` takes the widest and gives it to
-                        // every row. A cluster of bare chords wants the opposite: each box hugs its
-                        // own chord, because there they are labels on things and not a table.
-                        // **All one width**, so the box reads as a block rather than as a ragged
-                        // stack — `Stretch` takes the widest row and gives it to every row. A
-                        // cluster of bare chords wants the opposite: each chip hugs its own chord,
-                        // because there they are labels on things and not a table.
-                        align_items: if labelled {
-                            AlignItems::Stretch
-                        } else {
-                            AlignItems::Start
-                        },
-                        // **A labelled cluster is ONE box, and its rows are rows.**
-                        //
-                        // This was true of the legend alone, and the asymmetry was a bug with two
-                        // faces. A control that owns four chords drew **four bordered boxes** — and
-                        // a cluster has exactly **one** leader, so three of the four had no line to
-                        // anything. Reported from the keyboard: *"if we have a keyboard legend that
-                        // relates to a section of UI components, then the legend should have a
-                        // single box instead of being split between two. So every box should have
-                        // one line to the component it belongs in."*
-                        //
-                        // The other face is where the line lands. `place_badges` aims the leader at
-                        // the **cluster's** centre, and with the cluster invisible that centre falls
-                        // in the *gap between two chips* — a line ending in empty space next to the
-                        // boxes it belongs to. Also reported: *"the lines are still not connecting
-                        // to the keyboard legend box so that it falls in the middle."* One box, one
-                        // centre, one line: the same edit answers both.
-                        //
-                        // A band's cluster still carries no box — there each badge is its own chip
-                        // beside a control whose own words are already the verb.
-                        padding: if labelled {
-                            chrome::CHIP_PAD
-                        } else {
-                            UiRect::ZERO
-                        },
-                        border: if labelled {
-                            UiRect::all(Val::Px(chrome::EDGE_W))
-                        } else {
-                            UiRect::ZERO
-                        },
-                        column_gap: Val::Px(GAP_TIGHT),
-                        row_gap: Val::Px(GAP_TIGHT),
+                    // A cluster stands where its anchor is, which flow has no opinion about: `place_badges` computes its left and top from a rect or a projection every frame
+                    // (`HostGeometry`). What it holds is a flow with a gap, which a placed node takes beside its place (`GapPx`, G-87).
+                    //
+                    // **A labelled cluster is ONE box, and its rows are rows**: a column with a box (the chip's inset and a 1 px edge) and `Stretch`, so the rows are one width;
+                    // a band's cluster is a row of bare chords that each hug their own, with no box. **A cluster never wraps** (`NoWrap`): a band cannot hang a second row below its
+                    // control (B-035). Its colours are the editor's (`InkFollow`), `flash_live_badges` and the theme move them.
+                    bevy_gooey::placed(UiRect::all(Val::Auto)),
+                    bevy_gooey::HostGeometry,
+                    bevy_gooey::RowLayout {
+                        direction: Some(if labelled { FlexDirection::Column } else { FlexDirection::Row }),
+                        align: Some(if labelled { AlignItems::Stretch } else { AlignItems::Start }),
+                        wrap: Some(FlexWrap::NoWrap),
                         ..default()
                     },
+                    bevy_gooey::GapPx(GAP_TIGHT),
+                    if labelled { chrome::CHIP_SPACING } else { bevy_gooey::Spacing::default() },
+                    bevy_gooey::BorderPx(if labelled { bevy_gooey::Sides::all(chrome::EDGE_W) } else { bevy_gooey::Sides::default() }),
+                    bevy_gooey::InkFollow,
                     BackgroundColor(if labelled { ink.panel } else { Color::NONE }),
                     BorderColor::all(if labelled { ink.key } else { Color::NONE }),
                     // Hidden, not `Display::None`: a node that is not displayed is never laid out,
                     // so it could never acquire the size `place_badges` needs to position it. A
                     // visibility-hidden UI node does occupy layout, which is the difference.
                     Visibility::Hidden,
-                    bevy::picking::Pickable::IGNORE,
                 ));
                 if let Some((_, three)) = leads.iter().find(|(h, _)| h == home) {
                     spawned.insert(Lead(*three));
@@ -2350,27 +2306,14 @@ fn one_badge(
 ) {
     c.spawn((
         Badge(badge.actions.clone()),
-        Node {
-            padding: chrome::CHIP_PAD,
-            // **A row inside a box needs no box of its own.** That is now true of every
-            // labelled cluster and not just the legend's — see the cluster's own node for
-            // why the per-chord border had to go: it drew one box per chord against one
-            // leader per cluster, so most boxes pointed at nothing.
-            //
-            // A bare chord in a band is still its own object, and still carries its own.
-            border: if boxed {
-                UiRect::ZERO
-            } else {
-                UiRect::all(Val::Px(chrome::EDGE_W))
-            },
-            flex_direction: FlexDirection::Row,
-            // **Start, not Center.** A wrapped description is two lines tall and
-            // its chord is one; centring floated the chord in the middle of the
-            // pair, so a column of chords stopped being a column.
-            align_items: AlignItems::Start,
-            column_gap: Val::Px(chrome::GAP_ROW),
-            ..default()
-        },
+        // A badge's row: the chord and what it does, a row step apart, **Start, not Center** (a wrapped description is two lines tall and its chord is one; centring floated the
+        // chord in the middle of the pair, so a column of chords stopped being a column). **A row inside a box needs no box of its own**: a labelled cluster draws one box, so its
+        // rows have no edge; a bare chord in a band is its own object and carries its own. The colours are the editor's (`InkFollow`): `BadgeRest` and `flash_live_badges`.
+        bevy_gooey::row_with(0.0, bevy_gooey::RowLayout { align: Some(AlignItems::Start), ..default() }),
+        bevy_gooey::GapPx(chrome::GAP_ROW),
+        chrome::CHIP_SPACING,
+        bevy_gooey::BorderPx(if boxed { bevy_gooey::Sides::default() } else { bevy_gooey::Sides::all(chrome::EDGE_W) }),
+        bevy_gooey::InkFollow,
         // Opaque, and that is what makes a standalone badge legible over both
         // grounds: against the bright viewport the near-black fill is maximum
         // contrast, and against a panel — where the fill matches the ground —

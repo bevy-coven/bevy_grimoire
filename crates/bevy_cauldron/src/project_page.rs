@@ -727,11 +727,10 @@ fn fill_the_guide_buttons(mut commands: Commands, page: Option<Res<ProjectPage>>
 /// A map: its picture, name, size in metres and how many pieces stand in it. One that will not open says why and can be deleted.
 fn map_card(grid: &mut ChildSpawner, map: &MapEntry, picture: Option<ImageNode>, menu: Entity) {
     let name = map.name.clone();
-    let node = launcher::card_node();
     match &map.summary {
         MapSummary::Unreadable(why) => {
             let gone = name.clone();
-            grid.spawn((node, Role::Card, MapCard(name.clone()))).with_children(|card| {
+            grid.spawn((launcher::card_layout(), MapCard(name.clone()))).insert(Role::Card).with_children(|card| {
                 card.spawn(launcher::quiet(name.clone()));
                 card.spawn(label("Will not open"));
                 card.spawn(launcher::quiet(launcher::middle_ellipsis(why, 90)));

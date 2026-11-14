@@ -112,15 +112,8 @@ pub fn toggle_the_preview(
             // one main action, an ordinary button, a switch and a meter. Each takes its colour from the
             // skin it stands under — the project's, here — so an edit to `accent` moves the primary
             // button and nothing in the editor's chrome.
-            panel.spawn((
-                Node {
-                    flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                    padding: UiRect::all(Val::Px(crate::chrome::PAD)),
-                    ..default()
-                },
-                bevy_gooey::Role::Panel,
-            ))
+            // A gooey panel: its padding, gap, frame and radius are the skin's (the raw node's own 12 px and 3 px were overwritten by the skin's panel).
+            panel.spawn(bevy_gooey::panel())
             .with_children(|sample| {
                 sample.spawn(heading("A game's own screen"));
                 sample.spawn(label("Words a player reads, in the game's own ink."));

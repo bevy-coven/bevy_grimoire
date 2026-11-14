@@ -105,21 +105,23 @@ fn the_frames_root_is_a_sized_box_a_window_tall() {
     assert_eq!((node.width, node.height), (Val::Percent(100.0), Val::Vh(100.0)), "100% wide and a window tall");
 }
 
-/// **A px border keeps the colour the editor gave it.** The skin paints any `BorderPx` edge in its outline unless the host pins a colour with `InkOverride`; a box with a `BorderPx` and no
-/// override would turn the editor's accent, panel edge or tint into the outline (the held tag chip lost its accent edge this way, which `headless::a_held_tag_chip_carries_an_accent_edge`
-/// found). So every node that carries a `BorderPx` carries an `InkOverride` edge, and draws it.
+/// **A px border keeps the colour the editor gave it.** The skin paints any `BorderPx` edge in its outline unless the host owns the colour: an `InkOverride` pins one (and the skin writes it),
+/// an `InkFollow` leaves the node's `BorderColor` and `BackgroundColor` to the editor's own painters (hover, held, selected, the theme). A box with a `BorderPx` and neither would turn the editor's
+/// accent, panel edge or tint into the outline (the held tag chip lost its accent edge this way, which `headless::a_held_tag_chip_carries_an_accent_edge` found).
 #[test]
 fn a_px_border_keeps_the_edge_colour_the_editor_gave_it() {
     let mut app = editor("edge", 1);
     let world = app.world_mut();
     let mut seen = 0;
-    for (entity, edge, pinned) in world.query::<(Entity, &BorderColor, Option<&bevy_gooey::InkOverride>)>().iter(world) {
+    for (entity, edge, pinned, follows) in world.query::<(Entity, &BorderColor, Option<&bevy_gooey::InkOverride>, Has<bevy_gooey::InkFollow>)>().iter(world) {
         if world.get::<bevy_gooey::BorderPx>(entity).is_none() {
             continue;
         }
         seen += 1;
-        let pinned = pinned.and_then(|o| o.edge).unwrap_or_else(|| panic!("{entity:?} has a `BorderPx` edge and no `InkOverride`: the skin would paint it in its outline"));
-        assert_eq!(edge.top, pinned, "{entity:?} draws the edge colour the editor gave it");
+        match pinned.and_then(|o| o.edge) {
+            Some(pinned) => assert_eq!(edge.top, pinned, "{entity:?} draws the edge colour the editor gave it"),
+            None => assert!(follows, "{entity:?} has a `BorderPx` edge and neither an `InkOverride` nor an `InkFollow`: the skin would paint it in its outline"),
+        }
     }
-    assert!(seen >= 1, "the activity bar carries a px border: {seen}");
+    assert!(seen >= 10, "the bars, the chips and the rows of a Map door carry a px border: {seen}");
 }

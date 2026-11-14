@@ -395,7 +395,7 @@ fn raise_toast(
     open: Option<Res<crate::project::OpenMap>>,
     journals: Query<&Node, With<crate::chrome::JournalPanel>>,
     standing: Query<Entity, With<RefusalToast>>,
-    mut layers: Query<&mut Node, (With<crate::chrome::ToastLayer>, Without<crate::chrome::JournalPanel>)>,
+    mut layers: Query<&mut bevy_gooey::Shown, (With<crate::chrome::ToastLayer>, Without<crate::chrome::JournalPanel>)>,
 ) {
     let journal_open = journals.iter().any(|n| n.display != Display::None);
     let mut up = !standing.is_empty();
@@ -424,10 +424,9 @@ fn raise_toast(
         }
         up = false;
     }
-    for mut node in &mut layers {
-        let want = if up { Display::Flex } else { Display::None };
-        if node.display != want {
-            node.display = want;
+    for mut shown in &mut layers {
+        if shown.0 != up {
+            shown.0 = up;
         }
     }
 }

@@ -1924,7 +1924,7 @@ fn rebuild_labels(
             continue;
         };
         let armed = armed.is(&c.id);
-        let mut label = commands.spawn((
+        commands.spawn((
             SlotLabel(k),
             Text::new(if armed { format!("{} *", c.id) } else { c.id.clone() }),
             // The miniatures name themselves in smaller type, so the strip reads as one focal group
@@ -1935,9 +1935,9 @@ fn rebuild_labels(
             // point in the scene lands on screen. **Never steals the wheel**: `view::drive` gives scroll to whatever is under the cursor by
             // testing `Hovered`, so a pickable node floating over the stage would silently kill zoom, and `placed` is `Pickable::IGNORE`.
             bevy_gooey::placed(UiRect::all(Val::Auto)),
+            // Hidden until `place_labels` has a projection to put it at — a label at (0,0) for one frame is a label in the wrong place.
+            bevy_gooey::Shown(false),
         ));
-        // Hidden until `place_labels` has a projection to put it at — a label at (0,0) for one frame is a label in the wrong place.
-        label.entry::<Node>().and_modify(|mut node| node.display = Display::None);
     }
 }
 
@@ -2102,7 +2102,7 @@ fn place_labels(
         (
             &SlotLabel,
             &mut Text,
-            &mut Node,
+            &mut bevy_gooey::Shown,
             &mut bevy_gooey::PlacedAt,
             &bevy::ui::ComputedNode,
             &UiGlobalTransform,
@@ -2114,9 +2114,9 @@ fn place_labels(
     >,
 ) {
     let Some(camera) = camera.filter(|_| *mode == Mode::Compose) else {
-        for (_, _, mut node, ..) in &mut labels {
-            if node.display != Display::None {
-                node.display = Display::None;
+        for (_, _, mut shown, ..) in &mut labels {
+            if shown.0 {
+                shown.0 = false;
             }
         }
         return;
@@ -2180,7 +2180,7 @@ fn place_labels(
     // --- refusal is reported in the channel the author watches.
     let withheld_set: std::collections::HashSet<usize> = withheld.into_iter().collect();
 
-    for (label, mut text, mut node, mut placed_at, _, _) in &mut labels {
+    for (label, mut text, mut shown, mut placed_at, _, _) in &mut labels {
         let placed = carousel.0.slots.get(label.0).and_then(|slot| {
             let advance = LABEL_CHAR_W
                 * if slot.offset == 0 { 1.0 } else { LABEL_PX.1.px() / LABEL_PX.0.px() };
@@ -2227,8 +2227,8 @@ fn place_labels(
                 // --- The same conversion as every other position here: the projection is
                 // --- physical and `Val::Px` is logical, so it is divided — once.
                 let (left, top) = (Val::Px(p.x / s - half), Val::Px(p.y / s + LABEL_DROP));
-                if node.display != Display::Flex {
-                    node.display = Display::Flex;
+                if !shown.0 {
+                    shown.0 = true;
                 }
                 if placed_at.0.left != left || placed_at.0.top != top {
                     placed_at.0.left = left;
@@ -2274,8 +2274,8 @@ fn place_labels(
                 // **Guarded against the no-op write**, the way `editor::refresh_status` is: `Node` is
                 // change-detected, and touching it every frame makes Bevy re-lay the whole UI tree
                 // on every frame the camera happens to be still.
-                if node.display != Display::Flex {
-                    node.display = Display::Flex;
+                if !shown.0 {
+                    shown.0 = true;
                 }
                 if placed_at.0.left != left || placed_at.0.top != top {
                     placed_at.0.left = left;
@@ -2283,8 +2283,8 @@ fn place_labels(
                 }
             }
             None => {
-                if node.display != Display::None {
-                    node.display = Display::None;
+                if shown.0 {
+                    shown.0 = false;
                 }
             }
         }

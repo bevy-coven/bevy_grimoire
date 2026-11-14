@@ -12,7 +12,9 @@ use crate::fixtures;
 // 38 -> 34: #260 moved the problem line, the row labels and the wrapping text onto gooey's `TextFlow`, `Sizing` and `Spacing`. Owner exception (2026-11-14): a ratchet tightened to the real count.
 // 34 -> 33: #260 moved the frame root's height onto gooey's `Extent::Vh`. Owner exception (2026-11-14): a ratchet tightened to the real count.
 // 33 -> 31: #260 moved the modal card, the severity rail and the frame root onto gooey's column, px border and Extent::Vh. Owner exception (2026-11-14): a ratchet tightened to the real count.
-const CHROME_NODES_LEFT: usize = 31;
+// 31 -> 13: #260 round 8 moved the frame, the chips, the buttons, the rows, the text field, the name box and the toast strip onto gooey rows, columns and placed nodes (G-87). Owner exception (2026-11-14): a ratchet tightened to the real count.
+// 13 -> 10: #260 round 8: the back button and the bars' spacers are gooey's (G-87). Owner exception (2026-11-14): a ratchet tightened to the real count.
+const CHROME_NODES_LEFT: usize = 10;
 
 #[test]
 fn chrome_rs_carries_no_more_raw_nodes_than_it_is_counted_to() {
