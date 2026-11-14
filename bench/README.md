@@ -220,5 +220,24 @@ measures, and its raw output must not appear in the project's `git status`.
 
 An editor or server binary that is not there, an `--agent` this build does not have, a `--variant` the suite
 does not state, a suite with one task that will not load, and — for `--agent omp` — a model this host does
-not list (`omp models find`). Each of those would otherwise become a run of harness errors that says
-nothing about the editor.
+not list (`omp models find`), a model name with no provider in front (`sonnet`: write `provider/model`, for example
+`anthropic/claude-sonnet-5-5`), and a provider that refuses one real turn (`omp -p "reply ok"`, run once before the
+first trial; a spent quota or a refused key is found there, in the provider's own words). Each of those would
+otherwise become a run of harness errors that says nothing about the editor. A run also stops itself after three
+provider refusals in a row, and the report's "Harness errors" section says why.
+
+## What the agent inside a trial can read
+
+**A trial's agent can read its own provider credential.** The trial's isolated `HOME` holds the one credential its
+model needs (`~/.omp/agent/agent.db`, mode 600: an OAuth access token and, for a rotating provider, its refresh
+token), and the agent's shell and file tools can open it. What it prints lands in `transcript.jsonl`, which the run
+keeps. So:
+
+- only the model's provider's credential is imported, never the host's whole login;
+- the credential strings are scrubbed from the retained `transcript.jsonl` and `agent.err` (replaced by
+  `[redacted]`) before they are read or reported, and `home/` is deleted when the agent is done;
+- a run killed with `kill -KILL` leaves its `home/` behind (a `Drop` cannot run), and the next run deletes any older
+  than an hour; Ctrl-C and SIGTERM stop the run through its guards;
+- **what is not covered**: a credential the agent copies into the *project* it works in is not scrubbed, and the
+  agent can use the credential while it runs. A provider whose refresh token rotates signs the host out of that
+  login if the copy refreshes it, so do not run the benchmark on a login you cannot afford to refresh elsewhere.
