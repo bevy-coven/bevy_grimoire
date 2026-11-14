@@ -735,7 +735,7 @@ dependencies = [
  "bevy_elements",
  "bevy_fairy",
  "bevy_flora",
- "bevy_gooey",
+ "bevy_gooey 0.52.1 (git+https://github.com/bevy-coven/bevy_gooey?rev=424d37b88bd32fd40ea230dfdd99f862717df2af)",
  "bevy_grimoire",
  "bevy_grimoire_anim",
  "bevy_grimoire_core",
@@ -769,7 +769,7 @@ dependencies = [
  "bevy",
  "bevy_cauldron",
  "bevy_fairy",
- "bevy_gooey",
+ "bevy_gooey 0.52.1 (git+https://github.com/bevy-coven/bevy_gooey?rev=57d3d49b3e096e7cf4d2c83c4d6b6ee6fad92a73)",
  "bevy_grimoire_core",
  "libc",
  "serde",
@@ -1244,6 +1244,16 @@ dependencies = [
 name = "bevy_gooey"
 version = "0.52.1"
 source = "git+https://github.com/bevy-coven/bevy_gooey?rev=424d37b88bd32fd40ea230dfdd99f862717df2af#424d37b88bd32fd40ea230dfdd99f862717df2af"
+dependencies = [
+ "accesskit",
+ "bevy",
+ "serde",
+]
+
+[[package]]
+name = "bevy_gooey"
+version = "0.52.1"
+source = "git+https://github.com/bevy-coven/bevy_gooey?rev=57d3d49b3e096e7cf4d2c83c4d6b6ee6fad92a73#57d3d49b3e096e7cf4d2c83c4d6b6ee6fad92a73"
 dependencies = [
  "accesskit",
  "bevy",
