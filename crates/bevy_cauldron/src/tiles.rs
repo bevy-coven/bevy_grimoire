@@ -4832,7 +4832,8 @@ fn click_tab(click: On<PointerClick>, tabs: Query<&Tab>, mut commands: Commands)
 }
 
 /// **`R` rescans**, because meshes arrive while the editor is open — an importer that only sees what
-/// was on disk at launch is one you have to restart to use.
+/// was on disk at launch is one you have to restart to use. **Through `kit_rescan`** (E-002, #129 slice 33), the operation an
+/// agent calls: the key asks, the answer says a scan is wanted, and the scan is [`scan`], the one reader of the directory.
 fn rescan_key(
     keyboard: Res<ButtonInput<KeyCode>>,
     live: Res<crate::keys::Live>,
@@ -4840,8 +4841,20 @@ fn rescan_key(
     mode: Res<Mode>,
     mut state: ResMut<ImportState>,
 ) {
-    if *mode == Mode::Meshes && keys::just_pressed(&keyboard, *live, Action::Rescan) {
-        scan(&project, &mut state);
+    if *mode != Mode::Meshes || !keys::just_pressed(&keyboard, *live, Action::Rescan) {
+        return;
+    }
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View::default()),
+        ..crate::ops::Ctx::default()
+    };
+    match crate::ops::dispatch(&mut ctx, "kit_rescan", &serde_json::json!({})) {
+        Ok(crate::ops::Applied::Done { .. }) if ctx.view.as_ref().is_some_and(|v| v.rescan) => scan(&project, &mut state),
+        Ok(crate::ops::Applied::Done { .. }) => {}
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => state.status.problem(e.0),
     }
 }
 

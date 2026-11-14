@@ -1089,7 +1089,13 @@ impl Action {
             | Action::PanLeft
             | Action::PanRight
             | Action::TurnViewLeft
-            | Action::TurnViewRight => Change::View,
+            | Action::TurnViewRight
+            // **The Anim tab's project-wide check** (E-002, #129 slice 32): the summary face and a request to measure what has no
+            // report yet, session state; migrated to `rig_check_all`.
+            | Action::CheckAllRigs
+            // **The Meshes tab's rescan** (E-002, #129 slice 33): the candidate list a person is looking at, read from the pack's
+            // directory again; migrated to `kit_rescan`.
+            | Action::Rescan => Change::View,
 
             // **Held, not pressed.** The effect is the hold: things fade, a pick is live, the overlay is
             // up. An operation whose effect reverses when a key is released is not a value an agent can
@@ -1119,11 +1125,10 @@ impl Action {
             | Action::RedoTile
             | Action::UndoBench
             | Action::RedoBench
-            | Action::Rescan
+            // (`Rescan` left this list for `kit_rescan`.)
             | Action::SuggestLabels
             | Action::SuggestAll
-            | Action::DiscardAllSuggestions
-            | Action::CheckAllRigs => Change::World,
+            | Action::DiscardAllSuggestions => Change::World,
 
             // Everything else writes the grimoire and owes an operation.
             _ => Change::Project,
@@ -1205,6 +1210,12 @@ impl Action {
             // turn it a quarter, through the operations an agent calls.
             Action::PanForward | Action::PanBack | Action::PanLeft | Action::PanRight => Some("camera_pan"),
             Action::TurnViewLeft | Action::TurnViewRight => Some("camera_turn"),
+            // **The Anim tab's project-wide check is view state and a request to the watcher** (E-002, #129 slice 32): `C` shows
+            // the summary and queues what has no report, through the operation an agent calls.
+            Action::CheckAllRigs => Some("rig_check_all"),
+            // **The Meshes tab's rescan is a request to read the pack's directory again** (E-002, #129 slice 33): `R` asks for it
+            // through the operation an agent calls.
+            Action::Rescan => Some("kit_rescan"),
             // **The tool keys** (E-002, #129): `B`, `Shift+B` and the run chord arm a tool through `tool_arm`.
             // **`Remove` and `NoteTool` arm a tool, so they name the arming operation** (E-002,
             // #129). They named `placement_remove` and `note_add`: a write neither key makes — its

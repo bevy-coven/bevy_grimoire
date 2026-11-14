@@ -781,6 +781,10 @@ struct Gates<'w, 's> {
     tile_history: Option<ResMut<'w, crate::build::TileHistory>>,
     /// **The Map camera** (E-002, #129 slice 31): what `camera_pan` and `camera_turn` move, carried by the same view.
     rig: Option<ResMut<'w, crate::view::Rig>>,
+    /// **The rig bench's measurements and the watcher's queue** (E-002, #129 slice 32): what `rig_check_all` reads (which rigs are
+    /// measured) and asks (which to measure next), carried by the same view.
+    reports: Option<Res<'w, crate::anim_watch::BenchReports>>,
+    measure: Option<ResMut<'w, crate::anim_watch::MeasureQueue>>,
 }
 
 impl Gates<'_, '_> {
@@ -807,7 +811,11 @@ impl Gates<'_, '_> {
             picker_selected: self.picker.as_deref().map(|p| p.selected).unwrap_or_default(),
             picker_active: self.picker.as_deref().is_some_and(|p| p.active),
             compose: self.compose.as_deref().map(|c| c.cursor()).unwrap_or_default(),
-            rig: self.bench.as_deref().map(|b| b.cursor()).unwrap_or_default(),
+            rig: match (self.bench.as_deref(), self.reports.as_deref()) {
+                (Some(bench), Some(reports)) => bench.cursor_with(reports),
+                (Some(bench), None) => bench.cursor(),
+                _ => Default::default(),
+            },
             // **The page is "up" when `browsing` holds a row**, and its length is the page's own (`build::page_len`).
             tile_page: self.build.as_deref().zip(project).and_then(|(build, project)| {
                 build.browsing.map(|row| crate::ops_view::TilePage { row, rows: crate::build::page_len(project, build) })
@@ -891,6 +899,13 @@ impl Gates<'_, '_> {
             && !bench.is_at(&view.rig)
         {
             bench.set_cursor(&view.rig);
+        }
+        // **A project-wide rig check** (E-002, #129 slice 32): the rigs it named go to the watcher and the bench shows the summary.
+        if view.rig.check.made
+            && let Some(bench) = self.bench.as_deref_mut()
+            && let Some(queue) = self.measure.as_deref_mut()
+        {
+            bench.take_check(&view.rig, queue);
         }
         if let Some(page) = view.tile_page
             && let Some(build) = self.build.as_deref_mut()
@@ -2238,7 +2253,15 @@ fn operation_apply(
     let carried = ctx.proposal.take();
     // **The view the operation answered with goes back to the editor's own** (E-002, #129), as a key's does.
     if let Some(view) = ctx.view.take() {
+        // **A rescan is a request** (E-002, #129 slice 33): the operation says the directory is wanted and the scan is the
+        // Meshes tab's own, run against the project the operation held.
+        let rescan = view.rescan;
         gates.apply_view(view, state.as_deref_mut(), import.as_deref_mut(), filters.as_deref_mut());
+        if rescan
+            && let (Some(import), Some(project)) = (import.as_deref_mut(), ctx.project.as_ref())
+        {
+            crate::tiles::scan(project, import);
+        }
     }
     // **A project the operation LOADED is installed here, before the map goes back.** `map_open` can
     // load the project from the menu's root — that is what lets an agent make a map and then work in

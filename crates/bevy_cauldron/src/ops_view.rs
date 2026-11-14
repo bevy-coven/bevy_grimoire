@@ -124,6 +124,10 @@ pub struct View {
     /// Session state like the rest; not serialised while it is where a session opens.
     #[serde(default, skip_serializing_if = "CameraCursor::is_default")]
     pub camera: CameraCursor,
+    /// **The answer of `kit_rescan`** (E-002, #129 slice 33): whether the Meshes tab is asked to read the pack's directory again. A
+    /// request, not state: the front end reads it, scans, and the view goes. Not serialised while false.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub rescan: bool,
 }
 
 /// **Where the Map camera is**, as a value an operation can move (E-002, #129 slice 31).
@@ -305,6 +309,32 @@ pub struct RigCursor {
     /// **Whether the bench shows the project-wide summary** rather than one rig. Walking to a rig puts it back on one.
     #[serde(default)]
     pub all: bool,
+    /// **The rigs whose measurement is already in hand**, carried in so `rig_check_all` can say which are left (E-002, #129
+    /// slice 32). Read, never written back; not serialised while empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub measured: Vec<String>,
+    /// **The answer of `rig_check_all`**: whether a check was made and the rigs it queued to measure. The front end reads
+    /// this and nothing else of a check; both are the default for every other operation.
+    #[serde(default, skip_serializing_if = "CheckAnswer::is_default")]
+    pub check: CheckAnswer,
+}
+
+/// **What a project-wide rig check answered** (E-002, #129 slice 32): that it ran, and which rigs it queued.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CheckAnswer {
+    /// Whether a check was made at all.
+    #[serde(default)]
+    pub made: bool,
+    /// The rigs with no measurement yet, in manifest order: the ones the watcher is asked to measure.
+    #[serde(default)]
+    pub queued: Vec<String>,
+}
+
+impl CheckAnswer {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 impl RigCursor {
@@ -524,6 +554,8 @@ mod tests {
             tile_history: None,
             // Owner exception (2026-11-13): the literal names the field #129 slice 31 adds (its default); the round trip is unchanged.
             camera: CameraCursor::default(),
+            // Owner exception (2026-11-13): the literal names the field #129 slice 33 adds (its default); the round trip is unchanged.
+            rescan: false,
         };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);

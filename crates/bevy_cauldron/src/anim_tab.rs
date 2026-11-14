@@ -801,7 +801,30 @@ impl BenchState {
             names: self.names().into_iter().map(str::to_owned).collect(),
             selected: self.selected,
             all: self.view == View::All,
+            ..Default::default()
         }
+    }
+
+    /// **The cursor with the rigs already measured**, so `rig_check_all` can say which are left (E-002, #129 slice 32).
+    pub(crate) fn cursor_with(&self, reports: &crate::anim_watch::BenchReports) -> crate::ops_view::RigCursor {
+        let measured = self.names().into_iter().filter(|n| reports.by_rig.contains_key(*n)).map(str::to_owned).collect();
+        crate::ops_view::RigCursor { measured, ..self.cursor() }
+    }
+
+    /// **Take what `rig_check_all` answered**: queue the rigs it named for the watcher, show the project-wide summary and say
+    /// how many are being measured. The key and an agent's call both come through here, so the status line is the same.
+    /// A cursor that carries no check is left alone.
+    pub(crate) fn take_check(&mut self, cursor: &crate::ops_view::RigCursor, queue: &mut crate::anim_watch::MeasureQueue) {
+        if !cursor.check.made {
+            return;
+        }
+        for name in &cursor.check.queued {
+            queue.push_back_unique(name);
+        }
+        if self.view != View::All {
+            self.view = View::All;
+        }
+        self.status.note(crate::ops::rig_check_all::says(cursor.check.queued.len()));
     }
 
     /// **Whether the bench is already where an operation answered.** Compared first by the caller, because a write through
@@ -924,27 +947,36 @@ fn check_all_keys(
     mut bench: ResMut<BenchState>,
     mut queue: ResMut<crate::anim_watch::MeasureQueue>,
     reports: Res<crate::anim_watch::BenchReports>,
+    project: Option<Res<crate::project::Project>>,
 ) {
     if !crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::CheckAllRigs) {
         return;
     }
-    // Only what is unmeasured: reports persist for the session and the watcher re-measures on a
-    // real change, so a second C is an instant summary, not a rescan that says nothing new.
-    let missing: Vec<String> = bench
-        .names()
-        .iter()
-        .filter(|n| !reports.by_rig.contains_key(**n))
-        .map(|n| (*n).to_owned())
-        .collect();
-    for name in &missing {
-        queue.push_back_unique(name);
-    }
-    bench.view = View::All;
-    bench.status.note(if missing.is_empty() {
-        "all rigs measured".to_owned()
+    // **Through `rig_check_all`**, the operation an agent calls (E-002, #129 slice 32): which rigs are unmeasured, the summary
+    // face and the sentence are its. Only what is unmeasured: reports persist for the session and the watcher re-measures on a
+    // real change, so a second C is an instant summary, not a rescan that says nothing new. **A bench with no project has no
+    // log to write**, so it dispatches without one, as the camera does.
+    let root = project.as_deref().map(|p| p.root.clone());
+    let mut ctx = crate::ops::Ctx {
+        root: root.clone(),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View { rig: bench.cursor_with(&reports), ..Default::default() }),
+        ..crate::ops::Ctx::default()
+    };
+    let applied = if root.is_some() {
+        crate::ops::dispatch(&mut ctx, "rig_check_all", &serde_json::json!({}))
     } else {
-        format!("measuring {} rig(s)...", missing.len())
-    });
+        crate::ops::dispatch_repeat(&mut ctx, "rig_check_all", &serde_json::json!({}))
+    };
+    match applied {
+        Ok(crate::ops::Applied::Done { .. }) => {
+            if let Some(view) = ctx.view.take() {
+                bench.take_check(&view.rig, &mut queue);
+            }
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => bench.status.problem(e.0),
+    }
 }
 
 /// **The rig bench's ink, from the editor's skin** (UI-02, #210).

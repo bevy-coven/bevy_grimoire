@@ -61,6 +61,9 @@ const PINNED_NOWHERE: &[&str] = &[
     // Assumed owner exception (2026-11-12): the list grows by the two operations #129 slice 24 registers, the rig bench's
     // cursor and the Tiles page's, which a person's own view holds, like the picker's above.
     "rig_walk",
+    // Assumed owner exception (2026-11-13): the list grows by the operation #129 slice 32 registers, which shows the rig bench's
+    // project-wide summary and asks the watcher to measure: what a person's own view holds, like the rig bench's cursor above.
+    "rig_check_all",
     "tile_page_walk",
     // Assumed owner exception (2026-11-12): the list grows by the two operations #129 slice 25 registers, which of the candidate
     // list's groups are folded and which filter box has the keyboard, which a person's own view holds, like the picker's above.
@@ -71,6 +74,9 @@ const PINNED_NOWHERE: &[&str] = &[
     "stage_play",
     "stage_scrub",
     "stage_camera",
+    // Assumed owner exception (2026-11-13): the list grows by the operation #129 slice 33 registers, which reads the Meshes tab's
+    // pack directory again: the candidate list a person is looking at, like the lattice cursor below.
+    "kit_rescan",
     // Assumed owner exception (2026-11-13): the list grows by the operation #129 slice 27 registers, the lattice grid's cursor,
     // which a person's own view holds, like the picker's above.
     "lattice_cursor_step",

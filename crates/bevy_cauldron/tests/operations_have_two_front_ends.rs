@@ -255,7 +255,6 @@ const UNMIGRATED: &[Action] = &[
     Action::NextCandidate,
     Action::TypeId,
     Action::Accept,
-    Action::Rescan,
     Action::UndoTile,
     Action::RedoTile,
     Action::TileListPrev,
@@ -269,7 +268,6 @@ const UNMIGRATED: &[Action] = &[
     Action::DiscardAllSuggestions,
     Action::UndoBench,
     Action::RedoBench,
-    Action::CheckAllRigs,
 ];
 
 /// **The ratchet.** It is lowered in the same commit that migrates an action, and it is the only
@@ -314,7 +312,9 @@ const UNMIGRATED: &[Action] = &[
 // 52 -> 40: `BuildForward`, `BuildBack`, `BuildLeft`, `BuildRight`, `BuildUp`, `BuildDown`, `AlignForward`, `AlignBack`, `AlignLeft`, `AlignRight`, `BuildDrop` and `BuildSlot` -> `tile_member_nudge`, `tile_member_flush`, `tile_member_drop` and `tile_slot_drop` (E-002, #129 slice 29): the arrows and `[` and `]` nudge the focused member along its ladder, Shift with an arrow puts it flush, Enter drops the picked piece and the hole key drops a hole, through the operations an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the twelve from the `Camera` set for the same reason; nothing is skipped.
 // 40 -> 38: `UndoBuild` and `RedoBuild` -> `tile_history_step` (E-002, #129 slice 30): `Cmd+Z` and `Cmd+Shift+Z` on the Tiles tab step the draft's own history back and forward through the operation an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the two from the `World` set for the same reason; nothing is skipped.
 // 38 -> 32: `PanForward`, `PanBack`, `PanLeft`, `PanRight`, `TurnViewLeft` and `TurnViewRight` -> `camera_pan` and `camera_turn` (E-002, #129 slice 31): `W`, `A`, `S` and `D` pan the Map view along the screen's axes, held, and `Q` and `E` turn it a quarter, through the operations an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the six from the `Camera` set for the same reason; nothing is skipped.
-const UNMIGRATED_MAX: usize = 32;
+// 32 -> 31: `CheckAllRigs` -> `rig_check_all` (E-002, #129 slice 32): `C` on the Anim tab shows the project-wide summary and asks the watcher to measure the rigs with no report, through the operation an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `CheckAllRigs` from the `World` set for the same reason; nothing is skipped.
+// 31 -> 30: `Rescan` -> `kit_rescan` (E-002, #129 slice 33): `R` on the Meshes tab reads the pack's directory again through the operation an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `Rescan` from the `World` set for the same reason; nothing is skipped.
+const UNMIGRATED_MAX: usize = 30;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///
@@ -650,8 +650,8 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     assert_eq!(
         world,
         [
-            "Undo", "Redo", "Rescan", "UndoTile", "RedoTile", "SuggestLabels",
-            "SuggestAll", "DiscardAllSuggestions", "UndoBench", "RedoBench", "CheckAllRigs",
+            "Undo", "Redo", "UndoTile", "RedoTile", "SuggestLabels",
+            "SuggestAll", "DiscardAllSuggestions", "UndoBench", "RedoBench",
         ],
         "the `World` set changed. A verb belongs here when its handler takes `Commands`, an \
          `AssetServer` or a `Query` — `Ctx` cannot carry those, so the operation would need a different \

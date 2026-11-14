@@ -4178,6 +4178,128 @@ pub mod camera {
     }
 }
 
+/// **Check every rig on the bench**, as `C` does on the Anim tab (E-002, #129 slice 32): show the project-wide summary and ask
+/// the watcher to measure each rig that has no measurement yet. Reports persist for the session and the watcher re-measures on a
+/// real change, so only what is unmeasured is queued, and a second check is an instant summary. What a person is looking at (the
+/// summary face) and a request to the watcher; nothing is written to `rigs.yaml` and no undo step is taken.
+pub mod rig_check_all {
+    use super::list_walk::need_view;
+    use super::*;
+    use serde_json::json;
+
+    /// **The sentence for a check**: what the key has always said, written once for the operation's answer and the status line.
+    pub fn says(queued: usize) -> String {
+        if queued == 0 { "all rigs measured".to_owned() } else { format!("measuring {queued} rig(s)...") }
+    }
+
+    pub struct RigCheckAll;
+
+    impl RigCheckAll {
+        /// The rigs with no measurement yet, in manifest order: the rule, one copy for plan and commit.
+        fn unmeasured(ctx: &Ctx, params: &serde_json::Value) -> Result<Vec<String>, Refusal> {
+            match params {
+                serde_json::Value::Null => {}
+                serde_json::Value::Object(o) if o.is_empty() => {}
+                _ => return Err(Refusal::new("these are not a check: it takes no fields. Every rig on the bench is what it checks.")),
+            }
+            let rigs = &need_view(ctx, "check")?.rig;
+            Ok(rigs.names.iter().filter(|n| !rigs.measured.contains(n)).cloned().collect())
+        }
+    }
+
+    impl Operation for RigCheckAll {
+        fn name(&self) -> &'static str {
+            "rig_check_all"
+        }
+        fn changes_view(&self) -> bool {
+            true
+        }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::Nowhere
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &[]
+        }
+        fn undo(&self) -> Undo {
+            Undo::None
+        }
+        fn schema(&self) -> serde_json::Value {
+            json!({"type": "object", "additionalProperties": false, "properties": {}})
+        }
+        fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+            Ok(json!({ "queued": Self::unmeasured(ctx, params)? }))
+        }
+        fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+            let queued = Self::unmeasured(ctx, params)?;
+            let Some(view) = ctx.view.as_mut() else {
+                return Err(Refusal::new("no view is in hand, so there is no rig bench to check."));
+            };
+            view.rig.all = true;
+            view.rig.check = crate::ops_view::CheckAnswer { made: true, queued: queued.clone() };
+            Ok(Outcome { summary: says(queued.len()), affected: 0, saved: false, inverse: None, after: Some(json!({ "queued": queued })) })
+        }
+    }
+}
+
+/// **Rescan the kit's mesh directory**, as `R` does on the Meshes tab (E-002, #129 slice 33): meshes arrive while the editor is
+/// open, and an importer that only sees what was on disk at launch is one you have to restart to use. The operation answers
+/// that a scan is asked for and the front end reads the directory; what comes back is the tab's candidate list, which is what a
+/// person is looking at. It writes no file and takes no undo step.
+pub mod kit_rescan {
+    use super::list_walk::need_view;
+    use super::*;
+    use serde_json::json;
+
+    pub struct KitRescan;
+
+    impl KitRescan {
+        fn check(ctx: &Ctx, params: &serde_json::Value) -> Result<(), Refusal> {
+            match params {
+                serde_json::Value::Null => {}
+                serde_json::Value::Object(o) if o.is_empty() => {}
+                _ => return Err(Refusal::new("these are not a rescan: it takes no fields. The open project's mesh directory is what it reads.")),
+            }
+            need_view(ctx, "rescan")?;
+            if ctx.project.is_none() {
+                return Err(Refusal::new("no project is open, so there is no mesh directory to rescan."));
+            }
+            Ok(())
+        }
+    }
+
+    impl Operation for KitRescan {
+        fn name(&self) -> &'static str {
+            "kit_rescan"
+        }
+        fn changes_view(&self) -> bool {
+            true
+        }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::Nowhere
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &[]
+        }
+        fn undo(&self) -> Undo {
+            Undo::None
+        }
+        fn schema(&self) -> serde_json::Value {
+            json!({"type": "object", "additionalProperties": false, "properties": {}})
+        }
+        fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+            Self::check(ctx, params)?;
+            Ok(json!({ "rescan": true }))
+        }
+        fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+            Self::check(ctx, params)?;
+            if let Some(view) = ctx.view.as_mut() {
+                view.rescan = true;
+            }
+            Ok(Outcome { summary: "the mesh directory is read again".to_owned(), affected: 0, saved: false, inverse: None, after: Some(json!({ "rescan": true })) })
+        }
+    }
+}
+
 /// **The lattice grid's cursor, stepped** (E-002, #129 slice 27): `F`, `H`, `T` and `G` step the selected cell along a
 /// layer and `[` and `]` step the layer the grid shows, on the Meshes tab. One view operation for the six keys, on the rules
 /// the keys always had: a step stops at the grid's edges, the cursor rides the layer instead of being dropped by it, and a
@@ -7291,6 +7413,8 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(stage::stage_camera::StageCamera),
         Box::new(camera::camera_pan::CameraPan),
         Box::new(camera::camera_turn::CameraTurn),
+        Box::new(rig_check_all::RigCheckAll),
+        Box::new(kit_rescan::KitRescan),
         Box::new(lattice_cursor_step::LatticeCursorStep),
         Box::new(tile_hand::tile_hand_arm::TileHandArm),
         Box::new(tile_hand::tile_member_focus::TileMemberFocus),
@@ -7590,6 +7714,10 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // through `view::drive`.
     ("camera_pan", "\"camera_pan\""),
     ("camera_turn", "\"camera_turn\""),
+    // **The Anim tab's check key** (E-002, #129 slice 32): `C` dispatches `rig_check_all`, through `anim_tab::check_all_keys`.
+    ("rig_check_all", "\"rig_check_all\""),
+    // **The Meshes tab's rescan key** (E-002, #129 slice 33): `R` dispatches `kit_rescan`, through `tiles::rescan_key`.
+    ("kit_rescan", "\"kit_rescan\""),
     // **The lattice grid's cursor keys** (E-002, #129 slice 27): `F`, `H`, `T`, `G`, `[` and `]` dispatch `lattice_cursor_step`,
     // through `tiles::lattice_keys`.
     ("lattice_cursor_step", "\"lattice_cursor_step\""),
