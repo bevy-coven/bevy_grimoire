@@ -32,7 +32,9 @@ Everything is committed before the first run, in this repository, at the commits
 |---|---|---|
 | The game's style | `games/sample/design/style.md` | `925031b34` |
 | The courtyard level's style | `games/sample/design/levels/courtyard/style.md` | `925031b34` |
-| The three tasks, their checks and the two arms | `games/sample/bench/tasks/` | `ec8642dd3` |
+| The three tasks, their checks and the two arms | `games/sample/bench/tasks/` | `ec8642dd3`; the greeting task revised in `ea179c404` |
+| The runner's `file_value` `contains` and `lacks` | `crates/bevy_cauldron_bench/src/check.rs` | `b24c045b1` |
+| The analysis script | `docs/research/2026-11-14-style-helps-an-agent-analyse.py` | the commit that adds this revision of this file |
 | The market library, its vocabulary and the two data files the tasks edit | `games/sample/bench/fixture/` | `ec8642dd3` |
 | This pre-registration | `docs/research/2026-11-14-style-helps-an-agent.md` | the commit that adds this file; the report records its SHA |
 
@@ -193,7 +195,7 @@ Also in the report, from the runner: tokens, cost, wall time, tool calls, refusa
 
 These are measured, on 2026-11-14, on a macOS host, with no model.
 
-**Proved (no model, a real editor), at the revised suite:**
+**Proved (no model):**
 
 - **At the first draft's suite (`ec8642dd3`), with a real editor on a macOS host:** `cauldron-bench run --project games/sample --suite games/sample/bench/tasks --agent nothing` failed all three tasks (5 of 11, 1 of 11 and 0 of 7 checks held), `--agent oracle` passed all three (11 of 11, 11 of 11, 7 of 7), and `--agent oracle` under each `--variant` passed 3 of 3, with `tools_offered` holding `grimoire_style` in the with-style trial (28 tools) and not in the without-style one (27), and `design/` on disk in the with-style copy only. The market and light tasks and the arms have not changed since.
 - **At the revised suite, with no editor** (the new test `the_greeting_task_is_scored_on_the_saved_leaf` loads the real greeting task and grades a trial copy laid out as the runner lays it): a greeting never written fails the three Do lines and satisfies the three Don't lines; a good greeting satisfies all six whatever the hand-back says, even one that names every forbidden word; a bad greeting fails all six even when the hand-back states every Do word. Failing first on the task as it was.
