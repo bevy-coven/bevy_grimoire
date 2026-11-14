@@ -203,13 +203,22 @@ fn left_and_the_arrows_and_an_agent_walk_the_candidate_list_through_operations()
     assert_eq!(last.1["params"], json!({"by": "next", "rows": 5}), "{:?}", last);
 }
 
-/// **A held key walks every repeat and writes one line**: the press is the change and the repeats are it continuing.
+/// **A held key walks every repeat and writes one line**: the press is the change and the repeats are it continuing. The hold goes
+/// further than the one row a single press goes (so the repeats did walk), and the repeats leave no line of their own.
 #[test]
 fn a_held_arrow_walks_the_candidates_and_logs_one_line() {
+    // One press, for the row a first press alone reaches.
+    let mut single = editor("single", Mode::Meshes, true);
+    let start = cursor(&single);
+    tap(&mut single, &[], down());
+    let one_row = cursor(&single);
+    assert_ne!(one_row, start, "a press walks one row");
+    assert_eq!(logged(&single, "shelf_walk").len(), 1);
+
     let mut app = editor("held", Mode::Meshes, true);
-    let start = cursor(&app);
+    assert_eq!(cursor(&app), start, "both editors begin on the same row");
     send(&mut app, down(), ButtonState::Pressed);
-    for _ in 0..8 {
+    for _ in 0..16 {
         std::thread::sleep(std::time::Duration::from_millis(30));
         app.update();
     }
@@ -217,6 +226,7 @@ fn a_held_arrow_walks_the_candidates_and_logs_one_line() {
     app.update();
     app.update();
     assert_ne!(cursor(&app), start, "a held arrow walks");
+    assert_ne!(cursor(&app), one_row, "a held arrow walks further than the first press alone: the repeats walked");
     let walk = logged(&app, "shelf_walk");
     assert_eq!(walk.len(), 1, "one hold, one logged line however many rows it walked: {walk:?}");
     assert_eq!(walk[0].0, "human", "{:?}", walk[0]);

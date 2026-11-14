@@ -202,6 +202,17 @@ impl ShelfCursor {
     }
 }
 
+/// **Which shelf list has the arrows** (E-002, #129 slice 37): an enum and not an `Option<Option<String>>`, because serde reads a
+/// `null` as the outer `None`, so the nested form would not survive a round trip.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShelfHand {
+    /// The candidates have the arrows, and no library piece is selected.
+    Candidates,
+    /// The library has the arrows, with this piece selected.
+    Library(String),
+}
+
 /// **What a shelf operation answers** (E-002, #129 slice 37), carried out by `tiles::take_shelf` for a key, a chip and an agent.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -209,9 +220,9 @@ pub struct ShelfAnswer {
     /// Whether an operation answered with a change at all.
     #[serde(default)]
     pub made: bool,
-    /// Which list has the arrows after it: `Some(None)` the candidates, `Some(Some(id))` the library with this piece selected.
+    /// Which list has the arrows after it, when the answer changes that.
     #[serde(default)]
-    pub library: Option<Option<String>>,
+    pub hand: Option<ShelfHand>,
     /// The candidate row the cursor goes to.
     #[serde(default)]
     pub row: Option<ShelfRow>,
@@ -222,6 +233,16 @@ pub struct ShelfAnswer {
     /// selection says it itself.
     #[serde(default)]
     pub say: bool,
+}
+
+impl ShelfAnswer {
+    /// The library piece the answer selects, if it does.
+    pub fn selects(&self) -> Option<&str> {
+        match &self.hand {
+            Some(ShelfHand::Library(id)) => Some(id),
+            _ => None,
+        }
+    }
 }
 
 /// **What a Tiles-page operation answers** (E-002, #129 slice 36): `tile_page_enter`, `tile_page_leave`, `tile_open`, `tile_close` and
@@ -809,6 +830,17 @@ mod tests {
         };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);
+    }
+
+    /// **A shelf answer survives a round trip in each of its forms**, the candidates' hand included (a nested `Option` reads its
+    /// `null` back as the outer `None`, which is why the hand is an enum).
+    #[test]
+    fn a_shelf_answer_round_trips_through_json() {
+        for hand in [None, Some(ShelfHand::Candidates), Some(ShelfHand::Library("floor".to_owned()))] {
+            let answer = ShelfAnswer { made: true, hand, row: Some(ShelfRow::Excluded), clear_pack: true, say: true };
+            let text = serde_json::to_string(&answer).unwrap();
+            assert_eq!(serde_json::from_str::<ShelfAnswer>(&text).unwrap(), answer, "{text}");
+        }
     }
 
     /// **The journal toggles, and says which way it went.**

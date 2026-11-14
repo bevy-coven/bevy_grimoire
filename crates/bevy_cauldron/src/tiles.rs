@@ -6913,10 +6913,10 @@ pub(crate) fn take_shelf(
     source: crate::ops::Source,
 ) {
     if answer.made {
-        match &answer.library {
-            Some(Some(id)) if tiles_tab => state.selected_library_id = Some(id.clone()),
-            Some(Some(id)) => crate::editor::select_piece_as(state, project, id, source),
-            Some(None) => state.selected_library_id = None,
+        match &answer.hand {
+            Some(crate::ops_view::ShelfHand::Library(id)) if tiles_tab => state.selected_library_id = Some(id.clone()),
+            Some(crate::ops_view::ShelfHand::Library(id)) => crate::editor::select_piece_as(state, project, id, source),
+            Some(crate::ops_view::ShelfHand::Candidates) => state.selected_library_id = None,
             None => {}
         }
         if let Some(row) = &answer.row {

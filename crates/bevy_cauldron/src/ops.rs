@@ -3718,7 +3718,7 @@ pub mod shelf_cursors {
     /// of where `right` lands.
     pub mod shelf {
         use super::*;
-        use crate::ops_view::{ShelfAnswer, ShelfCursor};
+        use crate::ops_view::{ShelfAnswer, ShelfCursor, ShelfHand};
 
         /// **What a walk says when the library has nothing to land on**, as a note: guidance, not a refusal.
         pub const LIBRARY_EMPTY_NOTE: &str = "the library is empty";
@@ -3765,7 +3765,7 @@ pub mod shelf_cursors {
         /// selection says it through `piece_select`.
         pub fn selects(shelf: &ShelfCursor, id: &str) -> (ShelfAnswer, String) {
             (
-                ShelfAnswer { made: true, library: Some(Some(id.to_owned())), say: shelf.tiles_tab, ..ShelfAnswer::default() },
+                ShelfAnswer { made: true, hand: Some(ShelfHand::Library(id.to_owned())), say: shelf.tiles_tab, ..ShelfAnswer::default() },
                 selected_says(id),
             )
         }
@@ -3775,7 +3775,7 @@ pub mod shelf_cursors {
             let Some(view) = ctx.view.as_mut() else {
                 return Err(Refusal::new("no view is in hand, so there is no shelf to change."));
             };
-            let after = json!({ "selected": answer.library.clone().flatten(), "row": answer.row.clone() });
+            let after = json!({ "selected": answer.selects(), "row": answer.row.clone() });
             view.shelf.answer = answer;
             Ok(Outcome { summary, affected: 0, saved: false, inverse: None, after: Some(after) })
         }
@@ -3785,7 +3785,7 @@ pub mod shelf_cursors {
     pub mod shelf_focus {
         use super::shelf::{LIBRARY_EMPTY_NOTE, NOTHING_TO_WALK, landing, nothing, settle, shelf_in};
         use super::*;
-        use crate::ops_view::ShelfAnswer;
+        use crate::ops_view::{ShelfAnswer, ShelfHand};
 
         /// The two lists an agent names, beside the schema so the parse and the schema cannot disagree.
         pub const LISTS: &[&str] = &["candidates", "library"];
@@ -3811,7 +3811,7 @@ pub mod shelf_cursors {
                         } else {
                             "candidates".to_owned()
                         };
-                        Ok((ShelfAnswer { made: true, library: Some(None), say: true, ..ShelfAnswer::default() }, said))
+                        Ok((ShelfAnswer { made: true, hand: Some(ShelfHand::Candidates), say: true, ..ShelfAnswer::default() }, said))
                     }
                     "library" => match landing(shelf) {
                         // **Arriving on the library is a selection only when none is made**: the seed is the arrival, and a selection
@@ -3819,7 +3819,7 @@ pub mod shelf_cursors {
                         Some(land) => Ok((
                             ShelfAnswer {
                                 made: true,
-                                library: shelf.selected.is_none().then_some(Some(land)),
+                                hand: shelf.selected.is_none().then_some(ShelfHand::Library(land)),
                                 clear_pack: true,
                                 say: true,
                                 ..ShelfAnswer::default()
@@ -3861,7 +3861,7 @@ pub mod shelf_cursors {
             }
             fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
                 let (answer, said) = Self::decide(ctx, params)?;
-                Ok(json!({ "says": said, "selects": answer.library.clone().flatten() }))
+                Ok(json!({ "says": said, "selects": answer.selects() }))
             }
             fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
                 let (answer, said) = Self::decide(ctx, params)?;
@@ -3950,8 +3950,13 @@ pub mod shelf_cursors {
             fn changes_view(&self) -> bool {
                 true
             }
-            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
-                Shown::Nowhere
+            /// A walk that lands on a library piece moves the shelf's highlighted row and the detail pane to it; a walk of the
+            /// candidates, or one with no view to read, has no piece to name.
+            fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+                match Self::decide(ctx, params) {
+                    Ok((answer, _)) => answer.selects().map_or(Shown::Nowhere, |id| Shown::Piece { id: id.to_owned() }),
+                    Err(_) => Shown::Nowhere,
+                }
             }
             fn writes(&self) -> &'static [&'static str] {
                 &[]
@@ -3972,7 +3977,7 @@ pub mod shelf_cursors {
             }
             fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
                 let (answer, said) = Self::decide(ctx, params)?;
-                Ok(json!({ "says": said, "selects": answer.library.clone().flatten() }))
+                Ok(json!({ "says": said, "selects": answer.selects() }))
             }
             fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
                 let (answer, said) = Self::decide(ctx, params)?;
