@@ -985,6 +985,13 @@ pub fn run(options: &Options, held_out: Option<&Path>) -> Result<Vec<TrialRecord
     }
     std::fs::create_dir_all(&options.out)
         .map_err(|e| format!("{}: {e}", options.out.display()))?;
+    // **A killed run's credential directories are swept before this one starts** (#433): the guards are `Drop`s, which
+    // `kill -KILL` never runs. Other runs' directories only when they are older than any trial can run (a run in
+    // progress keeps its own), and this run's own directory whatever its age.
+    if let Some(state) = options.out.parent() {
+        sweep_stale_secrets(state, Duration::from_secs(STALE_SECRETS_AGE_S));
+    }
+    sweep_run_dir(&options.out, Duration::ZERO);
     // **One real turn before any trial** (#432, D2): a model the host lists can still have a provider with no
     // quota left or a key that is refused, and finding that out trial by trial costs 35 s each, for every
     // trial of the run. The turn runs in the same kind of isolated HOME a trial uses, with the same credential.
@@ -1068,7 +1075,7 @@ pub fn run_work(
             .map(|_| {
                 scope.spawn(|| {
                     loop {
-                        if stopped.load(SeqCst) {
+                        if stopped.load(SeqCst) || interrupted() {
                             return;
                         }
                         let i = next.fetch_add(1, SeqCst);
@@ -1100,7 +1107,8 @@ pub fn run_work(
         return Err("a trial's worker panicked".to_owned());
     }
     let mut finished = finished.into_inner().map_err(|_| "a trial's records were poisoned".to_owned())?;
-    if stopped.load(SeqCst) {
+    let was_interrupted = interrupted();
+    if stopped.load(SeqCst) || was_interrupted {
         let why = last_refusal
             .into_inner()
             .map_err(|_| "a trial's records were poisoned".to_owned())?
@@ -1108,10 +1116,14 @@ pub fn run_work(
         let started: std::collections::BTreeSet<usize> = finished.iter().map(|(i, _)| *i).collect();
         for (i, (task, label, trial)) in work.iter().enumerate() {
             if !started.contains(&i) {
-                let reason = format!(
-                    "not run: the run was stopped after {PROVIDER_REFUSALS_MAX} consecutive provider refusals, so this \
-                     trial was never started. The last refusal: {why}"
-                );
+                let reason = if was_interrupted {
+                    "not run: the run was interrupted (SIGINT or SIGTERM), so this trial was never started".to_owned()
+                } else {
+                    format!(
+                        "not run: the run was stopped after {PROVIDER_REFUSALS_MAX} consecutive provider refusals, so this \
+                         trial was never started. The last refusal: {why}"
+                    )
+                };
                 finished.push((i, not_run(task, label, *trial, reason)));
             }
         }
@@ -1352,6 +1364,10 @@ pub fn wait_within(
                 break;
             }
             Ok(None) => {
+                if interrupted() {
+                    stop_group(&mut child);
+                    return Err("the run was interrupted (SIGINT or SIGTERM), so this trial was stopped".to_owned());
+                }
                 if let Some(reason) = editor_gone() {
                     stop_group(&mut child);
                     return Err(reason);
@@ -2489,3 +2505,71 @@ pub fn record_json(record: &TrialRecord, task: &Task, sentence: &str) -> Value {
     }
     value
 }
+
+/// **How old a trial's credential directory must be before another run sweeps it**, seconds: longer than any trial runs
+/// (a task's wall budget is minutes), so a run in progress under another `--run` keeps its own.
+pub const STALE_SECRETS_AGE_S: u64 = 3600;
+
+/// **Delete the credential directories a dead run left**, `<state>/<run>/preflight` and
+/// `<state>/<run>/<task>/trial-<n>/{home,claude-config}`, that were last modified `older_than` ago or earlier, and
+/// answer how many were removed (#433). `kill -KILL` never runs the [`TrialSecrets`] guards; the next run does this.
+pub fn sweep_stale_secrets(state: &Path, older_than: Duration) -> usize {
+    let Ok(runs) = std::fs::read_dir(state) else {
+        return 0;
+    };
+    runs.flatten().filter(|run| run.path().is_dir()).map(|run| sweep_run_dir(&run.path(), older_than)).sum()
+}
+
+/// **[`sweep_stale_secrets`] for one run's directory.**
+fn sweep_run_dir(run: &Path, older_than: Duration) -> usize {
+    let stale = |path: &Path| {
+        path.is_dir()
+            && (older_than.is_zero()
+                || std::fs::metadata(path)
+                    .and_then(|m| m.modified())
+                    .is_ok_and(|modified| modified.elapsed().is_ok_and(|age| age >= older_than)))
+    };
+    let mut candidates = vec![run.join(PREFLIGHT_DIR)];
+    for task in std::fs::read_dir(run).into_iter().flatten().flatten().filter(|t| t.path().is_dir()) {
+        for trial in std::fs::read_dir(task.path()).into_iter().flatten().flatten() {
+            if trial.file_name().to_string_lossy().starts_with("trial-") {
+                candidates.push(trial.path().join("home"));
+                candidates.push(trial.path().join("claude-config"));
+            }
+        }
+    }
+    candidates.iter().filter(|path| stale(path) && std::fs::remove_dir_all(path).is_ok()).count()
+}
+
+/// **Whether SIGINT or SIGTERM has arrived** since [`install_interrupt_handler`] (#433).
+static INTERRUPTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// **Has the run been told to stop?** Workers take no further trial, a waiting agent's process group is killed, and the
+/// run unwinds through its guards, so no credential directory is left by a Ctrl-C.
+pub fn interrupted() -> bool {
+    INTERRUPTED.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// **The handler: it only sets the flag**, which is all a signal handler may safely do.
+#[cfg(unix)]
+extern "C" fn note_interrupt(_signal: libc::c_int) {
+    INTERRUPTED.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// **Make SIGINT and SIGTERM stop the run through its guards instead of ending the process** (#433).
+///
+/// Rust's default for both ends the process without running `Drop`, so a Ctrl-C used to leave every trial's
+/// credential directory behind. `kill -KILL` cannot be caught; [`sweep_stale_secrets`] cleans up after that.
+#[cfg(unix)]
+pub fn install_interrupt_handler() {
+    let handler = note_interrupt as extern "C" fn(libc::c_int) as libc::sighandler_t;
+    // SAFETY: `signal` with a handler that only stores to an atomic, which is async-signal-safe.
+    unsafe {
+        libc::signal(libc::SIGINT, handler);
+        libc::signal(libc::SIGTERM, handler);
+    }
+}
+
+/// **No signal handling off Unix**: the default stands.
+#[cfg(not(unix))]
+pub fn install_interrupt_handler() {}

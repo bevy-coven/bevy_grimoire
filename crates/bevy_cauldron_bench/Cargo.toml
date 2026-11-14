@@ -28,10 +28,10 @@ sha2.workspace = true
 # the same protocol to the same door, so this is the same client rather than a second dialect of it.
 ureq = { version = "3", features = ["json"] }
 
-# **Linux only, and for one call**: `detach` marks a child's inherited descriptors close-on-exec and asks the
+# **Unix only** (Linux for `detach`, any Unix for the interrupt handler, #433): `detach` marks a child's inherited descriptors close-on-exec and asks the
 # kernel to signal it when the harness dies (`close_range`, `prctl`). `libc` is already in `Cargo.lock` through Bevy's
 # graph, so this adds an edge and no crate.
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
 [[bin]]
