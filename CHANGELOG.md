@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-14
+
+- **sg-07-agents-write-style** `ed399cfa8919c15ac5ef56a5c83acd93a016eeaf` An agent changes a level's or area's style by style_edit (small exact edits, logged, undoable, followed to the Design page), and proposes a change to the game's or a region's style as a STYLE row you keep or discard *No clip: visible, not yet recorded: fleet worker*
+
 ## 2026-11-13
 
 - **sg-05-design-workspace** `edb097b97` The Design workspace (Cmd/Ctrl+0): the game style as a tree, a rendered page with its pictures, and the place board as cards *No clip: visible, not yet recorded: fleet worker*
