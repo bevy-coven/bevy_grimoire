@@ -369,7 +369,12 @@ python3 tools/release/bench_gate.py check --version "$(python3 tools/loop/versio
 git add docs/bench && git commit -m "docs(bench): the benchmark run for <version>"
 ```
 
-(`--label` publishes `docs/bench/runs/<date>-release-<version>.md` and `.json`.) Run it on a clean tree at
+(`--label` publishes `docs/bench/runs/<date>-release-<version>.md` and `.json`.) **The first run on this
+repository is the baseline**: with no `*-baseline` report committed, `--label release-<version>` is refused
+(there is nothing to compare it with), so that run is made with `--label baseline` (BM-04) and committed first;
+a report that is itself the baseline passes. The previous report must have the same agent, model and trial
+count as this one (only the suite may differ), so a baseline made with another agent or model is refused,
+not compared. Run it on a clean tree at
 the commit to be released, so the header names a commit and not `+dirty`; the bump commit that follows
 changes only the manifest and `Cargo.lock`. A held-out directory that is missing is a refusal, not a
 shorter run.

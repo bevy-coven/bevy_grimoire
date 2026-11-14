@@ -57,8 +57,9 @@ jobs:
       # **A release needs a benchmark run, and a regression stops it** (BM-05, #415): a published release is refused unless a
       # report committed under docs/bench/runs/ is for the code being released and its comparison with the previous release's
       # report is not `worse`. It reads the committed report; the run itself happens where an editor can open a window
-      # (docs/loop/RUNNING-A-LOOP.md). Before the signing and the build, so a refused release costs seconds. An ad-hoc build
-      # is never published and proves the build only, so it skips this.
+      # (docs/loop/RUNNING-A-LOOP.md). Before the signing, the notarization and the app build, so a refused release costs only
+      # the small `cauldron-bench` build (no editor), not the hours of the signed app. An ad-hoc build is never published and
+      # proves the build only, so it skips this.
       - name: The benchmark gate
         if: github.event_name == 'push' || inputs.publish
         env:
