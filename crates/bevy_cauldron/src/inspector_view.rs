@@ -124,7 +124,7 @@ fn spawn_the_block(commands: &mut Commands, pane: Entity, view: Entity) {
         .spawn((
             PoseBlock,
             Name::new("pose block"),
-            Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+            bevy_gooey::column(crate::chrome::GAP_TIGHT_STEPS),
         ))
         .with_children(|block| {
             crate::chrome::list_heading(block, "POSE");
