@@ -741,24 +741,26 @@ fn map_card(grid: &mut ChildSpawner, map: &MapEntry, picture: Option<ImageNode>,
         MapSummary::Read { placements, stamps, bounds, bash, .. } => {
             let open = name.clone();
             grid.spawn((
-                node,
-                // CHROME-OK: a map card is none of chrome's three clickables, it is a gooey button's skeleton holding a picture (bevy_gooey#41)
-                bevy::ui_widgets::Button,
-                Role::Button,
-                bevy::picking::hover::Hovered::default(),
-                bevy::ui::auto_directional_navigation::AutoDirectionalNavigation::default(),
+                // CHROME-OK: a map card is none of chrome's three clickables, it is a gooey button's box holding a picture (bevy_gooey#41)
+                launcher::card_button(),
                 ContextMenu(menu),
                 MapCard(name.clone()),
                 observe(move |_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::OpenMap(open.clone())); }),
             ))
             .with_children(|card| {
                 if let Some(picture) = picture {
-                    card.spawn(launcher::thumb_box(picture.image.clone())).insert(picture);
+                    card.spawn(launcher::thumb_box(picture.image.clone())).insert((picture, launcher::card_line()));
                 }
-                card.spawn((Text::new(name.clone()), Role::ButtonText, Pickable::IGNORE));
-                card.spawn((launcher::quiet(size_in_metres(*bounds)), Pickable::IGNORE));
+                card.spawn((Text::new(name.clone()), Role::ButtonText, launcher::card_line(), Pickable::IGNORE));
+                card.spawn((launcher::quiet(size_in_metres(*bounds)), Role::Sized, launcher::card_line(), Pickable::IGNORE));
                 let pieces = placements + stamps;
-                card.spawn((launcher::quiet(if pieces == 0 { "Empty".to_owned() } else { format!("{pieces} {} placed", plural(pieces, "piece")) }), Pickable::IGNORE));
+                // Every line but the last leaves `card_line`'s room below it, so the last is the one with nothing after it.
+                let (pieces_line, last) = (if pieces == 0 { "Empty".to_owned() } else { format!("{pieces} {} placed", plural(pieces, "piece")) }, bash.is_none());
+                if last {
+                    card.spawn((launcher::quiet(pieces_line), Pickable::IGNORE));
+                } else {
+                    card.spawn((launcher::quiet(pieces_line), Role::Sized, launcher::card_line(), Pickable::IGNORE));
+                }
                 if let Some(bash) = bash {
                     card.spawn((launcher::quiet(format!("Pieces from {bash}")), Pickable::IGNORE));
                 }
@@ -772,12 +774,10 @@ fn kit_row(rows: &mut ChildSpawner, kit: &Kit, is_default: bool, menu: Entity) {
     let label_text = kit.label.clone();
     let open = kit.label.clone();
     rows.spawn((
-        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_GROUP), padding: UiRect::all(Val::Px(crate::chrome::GAP_ROW)), ..default() },
-        // CHROME-OK: a kit row is none of chrome's three clickables, it is a gooey button's skeleton with a count and a badge
-        bevy::ui_widgets::Button,
-        Role::Button,
-        bevy::picking::hover::Hovered::default(),
-        bevy::ui::auto_directional_navigation::AutoDirectionalNavigation::default(),
+        // CHROME-OK: a kit row is none of chrome's three clickables, it is a gooey button's box with a count and a badge: the button's skin pads it and puts its half gap between its
+        // parts, as it did the raw node (the gap and padding the node asked for were overwritten).
+        bevy_gooey::button_box(),
+        bevy_gooey::RowLayout { align: Some(AlignItems::Center), ..default() },
         ContextMenu(menu),
         KitRow(label_text.clone()),
         observe(move |_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::OpenKit(open.clone())); }),

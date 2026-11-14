@@ -33,7 +33,6 @@ use bevy::image::{CompressedImageFormats, ImageSampler, ImageType};
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::ui::Selected;
-use bevy::ui::auto_directional_navigation::AutoDirectionalNavigation;
 use bevy_gooey::{
     Activate, ContextMenu, ContextTarget, Role, SplitAxis, SplitFraction, SplitMin, TextHint, ToastAction, ValueChange, button, context_menu,
     fuzzy_score, heading, label, menu_item, observe, screen, separator, split, text_input, toast, toast_alert,
@@ -520,7 +519,23 @@ fn paint_the_quiet_lines(skin: Option<Res<bevy_gooey::GooeySkin>>, mut lines: Qu
     }
 }
 
-/// A card's box: its width, padding and the gap between its lines.
+/// A card that is a button (#260): gooey's button box in a column, a card wide. The padding is the button skin's (a card was always padded by it: the 12 px its raw node asked for
+/// was overwritten, measured 9 x 3.6 px), and a button's role writes a gap along its row only, so a card's lines stand `STEP_TIGHT` apart by a bottom margin on each line above
+/// the last ([`card_line`]).
+pub(crate) fn card_button() -> impl Bundle {
+    (
+        bevy_gooey::button_box(),
+        bevy_gooey::RowLayout { direction: Some(FlexDirection::Column), align: Some(AlignItems::Stretch), ..default() },
+        bevy_gooey::Sizing { width: Some(bevy_gooey::Extent::Px(CARD_PX)), ..default() },
+    )
+}
+
+/// The room a card's line leaves before the next one (what `row_gap` was when the card was a raw column).
+pub(crate) fn card_line() -> bevy_gooey::Spacing {
+    crate::chrome::spacing(crate::chrome::margin_bottom(crate::chrome::STEP_TIGHT))
+}
+
+/// A card's box on a card that is not a button: its width, padding and the gap between its lines.
 pub(crate) fn card_node() -> Node {
     Node { flex_direction: FlexDirection::Column, width: Val::Px(CARD_PX), padding: UiRect::all(Val::Px(crate::chrome::PAD)), row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }
 }
@@ -996,14 +1011,9 @@ fn project_card(grid: &mut ChildSpawnerCommands, row: &Listed, art: &mut Art) {
     let when = format!("Opened {}", ago(row.project.last_opened, art.now));
     let key = card_key(&path);
     grid.spawn((
-        card_node(),
-        // CHROME-OK: a card is none of chrome's three clickables, it is a gooey button's skeleton holding a picture (bevy_gooey#41)
-        bevy::ui_widgets::Button,
-        Role::Button,
-        Hovered::default(),
-        // FOCUS-DECISION-REOPENED: a card is a button like gooey's own (which carry a `TabIndex` too), reached by Tab and the arrows on a screen no editor chord routes
-        bevy::input_focus::tab_navigation::TabIndex(0),
-        AutoDirectionalNavigation::default(),
+        // CHROME-OK: a card is none of chrome's three clickables, it is a gooey button's box holding a picture (bevy_gooey#41)
+        // FOCUS-DECISION-REOPENED: a card is a button like gooey's own, reached by Tab and the arrows (`button_box` is a tab stop) on a screen no editor chord routes
+        card_button(),
         ContextMenu(art.menu),
         ProjectCard { path: path.clone(), key },
         // **A card is drawn a little smaller under the press** (UI-R04, #334), as gooey's own card cells are: a card here is a button
@@ -1013,10 +1023,10 @@ fn project_card(grid: &mut ChildSpawnerCommands, row: &Listed, art: &mut Art) {
     ))
     .with_children(|card| {
         if let Some(picture) = picture {
-            card.spawn(thumb_box(picture.image.clone())).insert(picture);
+            card.spawn(thumb_box(picture.image.clone())).insert((picture, card_line()));
         }
-        card.spawn((Text::new(name_of(&path)), Role::ButtonText, Pickable::IGNORE));
-        card.spawn((quiet(shown_folder(&path)), Pickable::IGNORE));
+        card.spawn((Text::new(name_of(&path)), Role::ButtonText, card_line(), Pickable::IGNORE));
+        card.spawn((quiet(shown_folder(&path)), Role::Sized, card_line(), Pickable::IGNORE));
         card.spawn((quiet(when), Pickable::IGNORE));
     });
 }
@@ -1214,12 +1224,10 @@ fn news_page(page: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut Art
         let fresh = launcher.whats_new.iter().any(|n| n.id == item.id);
         let picture = item.still.as_deref().and_then(still_image).map(|image| art.images.add(image));
         page.spawn((
-            Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_GROUP), padding: UiRect::all(Val::Px(crate::chrome::PAD)), ..default() },
-            // CHROME-OK: an entry is none of chrome's three clickables, it is a gooey button's skeleton holding a picture (bevy_gooey#41)
-            bevy::ui_widgets::Button,
-            Role::Button,
-            bevy::picking::hover::Hovered::default(),
-            bevy::ui::auto_directional_navigation::AutoDirectionalNavigation::default(),
+            // CHROME-OK: an entry is none of chrome's three clickables, it is a gooey button's box holding a picture (bevy_gooey#41): the button's skin pads it and puts its half gap between
+            // its parts, as it did the raw node (the 16 px gap and 12 px padding the node asked for were overwritten).
+            bevy_gooey::button_box(),
+            bevy_gooey::RowLayout { align: Some(AlignItems::Center), ..default() },
             NewsEntry(item.id.clone()),
             observe(|_: On<Activate>, mut launcher: ResMut<Launcher>| {
                 if let Err(e) = open_in_os(CHANGELOG_URL) {
