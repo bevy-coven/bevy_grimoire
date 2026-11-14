@@ -752,6 +752,28 @@ fn cell(text: &str) -> String {
     text.replace('|', "\\|").replace('\n', " ")
 }
 
+/// **Text the report quotes, made inert** (#433): a provider's error body, an agent's version string, a model's name.
+///
+/// HTML's `&`, `<` and `>` become entities, and markdown's own punctuation (backslash, backtick, `*`, brackets and
+/// parentheses, which make code, emphasis, links and images) is backslash-escaped, so what was quoted renders as the
+/// text it is. The report's own markup is never passed through this. A pipe and a newline are [`cell`]'s.
+pub fn quoted(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '\\' | '`' | '*' | '[' | ']' | '(' | ')' => {
+                out.push('\\');
+                out.push(c);
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 /// **The tools of a count map, most called first**, as `name ×n`.
 pub fn top(counts: &BTreeMap<String, u32>, shown: usize) -> String {
     if counts.is_empty() {
@@ -812,7 +834,7 @@ impl Report {
             out.push_str(&format!(
                 "| {} | {} | {} |\n",
                 rows.len(),
-                if reason.is_empty() { "no reason was recorded".to_owned() } else { cell(reason) },
+                if reason.is_empty() { "no reason was recorded".to_owned() } else { cell(&quoted(reason)) },
                 cell(&which)
             ));
         }
@@ -829,16 +851,16 @@ impl Report {
             out.push_str(&format!("> **Unfit for comparison.** {why}.\n\n"));
         }
         out.push_str("| | |\n|---|---|\n");
-        let model = h.model.as_deref().unwrap_or("none (no model)");
+        let model = h.model.as_deref().map_or_else(|| "none (no model)".to_owned(), quoted);
         for (name, value) in [
             ("Editor and MCP server commit", format!("`{}`", h.commit)),
             ("Shipped guide SHA-256", format!("`{}`", h.guide_sha256)),
-            ("Agent", format!("{} {}", h.agent, h.agent_version)),
-            ("Model", model.to_owned()),
-            ("Variant", h.variant.clone().unwrap_or_else(|| "none".to_owned())),
+            ("Agent", format!("{} {}", quoted(&h.agent), quoted(&h.agent_version))),
+            ("Model", model),
+            ("Variant", quoted(&h.variant.clone().unwrap_or_else(|| "none".to_owned()))),
             ("Trials per task", h.trials.to_string()),
-            ("Suite", h.suite.clone()),
-            ("Host", h.host.clone()),
+            ("Suite", quoted(&h.suite)),
+            ("Host", quoted(&h.host)),
             ("Date", h.date.clone()),
             (
                 "Price per million tokens",
