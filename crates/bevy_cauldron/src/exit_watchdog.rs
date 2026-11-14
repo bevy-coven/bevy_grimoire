@@ -433,11 +433,10 @@ fn watch(state: &ExitState, second: Option<SecondPress>, grace: Duration, then: 
         let rising = down && !was_down;
         was_down = down;
         let now = state.now();
-        let (beat, mut requested, exiting) = state.times();
+        let (beat, requested, exiting) = state.times();
         // A press while the app is frozen is a quit request that the frozen app cannot read.
         if rising && requested.is_none() && now.saturating_sub(beat) >= FROZEN_AFTER_MS {
             state.request();
-            requested = Some(now);
             continue;
         }
         // An answered *Stay*, with the app drawing: forgotten, so a later freeze is not read as a stuck quit.
