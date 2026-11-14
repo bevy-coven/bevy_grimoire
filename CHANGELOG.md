@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-13
 
+- **ui-r06-dock-tabs-glide** `ecf9fed9` A reordered dock tab and the tab behind it both glide to their places, held by the editor's glide test at the gooey pin that fixes the late skin (#336) *No clip: visible, not yet recorded: fleet worker*
 - **ui-59-kit-gooey-parts** `f176a889` The Kit panels' glyph buttons, tabs, pack bands and counts are gooey widgets: tiles.rs has no raw Node left and compose.rs one (the world-space slot label) (#245) *No clip: visible, not yet recorded: fleet worker*
 - **af-03c-every-followed-row-is-measured** `8682499aa3a07ec99436e52d44278244f48c8cd8` The follow's row is measured on screen for every off-map variant: the Files tree row and the inspector's section headings join the rig, note, data and piece rows (#359) *No clip: visible, not yet recorded: fleet worker*
 - **af-03b-the-files-tree-follows** `fcad49e0c0714f903e64fa93b3c2d97a38062267` When an agent edits a file, the Files tree opens the folders above it and scrolls its row into view (#359) *No clip: visible, not yet recorded: fleet worker*
