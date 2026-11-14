@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-13
 
+- **ui-59-tab-strip-height** `ad0bfa28` The workspace strip keeps its height under gooey's edge tabs, so the inspector, the badges' free ground and the history list stand where they stood (#245) *No clip: layout fix; proved by the_tab_strip_is_as_tall_as_it_was, a_badge_stands_on_ground_nothing_else_uses, a_wheel_scrolls_to_the_end_of_the_session, every_destination_is_measured_and_the_baseline_says_so*
 - **ui-r06-dock-tabs-glide** `ecf9fed9` A reordered dock tab and the tab behind it both glide to their places, held by the editor's glide test at the gooey pin that fixes the late skin (#336) *No clip: visible, not yet recorded: fleet worker*
 - **ui-59-kit-gooey-parts** `f176a889` The Kit panels' glyph buttons, tabs, pack bands and counts are gooey widgets: tiles.rs has no raw Node left and compose.rs one (the world-space slot label) (#245) *No clip: visible, not yet recorded: fleet worker*
 - **af-03c-every-followed-row-is-measured** `8682499aa3a07ec99436e52d44278244f48c8cd8` The follow's row is measured on screen for every off-map variant: the Files tree row and the inspector's section headings join the rig, note, data and piece rows (#359) *No clip: visible, not yet recorded: fleet worker*
