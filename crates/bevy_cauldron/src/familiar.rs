@@ -608,7 +608,7 @@ fn follow_the_hand_back(
                                     row.spawn(bevy_gooey::fill_column(crate::chrome::GAP_TIGHT_STEPS))
                                         .with_children(|col| {
                                             for followed in presented.followed.iter().take(crate::style_followed::FOLLOWED_SHOWN_MAX) {
-                                                crate::chrome::wrapping_row(col, crate::chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Center)
+                                                crate::chrome::wrapping_row(col, crate::chrome::GAP_TIGHT_STEPS, crate::chrome::NO_MARGIN, AlignItems::Center)
                                                     .with_children(|line| {
                                                         line.spawn((
                                                             button(format!("{}:{}", followed.path, followed.line)),

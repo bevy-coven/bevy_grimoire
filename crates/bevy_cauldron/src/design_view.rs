@@ -50,7 +50,7 @@ use bevy::ui::{ComputedNode, ScrollPosition, UiGlobalTransform};
 use bevy::ui_widgets::{Activate, ValueChange};
 use bevy_gooey::{
     Card, CardSelection, MarkdownBase, MarkdownLink, MarkdownOutline, MarkdownPicture, MarkdownView, MarkdownViewport, SelectMode, Table, TableSelection,
-    RowLayout, TreeNode, column_with, fill_region, markdown_view, observe, scroll_to_heading, tree,
+    TreeNode, markdown_view, observe, scroll_to_heading, tree,
 };
 use bevy_grimoire_core::board::{self, Board};
 use bevy_grimoire_core::design::{self, Place, PlaceKind};
