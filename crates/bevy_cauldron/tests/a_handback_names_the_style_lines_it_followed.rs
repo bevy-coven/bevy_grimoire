@@ -211,6 +211,59 @@ fn close_the_block(app: &mut App) {
     updates(app, 6);
 }
 
+/// **Scroll the panel `entity` is in until `entity` is inside it**, turning the wheel over the panel as a person does: a pointer move onto it, then wheel notches through
+/// picking, the hover map and the observer `bevy_ui_widgets` installs (the way `a_wheel_over_the_inspector_scrolls_it.rs` drives it).
+fn scroll_into_view(app: &mut App, entity: Entity) {
+    use bevy::camera::{ImageRenderTarget, NormalizedRenderTarget};
+    use bevy::picking::pointer::{Location, PointerAction, PointerId, PointerInput};
+    use bevy::ui::{ComputedNode, OverflowAxis, UiGlobalTransform};
+
+    let panel = std::iter::successors(Some(entity), |e| app.world().get::<ChildOf>(*e).map(ChildOf::parent))
+        .find(|e| app.world().get::<Node>(*e).is_some_and(|node| node.overflow.y == OverflowAxis::Scroll))
+        .expect("the link is inside a scrolling panel");
+    let rect = |app: &App, e: Entity| {
+        let node = app.world().get::<ComputedNode>(e).expect("laid out");
+        let at = app.world().get::<UiGlobalTransform>(e).expect("placed");
+        Rect::from_center_size(at.translation, node.size())
+    };
+    let handle = app.world().resource::<bevy_cauldron::surface::Surface>().image.clone();
+    for _ in 0..60 {
+        let (panel_rect, link_rect) = (rect(app, panel), rect(app, entity));
+        if link_rect.min.y >= panel_rect.min.y && link_rect.max.y <= panel_rect.max.y {
+            return;
+        }
+        // The surface's pointer is in physical pixels, as `bevy_gooey::testing::click` puts it. **A quarter of the way in, not the centre**: the panel's centre lies under the
+        // split's divider (measured: a wheel there reached the divider and the panel did not move), and a quarter in is on the panel's own content.
+        let at = Vec2::new(panel_rect.min.x + panel_rect.width() / 4.0, panel_rect.center().y);
+        let location = Location { target: NormalizedRenderTarget::Image(ImageRenderTarget { handle: handle.clone(), scale_factor: 1.0 }), position: at };
+        for action in [
+            PointerAction::Move { delta: Vec2::ONE },
+            PointerAction::Scroll { unit: bevy::input::mouse::MouseScrollUnit::Line, x: 0.0, y: -1.0, phase: bevy::input::touch::TouchPhase::Moved },
+        ] {
+            app.world_mut().write_message(PointerInput::new(PointerId::Mouse, location.clone(), action));
+            updates(app, 2);
+        }
+    }
+    panic!("the wheel did not bring the link into its panel");
+}
+
+/// **The first followed link is inside the panel as it opens, and a real click on it opens the page on its line.**
+#[test]
+fn the_first_followed_link_takes_a_real_click_as_the_card_opens() {
+    let (mut app, _root) = ready_in("followed_click_first", false);
+    harness::resize_surface(&mut app, 1024, 640).unwrap_or_else(|e| panic!("{e}"));
+    updates(&mut app, 6);
+    read_the_style(&mut app, None);
+    present(&mut app, json!([{"path": GAME_PAGE, "line": 3}, {"path": GAME_PAGE, "line": 4}])).unwrap_or_else(|e| panic!("{e}"));
+    updates(&mut app, 4);
+    let found = links(&mut app);
+    bevy_gooey::testing::click(&mut app, found[0].0);
+    updates(&mut app, 6);
+    let view = app.world().resource::<DesignView>();
+    assert_eq!(view.selected(), Some(GAME_PAGE), "the click opened the page");
+    assert_eq!(view.last_line_asked(), Some(3), "on the line the link names");
+}
+
 /// **A real click on a followed link, in a 1024 x 640 window, opens the page on its line**: each link has a rect at least 40 px wide, inside the surface.
 #[test]
 fn a_followed_link_has_a_rect_a_pointer_could_hit_and_its_press_opens_the_page_on_its_line() {
@@ -232,9 +285,12 @@ fn a_followed_link_has_a_rect_a_pointer_could_hit_and_its_press_opens_the_page_o
         assert!(w >= 40.0, "the link to line {line} is {w} px wide");
         assert!(cx - w / 2.0 >= 0.0 && cx + w / 2.0 <= 1024.0 && cy - h / 2.0 >= 0.0 && cy + h / 2.0 <= 640.0, "the link to line {line} is at ({cx}, {cy}), {w} x {h}, outside the surface");
     }
-    // **A pointer click does not reach the link in this window** (measured: the pointer lands on a layout region under the card, `testing::click` hits an unnamed Node that is not the
-    // link, so the card is clipped by its scrolling panel at 1024 x 640). The link's rect above is real (>= 40 px, inside the surface); the press is the `Activate` a click sends.
-    app.world_mut().commands().trigger(Activate { entity: found[1].0 });
+    // **A real click on the second link needs the panel scrolled to it first**, as a person's wheel does. Measured at 1024 x 640 (layout pixels): the card sits at the bottom
+    // of the AGENT block's scrolling panel, which is 148 px tall (y 217..365), so the second link, at y 378..407, is below the panel's bottom edge, and a pointer there is over
+    // the layout split under the panel, not over the link. That is what the panel's clip is for, not a defect: the person scrolls, and the first link, inside the panel, takes
+    // the click as it is (`the_first_followed_link_takes_a_real_click_as_the_card_opens`). The earlier reading that the click "lands on an unnamed Node" was this clip.
+    scroll_into_view(&mut app, found[1].0);
+    bevy_gooey::testing::click(&mut app, found[1].0);
     updates(&mut app, 6);
     let view = app.world().resource::<DesignView>();
     assert_eq!(view.selected(), Some(GAME_PAGE), "the press opened the page");
