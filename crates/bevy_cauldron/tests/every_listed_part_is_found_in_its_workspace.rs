@@ -6,7 +6,9 @@
 //! - **World: water and forest**, which exist since NV-11 (#393, #394);
 //! - **Kit: the library browser** (UI-52, #238), which was a toggle of the Map's inspector until it moved here: it is asked for in the Kit
 //!   workspace (View ▸ Show library, offered only there) and the Map's inspector no longer holds it;
-//! - **Animation: the rig bench**, **Files: the file tree**.
+//! - **Animation: the rig bench**, **Files: the file tree**;
+//! - **Project: the project's page** (its maps, its kits and the agent guide), drawn inside the workbench. `Screen::Project` stays the home a project-less
+//!   start needs; this is the same page as the Project workspace's panel.
 //!
 //! Each is read the way the sibling file reads it: a `Text` with exactly the heading's words, drawn (visible, with a laid-out box).
 
@@ -38,6 +40,8 @@ fn project(tag: &str) -> PathBuf {
 
 fn editor(tag: &str) -> App {
     let mut app = harness::build_headless(&project(tag), "m", None).unwrap_or_else(|e| panic!("{e}"));
+    // **The home's plugins, as `main.rs` adds them**: the project page is the home's, and the Project workspace draws it.
+    app.add_plugins(bevy_cauldron::launcher::LauncherPlugin);
     settle(&mut app);
     app
 }
@@ -137,4 +141,45 @@ fn the_rig_bench_and_the_file_tree_are_found_by_label_in_their_workspaces() {
     assert!(shows(&mut app, "RIGS"), "the Animation workspace does not show the rig bench's RIGS list");
     switch_to(&mut app, Workspace::Files);
     assert!(shows(&mut app, "FILES"), "the Files workspace does not show the FILES tree");
+}
+
+/// **Project: the page's content is found by label in the Project workspace**: its panel heading, the project's name, the Maps and Kits sections
+/// with their new-thing buttons, the map the fixture holds, and the agent guide section. Not on the Map first, so the page is the workspace's.
+#[test]
+fn the_project_page_is_found_by_label_in_the_project_workspace() {
+    let mut app = editor("project_page");
+    for label in ["PROJECT", "Maps", "Kits", "+ New map", "+ New kit"] {
+        assert!(!shows(&mut app, label), "`{label}` is on the Map before the Project workspace is opened");
+    }
+    switch_to(&mut app, Workspace::Project);
+    for label in ["PROJECT", "Maps", "Kits", "+ New map", "+ New kit", "m"] {
+        assert!(shows(&mut app, label), "the Project workspace does not show `{label}`");
+    }
+    // The heading is the project's folder name (the page's title); the fixture's folders all start the same way.
+    let named = {
+        let world = app.world_mut();
+        world.query::<&Text>().iter(world).any(|t| t.0.starts_with("grimoire-fixture-"))
+    };
+    assert!(named, "the page does not name the project");
+    switch_to(&mut app, Workspace::Map);
+    assert!(!shows(&mut app, "Maps"), "the project page stayed on screen when the Project workspace was left");
+}
+
+/// **A map opened from the Project workspace becomes the live one and the Map workspace is shown**, through the editor's own tabs: the project
+/// stays open, nothing goes through the home.
+#[test]
+fn opening_a_map_from_the_project_workspace_shows_it_in_the_map_workspace() {
+    use bevy_cauldron::project::OpenMap;
+    let mut app = editor("project_open");
+    switch_to(&mut app, Workspace::Project);
+    let card = {
+        let world = app.world_mut();
+        let mut q = world.query::<(Entity, &bevy_cauldron::project_page::MapCard)>();
+        q.iter(world).find(|(_, c)| c.0 == "m").map(|(e, _)| e).expect("the page draws the map `m` as a card")
+    };
+    app.world_mut().trigger(bevy_gooey::Activate { entity: card });
+    settle(&mut app);
+    assert_eq!(app.world().resource::<Workspace>(), &Workspace::Map, "opening a map from the page shows the Map workspace");
+    assert_eq!(app.world().resource::<OpenMap>().map.name, "m", "and the map is the open one");
+    assert_eq!(*app.world().resource::<State<bevy_cauldron::screen::Screen>>().get(), bevy_cauldron::screen::Screen::Editor, "and the editor never left");
 }

@@ -58,6 +58,8 @@ crate::keys::enumerated! {
         Agent,
         /// **The project's files and the editor for them** (GD-11, #373): the file tree and a code editor.
         Files,
+        /// **The project's page** (NV-08, #385): its maps, its kits and the agent guide, inside the workbench.
+        Project,
     }
     /// **Every panel there is**, in strip order — for the ratchets that have to visit all of them.
     ///
@@ -101,6 +103,7 @@ impl Mode {
             Mode::Game => "GAME",
             Mode::Agent => "AGENT",
             Mode::Files => "FILES",
+            Mode::Project => "PROJECT",
         }
     }
 
@@ -119,6 +122,7 @@ impl Mode {
             Mode::Game => crate::keys::Context::Game,
             Mode::Agent => crate::keys::Context::Agent,
             Mode::Files => crate::keys::Context::Files,
+            Mode::Project => crate::keys::Context::Project,
         }
     }
 }
@@ -484,7 +488,7 @@ fn stage_camera(
                 crate::compose::carousel_height(&carousel.0).min(crate::view::MAX_ZOOM);
             rig.elevation = crate::view::ISO_ELEVATION;
         }
-        Mode::Map | Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files => {
+        Mode::Map | Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files | Mode::Project => {
             if let Some(was) = saved.0.take() {
                 rig.focus = was.focus;
                 rig.height = was.height;
@@ -4368,11 +4372,11 @@ fn focus_filter(
             Mode::Compose => crate::filter::Pane::Candidates,
             // **No list of their own** (NV-08, #385; NV-09, #386): the World, Sound and Game panels are fields, so the
             // key has no box to take; the Map's is the nearest honest answer and focusing it is harmless.
-            Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files => crate::filter::Pane::Palette,
+            Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files | Mode::Project => crate::filter::Pane::Palette,
         };
-        // **The Files workspace has no filter box at all** (GD-11, #373): the key takes nothing there, rather than focusing a
-        // box of the Map's that is not on screen.
-        if *mode != Mode::Files {
+        // **The Files and Project workspaces have no filter box at all** (GD-11, #373; NV-08, #385): the key takes nothing there, rather than
+        // focusing a box of the Map's that is not on screen.
+        if !matches!(*mode, Mode::Files | Mode::Project) {
             focus_through_operation(project.as_deref(), &mut filters, pane);
         }
     }
@@ -7815,7 +7819,7 @@ fn apply_mode(
             Mode::Meshes | Mode::Tiles => is_tiles,
             Mode::Anim => is_anim,
             Mode::Compose => is_compose,
-            Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files => false,
+            Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files | Mode::Project => false,
         };
         // A panel belonging to no tab is not ours to touch — the tab strip and the cost readout are
         // both unmarked and must stay visible in every mode.

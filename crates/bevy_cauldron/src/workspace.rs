@@ -66,6 +66,26 @@ pub const VIEWPORT: &str = "viewport";
 /// The library the map places from.
 pub const PLACE: &str = "place";
 
+/// **The workspaces whose part is not built yet, each with the issue that brings it** (the sentence a refused chord answers with).
+///
+/// Empty since the Project workspace (NV-08, #385) was the last: every workspace is registered. The table stays, because the refusal it
+/// feeds ([`Workspace::missing`], `Command::enabled`, `Action::is_offered`) is how a *future* workspace's chord exists before its panel
+/// does, and `an_unbuilt_workspace_is_refused_with_its_reason.rs` proves that mechanism on a table that is not empty.
+pub const WAITING: [(Workspace, &str); 0] = [];
+
+/// **What `workspace` is waiting for in `table`**, or `None` when it is not listed there. The lookup [`Workspace::missing`] makes, over a
+/// table a test can fill.
+pub const fn waiting_reason(table: &[(Workspace, &'static str)], workspace: Workspace) -> Option<&'static str> {
+    let mut at = 0;
+    while at < table.len() {
+        if table[at].0 as u8 == workspace as u8 {
+            return Some(table[at].1);
+        }
+        at += 1;
+    }
+    None
+}
+
 impl Workspace {
     /// **Every workspace there is, in the order the keys follow.** Fixed for good: see the module
     /// note.
@@ -159,13 +179,12 @@ impl Workspace {
             // **The world under the level, and the audio** (NV-08, #385): each is one panel of its own.
             Workspace::World => &[Mode::World],
             Workspace::Sound => &[Mode::Sound],
-            // **Nothing yet.** These workspaces hold documents rather than panels (NV-04, NV-07) or
-            // a page of their own (NV-08, NV-09, NV-10), and until they are built they show no
-            // panel and are not registered.
             Workspace::Game => &[Mode::Game],
             Workspace::Agent => &[Mode::Agent],
             Workspace::Files => &[Mode::Files],
-            Workspace::Project => &[],
+            // **The project's page, inside the workbench** (NV-08, #385): its maps, its kits and the agent guide. `Screen::Project` stays
+            // the home a project-less start, the launcher and Close project still need; this is the same page as one panel of the editor.
+            Workspace::Project => &[Mode::Project],
         }
     }
 
@@ -193,29 +212,17 @@ impl Workspace {
     /// **Whether this workspace's part is built**, and so whether it is registered.
     ///
     /// A workspace that is not built is refused rather than shown empty: the vision's *"no
-    /// placeholder screens"*.
+    /// placeholder screens"*. It is built exactly when [`WAITING`] does not list it, so the one table
+    /// says both whether it is registered and what it is waiting for.
     pub const fn is_built(self) -> bool {
-        matches!(
-            self,
-            Workspace::Map | Workspace::Kit | Workspace::Animation | Workspace::World | Workspace::Sound | Workspace::Game | Workspace::Agent | Workspace::Files
-        )
+        self.missing().is_none()
     }
 
     /// **What this workspace is waiting for**, in the issue series' own words, or `None` when it is
     /// built. The command's `enabled` answer is this sentence, so a person who presses the chord
     /// reads where it comes from instead of wondering whether the key works.
     pub const fn missing(self) -> Option<&'static str> {
-        match self {
-            Workspace::Project => Some("the Project workspace arrives with NV-08 (#385)"),
-            Workspace::Map
-            | Workspace::Kit
-            | Workspace::Animation
-            | Workspace::World
-            | Workspace::Sound
-            | Workspace::Game
-            | Workspace::Agent
-            | Workspace::Files => None,
-        }
+        waiting_reason(&WAITING, self)
     }
 
     /// **The workspace, by its id** — the `--workspace` flag, a command id's tail, and an agent's
@@ -262,6 +269,11 @@ impl Workspace {
         workspace.is_some_and(|w| *w == Workspace::World)
     }
 
+    /// **Run condition: is the Project workspace open?** (NV-08, #385.) What the project's page, drawn inside the workbench, is spawned under.
+    pub fn project_is_open(workspace: Option<Res<Workspace>>) -> bool {
+        workspace.is_some_and(|w| *w == Workspace::Project)
+    }
+
     /// **Run condition: is the Sound workspace open?** (NV-08, #385.)
     pub fn sound_is_open(workspace: Option<Res<Workspace>>) -> bool {
         workspace.is_some_and(|w| *w == Workspace::Sound)
@@ -292,8 +304,8 @@ impl Workspace {
     pub fn default_layout(self) -> DockLayout {
         let horizontal = SplitAxis::Horizontal;
         match self {
-            // **The page is the whole workspace.** It has no dock of its own yet (NV-08).
-            Workspace::Project => DockLayout::group([VIEWPORT]),
+            // **The page beside the view** (NV-08, #385): the project's maps, kits and guide in the left dock, like the Sound workspace's table.
+            Workspace::Project => DockLayout::split(horizontal, 0.34, DockLayout::group([INSPECTOR]), DockLayout::group([VIEWPORT])),
             Workspace::Map => DockLayout::split(
                 horizontal,
                 0.22,

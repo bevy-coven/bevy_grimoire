@@ -65,10 +65,10 @@ the compositions, so crossing between jobs meant a full teardown and a project r
 changes which panels are drawn and nothing else — **one viewport is shared by every workspace that
 shows the world** (Map, World, Kit, Animation), so switching never reloads a map or drops a selection.
 
-**A workspace whose part is not built is not registered.** Project (the page is still its own screen, reached by
-Cmd/Ctrl+O) and Files (until GD-11) have their chord and their command, and the
-command says which issue brings it. There are no placeholder screens: a workspace either does its job or says what
-it is waiting for.
+**A workspace whose part is not built is not registered.** Such a workspace has its chord and its command, and the command says which
+issue brings it (`workspace::WAITING` is that table). All nine are built now: the Project workspace (NV-08, #385) draws the project's page
+inside the workbench, while `Screen::Project` stays the home of a project-less start, the launcher and Close project, reached by
+Cmd/Ctrl+O. There are no placeholder screens: a workspace either does its job or says what it is waiting for.
 
 Regions, top to bottom and left to right:
 
@@ -94,7 +94,7 @@ layouts are per workspace rather than one shared one:
 
 | Workspace | Default | Panels |
 |---|---|---|
-| Project | the page, whole | the project page (NV-08, not yet moved into the workbench) |
+| Project | the page beside the view | the project page: maps, kits and the agent guide, inside the workbench (NV-08, #385). `Screen::Project` stays the home of a project-less start, the launcher and Close project |
 | Map | inspector 22%, viewport, library | viewport, outliner, inspector, place, notes, checks |
 | World | viewport over the inspector | terrain, and the environment, lights and light map in a build that has those crates (NV-08, #385). `WATER` and `FOREST` list what the map's plan and forest files hold; they are placed on the terrain line (NV-11, #393, #394) |
 | Kit | inspector 30%, viewport, library | Meshes, Tiles, Compose, and the library browser (UI-52), asked for by View ▸ Show library, which is offered only in Kit and no longer toggles a section of the Map's inspector (NV-08, #385) |

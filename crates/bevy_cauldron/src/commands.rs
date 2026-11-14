@@ -41,6 +41,13 @@ pub struct Command {
     pub stances: Stances,
 }
 
+/// **A chord for a workspace that is not built is refused with the sentence that says which issue brings it** (the series' own words,
+/// `Workspace::missing`), before any live-context rule is asked. A pure function of that sentence, so the refusal is proved on a workspace
+/// that is waiting even while every real one is built (`an_unbuilt_workspace_is_refused_with_its_reason.rs`).
+pub fn workspace_refusal(missing: Option<&'static str>) -> Result<(), &'static str> {
+    missing.map_or(Ok(()), Err)
+}
+
 impl Command {
     /// The part of the id before the dot: what a menu groups this command under.
     pub fn category(&self) -> &'static str {
@@ -67,11 +74,7 @@ impl Command {
         // live-context rules, because *that* is the reason a person pressing `Cmd`+`1` learns
         // nothing: the workspace does not exist yet, not that a field has the keys. Its own words
         // are the issue's, so the refusal and the roadmap cannot disagree.
-        if let Some(workspace) = self.action.workspace()
-            && let Some(missing) = workspace.missing()
-        {
-            return Err(missing);
-        }
+        workspace_refusal(self.action.workspace().and_then(crate::workspace::Workspace::missing))?;
         if live.0 == Context::Typing {
             return Err("A text field is taking the keys");
         }

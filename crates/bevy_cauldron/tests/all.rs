@@ -69,6 +69,7 @@ mod a_refused_project_offers_to_migrate_itself;
 mod a_project_with_a_ron_file_is_refused_at_open;
 mod an_old_users_files_are_converted_once;
 mod an_oplog_line_of_another_version_is_refused;
+mod an_unbuilt_workspace_is_refused_with_its_reason;
 mod a_dead_end_names_its_closest_piece;
 mod capture_feedback_1793905912313;
 mod capture_feedback_1793905798698;
