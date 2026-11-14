@@ -258,6 +258,23 @@ pub fn is_refusal(is_error: bool, text: &str) -> bool {
     value.get("refused").is_some() || value.get("outcome").and_then(Value::as_str) == Some("refused")
 }
 
+/// **The refusal an operation's answer carries**, or `None` when it did not refuse (#433).
+///
+/// The editor answers an operation call with `Ok` even when the operation was refused: the answer says
+/// `outcome: "refused"` and gives `refusal` (or `problem.what`). A setup step that was refused changed
+/// nothing, and the trial that follows would measure a project the task never described.
+pub fn refused_answer(answer: &Value) -> Option<String> {
+    if !is_refusal(false, &answer.to_string()) {
+        return None;
+    }
+    let why = answer
+        .get("refusal")
+        .and_then(Value::as_str)
+        .or_else(|| answer.get("problem").and_then(|p| p.get("what")).and_then(Value::as_str))
+        .map_or_else(|| answer.to_string(), str::to_owned);
+    Some(format!("`{}` was refused: {why}", answer.get("operation").and_then(Value::as_str).unwrap_or("an operation")))
+}
+
 /// **The tool an `undo` is**, as the editor's MCP server names it.
 pub const UNDO_TOOL: &str = "grimoire_undo_operation";
 
@@ -641,7 +658,7 @@ pub fn start_editor(editor: &Path, project: &Path, map: &str, dir: &Path) -> Res
     let mut running = Editor { child, port, display, log: log.clone() };
     let deadline = Instant::now() + Duration::from_secs(EDITOR_START_S);
     while Instant::now() < deadline {
-        if brp_call(port, "grimoire/state", json!({})).is_ok() {
+        if brp_call(port, "grimoire/state", json!({})).is_ok() && map_is_open(port) {
             return Ok(running);
         }
         // **An editor that exited is a harness error now**, not in `EDITOR_START_S`: the reason is in its
@@ -658,6 +675,31 @@ pub fn start_editor(editor: &Path, project: &Path, map: &str, dir: &Path) -> Res
         "the editor did not answer grimoire/state on port {port} within {EDITOR_START_S} s. {}",
         tail(&log)
     ))
+}
+
+/// **The operation a started editor is probed with**: a dry run of `note_remove` for a note that does not exist.
+///
+/// It changes nothing, and its refusal says whether a map is open: "no map is open, ..." before the editor has opened
+/// the map it was pointed at, and "no note ... on this map" after.
+const MAP_PROBE_OP: &str = "note_remove";
+
+/// **What a refusal says when no map is open yet.**
+const NO_MAP_OPEN: &str = "no map is open";
+
+/// **Whether the editor has opened its map**, which `grimoire/state` cannot say: it names the map from the moment the
+/// editor is pointed at it (#433). Under load the BRP server answers many frames before the map is open, and a setup
+/// step or an agent's first call in that gap is refused with "no map is open": `work-the-open-note` failed 8 of 24 trials
+/// run 8 at a time that way, and passed alone.
+fn map_is_open(port: u16) -> bool {
+    let answer = brp_call(
+        port,
+        "grimoire/operation_apply",
+        json!({"operation": MAP_PROBE_OP, "parameters": {"id": "bench-probe"}, "dry_run": true}),
+    );
+    match answer {
+        Ok(value) => !refused_answer(&value).is_some_and(|why| why.contains(NO_MAP_OPEN)),
+        Err(_) => false,
+    }
 }
 
 /// **The last few lines of a file**, for a harness error's reason.
@@ -1607,6 +1649,12 @@ fn one_trial(options: &Options, task: &Task, label: &str, trial: u32, variant: O
             "grimoire/operation_apply",
             json!({"operation": step.op, "parameters": step.params, "dry_run": false}),
         );
+        // **A refused answer is a failed setup, not a success** (#433): the BRP call is `Ok` when the editor
+        // answered, and the answer says `outcome: refused` when the operation did not happen.
+        let answer = answer.and_then(|value| match refused_answer(&value) {
+            Some(why) => Err(why),
+            None => Ok(value),
+        });
         if let Err(e) = answer {
             // **The refusal quotes the step's operation and arguments**, which for a held-out task are its setup.
             return harness(if held_out {
