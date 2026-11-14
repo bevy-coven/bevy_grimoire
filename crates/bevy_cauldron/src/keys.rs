@@ -965,7 +965,12 @@ impl Action {
     /// `Context::Global` and the thing they acted on was per workspace; those keys are gone (#379), so
     /// the panel count no longer decides anything.
     pub fn is_offered(self) -> bool {
-        self.workspace().is_none_or(|w| w.is_built())
+        self.is_offered_in(&crate::workspace::WAITING)
+    }
+
+    /// **[`Self::is_offered`] against a table of unbuilt workspaces** — the seam a test fills (every real workspace is built).
+    pub fn is_offered_in(self, waiting: &[(crate::workspace::Workspace, &'static str)]) -> bool {
+        self.workspace().is_none_or(|w| crate::workspace::waiting_reason(waiting, w).is_none())
     }
 
     /// **The workspace this chord goes to**, or `None` for every other verb.
