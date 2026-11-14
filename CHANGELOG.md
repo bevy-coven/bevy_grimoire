@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-13
 
+- **ops-review-34-36** `4fe4fe1b` A rig history step whose log line fails is taken back whole, the labeller refusals and the kit-name refusal are tested, and the rig step keeps its selection by name (#129 review) *No clip: a test and API fix behind existing keys; proved by rig_history_is_an_operation, labeller_requests_are_operations and tile_page_is_an_operation*
 - **tile-page-operations** `13b933dc` The Tiles tab's right, left, Enter, C and N keys are operations an agent calls too (tile_page_enter, tile_page_leave, tile_open, tile_close, tile_new) *No clip: an API behind existing keys, no new picture; proved by tile_page_is_an_operation*
 - **rig-history-operation** `18f5947e` Cmd+Z and Cmd+Shift+Z on the Anim tab are one operation an agent calls too (rig_history_step) *No clip: an API behind existing keys, no new picture; proved by rig_history_is_an_operation*
 - **labeller-operations** `9a630c29` L, Shift+L and Shift+Y ask the labeller through operations an agent calls too (labels_suggest, labels_walk, labels_abandon) *No clip: an API behind existing keys, no new picture; proved by labeller_requests_are_operations*
