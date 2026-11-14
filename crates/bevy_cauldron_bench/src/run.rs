@@ -1044,7 +1044,8 @@ pub fn run_work(
                 })
             })
             .collect();
-        handles.into_iter().map(|h| h.join().is_err()).fold(false, |any, p| any || p)
+        let joined: Vec<bool> = handles.into_iter().map(|h| h.join().is_err()).collect();
+        joined.contains(&true)
     });
     if panicked {
         return Err("a trial's worker panicked".to_owned());
