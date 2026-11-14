@@ -50,7 +50,7 @@ use bevy::ui::{ComputedNode, ScrollPosition, UiGlobalTransform};
 use bevy::ui_widgets::{Activate, ValueChange};
 use bevy_gooey::{
     Card, CardSelection, MarkdownBase, MarkdownLink, MarkdownOutline, MarkdownPicture, MarkdownView, MarkdownViewport, SelectMode, Table, TableSelection,
-    TreeNode, markdown_view, observe, scroll_to_heading, tree,
+    RowLayout, TreeNode, column_with, fill_region, markdown_view, observe, scroll_to_heading, tree,
 };
 use bevy_grimoire_core::board::{self, Board};
 use bevy_grimoire_core::design::{self, Place, PlaceKind};
@@ -192,6 +192,8 @@ pub struct DesignView {
     topic_menu: bool,
     /// The line a reveal asked for, counted from 0, until the page has been scrolled there.
     line: Option<usize>,
+    /// **The line the last reveal asked for**, kept after the page has been scrolled there (SG-09, #408): where a followed line's link sent the person.
+    last_line_asked: Option<usize>,
     /// The board picture whose card is lit.
     card: Option<String>,
     /// A picture of the page the person asked to be scrolled to (a card was chosen), by its index in the page.
@@ -208,6 +210,16 @@ impl DesignView {
     /// The page selected, project-relative.
     pub fn selected(&self) -> Option<&str> {
         self.selected.as_deref()
+    }
+
+    /// **The line a reveal asked for**, counted from 1, until the page has been scrolled there (SG-09, #408: a followed line's link asks for it).
+    pub fn line_asked(&self) -> Option<usize> {
+        self.line
+    }
+
+    /// **The line the last reveal asked for**, still set once the page has scrolled there.
+    pub fn last_line_asked(&self) -> Option<usize> {
+        self.last_line_asked
     }
 
     /// The page the file editor holds, while Edit is pressed.
@@ -239,6 +251,9 @@ impl DesignView {
         }
         self.selected = Some(page.to_owned());
         self.line = line.filter(|line| *line > 0);
+        if self.line.is_some() {
+            self.last_line_asked = self.line;
+        }
         self.stale = true;
     }
 
@@ -430,18 +445,7 @@ fn spawn_the_design_workspace(mut commands: Commands, frame: Res<Frame>) {
     let host = commands
         .spawn((
             DesignHost,
-            Node {
-                flex_grow: 1.0,
-                min_width: Val::Px(0.0),
-                min_height: Val::Px(0.0),
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(chrome::GAP_ROW),
-                padding: UiRect::all(Val::Px(chrome::PAD)),
-                margin: UiRect::all(Val::Px(chrome::MARGIN)),
-                border: UiRect::all(Val::Px(chrome::EDGE_W)),
-                border_radius: BorderRadius::all(Val::Px(chrome::RADIUS_PANEL)),
-                ..default()
-            },
+            files::page_host_node(),
             BackgroundColor(ink.panel_bg),
             chrome::Ground(ink.panel_bg),
             chrome::PanelGround,

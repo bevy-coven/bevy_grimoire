@@ -114,6 +114,7 @@ fn an_unretried_or_unclosed_refusal_is_a_harness_error() {
         wishes: Vec::new(),
         dir: PathBuf::new(),
         held_out: false,
+        call_budget_exhausted: false,
     }));
 }
 

@@ -114,6 +114,7 @@ fn record(task: &str, trial: u32, outcome: Outcome, reason: &str) -> TrialRecord
         wishes: Vec::new(),
         dir: PathBuf::new(),
         held_out: false,
+        call_budget_exhausted: false,
     }
 }
 

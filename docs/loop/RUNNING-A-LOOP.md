@@ -377,6 +377,18 @@ the gate compares only runs of one model. **`--jobs 4`** runs four trials at onc
 140-trial run (28 tasks x 5 trials) measured 3 to 8 h serial and 0.6 to 2.5 h at `--jobs 4..6` (BM-08, #432); a
 trial's `home/` (its one provider's credential and omp's 128 MB of natives) is deleted as the trial ends.
 
+**The agent inside a trial can read its own credential** (its shell reaches `home/.omp/agent/agent.db`: an OAuth access
+token and, for a rotating provider, a refresh token), and anything it prints lands in the kept `transcript.jsonl`.
+The runner imports only the model's provider's credential, scrubs the imported strings (exact and JSON-escaped, nothing
+else: not base64, URL-encoded, hex or partial forms) from `transcript.jsonl` and `agent.err`, deletes `home/` as the
+trial ends, sweeps what a `kill -KILL`ed run left (anything older than an hour, in a run directory it made, at the next
+run's start) and stops cleanly on Ctrl-C and SIGTERM. **An interrupted run writes and publishes no report.** The omp
+agent has the runner's credential-looking environment variables removed but inherits the rest of the environment (no
+`env_clear`), so a secret in an ordinarily named variable is readable through `env` and not scrubbed; the pre-flight
+turn's output is not scrubbed; and a credential the agent copies into the project it edits is not scrubbed. See
+`bench/README.md`, "What the agent inside a trial can read". A model name without a
+provider (`--model sonnet`) is refused for `--agent omp`: write `provider/model`.
+
 (`--label` publishes `docs/bench/runs/<date>-release-<version>.md` and `.json`.) **The first run on this
 repository is the baseline**: with no `*-baseline` report committed, `--label release-<version>` is refused
 (there is nothing to compare it with), so that run is made with `--label baseline` (BM-04) and committed first;

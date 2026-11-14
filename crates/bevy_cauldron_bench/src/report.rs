@@ -206,6 +206,10 @@ pub struct TrialData {
     /// The wishes the agent made, as `{tool, task}`.
     #[serde(default)]
     pub wishes: Vec<Value>,
+    /// **Whether the agent was stopped at its tool-call budget** (#433); absent from a `trial.json` written before it was
+    /// recorded, which reads as not stopped.
+    #[serde(default)]
+    pub call_budget_exhausted: bool,
 }
 
 fn dev_split() -> Split {
@@ -367,6 +371,12 @@ pub struct TaskReport {
     pub wishes: u32,
     /// Each failed trial's first failing check and last calls.
     pub failures: Vec<Failure>,
+    /// **Trials of this task the agent was stopped in at its tool-call budget** (#433).
+    #[serde(default)]
+    pub budget_exhausted: u32,
+    /// Which trials those were, in order.
+    #[serde(default)]
+    pub budget_exhausted_trials: Vec<u32>,
 }
 
 /// **A group of tasks stated as one**: the suite, a tag, or the held-out total.
@@ -509,6 +519,8 @@ impl TaskReport {
             cost_usd: if scored.is_empty() { None } else { sum_costs(scored.iter().map(|t| t.cost_usd(price))) },
             wishes: scored.iter().map(|t| t.wishes.len() as u32).sum(),
             failures,
+            budget_exhausted: scored.iter().filter(|t| t.call_budget_exhausted).count() as u32,
+            budget_exhausted_trials: scored.iter().filter(|t| t.call_budget_exhausted).map(|t| t.trial).collect(),
         }
     }
 
@@ -740,6 +752,28 @@ fn cell(text: &str) -> String {
     text.replace('|', "\\|").replace('\n', " ")
 }
 
+/// **Text the report quotes, made inert** (#433): a provider's error body, an agent's version string, a model's name.
+///
+/// HTML's `&`, `<` and `>` become entities, and markdown's own punctuation (backslash, backtick, `*`, brackets and
+/// parentheses, which make code, emphasis, links and images) is backslash-escaped, so what was quoted renders as the
+/// text it is. The report's own markup is never passed through this. A pipe and a newline are [`cell`]'s.
+pub fn quoted(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '\\' | '`' | '*' | '[' | ']' | '(' | ')' => {
+                out.push('\\');
+                out.push(c);
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 /// **The tools of a count map, most called first**, as `name ×n`.
 pub fn top(counts: &BTreeMap<String, u32>, shown: usize) -> String {
     if counts.is_empty() {
@@ -751,6 +785,26 @@ pub fn top(counts: &BTreeMap<String, u32>, shown: usize) -> String {
 }
 
 impl Report {
+    /// **The "Tool-call budget" section: the trials whose agent was stopped for making a call beyond its task's budget** (#433).
+    ///
+    /// Empty when none was. Such a trial was graded as it stood, so its failure may be the cut-off and not the agent's idea.
+    fn budget_markdown(&self) -> String {
+        let stopped: Vec<String> = self
+            .tasks
+            .iter()
+            .flat_map(|t| t.budget_exhausted_trials.iter().map(move |n| format!("`{}` trial {n}", t.task)))
+            .collect();
+        if stopped.is_empty() {
+            return String::new();
+        }
+        format!(
+            "## Tool-call budget\n\n{} trial(s) were stopped when the agent made a call beyond its task's `budget.tool_calls`, \
+             and graded as they stood: {}.\n\n",
+            stopped.len(),
+            stopped.join(", ")
+        )
+    }
+
     /// **The "Harness errors" section: every distinct cause, how many trials had it, and which** (#432, D1).
     ///
     /// Empty for a run with none. Trials with the same reason are one row (a hundred refused turns are one
@@ -780,7 +834,7 @@ impl Report {
             out.push_str(&format!(
                 "| {} | {} | {} |\n",
                 rows.len(),
-                if reason.is_empty() { "no reason was recorded".to_owned() } else { cell(reason) },
+                if reason.is_empty() { "no reason was recorded".to_owned() } else { cell(&quoted(reason)) },
                 cell(&which)
             ));
         }
@@ -797,16 +851,16 @@ impl Report {
             out.push_str(&format!("> **Unfit for comparison.** {why}.\n\n"));
         }
         out.push_str("| | |\n|---|---|\n");
-        let model = h.model.as_deref().unwrap_or("none (no model)");
+        let model = h.model.as_deref().map_or_else(|| "none (no model)".to_owned(), quoted);
         for (name, value) in [
             ("Editor and MCP server commit", format!("`{}`", h.commit)),
             ("Shipped guide SHA-256", format!("`{}`", h.guide_sha256)),
-            ("Agent", format!("{} {}", h.agent, h.agent_version)),
-            ("Model", model.to_owned()),
-            ("Variant", h.variant.clone().unwrap_or_else(|| "none".to_owned())),
+            ("Agent", format!("{} {}", quoted(&h.agent), quoted(&h.agent_version))),
+            ("Model", model),
+            ("Variant", quoted(&h.variant.clone().unwrap_or_else(|| "none".to_owned()))),
             ("Trials per task", h.trials.to_string()),
-            ("Suite", h.suite.clone()),
-            ("Host", h.host.clone()),
+            ("Suite", quoted(&h.suite)),
+            ("Host", quoted(&h.host)),
             ("Date", h.date.clone()),
             (
                 "Price per million tokens",
@@ -825,6 +879,7 @@ impl Report {
             "\n{} trial(s), {} harness error(s). A harness error is never scored as a pass or a fail.\n\n",
             self.trials_total, self.harness_errors
         ));
+        out.push_str(&self.budget_markdown());
         out.push_str(&self.harness_errors_markdown());
 
         out.push_str("## The suite\n\n");
@@ -904,9 +959,9 @@ impl Report {
                     out.push_str(&format!("\n### `{}`, trial {}\n\n", t.task, f.trial));
                     out.push_str(&format!(
                         "- first failing check: `{}` — wanted {}; measured {}\n",
-                        f.check,
-                        cell(&f.wanted),
-                        cell(&f.measured)
+                        f.check.replace('`', "'"),
+                        cell(&quoted(&f.wanted)),
+                        cell(&quoted(&f.measured))
                     ));
                     if f.last_calls.is_empty() {
                         out.push_str("- the agent made no tool call\n");

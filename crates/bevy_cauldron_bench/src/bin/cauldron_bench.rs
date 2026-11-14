@@ -99,6 +99,8 @@ fn main() -> std::process::ExitCode {
             return std::process::ExitCode::FAILURE;
         }
     };
+    // **Ctrl-C and SIGTERM stop the run through its guards**, so a trial's credential directory is not left behind (#433).
+    run::install_interrupt_handler();
     let records = match run::run(&options, held_out.as_deref()) {
         Ok(records) => records,
         Err(e) => {

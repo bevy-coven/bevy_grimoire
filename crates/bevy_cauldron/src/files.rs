@@ -231,10 +231,24 @@ pub(crate) fn inside(root: &Path, rel: &str) -> Result<PathBuf, String> {
     }
     let full = root.join(path);
     // A symlink is followed only while it stays in the project: the tree never lists one, and a path typed by
-    // hand or sent by an agent must not reach what the project's folder does not hold.
-    if let (Ok(real), Ok(base)) = (std::fs::canonicalize(&full), std::fs::canonicalize(root))
-        && !real.starts_with(&base)
-    {
+    // hand or sent by an agent must not reach what the project's folder does not hold. **A path that is not there yet is judged by the nearest
+    // folder that is** (a new page under a folder that links out of the project is outside it), and **a link that leads nowhere is outside too**,
+    // because a write through it would make the file where the link points.
+    let Ok(base) = std::fs::canonicalize(root) else { return Ok(full) };
+    let mut probe = full.as_path();
+    let real = loop {
+        match std::fs::canonicalize(probe) {
+            Ok(real) => break Some(real),
+            Err(_) if std::fs::symlink_metadata(probe).is_ok_and(|m| m.file_type().is_symlink()) => {
+                return Err(format!("{rel} is outside the project"));
+            }
+            Err(_) => match probe.parent() {
+                Some(parent) => probe = parent,
+                None => break None,
+            },
+        }
+    };
+    if real.is_some_and(|real| !real.starts_with(&base)) {
         return Err(format!("{rel} is outside the project"));
     }
     Ok(full)
@@ -660,6 +674,23 @@ impl Plugin for FilesPlugin {
 
 /// **Spawn the tree and the editor's column** when the Files workspace is entered. The code editor itself is
 /// spawned by [`keep_the_editor`] while a file is open, so a workspace with no file open holds no editor.
+/// **The node a workspace's central page stands in**: one card of the editor's panel look (padding, margin, edge, rounded corners) that fills what the
+/// docks leave. The Files workspace and the Design workspace both build their page host on it, so there is one such node and no second copy of it.
+pub(crate) fn page_host_node() -> Node {
+    Node {
+        flex_grow: 1.0,
+        min_width: Val::Px(0.0),
+        min_height: Val::Px(0.0),
+        flex_direction: FlexDirection::Column,
+        row_gap: Val::Px(chrome::GAP_ROW),
+        padding: UiRect::all(Val::Px(chrome::PAD)),
+        margin: UiRect::all(Val::Px(chrome::MARGIN)),
+        border: UiRect::all(Val::Px(chrome::EDGE_W)),
+        border_radius: BorderRadius::all(Val::Px(chrome::RADIUS_PANEL)),
+        ..default()
+    }
+}
+
 fn spawn_the_files_workspace(mut commands: Commands, frame: Res<Frame>) {
     let panel = chrome::panel_root(&mut commands, &frame, Side::Left, TREE_PANEL_W, true, false, "FILES").insert(FilesPanel).id();
     commands.entity(panel).with_children(|p| {
@@ -674,18 +705,7 @@ fn spawn_the_files_workspace(mut commands: Commands, frame: Res<Frame>) {
     let host = commands
         .spawn((
             FilesHost,
-            Node {
-                flex_grow: 1.0,
-                min_width: Val::Px(0.0),
-                min_height: Val::Px(0.0),
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(chrome::GAP_ROW),
-                padding: UiRect::all(Val::Px(chrome::PAD)),
-                margin: UiRect::all(Val::Px(chrome::MARGIN)),
-                border: UiRect::all(Val::Px(chrome::EDGE_W)),
-                border_radius: BorderRadius::all(Val::Px(chrome::RADIUS_PANEL)),
-                ..default()
-            },
+            page_host_node(),
             BackgroundColor(ink.panel_bg),
             chrome::Ground(ink.panel_bg),
             chrome::PanelGround,

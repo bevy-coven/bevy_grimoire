@@ -127,6 +127,8 @@ pub mod jobs;
 pub mod live;
 pub mod loading;
 pub mod present;
+pub mod style_proposals;
+pub mod style_followed;
 pub mod ops;
 pub mod ops_view;
 #[cfg(feature = "debugger")]

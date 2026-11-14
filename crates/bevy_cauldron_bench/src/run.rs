@@ -258,6 +258,23 @@ pub fn is_refusal(is_error: bool, text: &str) -> bool {
     value.get("refused").is_some() || value.get("outcome").and_then(Value::as_str) == Some("refused")
 }
 
+/// **The refusal an operation's answer carries**, or `None` when it did not refuse (#433).
+///
+/// The editor answers an operation call with `Ok` even when the operation was refused: the answer says
+/// `outcome: "refused"` and gives `refusal` (or `problem.what`). A setup step that was refused changed
+/// nothing, and the trial that follows would measure a project the task never described.
+pub fn refused_answer(answer: &Value) -> Option<String> {
+    if !is_refusal(false, &answer.to_string()) {
+        return None;
+    }
+    let why = answer
+        .get("refusal")
+        .and_then(Value::as_str)
+        .or_else(|| answer.get("problem").and_then(|p| p.get("what")).and_then(Value::as_str))
+        .map_or_else(|| answer.to_string(), str::to_owned);
+    Some(format!("`{}` was refused: {why}", answer.get("operation").and_then(Value::as_str).unwrap_or("an operation")))
+}
+
 /// **The tool an `undo` is**, as the editor's MCP server names it.
 pub const UNDO_TOOL: &str = "grimoire_undo_operation";
 
@@ -305,6 +322,9 @@ pub struct TrialRecord {
     pub dir: PathBuf,
     /// **Whether the task is held out**, so nothing that prints the trial names it (see [`summary_line`]).
     pub held_out: bool,
+    /// **Whether the agent was stopped because it made a call beyond its task's `budget.tool_calls`** (#433): such a trial
+    /// was cut off, and what it left was graded as it stood.
+    pub call_budget_exhausted: bool,
 }
 
 impl TrialRecord {
@@ -355,6 +375,7 @@ impl TrialRecord {
             "cost_reported_usd": self.cost_reported_usd,
             "tools_offered": self.tools_offered,
             "wishes": self.wishes,
+            "call_budget_exhausted": self.call_budget_exhausted,
         })
     }
 }
@@ -613,6 +634,9 @@ pub fn free_port() -> Result<u16, String> {
 /// **Start the editor under test on `project`, with its own port and display**, and wait for
 /// `grimoire/state` to answer.
 pub fn start_editor(editor: &Path, project: &Path, map: &str, dir: &Path) -> Result<Editor, String> {
+    if interrupted() {
+        return Err(INTERRUPTED_SENTENCE.to_owned());
+    }
     let port = free_port()?;
     let display = match std::env::consts::OS {
         "linux" => Some(Display::start()?),
@@ -641,7 +665,10 @@ pub fn start_editor(editor: &Path, project: &Path, map: &str, dir: &Path) -> Res
     let mut running = Editor { child, port, display, log: log.clone() };
     let deadline = Instant::now() + Duration::from_secs(EDITOR_START_S);
     while Instant::now() < deadline {
-        if brp_call(port, "grimoire/state", json!({})).is_ok() {
+        if interrupted() {
+            return Err(INTERRUPTED_SENTENCE.to_owned());
+        }
+        if brp_call(port, "grimoire/state", json!({})).is_ok() && map_is_open(port) {
             return Ok(running);
         }
         // **An editor that exited is a harness error now**, not in `EDITOR_START_S`: the reason is in its
@@ -658,6 +685,32 @@ pub fn start_editor(editor: &Path, project: &Path, map: &str, dir: &Path) -> Res
         "the editor did not answer grimoire/state on port {port} within {EDITOR_START_S} s. {}",
         tail(&log)
     ))
+}
+
+/// **The operation a started editor is probed with**: a dry run of `note_remove` for a note that does not exist.
+///
+/// It changes nothing, and its refusal says whether a map is open: "no map is open, ..." before the editor has opened
+/// the map it was pointed at, and "no note ... on this map" after. **Pinned to the editor's wording** by
+/// `tests/a_map_probe_matches_the_editor.rs`, which reads `bevy_cauldron`'s source for both.
+pub const MAP_PROBE_OP: &str = "note_remove";
+
+/// **What a refusal says when no map is open yet** (the start of the editor's own sentence; see [`MAP_PROBE_OP`]).
+pub const NO_MAP_OPEN: &str = "no map is open";
+
+/// **Whether the editor has opened its map**, which `grimoire/state` cannot say: it names the map from the moment the
+/// editor is pointed at it (#433). Under load the BRP server answers many frames before the map is open, and a setup
+/// step or an agent's first call in that gap is refused with "no map is open": `work-the-open-note` failed 8 of 24 trials
+/// run 8 at a time that way, and passed alone.
+fn map_is_open(port: u16) -> bool {
+    let answer = brp_call(
+        port,
+        "grimoire/operation_apply",
+        json!({"operation": MAP_PROBE_OP, "parameters": {"id": "bench-probe"}, "dry_run": true}),
+    );
+    match answer {
+        Ok(value) => !refused_answer(&value).is_some_and(|why| why.contains(NO_MAP_OPEN)),
+        Err(_) => false,
+    }
 }
 
 /// **The last few lines of a file**, for a harness error's reason.
@@ -873,6 +926,9 @@ pub fn tool_text(answer: &Value) -> String {
 /// dev-only run. It is an argument and not a field of [`Options`] because it is not a property of a run's
 /// settings: it is a place on this host, which no report or header may carry.
 pub fn run(options: &Options, held_out: Option<&Path>) -> Result<Vec<TrialRecord>, String> {
+    if options.agent == Agent::Omp {
+        check_model_form(&options.model)?;
+    }
     let known = operations(&options.editor)?;
     let known_refs: Vec<&str> = known.iter().map(String::as_str).collect();
     let suite = Suite::load(&options.root, &options.tasks, &known_refs)
@@ -936,6 +992,19 @@ pub fn run(options: &Options, held_out: Option<&Path>) -> Result<Vec<TrialRecord
     }
     std::fs::create_dir_all(&options.out)
         .map_err(|e| format!("{}: {e}", options.out.display()))?;
+    // **A killed run's credential directories are swept before this one starts** (#433): the guards are `Drop`s, which
+    // `kill -KILL` never runs. Only directories the runner made (a run directory carries its `run.json`) and only those
+    // older than any trial can run, so a run in progress under another `--run` keeps its own. This run's own directory is
+    // not special: nothing here is swept at age zero while another process might share its name.
+    if let Some(state) = options.out.parent() {
+        sweep_stale_secrets(state, Duration::from_secs(STALE_SECRETS_AGE_S));
+    }
+    // **The header, before the pre-flight turn and any trial**, so a run killed halfway still says how it was made and
+    // its directory carries the marker the sweep looks for.
+    let header = crate::probe::header(options, &options.label);
+    let header_text = serde_json::to_string_pretty(&header).map_err(|e| format!("{e}"))? + "\n";
+    bevy_grimoire_core::atomic_file::write(&options.out.join(crate::report::RUN_FILE), header_text)
+        .map_err(|e| format!("{}: {e}", options.out.display()))?;
     // **One real turn before any trial** (#432, D2): a model the host lists can still have a provider with no
     // quota left or a key that is refused, and finding that out trial by trial costs 35 s each, for every
     // trial of the run. The turn runs in the same kind of isolated HOME a trial uses, with the same credential.
@@ -949,11 +1018,7 @@ pub fn run(options: &Options, held_out: Option<&Path>) -> Result<Vec<TrialRecord
         let owned: Vec<Task> = held_selected.into_iter().cloned().collect();
         validate_held_out(options, &owned)?;
     }
-    // **The header, before any trial**, so a run killed halfway still says how it was made.
-    let header = crate::probe::header(options, &options.label);
-    let header_text = serde_json::to_string_pretty(&header).map_err(|e| format!("{e}"))? + "\n";
-    bevy_grimoire_core::atomic_file::write(&options.out.join(crate::report::RUN_FILE), header_text)
-        .map_err(|e| format!("{}: {e}", options.out.display()))?;
+    // (the header was written above)
 
     // **One work list, one worker per `jobs`**, so a `--jobs` of 1 is the same code as a `--jobs` of 4.
     // **A held-out task's trials are filed by ordinal**, never by id: the trial's directory is an ancestor of
@@ -1019,7 +1084,7 @@ pub fn run_work(
             .map(|_| {
                 scope.spawn(|| {
                     loop {
-                        if stopped.load(SeqCst) {
+                        if stopped.load(SeqCst) || interrupted() {
                             return;
                         }
                         let i = next.fetch_add(1, SeqCst);
@@ -1051,7 +1116,8 @@ pub fn run_work(
         return Err("a trial's worker panicked".to_owned());
     }
     let mut finished = finished.into_inner().map_err(|_| "a trial's records were poisoned".to_owned())?;
-    if stopped.load(SeqCst) {
+    let was_interrupted = interrupted();
+    if stopped.load(SeqCst) || was_interrupted {
         let why = last_refusal
             .into_inner()
             .map_err(|_| "a trial's records were poisoned".to_owned())?
@@ -1059,10 +1125,14 @@ pub fn run_work(
         let started: std::collections::BTreeSet<usize> = finished.iter().map(|(i, _)| *i).collect();
         for (i, (task, label, trial)) in work.iter().enumerate() {
             if !started.contains(&i) {
-                let reason = format!(
-                    "not run: the run was stopped after {PROVIDER_REFUSALS_MAX} consecutive provider refusals, so this \
-                     trial was never started. The last refusal: {why}"
-                );
+                let reason = if was_interrupted {
+                    "not run: the run was interrupted (SIGINT or SIGTERM), so this trial was never started".to_owned()
+                } else {
+                    format!(
+                        "not run: the run was stopped after {PROVIDER_REFUSALS_MAX} consecutive provider refusals, so this \
+                         trial was never started. The last refusal: {why}"
+                    )
+                };
                 finished.push((i, not_run(task, label, *trial, reason)));
             }
         }
@@ -1122,6 +1192,11 @@ pub fn validate_held_out(options: &Options, tasks: &[Task]) -> Result<(), String
 /// Answers the report and the paths written. A run whose `trial.json` files do not read is an error naming
 /// the file: a report of fewer trials than the run made would be a worse number with a better look.
 pub fn write_reports(options: &Options) -> Result<(crate::report::Report, Vec<PathBuf>), String> {
+    // **An interrupted run publishes nothing** (#433 review): the trials it never started are only harness errors, so a
+    // report of them would still read as fit (10% are tolerated) and could be committed under `--label` as a result.
+    if interrupted() {
+        return Err(format!("{INTERRUPTED_SENTENCE}, so no report was written"));
+    }
     let data = crate::report::RunData::read(&options.out)?;
     let report = crate::report::Report::build(&data);
     let md = options.out.join("report.md");
@@ -1227,9 +1302,11 @@ impl ToolBudget {
         self.calls
     }
 
-    /// **Whether the agent has made all the calls it was given.**
+    /// **Whether the agent has made a call BEYOND the number it was given** (#433): an agent that uses exactly its budget
+    /// is not stopped, and so is not cut before its closing message. The call that went over has already finished by
+    /// the time it is counted, so it is the one the stop is about.
     pub fn spent(&mut self) -> bool {
-        self.calls() >= self.limit
+        self.calls() > self.limit
     }
 }
 
@@ -1260,16 +1337,28 @@ pub fn claude_calls(event: &Value) -> u32 {
 /// holding the trial's project (the follow-up #412's review named). The agent leads its own group
 /// ([`detach`]), so the group is the agent's and nothing else's.
 ///
-/// **An agent that has made all the calls its task gave it is stopped** as one that ran out of time is
+/// **An agent that has made a call beyond what its task gave it is stopped** as one that ran out of time is
 /// (`budget`, [`ToolBudget`]), and what it left is graded: the call budget is a bound on the run, not a failure of it.
+/// The answer says which way the wait ended, so a trial stopped at its budget can be recorded as such.
 pub fn wait_for_agent(
     child: Child,
     editor: &mut Editor,
     wall_s: u32,
     name: &str,
     budget: Option<&mut ToolBudget>,
-) -> Result<(), String> {
+) -> Result<WaitEnd, String> {
     wait_within(child, wall_s, name, budget, || editor_exit(editor))
+}
+
+/// **How the wait for an agent ended**, when it ended without an error.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WaitEnd {
+    /// The agent exited by itself.
+    Finished,
+    /// The wall budget ran out and the agent was stopped.
+    WallTime,
+    /// The agent made a call beyond its tool-call budget and was stopped.
+    CallBudget,
 }
 
 /// **[`wait_for_agent`] with the editor's death passed as a question**, so a stand-in agent needs no editor.
@@ -1279,17 +1368,26 @@ pub fn wait_within(
     name: &str,
     mut budget: Option<&mut ToolBudget>,
     mut editor_gone: impl FnMut() -> Option<String>,
-) -> Result<(), String> {
+) -> Result<WaitEnd, String> {
     let deadline = Instant::now() + Duration::from_secs(u64::from(wall_s));
+    let mut end = WaitEnd::WallTime;
     while Instant::now() < deadline {
         match child.try_wait() {
-            Ok(Some(_)) => break,
+            Ok(Some(_)) => {
+                end = WaitEnd::Finished;
+                break;
+            }
             Ok(None) => {
+                if interrupted() {
+                    stop_group(&mut child);
+                    return Err("the run was interrupted (SIGINT or SIGTERM), so this trial was stopped".to_owned());
+                }
                 if let Some(reason) = editor_gone() {
                     stop_group(&mut child);
                     return Err(reason);
                 }
                 if budget.as_mut().is_some_and(|b| b.spent()) {
+                    end = WaitEnd::CallBudget;
                     break;
                 }
                 std::thread::sleep(Duration::from_millis(AGENT_POLL_INTERVAL_MS));
@@ -1298,7 +1396,7 @@ pub fn wait_within(
         }
     }
     stop_group(&mut child);
-    Ok(())
+    Ok(end)
 }
 
 /// **Kill an agent's process group while its leader still runs, then the agent itself, and wait for it.**
@@ -1326,6 +1424,7 @@ pub fn stop_group(child: &mut Child) -> bool {
 ///
 /// Listing proves the name and nothing about the provider behind it; [`preflight_turn`] asks the provider.
 pub fn check_model(omp: &str, model: &str) -> Result<(), String> {
+    check_model_form(model)?;
     let out = Command::new(omp)
         .args(["models", "find", model])
         .output()
@@ -1357,6 +1456,8 @@ pub fn check_model(omp: &str, model: &str) -> Result<(), String> {
 /// finds it out here, once.
 pub fn preflight_turn(omp: &str, model: &str, scratch: &Path) -> Result<(), String> {
     let home = scratch.join("home");
+    // A pre-flight directory a killed run left is this one's to replace.
+    let _ = std::fs::remove_dir_all(scratch);
     let _secrets = TrialSecrets::new([scratch.to_path_buf()]);
     seed_credentials(omp, &home, model)?;
     let wall = format!("{PREFLIGHT_WALL_S}s");
@@ -1383,6 +1484,7 @@ pub fn preflight_turn(omp: &str, model: &str, scratch: &Path) -> Result<(), Stri
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    withhold_credentials(&mut command);
     let child = detach(&mut command)
         .spawn()
         .map_err(|e| format!("omp did not start for the pre-flight turn: {e}"))?;
@@ -1461,6 +1563,10 @@ fn output_within(mut child: Child, within: Duration) -> Result<(String, String),
     let err = drain(child.stderr.take());
     let deadline = Instant::now() + within;
     loop {
+        if interrupted() {
+            stop_group(&mut child);
+            return Err(INTERRUPTED_SENTENCE.to_owned());
+        }
         match child.try_wait() {
             Ok(Some(_)) => break,
             Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(AGENT_POLL_INTERVAL_MS)),
@@ -1538,6 +1644,7 @@ fn blank_record(
         wishes: Vec::new(),
         dir: trial_dir(options, label, trial),
         held_out: task.split == crate::task::Split::HeldOut,
+        call_budget_exhausted: false,
     }
 }
 
@@ -1607,6 +1714,12 @@ fn one_trial(options: &Options, task: &Task, label: &str, trial: u32, variant: O
             "grimoire/operation_apply",
             json!({"operation": step.op, "parameters": step.params, "dry_run": false}),
         );
+        // **A refused answer is a failed setup, not a success** (#433): the BRP call is `Ok` when the editor
+        // answered, and the answer says `outcome: refused` when the operation did not happen.
+        let answer = answer.and_then(|value| match refused_answer(&value) {
+            Some(why) => Err(why),
+            None => Ok(value),
+        });
         if let Err(e) = answer {
             // **The refusal quotes the step's operation and arguments**, which for a held-out task are its setup.
             return harness(if held_out {
@@ -1678,6 +1791,7 @@ fn one_trial(options: &Options, task: &Task, label: &str, trial: u32, variant: O
     record.wall_s = wall_s;
     record.tools_offered = run.tools_offered.clone();
     record.wishes = run.wishes.clone();
+    record.call_budget_exhausted = run.call_budget_exhausted;
     let reason = graded.sentence();
     write_record(&record, task, &reason);
     record
@@ -1704,6 +1818,8 @@ pub struct AgentRun {
     pub tools_offered: Vec<String>,
     /// The decisions the harness made, by the name a `decide` check asks for.
     pub decisions: std::collections::BTreeMap<String, Decision>,
+    /// **Whether the agent was stopped at its tool-call budget** (#433).
+    pub call_budget_exhausted: bool,
 }
 
 /// **An agent that connects and stops**, which must pass no task.
@@ -1814,7 +1930,7 @@ fn run_omp(
     // trial's agent is done, on every path out of this function (#432, D6 and D7). The guard is made first, so
     // a failed import leaves nothing behind either.
     let _secrets = TrialSecrets::new([dir.join("home")]);
-    seed_credentials(OMP_PROGRAM, &dir.join("home"), &options.model)?;
+    let secrets = seed_credentials(OMP_PROGRAM, &dir.join("home"), &options.model)?;
     let transcript = dir.join("transcript.jsonl");
     let stdout = std::fs::File::create(&transcript).map_err(|e| format!("{}: {e}", transcript.display()))?;
     let stderr = std::fs::File::create(dir.join("agent.err")).map_err(|e| format!("{e}"))?;
@@ -1851,6 +1967,7 @@ fn run_omp(
         .stdin(Stdio::null())
         .stdout(stdout)
         .stderr(stderr);
+    withhold_credentials(&mut omp);
     let child = detach(&mut omp)
         .spawn()
         .map_err(|e| format!("omp did not start: {e}"))?;
@@ -1859,13 +1976,19 @@ fn run_omp(
     // ignores its own flag, and it is the same number so a trial is one budget and not two. **The calls it
     // was given are the other bound** (#432, D3): the transcript is counted while the agent runs.
     let mut calls = ToolBudget::new(transcript.clone(), omp_calls, task.budget.tool_calls);
-    wait_for_agent(child, editor, task.budget.wall_s, "omp", Some(&mut calls))?;
+    let waited = wait_for_agent(child, editor, task.budget.wall_s, "omp", Some(&mut calls));
+    // **The credential strings the trial was given are scrubbed from the files it keeps** (#433), whichever way the wait
+    // ended: an agent that read its own `agent.db` printed it into the transcript.
+    scrub_secrets(&[transcript.clone(), dir.join("agent.err")], &secrets);
+    let end = waited?;
     let server = config
         .get("mcpServers")
         .and_then(Value::as_object)
         .and_then(|servers| servers.keys().next().cloned())
         .ok_or("the editor's MCP config names no server")?;
-    read_transcript(&transcript, dir, &server)
+    let mut run = read_transcript(&transcript, dir, &server)?;
+    run.call_budget_exhausted = end == WaitEnd::CallBudget;
+    Ok(run)
 }
 
 /// **Where a trial's harness records the tool list it was offered**, beside the transcript.
@@ -1950,12 +2073,32 @@ pub fn model_provider(model: &str) -> Option<&str> {
     model.split_once('/').map(|(provider, _)| provider).filter(|provider| !provider.is_empty())
 }
 
+/// **An example of a model name that names its provider**, for a refusal to quote.
+pub const EXAMPLE_MODEL: &str = "anthropic/claude-sonnet-5-5";
+
+/// **The sentence for a model name that names no provider.**
+fn no_provider_sentence(model: &str) -> String {
+    format!(
+        "`{model}` names no provider, and a trial carries only its model's provider's credential: name the model as \
+         `provider/model`, for example `--model {EXAMPLE_MODEL}`"
+    )
+}
+
+/// **Refuse a model name with no `provider/` in front of it** (#433), before omp is asked anything.
+///
+/// The provider is what the credential is narrowed by ([`credentials_for`]); a bare name used to fall back to
+/// carrying every stored credential into the trial.
+pub fn check_model_form(model: &str) -> Result<(), String> {
+    if model_provider(model).is_some() { Ok(()) } else { Err(no_provider_sentence(model)) }
+}
+
 /// **What a trial keeps from `omp auth export`: the credentials of one provider**, in the export's own shape.
 ///
 /// A trial runs one model, so it needs one provider's login and no other: copying every stored credential
 /// into every trial's `HOME` put the host's whole login (an OAuth refresh token included, which omp itself
 /// warns signs the source machine out once a copy refreshes it) in a directory that outlived the trial (#432,
-/// D6). `provider` is `None` for a bare model name, and then nothing can be narrowed: every credential is kept.
+/// D6). **A bare model name names no provider and is refused** (#433): nothing could be narrowed, and carrying every
+/// stored credential into a trial is what the narrowing is for.
 ///
 /// An export that holds nothing for the provider is an error naming the providers it does hold (a provider's
 /// name is not a secret) and the one to log in to.
@@ -1969,7 +2112,7 @@ pub fn credentials_for(carried: &Value, provider: Option<&str>, model: &str) -> 
         );
     }
     let Some(provider) = provider else {
-        return Ok(carried.clone());
+        return Err(no_provider_sentence(model));
     };
     let own: Vec<Value> = all
         .iter()
@@ -2029,7 +2172,7 @@ const AUTH_CARRIED_FILE: &str = "auth-carried.json";
 ///
 /// **The carrying file is removed on every path**, a failed import included: it holds the credentials in
 /// plain text. The caller holds a [`TrialSecrets`] over `home`, which removes what the import wrote.
-pub fn seed_credentials(omp: &str, home: &Path, model: &str) -> Result<(), String> {
+pub fn seed_credentials(omp: &str, home: &Path, model: &str) -> Result<Vec<String>, String> {
     let exported = Command::new(omp)
         .args(["auth", "export"])
         .output()
@@ -2044,12 +2187,88 @@ pub fn seed_credentials(omp: &str, home: &Path, model: &str) -> Result<(), Strin
     let carried = serde_json::from_slice::<Value>(&exported.stdout)
         .map_err(|e| format!("`omp auth export` did not print JSON: {e}"))?;
     let carried = credentials_for(&carried, model_provider(model), model)?;
+    let secrets = credential_strings(&carried);
     let file = home.join(AUTH_CARRIED_FILE);
     std::fs::create_dir_all(home).map_err(|e| format!("{}: {e}", home.display()))?;
     let imported = import_credentials(omp, home, &file, &carried);
     // **Removed whether or not the import worked**: the file is the secret in plain text.
     let _ = std::fs::remove_file(&file);
-    imported
+    imported.map(|()| secrets)
+}
+
+/// **What marks the place a secret was in a file the trial keeps.**
+pub const REDACTED: &str = "[redacted]";
+
+/// **The shortest string treated as a secret**, characters. A shorter value (`oauth`, `api_key`, a provider's name) is a
+/// word the files say elsewhere, and scrubbing it would damage them.
+pub const MIN_SECRET_LEN: usize = 8;
+
+/// **Every string value in `value`, however deep, that is long enough to be a secret.**
+pub fn secret_strings(value: &Value) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut stack = vec![value];
+    while let Some(next) = stack.pop() {
+        match next {
+            Value::String(s) if s.chars().count() >= MIN_SECRET_LEN => found.push(s.clone()),
+            Value::Array(items) => stack.extend(items),
+            Value::Object(map) => stack.extend(map.values()),
+            _ => {}
+        }
+    }
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// **The secret strings of an `omp auth export`**: every string value under each entry's `credential` (an access
+/// token, a refresh token, an API key), which is what the carried HOME holds and an agent in it can read.
+pub fn credential_strings(export: &Value) -> Vec<String> {
+    let mut found: Vec<String> = export
+        .get("credentials")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|c| c.get("credential"))
+        .flat_map(secret_strings)
+        .collect();
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// **Replace every secret in these files with [`REDACTED`]**, in place, and answer how many times (#433).
+///
+/// Each secret is looked for as it is and as it reads inside a JSON string (`"` and `\` escaped), because the
+/// transcript is JSON lines and an agent's output is a string in it. A file that is not there or is not UTF-8 is
+/// skipped. The retained transcript and `agent.err` are what this is for; the credential in HOME is deleted (#432).
+pub fn scrub_secrets(files: &[PathBuf], secrets: &[String]) -> usize {
+    let mut forms: Vec<String> = Vec::new();
+    for secret in secrets.iter().filter(|s| s.chars().count() >= MIN_SECRET_LEN) {
+        forms.push(secret.clone());
+        if let Ok(escaped) = serde_json::to_string(secret) {
+            forms.push(escaped.trim_matches('"').to_owned());
+        }
+    }
+    forms.sort();
+    forms.dedup();
+    let mut replaced = 0;
+    for file in files {
+        let Ok(text) = std::fs::read_to_string(file) else {
+            continue;
+        };
+        let mut scrubbed = text.clone();
+        for form in &forms {
+            let hits = scrubbed.matches(form.as_str()).count();
+            if hits > 0 {
+                scrubbed = scrubbed.replace(form.as_str(), REDACTED);
+                replaced += hits;
+            }
+        }
+        if scrubbed != text {
+            let _ = bevy_grimoire_core::atomic_file::write(file, scrubbed);
+        }
+    }
+    replaced
 }
 
 /// **Write the carrying file and run `omp auth import` on it** into `home`.
@@ -2307,4 +2526,113 @@ pub fn record_json(record: &TrialRecord, task: &Task, sentence: &str) -> Value {
         object.insert("tags".to_owned(), json!(task.tags));
     }
     value
+}
+
+/// **How old a trial's credential directory must be before another run sweeps it**, seconds: longer than any trial runs
+/// (a task's wall budget is minutes), so a run in progress under another `--run` keeps its own.
+pub const STALE_SECRETS_AGE_S: u64 = 3600;
+
+/// **Delete the credential directories a dead run left**, `<state>/<run>/preflight` and
+/// `<state>/<run>/<task>/trial-<n>/{home,claude-config}`, that were last modified `older_than` ago or earlier, and
+/// answer how many were removed (#433). `kill -KILL` never runs the [`TrialSecrets`] guards; the next run does this.
+pub fn sweep_stale_secrets(state: &Path, older_than: Duration) -> usize {
+    let Ok(runs) = std::fs::read_dir(state) else {
+        return 0;
+    };
+    runs.flatten().filter(|run| run.path().is_dir()).map(|run| sweep_run_dir(&run.path(), older_than)).sum()
+}
+
+/// **[`sweep_stale_secrets`] for one run's directory.**
+fn sweep_run_dir(run: &Path, older_than: Duration) -> usize {
+    // **Only a directory the runner made**: it writes `run.json` before any trial or pre-flight turn.
+    if !run.join(crate::report::RUN_FILE).is_file() {
+        return 0;
+    }
+    let stale = |path: &Path| {
+        path.is_dir()
+            && (older_than.is_zero()
+                || std::fs::metadata(path)
+                    .and_then(|m| m.modified())
+                    .is_ok_and(|modified| modified.elapsed().is_ok_and(|age| age >= older_than)))
+    };
+    let mut candidates = vec![run.join(PREFLIGHT_DIR)];
+    for task in std::fs::read_dir(run).into_iter().flatten().flatten().filter(|t| t.path().is_dir()) {
+        for trial in std::fs::read_dir(task.path()).into_iter().flatten().flatten() {
+            if trial.file_name().to_string_lossy().starts_with("trial-") {
+                candidates.push(trial.path().join("home"));
+                candidates.push(trial.path().join("claude-config"));
+            }
+        }
+    }
+    candidates.iter().filter(|path| stale(path) && std::fs::remove_dir_all(path).is_ok()).count()
+}
+
+/// **Whether SIGINT or SIGTERM has arrived** since [`install_interrupt_handler`] (#433).
+static INTERRUPTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// **Has the run been told to stop?** Workers take no further trial, a waiting agent's process group is killed, and the
+/// run unwinds through its guards, so no credential directory is left by a Ctrl-C.
+pub fn interrupted() -> bool {
+    INTERRUPTED.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// **The handler: it only sets the flag**, which is all a signal handler may safely do.
+#[cfg(unix)]
+extern "C" fn note_interrupt(signal: libc::c_int) {
+    INTERRUPTED.store(true, std::sync::atomic::Ordering::SeqCst);
+    // SAFETY: `signal` is async-signal-safe. **The default is restored after the first signal**, so a second Ctrl-C
+    // kills a run that is stuck instead of being swallowed.
+    unsafe {
+        libc::signal(signal, libc::SIG_DFL);
+    }
+}
+
+/// **Make SIGINT and SIGTERM stop the run through its guards instead of ending the process** (#433).
+///
+/// Rust's default for both ends the process without running `Drop`, so a Ctrl-C used to leave every trial's
+/// credential directory behind. `kill -KILL` cannot be caught; [`sweep_stale_secrets`] cleans up after that.
+#[cfg(unix)]
+pub fn install_interrupt_handler() {
+    let handler = note_interrupt as extern "C" fn(libc::c_int) as libc::sighandler_t;
+    // SAFETY: `signal` with a handler that only stores to an atomic, which is async-signal-safe.
+    unsafe {
+        libc::signal(libc::SIGINT, handler);
+        libc::signal(libc::SIGTERM, handler);
+    }
+}
+
+/// **No signal handling off Unix**: the default stands.
+#[cfg(not(unix))]
+pub fn install_interrupt_handler() {}
+
+/// **What an interrupted wait, start or report says.**
+const INTERRUPTED_SENTENCE: &str = "the run was interrupted (SIGINT or SIGTERM)";
+
+/// **The names in an environment that look like a credential** (#433 review): a key, token, secret, password or
+/// credential, an `AWS_` variable, an ssh agent's socket. The omp agent's shell can run `env`, and what it prints lands
+/// in the kept transcript; the runner only scrubs the credential it imported, so the rest is not handed over at all.
+pub fn credential_variables(names: impl IntoIterator<Item = std::ffi::OsString>) -> Vec<std::ffi::OsString> {
+    names
+        .into_iter()
+        .filter(|name| {
+            let upper = name.to_string_lossy().to_uppercase();
+            ["_KEY", "_TOKEN", "_SECRET", "_PASSWORD", "_PASSWD", "_AUTH"].iter().any(|s| upper.ends_with(s))
+                || ["SECRET", "TOKEN", "PASSWORD", "CREDENTIAL", "AUTH_SOCK"].iter().any(|s| upper.contains(s))
+                || upper.starts_with("AWS_")
+        })
+        .collect()
+}
+
+/// **Remove these variables from a command's environment.**
+pub fn withhold_from(command: &mut Command, names: impl IntoIterator<Item = std::ffi::OsString>) {
+    for name in names {
+        command.env_remove(name);
+    }
+}
+
+/// **Start an omp agent without the runner's credential-looking variables** ([`credential_variables`]). Everything else
+/// is inherited: `PATH`, the editor's port, and a test's marker. (Claude Code's `ANTHROPIC_API_KEY` is its credential
+/// and is carried and scrubbed instead.)
+pub fn withhold_credentials(command: &mut Command) {
+    withhold_from(command, credential_variables(std::env::vars_os().map(|(name, _)| name)));
 }
