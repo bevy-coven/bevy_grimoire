@@ -30,6 +30,7 @@ mod areas_drawn_on_the_map;
 mod back_and_forward_across_workspaces;
 mod back_and_forward_returns_to_a_cue_and_a_file;
 mod fixtures;
+mod new_topics_start_from_templates_in_the_design_workspace;
 mod the_agent_workspace_takes_a_change_back_from_its_row;
 mod the_finder_goes_to_cues_scripts_and_files;
 
@@ -410,6 +411,7 @@ mod the_carved_ground_is_not_white;
 mod the_carved_ground_pipeline_is_warm;
 mod the_chrome_helpers_keep_their_raw_nodes_counted;
 mod the_design_tree_is_in_the_editors_state;
+mod the_design_workspace_shows_the_style;
 mod the_door_switch_crosses;
 mod the_editor_and_the_game_agree;
 mod the_editor_follows_an_agents_change;

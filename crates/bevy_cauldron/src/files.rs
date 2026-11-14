@@ -322,6 +322,23 @@ pub fn open_file(world: &mut World, rel: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// **Hold a file's text for an editor that is not the Files workspace's** (SG-05, #404): the Design workspace's Edit. The file is read
+/// into [`Files`] exactly as an open reads it and gets **no tab**, so the Files workspace's tabs are untouched; the buffer lives while it
+/// has unsaved typing or the Design workspace is editing it (`keep_the_open_files`). A buffer already held is left as it is.
+pub fn hold_for_editing(world: &mut World, rel: &str) -> Result<(), String> {
+    let root = world.get_resource::<Project>().map(|p| p.root.clone()).ok_or("there is no project open")?;
+    let mut files = world.get_resource_mut::<Files>().ok_or("the file editor is not running")?;
+    if files.root.as_deref() != Some(root.as_path()) {
+        files.root = Some(root.clone());
+        files.open.clear();
+    }
+    if !files.open.contains_key(rel) {
+        let file = OpenFile::from_disk(&root, rel)?;
+        files.open.insert(rel.to_owned(), file);
+    }
+    Ok(())
+}
+
 pub fn save_file(files: &mut Files, root: &Path, rel: &str) -> Result<(), String> {
     let file = files.open.get_mut(rel).ok_or_else(|| format!("{rel} is not open"))?;
     if let Some(why) = &file.problem {
@@ -577,6 +594,13 @@ pub struct FileEditor {
     analysed: u64,
 }
 
+impl FileEditor {
+    /// **A fresh editor widget's bookkeeping for `rel`**: nothing coloured or analysed yet, so the first frame does both.
+    pub fn showing(rel: &str, pushed: u64) -> FileEditor {
+        FileEditor { shown: Some(rel.to_owned()), pushed, highlighted: u64::MAX, analysed: u64::MAX }
+    }
+}
+
 fn in_files(workspace: Option<Res<Workspace>>) -> bool {
     workspace.is_some_and(|w| *w == Workspace::Files)
 }
@@ -621,6 +645,15 @@ impl Plugin for FilesPlugin {
                     .chain()
                     .run_if(in_state(Screen::Editor))
                     .run_if(in_files),
+            )
+            // **The Design workspace edits through the same machinery** (SG-05, #404): the buffer kept, the disk polled, the editor driven and
+            // coloured, in the Design workspace's page instead of the Files workspace's.
+            .add_systems(
+                Update,
+                (keep_the_open_files, poll_the_disk, keep_the_design_editor, decorate_the_editor)
+                    .chain()
+                    .run_if(in_state(Screen::Editor))
+                    .run_if(Workspace::design_is_open),
             );
     }
 }
@@ -744,7 +777,13 @@ fn tree_names(world: &mut World) -> HashMap<u64, (String, bool)> {
 
 /// **Keep the open files in step with the tabs.** A tab the session restored has no text yet: read it. A
 /// file whose tab was closed and which has nothing unsaved is let go. The project changing drops all of them.
-fn keep_the_open_files(mut files: ResMut<Files>, session: Res<Session>, project: Option<Res<Project>>, mut state: Option<ResMut<EditorState>>) {
+fn keep_the_open_files(
+    mut files: ResMut<Files>,
+    session: Res<Session>,
+    project: Option<Res<Project>>,
+    mut state: Option<ResMut<EditorState>>,
+    design: Option<Res<crate::design_view::DesignView>>,
+) {
     let Some(project) = project else { return };
     if files.root.as_deref() != Some(project.root.as_path()) {
         files.root = Some(project.root.clone());
@@ -785,7 +824,9 @@ fn keep_the_open_files(mut files: ResMut<Files>, session: Res<Session>, project:
             }
         }
     }
-    files.open.retain(|rel, file| wanted.contains(&rel.as_str()) || file.dirty());
+    // **A file the Design workspace is editing is kept** even while clean (SG-05, #404): it has no tab here.
+    let design_editing = design.as_deref().and_then(crate::design_view::DesignView::editing_file).map(str::to_owned);
+    files.open.retain(|rel, file| wanted.contains(&rel.as_str()) || file.dirty() || design_editing.as_deref() == Some(rel.as_str()));
     let dirty: Vec<String> = files.open.iter().filter(|(_, f)| f.dirty()).map(|(rel, _)| rel.clone()).collect();
     publish_unsaved(&project.root, dirty);
 }
@@ -857,7 +898,30 @@ fn keep_the_editor(
     mut editors: Query<(Entity, &mut FileEditor, &mut CodeEditorValue, &mut CodeEditor, Option<&InteractionDisabled>)>,
 ) {
     let Ok(host) = hosts.single() else { return };
-    let active = active_file(&session);
+    drive_the_editor(&mut commands, &mut files, host, active_file(&session), &mut editors);
+}
+
+/// **The Design workspace's editor** (SG-05, #404): the same widget, the same buffer ([`Files`]) and the same driver as the Files
+/// workspace's, in the page's own place, for the file Edit was pressed on.
+pub(crate) fn keep_the_design_editor(
+    mut commands: Commands,
+    mut files: ResMut<Files>,
+    design: Res<crate::design_view::DesignView>,
+    hosts: Query<Entity, With<crate::design_view::DesignBody>>,
+    mut editors: Query<(Entity, &mut FileEditor, &mut CodeEditorValue, &mut CodeEditor, Option<&InteractionDisabled>)>,
+) {
+    let Ok(host) = hosts.single() else { return };
+    drive_the_editor(&mut commands, &mut files, host, design.editing_file().map(str::to_owned), &mut editors);
+}
+
+/// **Put `active` in the code editor under `host`**, spawning the editor when there is a file and taking it away when there is none.
+fn drive_the_editor(
+    commands: &mut Commands,
+    files: &mut Files,
+    host: Entity,
+    active: Option<String>,
+    editors: &mut Query<(Entity, &mut FileEditor, &mut CodeEditorValue, &mut CodeEditor, Option<&InteractionDisabled>)>,
+) {
     match (active, editors.iter_mut().next()) {
         (None, Some((entity, ..))) => {
             commands.entity(entity).despawn();
@@ -868,7 +932,7 @@ fn keep_the_editor(
             let editor = commands
                 .spawn((
                     bevy_gooey::code_editor(rel.clone(), file.text.clone()),
-                    FileEditor { shown: Some(rel.clone()), pushed: file.pushed, highlighted: u64::MAX, analysed: u64::MAX },
+                    FileEditor::showing(&rel, file.pushed),
                     indentation_of(Lang::of(&rel)),
                     // **The text small down the right edge** (GD-12, #374): the person's way round a long file, with the
                     // errors and the lines an agent changed marked on it.

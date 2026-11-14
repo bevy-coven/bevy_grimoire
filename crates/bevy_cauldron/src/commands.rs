@@ -255,6 +255,7 @@ pub fn identity(action: Action) -> (&'static str, &'static str) {
         Action::WorkspaceFiles => ("workspace.files", "Go to the Files workspace"),
         Action::WorkspaceGame => ("workspace.game", "Go to the Game workspace"),
         Action::WorkspaceAgent => ("workspace.agent", "Go to the Agent workspace"),
+        Action::WorkspaceDesign => ("workspace.design", "Go to the Design workspace"),
         Action::EditTile => ("meshes.define_piece", "Define this piece"),
         Action::Shortcuts => ("help.show_keys", "Show every key on what it does"),
         Action::Save => ("file.save", "Save"),

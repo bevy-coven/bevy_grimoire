@@ -183,21 +183,47 @@ pub fn compose(
 ) -> Result<Answer, String> {
     check(tree, request)?;
     let chain = tree.chain_to(request.map.as_deref(), request.at);
-    let topic = request.topic.as_deref().filter(|t| *t != STYLE_TOPIC);
+    compose_chain(tree, &chain, request.topic.as_deref(), decide)
+}
+
+/// **The style of one place of the tree, as an agent that asked for that place would be served it** (SG-05, #404).
+///
+/// The Design workspace's "As an agent reads it" is this: the same [`compose_chain`] `grimoire_style` ends in, over the chain
+/// [`Tree::chain_of`] gives for the place, so the page and the answer cannot be two renderings. `None` when `place` is no place
+/// of the tree.
+pub fn compose_place(
+    tree: &Tree,
+    place: &str,
+    topic: Option<&str>,
+    decide: &mut dyn FnMut(&str, &str) -> Result<Decision, String>,
+) -> Option<Result<Answer, String>> {
+    let chain = tree.chain_of(place)?;
+    Some(compose_chain(tree, &chain, topic, decide))
+}
+
+/// **The chain, served.** One function for the request `grimoire_style` takes and the place the Design workspace shows: `topic`
+/// is the topic asked for, if any (`style` is the overall feel every place contributes, so it asks for nothing more).
+pub fn compose_chain(
+    tree: &Tree,
+    chain: &[&Place],
+    topic_asked: Option<&str>,
+    decide: &mut dyn FnMut(&str, &str) -> Result<Decision, String>,
+) -> Result<Answer, String> {
+    let topic = topic_asked.filter(|t| *t != STYLE_TOPIC);
     // **Each place's files, its overall feel first and then the topic asked for.**
     let rows_of = |place: &Place| -> Vec<Topic> {
         let mut rows: Vec<Topic> = place.topic(STYLE_TOPIC).cloned().into_iter().collect();
         rows.extend(topic.and_then(|t| place.topic(t)).cloned());
         rows
     };
-    refuse_a_chain_over_its_limit(&chain, &rows_of)?;
+    refuse_a_chain_over_its_limit(chain, &rows_of)?;
 
     let mut files: Vec<File> = Vec::new();
     let mut sections: Vec<String> = Vec::new();
     let mut withheld: Vec<Withheld> = Vec::new();
     let mut trouble: Option<String> = None;
     let mut served: Vec<String> = Vec::new();
-    for place in &chain {
+    for place in chain {
         for row in rows_of(place) {
             let Some(text) = tree.text(&row.file) else {
                 let why = tree
@@ -229,9 +255,9 @@ pub fn compose(
             }
         }
     }
-    let (pictures, left_out) = pictures_of(tree, &chain, &rows_of, &served);
+    let (pictures, left_out) = pictures_of(tree, chain, &rows_of, &served);
     let mut text = if sections.is_empty() {
-        let about = match request.topic.as_deref() {
+        let about = match topic_asked {
             Some(t) => format!(" for the topic `{t}`"),
             None => String::new(),
         };

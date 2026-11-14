@@ -1,0 +1,384 @@
+//! **The Design workspace: the tree, the rendered page and the board** (SG-05, #404; the series #399).
+//!
+//! `Cmd`/`Ctrl`+`0` opens a tenth workspace: the design tree on the left, the selected file rendered by gooey's `markdown_view` in the middle
+//! with its pictures in place, and that place's dream board beside it as a card grid. **Edit** swaps the page for the file editor and **Done**
+//! saves it and renders it again; a change on disk under unsaved typing offers Reload or Keep mine; "As an agent reads it" renders the chain
+//! as `grimoire_style` serves it; Go to anything lands on a topic's name here; a dropped picture goes on the selected place's board.
+
+use bevy::input::ButtonState;
+use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
+use bevy::input_focus::{FocusCause, InputFocus};
+use bevy::prelude::*;
+use bevy::time::TimeUpdateStrategy;
+use bevy::window::PrimaryWindow;
+use bevy_cauldron::design_view::{DesignView, Page};
+use bevy_cauldron::editor::EditorState;
+use bevy_cauldron::harness;
+use bevy_cauldron::keys::{Action, binding};
+use bevy_cauldron::workspace::Workspace;
+use bevy_gooey::{CardRef, CodeEditor, CodeEditorValue, MarkdownOutline, MarkdownPicture, MarkdownView};
+use bevy_grimoire_core::board::{self, Board, Entry};
+use bevy_grimoire_core::design::{self, Tree};
+use bevy_grimoire_core::style;
+use bevy_grimoire_core::trust::{Decision, TrustStore};
+
+use crate::fixtures;
+
+const SETTLE: usize = 14;
+/// One frame of the test clock, in seconds: the file watchers run on the real clock, which the manual strategy drives.
+const FRAME_S: f32 = 1.0 / 60.0;
+
+const GAME: &str = "design/style.md";
+const LEVEL: &str = "design/levels/m/style.md";
+const FOG: &str = "design/levels/m/board/fog.png";
+const DUSK: &str = "design/levels/m/board/dusk.png";
+const GONE: &str = "design/levels/m/board/gone.png";
+const LEVEL_TEXT: &str = "# Yard\n\n## Light\n\nSodium light on wet concrete.\n\n![the fog's colour, not its density](board/fog.png \"fog\")\n\n## Mood\n\nQuiet.\n\n![how the light leaves the roofs first](board/dusk.png)\n";
+
+fn press(app: &mut App, action: Action) {
+    let row = binding(action);
+    let mut keys = vec![row.key];
+    if row.needs_mod {
+        keys.push(if cfg!(target_os = "macos") { KeyCode::SuperLeft } else { KeyCode::ControlLeft });
+    }
+    for state in [ButtonState::Pressed, ButtonState::Released] {
+        for code in &keys {
+            app.world_mut().write_message(KeyboardInput {
+                key_code: *code,
+                logical_key: Key::Unidentified(NativeKey::Unidentified),
+                state,
+                text: None,
+                repeat: false,
+                window: Entity::PLACEHOLDER,
+            });
+        }
+        app.update();
+        app.update();
+    }
+    settle(app);
+}
+
+fn settle(app: &mut App) {
+    for _ in 0..SETTLE {
+        app.update();
+    }
+}
+
+fn picture(root: &std::path::Path, rel: &str) {
+    let full = root.join(rel);
+    std::fs::create_dir_all(full.parent().expect("a folder")).unwrap_or_else(|e| panic!("{e}"));
+    image::RgbaImage::from_pixel(8, 8, image::Rgba([200, 120, 40, 255])).save(&full).unwrap_or_else(|e| panic!("{}: {e}", full.display()));
+}
+
+fn write(root: &std::path::Path, rel: &str, text: &str) {
+    let full = root.join(rel);
+    std::fs::create_dir_all(full.parent().expect("a folder")).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(&full, text).unwrap_or_else(|e| panic!("{e}"));
+}
+
+/// **A project with a design tree**: the game, the level `m`, a board of three pictures (one restricted, one whose file is not here) and a page citing two.
+fn project(tag: &str) -> std::path::PathBuf {
+    let root = fixtures::Fixture::new(&format!("{tag}_{}", std::process::id())).descriptor("site/wall", "alpha").place("site/wall", (1.5, 1.5)).build("m");
+    write(&root, GAME, "# The game\n\nGrey concrete, sodium light.\n");
+    write(&root, "design/dialogue.md", "# Dialogue\n\nShort lines.\n");
+    write(&root, LEVEL, LEVEL_TEXT);
+    picture(&root, FOG);
+    picture(&root, DUSK);
+    let mut level = Board::default();
+    let mut fog = Entry::new(FOG, "the fog's colour, not its density");
+    fog.licence = Some("CC BY 4.0".to_owned());
+    level.add(fog, None).unwrap_or_else(|e| panic!("{e}"));
+    let mut dusk = Entry::new(DUSK, "how the light leaves the roofs first");
+    dusk.restricted = true;
+    level.add(dusk, None).unwrap_or_else(|e| panic!("{e}"));
+    level.add(Entry::new(GONE, "a picture whose file is not on this machine"), None).unwrap_or_else(|e| panic!("{e}"));
+    level.save(&root.join(board::file_of("design/levels/m"))).unwrap_or_else(|e| panic!("{e}"));
+    root
+}
+
+fn editor(root: &std::path::Path) -> App {
+    let mut app = harness::build_headless(root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    app.world_mut().spawn((Window::default(), PrimaryWindow));
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(std::time::Duration::from_secs_f32(FRAME_S)));
+    // **A trust store of the test's own**, so nothing here reads or writes the person's.
+    let store = root.join("trusted.yaml");
+    TrustStore::default().save(&store).unwrap_or_else(|e| panic!("{e}"));
+    app.world_mut().resource_mut::<EditorState>().trust.file = Some(store);
+    settle(&mut app);
+    app
+}
+
+/// Press the one visible widget that reads `label` (`Activate`, which is what a press sends), or choose the tree row of a level: a headless
+/// pointer click does not land on this workspace's widgets, so a row is chosen by the page it names, through the one `show_file`.
+fn click(app: &mut App, label: &str) {
+    if label == "m" || label.starts_with("m  (") {
+        let root = app.world().resource::<bevy_cauldron::project::Project>().root.clone();
+        let page = if root.join(LEVEL).exists() { LEVEL.to_owned() } else { "design/regions/north/levels/m/style.md".to_owned() };
+        bevy_cauldron::design_view::show_file(app.world_mut(), &page, None);
+        settle(app);
+        return;
+    }
+    let entity = bevy_gooey::testing::find_by_label(app, label).unwrap_or_else(|e| panic!("`{label}`: {e}"));
+    app.world_mut().commands().trigger(bevy::ui_widgets::Activate { entity });
+    settle(app);
+}
+
+fn visible(app: &mut App, label: &str) -> bool {
+    bevy_gooey::testing::find_by_label(app, label).is_ok()
+}
+
+fn selected(app: &App) -> Option<String> {
+    app.world().resource::<DesignView>().selected().map(str::to_owned)
+}
+
+fn page_source(app: &mut App) -> String {
+    let world = app.world_mut();
+    world.query::<&MarkdownView>().single(world).map(|v| v.source().to_owned()).unwrap_or_else(|e| panic!("one page is drawn: {e}"))
+}
+
+#[test]
+fn cmd_0_opens_design_and_a_level_selected_by_its_label_shows_its_headings_pictures_and_board() {
+    let root = project("design_page");
+    let mut app = editor(&root);
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Map, "the editor opens on the Map");
+    press(&mut app, Action::WorkspaceDesign);
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Design, "Cmd/Ctrl+0 is the Design workspace");
+    assert_eq!(selected(&app).as_deref(), Some(GAME), "it opens on the game's page");
+
+    // The level, by the label of its row in the tree.
+    click(&mut app, "m");
+    assert_eq!(selected(&app).as_deref(), Some(LEVEL), "a click on the level's row selects its page");
+
+    let world = app.world_mut();
+    let headings: Vec<String> = world.query::<&MarkdownOutline>().single(world).map(|o| o.0.iter().map(|e| e.title.clone()).collect()).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(headings, ["Yard", "Light", "Mood"], "the page's headings");
+    let pictures: Vec<(String, bool)> = world.query::<(&MarkdownPicture, Has<ImageNode>)>().iter(world).map(|(p, image)| (p.dest().to_owned(), image)).collect();
+    assert_eq!(pictures.len(), 2, "the page's two pictures: {pictures:?}");
+    assert!(pictures.iter().all(|(_, image)| *image), "both pictures are image boxes, not the box a missing one is: {pictures:?}");
+
+    // The board shows the same pictures with their captions, a licence line, a badge and a mark.
+    let cards = world.query::<&CardRef>().iter(world).count();
+    assert_eq!(cards, 3, "the board's three pictures are three cards");
+    for words in [
+        "the fog's colour, not its density",
+        "how the light leaves the roofs first",
+        "CC BY 4.0",
+        "Restricted: not shipped with the game",
+        "Missing on this machine",
+    ] {
+        assert!(visible(&mut app, words), "the board says `{words}`");
+    }
+}
+
+#[test]
+fn the_page_and_the_tree_readers_list_the_same_pictures_in_the_same_order_for_every_fixture_page() {
+    let pages = [
+        LEVEL_TEXT,
+        "# A\n\n![one](a.png)\n\ntext ![two](sub/b.jpg \"t\") more\n\n[![three](c.png)](https://example.com)\n",
+        "# ![in a heading](h.png)\n\n| a | b |\n|---|---|\n| ![in a cell](cell.png) | x |\n\n> ![in a quote](q.png)\n\n- ![in a list](l.png)\n",
+        "![ref][r]\n\n[r]: via/ref.png \"titled\"\n\n```\n![not a picture](code.png)\n```\n",
+        "no pictures at all\n",
+    ];
+    for page in pages {
+        let ours: Vec<String> = design::pictures(page, "design/levels/m/style.md").into_iter().map(|p| p.cited).collect();
+        let gooeys: Vec<String> = bevy_gooey::markdown::images(page).into_iter().map(|(_, dest, _)| dest).collect();
+        assert_eq!(ours, gooeys, "the two readers disagree about the pictures of {page:?}");
+    }
+}
+
+#[test]
+fn edit_typing_and_done_write_the_file_and_render_the_new_text() {
+    let root = project("design_edit");
+    let mut app = editor(&root);
+    press(&mut app, Action::WorkspaceDesign);
+    click(&mut app, "m");
+    click(&mut app, "Edit page");
+    assert!(!visible(&mut app, "Edit page") && visible(&mut app, "Done"), "Edit swaps the page for the editor, and the button for Done");
+    {
+        let world = app.world_mut();
+        assert!(world.query::<&MarkdownView>().iter(world).next().is_none(), "the page is taken away while the file editor holds the file");
+        let editor = world.query_filtered::<Entity, With<CodeEditor>>().single(world).unwrap_or_else(|e| panic!("one editor: {e}"));
+        world.resource_mut::<InputFocus>().set(editor, FocusCause::Navigated);
+    }
+    settle(&mut app);
+    bevy_gooey::testing::type_text(&mut app, "Dusk first. ");
+    settle(&mut app);
+    let typed = {
+        let world = app.world_mut();
+        world.query::<&CodeEditorValue>().single(world).map(|v| v.text().to_owned()).unwrap_or_else(|e| panic!("{e}"))
+    };
+    assert!(typed.contains("Dusk first. "), "the person typed in the editor: {typed:?}");
+    assert_eq!(std::fs::read_to_string(root.join(LEVEL)).unwrap_or_default(), LEVEL_TEXT, "nothing is written until Done");
+
+    click(&mut app, "Done");
+    let on_disk = std::fs::read_to_string(root.join(LEVEL)).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(on_disk, typed, "Done writes what was typed");
+    assert_eq!(page_source(&mut app), typed, "and renders it again");
+}
+
+#[test]
+fn a_change_on_disk_during_edit_offers_reload_or_keep_mine_and_overwrites_nothing() {
+    let root = project("design_conflict");
+    let mut app = editor(&root);
+    press(&mut app, Action::WorkspaceDesign);
+    click(&mut app, "m");
+    click(&mut app, "Edit page");
+    {
+        let world = app.world_mut();
+        let editor = world.query_filtered::<Entity, With<CodeEditor>>().single(world).unwrap_or_else(|e| panic!("one editor: {e}"));
+        world.resource_mut::<InputFocus>().set(editor, FocusCause::Navigated);
+    }
+    settle(&mut app);
+    bevy_gooey::testing::type_text(&mut app, "Mine. ");
+    settle(&mut app);
+
+    // Someone else writes the file: the question is asked, and the disk is not touched by the editor.
+    let theirs = "# Theirs\n\nWritten by an agent.\n";
+    write(&root, LEVEL, theirs);
+    for _ in 0..40 {
+        app.update();
+    }
+    assert!(visible(&mut app, "Reload") && visible(&mut app, "Keep mine"), "a change on disk under unsaved typing asks Reload or Keep mine");
+    assert_eq!(std::fs::read_to_string(root.join(LEVEL)).unwrap_or_default(), theirs, "the editor overwrote nothing");
+
+    // Done is refused while the question stands, and writes nothing.
+    click(&mut app, "Done");
+    assert_eq!(std::fs::read_to_string(root.join(LEVEL)).unwrap_or_default(), theirs, "a save while the question is open writes nothing");
+    assert!(app.world().resource::<EditorState>().status.problem_text().contains("Reload or Keep mine"), "and says why");
+
+    click(&mut app, "Reload");
+    assert!(!visible(&mut app, "Keep mine"), "answered");
+    let held = {
+        let world = app.world_mut();
+        world.query::<&CodeEditorValue>().single(world).map(|v| v.text().to_owned()).unwrap_or_else(|e| panic!("{e}"))
+    };
+    assert_eq!(held, theirs, "Reload takes the disk's text");
+}
+
+#[test]
+fn as_an_agent_reads_it_shows_the_chain_exactly_as_grimoire_style_returns_it() {
+    let root = fixtures::Fixture::new(&format!("design_agent_{}", std::process::id())).descriptor("site/wall", "alpha").place("site/wall", (1.5, 1.5)).build("m");
+    write(&root, GAME, "# The game\n\nGrey concrete, sodium light.\n");
+    write(&root, "design/regions/north/style.md", "# North\n\nSalt on everything.\n");
+    write(&root, "design/regions/north/levels/m/style.md", "# The yard\n\nThe wall is the horizon.\n");
+    let mut app = editor(&root);
+    // The person has allowed the game's and the level's files, and not the region's: it is withheld, and the page shows the line an agent reads.
+    let store = root.join("trusted.yaml");
+    let mut trusted = TrustStore::default();
+    for file in [GAME, "design/regions/north/levels/m/style.md"] {
+        let text = std::fs::read_to_string(root.join(file)).unwrap_or_else(|e| panic!("{e}"));
+        trusted.trust_text(&root, file, &text).unwrap_or_else(|e| panic!("{e}"));
+    }
+    trusted.save(&store).unwrap_or_else(|e| panic!("{e}"));
+
+    press(&mut app, Action::WorkspaceDesign);
+    click(&mut app, "m");
+    assert_eq!(selected(&app).as_deref(), Some("design/regions/north/levels/m/style.md"));
+    click(&mut app, "As an agent reads it");
+    assert!(app.world().resource::<DesignView>().as_agent());
+
+    let tree = Tree::read(&root);
+    let mut decide = |path: &str, text: &str| -> Result<Decision, String> {
+        TrustStore::load(&store).and_then(|s| s.text_decision(&root, path, text))
+    };
+    let served = style::compose(&tree, &style::Request { map: Some("m".to_owned()), at: None, topic: None }, &mut decide).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(page_source(&mut app), served.text, "the page is the text grimoire_style returns for this level");
+    let order: Vec<&str> = served.files.iter().map(|f| f.path.as_str()).collect();
+    assert_eq!(order, [GAME, "design/regions/north/style.md", "design/regions/north/levels/m/style.md"], "the game's, region's and level's files, in the order the chain is read");
+    assert!(served.text.contains("waiting for the person"), "the withheld region file is the line an agent is told, not its text");
+    assert!(!served.text.contains("Salt on everything"), "and its text is not in the page");
+    assert!(matches!(app.world().resource::<DesignView>().snapshot().page, Page::Agent(_)));
+}
+
+#[test]
+fn go_to_anything_on_a_topics_name_opens_it_here_and_a_style_link_reveal_opens_the_level() {
+    use bevy_cauldron::goto::{GotoIndex, Kind, show_in_world};
+    let root = project("design_goto");
+    let mut app = editor(&root);
+    let topic = app.world().resource::<GotoIndex>().of_kind(Kind::Design).find(|e| e.title == "dialogue").cloned().unwrap_or_else(|| panic!("`dialogue` is a row of the finder"));
+    show_in_world(app.world_mut(), &topic);
+    settle(&mut app);
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Design, "a topic of the game opens in the Design workspace");
+    assert_eq!(selected(&app).as_deref(), Some("design/dialogue.md"));
+    assert!(app.world().resource::<GotoIndex>().of_kind(Kind::Design).any(|e| e.title == "m"), "every place is a row too");
+
+    // The Map inspector's Style link asks the reveal for the level's page; it lands here.
+    app.world_mut().resource_mut::<bevy_cauldron::reveal::Revealing>().request_by_person("style_link", &bevy_cauldron::ops::Shown::File { path: LEVEL.to_owned(), lines: None });
+    settle(&mut app);
+    assert_eq!(selected(&app).as_deref(), Some(LEVEL));
+}
+
+#[test]
+fn a_level_style_is_reached_in_two_inputs_from_a_cold_start() {
+    let root = project("design_presses");
+    let mut app = editor(&root);
+    let mut presses = 0;
+    press(&mut app, Action::WorkspaceDesign);
+    presses += 1;
+    click(&mut app, "m");
+    presses += 1;
+    assert_eq!(selected(&app).as_deref(), Some(LEVEL), "the level's style is open");
+    assert!(presses <= 3, "NV-01's measure: at most three presses to a level's style (took {presses})");
+}
+
+#[test]
+fn a_problem_is_shown_above_the_page_it_belongs_to() {
+    let root = project("design_problem");
+    write(&root, LEVEL, "# Yard\n\n![nothing here](board/nothing.png)\n");
+    let mut app = editor(&root);
+    press(&mut app, Action::WorkspaceDesign);
+    click(&mut app, "m  (1 problem)");
+    let problems = Tree::read(&root).problems;
+    assert_eq!(problems.len(), 1, "{problems:?}");
+    let line = problems[0].line();
+    assert!(visible(&mut app, &line), "the page's problem is above it: `{line}`");
+}
+
+#[test]
+fn a_dropped_picture_goes_on_the_selected_places_board_and_the_levels_board_is_left() {
+    let root = project("design_drop");
+    let mut app = editor(&root);
+    press(&mut app, Action::WorkspaceDesign);
+    assert_eq!(selected(&app).as_deref(), Some(GAME));
+    picture(&root, "art/hall.png");
+    app.world_mut().write_message(bevy::window::FileDragAndDrop::DroppedFile { window: Entity::PLACEHOLDER, path_buf: root.join("art/hall.png") });
+    settle(&mut app);
+    let game = Board::of_place(&root, "design").unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(game.pictures.iter().map(|p| p.path.as_str()).collect::<Vec<_>>(), ["art/hall.png"], "the drop is on the game's board");
+    let level = Board::of_place(&root, "design/levels/m").unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(level.pictures.len(), 3, "the level's board is as it was");
+}
+
+#[test]
+fn clicking_a_picture_lights_its_card_and_choosing_a_card_scrolls_the_page_to_the_picture() {
+    let root = project("design_linked");
+    // A long page, so the second picture is below the fold.
+    let filler: String = (0..60).map(|n| format!("Line {n} of the level's feel, written long enough to take a row of its own.\n\n")).collect();
+    write(&root, LEVEL, &format!("# Yard\n\n![the fog's colour, not its density](board/fog.png)\n\n{filler}![how the light leaves the roofs first](board/dusk.png)\n"));
+    let mut app = editor(&root);
+    press(&mut app, Action::WorkspaceDesign);
+    click(&mut app, "m");
+    // Picture 1 (0-based) is the dusk one: its click lights the second card.
+    bevy_cauldron::design_view::pick_picture(app.world_mut(), 1);
+    settle(&mut app);
+    let lit: Vec<usize> = {
+        let world = app.world_mut();
+        world.query::<(&CardRef, Has<bevy::ui::Selected>)>().iter(world).filter(|(_, lit)| *lit).map(|(c, _)| c.index).collect()
+    };
+    assert_eq!(lit, [1], "the card of the second picture is lit");
+
+    // Choosing the first card scrolls the page to the first picture; choosing the second scrolls to the one far down.
+    let grid = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<bevy_cauldron::design_view::DesignCards>>().single(world).unwrap_or_else(|e| panic!("{e}"))
+    };
+    app.world_mut().commands().trigger(bevy::ui_widgets::ValueChange { source: grid, value: 1usize, is_final: true });
+    for _ in 0..30 {
+        app.update();
+    }
+    let scrolled = {
+        let world = app.world_mut();
+        world.query_filtered::<&bevy::ui::ScrollPosition, With<bevy_gooey::MarkdownViewport>>().single(world).map(|s| s.0.y).unwrap_or_else(|e| panic!("{e}"))
+    };
+    assert!(scrolled > 0.0, "the page scrolled to the picture far down it (scroll {scrolled})");
+}

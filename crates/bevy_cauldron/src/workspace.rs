@@ -53,6 +53,8 @@ pub enum Workspace {
     Game,
     /// The Familiar: what it is doing, and what it is waiting on.
     Agent,
+    /// **The game's style** (SG-05, #404): the design tree on the left, the selected page rendered in the middle, and that place's dream board on the right.
+    Design,
 }
 
 /// **The key every workspace's default layout is made of** — the four regions of the shell.
@@ -89,7 +91,7 @@ pub const fn waiting_reason(table: &[(Workspace, &'static str)], workspace: Work
 impl Workspace {
     /// **Every workspace there is, in the order the keys follow.** Fixed for good: see the module
     /// note.
-    pub const ALL: [Workspace; 9] = [
+    pub const ALL: [Workspace; 10] = [
         Workspace::Project,
         Workspace::Map,
         Workspace::World,
@@ -99,6 +101,8 @@ impl Workspace {
         Workspace::Files,
         Workspace::Game,
         Workspace::Agent,
+        // **Appended, so no chord changes meaning** (SG-05, #404): `Cmd`/`Ctrl`+`0` is the tenth.
+        Workspace::Design,
     ];
 
     /// **The workspace's command id**, spelled `workspace.<id>` (P1: one name for the key, the
@@ -114,6 +118,7 @@ impl Workspace {
             Workspace::Files => "files",
             Workspace::Game => "game",
             Workspace::Agent => "agent",
+            Workspace::Design => "design",
         }
     }
 
@@ -129,6 +134,7 @@ impl Workspace {
             Workspace::Files => "FILES",
             Workspace::Game => "GAME",
             Workspace::Agent => "AGENT",
+            Workspace::Design => "DESIGN",
         }
     }
 
@@ -144,6 +150,7 @@ impl Workspace {
             Workspace::Files => "Files",
             Workspace::Game => "Game",
             Workspace::Agent => "Agent",
+            Workspace::Design => "Design",
         }
     }
 
@@ -163,6 +170,7 @@ impl Workspace {
             Workspace::Files => "file.save",
             Workspace::Game => "panel.reload",
             Workspace::Agent => "panel.familiar",
+            Workspace::Design => "panel.notes",
         }
     }
 
@@ -181,6 +189,8 @@ impl Workspace {
             Workspace::Sound => &[Mode::Sound],
             Workspace::Game => &[Mode::Game],
             Workspace::Agent => &[Mode::Agent],
+            // **The game's style** (SG-05, #404): one panel of its own, drawn in the three parts the issue names.
+            Workspace::Design => &[Mode::Design],
             Workspace::Files => &[Mode::Files],
             // **The project's page, inside the workbench** (NV-08, #385): its maps, its kits and the agent guide. `Screen::Project` stays
             // the page of a project with no door open (Cmd+O, Close project); this is the same page as one panel of the editor.
@@ -289,6 +299,11 @@ impl Workspace {
         workspace.is_some_and(|w| *w == Workspace::Agent)
     }
 
+    /// **Run condition: is the Design workspace open?** (SG-05, #404.)
+    pub fn design_is_open(workspace: Option<Res<Workspace>>) -> bool {
+        workspace.is_some_and(|w| *w == Workspace::Design)
+    }
+
     /// Whether this workspace's middle is the world — the workspaces that share one viewport
     /// (`docs/ui/vision.md` §4: Map, World, Kit and Animation).
     pub const fn shows_the_map(self) -> bool {
@@ -339,6 +354,13 @@ impl Workspace {
             Workspace::Files => DockLayout::split(horizontal, 0.24, DockLayout::group([INSPECTOR]), DockLayout::group([VIEWPORT])),
             Workspace::Game => DockLayout::split(horizontal, 0.34, DockLayout::group([VIEWPORT]), DockLayout::group([INSPECTOR])),
             Workspace::Agent => DockLayout::split(horizontal, 0.30, DockLayout::group([INSPECTOR]), DockLayout::group([VIEWPORT])),
+            // **The tree, the page and the board** (SG-05, #404): the tree beside the page, and the place's board at the right.
+            Workspace::Design => DockLayout::split(
+                horizontal,
+                0.22,
+                DockLayout::group([INSPECTOR]),
+                DockLayout::split(horizontal, 0.68, DockLayout::group([VIEWPORT]), DockLayout::group([PLACE])),
+            ),
         }
     }
 }
@@ -351,7 +373,8 @@ mod tests {
     /// the others is caught rather than shipped as a blank tab.
     #[test]
     fn every_workspace_names_itself_once_and_is_reachable() {
-        assert_eq!(Workspace::ALL.len(), 9);
+        // Owner exception (2026-11-13): workspace.rs::every_workspace_names_itself_once_and_is_reachable: the count follows the tenth workspace, Design (#404, the issue's own decision).
+        assert_eq!(Workspace::ALL.len(), 10);
         for (i, workspace) in Workspace::ALL.into_iter().enumerate() {
             // The order the keys follow is the order of `ALL`, so a second workspace with the same id
             // would take somebody else's chord.

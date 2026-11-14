@@ -105,7 +105,7 @@ pub const fn kinds_of(workspace: Workspace) -> &'static [Kind] {
         Workspace::Kit => &[Kind::Mesh, Kind::Tile, Kind::Composition],
         Workspace::Animation => &[Kind::Rig, Kind::Clip],
         Workspace::Sound => &[Kind::Cue, Kind::Score],
-        Workspace::Project | Workspace::Game | Workspace::Agent => &[],
+        Workspace::Project | Workspace::Game | Workspace::Agent | Workspace::Design => &[],
     }
 }
 

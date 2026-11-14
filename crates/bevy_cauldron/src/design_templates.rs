@@ -63,11 +63,16 @@ pub fn topic_text(topic: &str, place_name: &str) -> Option<String> {
 /// wrote this text, so it is allowed, and `grimoire_style` serves it with no question (SG-02, #401). `store` is the override, as for the guide's
 /// grant: `None` is the person's own `trusted.yaml`. A store that cannot be read or written is an `Err` naming it, never a silent grant-less style.
 pub fn grant_style(root: &Path, store_root: Option<&crate::trusted::StoreRoot>, store: Option<&Path>) -> Result<(), String> {
-    let path = format!("{GAME_PLACE}/{}.{}", design::STYLE_TOPIC, design::MARKDOWN_EXT);
-    let text = std::fs::read_to_string(root.join(&path)).map_err(|e| format!("{path}: {e}"))?;
+    grant_file(root, &format!("{GAME_PLACE}/{}.{}", design::STYLE_TOPIC, design::MARKDOWN_EXT), store_root, store)
+}
+
+/// **Grant one style file as it stands in `root`**, `path` relative to the project root: the Design workspace's Create style and New topic write the
+/// editor's own template, which the person asked for, so it is allowed as the wizard's `design/style.md` is. A changed byte is a new question.
+pub fn grant_file(root: &Path, path: &str, store_root: Option<&crate::trusted::StoreRoot>, store: Option<&Path>) -> Result<(), String> {
+    let text = std::fs::read_to_string(root.join(path)).map_err(|e| format!("{path}: {e}"))?;
     let store_file = crate::trusted::resolve(store_root, store)?;
     let mut trusted = bevy_grimoire_core::trust::TrustStore::load(&store_file)?;
-    trusted.trust_text(root, &path, &text)?;
+    trusted.trust_text(root, path, &text)?;
     trusted.save(&store_file)
 }
 
