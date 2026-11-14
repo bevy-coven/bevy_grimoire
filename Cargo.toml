@@ -55,7 +55,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # **The CommonMark parser the design tree's pictures and links are read with** (SG-01, #400). The editor has
 # **no renderer** to share it with: GD-11's Markdown support is a *tokenizer* for syntax colours, which
 # recognises no image and no link, and `bevy_gooey` at the pinned revision has no Markdown module at all
-# (measured: `~/.cargo/git/checkouts/bevy_gooey-*/57d3d49/` carries no `markdown` and no `pulldown`). So this
+# (measured: `~/.cargo/git/checkouts/bevy_gooey-*/57d3d49/` (the pin before 424d37b) carries no `markdown` and no `pulldown`). So this
 # is the one parser, not a duplicate of another: written by hand it would be a CommonMark implementation with
 # tables, strikethrough and task lists, and the pictures a style text cites — the whole point of the check —
 # are exactly what a hand-rolled regex gets wrong. MIT, a pure data crate with no engine in it.
