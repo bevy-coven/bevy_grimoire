@@ -108,10 +108,12 @@ fn every_registered_operation_has_a_row_in_the_agent_guide() {
 /// and "a new operation is documented in the commit that registers it" would be a hope.
 #[test]
 fn the_work_list_only_shrinks() {
-    assert!(
-        NO_ROW_YET.len() <= NO_ROW_YET_MAX,
-        "NO_ROW_YET has {} names and the ratchet says {NO_ROW_YET_MAX}. The list only shrinks: a new operation gets its row in \
-         docs/guide/agents.md in the commit that registers it, and is never added here.",
+    assert_eq!(
+        NO_ROW_YET.len(),
+        NO_ROW_YET_MAX,
+        "NO_ROW_YET has {} names and the ratchet says {NO_ROW_YET_MAX}. The list only shrinks, and the ratchet follows it down: a \
+         new operation gets its row in docs/guide/agents.md in the commit that registers it, and is never added here; when a row \
+         lands, delete the name and lower NO_ROW_YET_MAX to the new length.",
         NO_ROW_YET.len()
     );
 }

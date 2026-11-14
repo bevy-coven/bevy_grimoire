@@ -2251,8 +2251,11 @@ fn operation_apply(
         .then(|| crate::checks::find(&ctx).map(|after| crate::checks::report(before.as_ref(), &after)))
         .flatten();
     let carried = ctx.proposal.take();
-    // **The view the operation answered with goes back to the editor's own** (E-002, #129), as a key's does.
-    if let Some(view) = ctx.view.take() {
+    // **The view the operation answered with goes back to the editor's own** (E-002, #129), as a key's does, **and only when the
+    // dispatch applied**: a call refused after its commit (a log line that could not be written takes the change back) told the
+    // agent "refused" and must not move the camera, rescan or queue rigs either (#129 review of slices 31-33).
+    let view = ctx.view.take().filter(|_| matches!(applied, Ok(ops::Applied::Done { .. })));
+    if let Some(view) = view {
         // **A rescan is a request** (E-002, #129 slice 33): the operation says the directory is wanted and the scan is the
         // Meshes tab's own, run against the project the operation held.
         let rescan = view.rescan;

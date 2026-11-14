@@ -107,6 +107,24 @@ fn r_and_an_agent_rescan_the_kits_mesh_directory_through_one_operation() {
     assert_eq!(refused["outcome"], "refused", "it takes no fields: {refused}");
 }
 
+/// **A rescan whose log line cannot be written scans nothing** (E-002, #129 slice 33 review): the operation is refused after its
+/// commit, so the answer the agent reads is "refused" and the editor's own state must not move either.
+#[test]
+fn a_rescan_whose_log_line_cannot_be_written_scans_nothing() {
+    let (mut app, root) = editor("unlogged");
+    let before = candidates(&app);
+    a_mesh_arrives(&root, "unlogged_pack");
+    let log = bevy_cauldron::ops::oplog_path_at(&root);
+    let _ = std::fs::remove_file(&log);
+    std::fs::create_dir_all(&log).expect("a directory where the log goes");
+    let said = apply(&mut app, "kit_rescan", json!({}));
+    assert_eq!(said["outcome"], "refused", "a change that cannot be recorded is refused: {said}");
+    for _ in 0..4 {
+        app.update();
+    }
+    assert_eq!(candidates(&app), before, "and a refused call does not read the directory");
+}
+
 /// **The action names the operation it dispatches**, which is what takes it off the allowlist.
 #[test]
 fn the_rescan_action_names_the_operation_it_dispatches() {

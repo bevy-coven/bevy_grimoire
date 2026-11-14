@@ -102,6 +102,16 @@ fn c_and_an_agent_check_every_rig_through_one_operation() {
     let lines = logged(&app, "rig_check_all");
     assert_eq!(lines.len(), 1, "one key, one logged operation: {lines:?}");
     assert_eq!(lines[0].0, "human", "{:?}", lines[0]);
+    // **The watcher was asked to measure every rig, not only the selected one**: the fixture has no `.glb` for the shipped
+    // rigs, so the mtime poll queues none of them and `queue_selected` queues one; the others get a report only because
+    // `take_check` queued them. Mutation-checked: with `queue.push_back_unique(name)` deleted from `BenchState::take_check`,
+    // this fails with one report of `rigs`.
+    for _ in 0..400 {
+        app.update();
+    }
+    assert_eq!(app.world().resource::<BenchReports>().by_rig.len(), rigs, "C queued every rig with no report for the watcher");
+    // The same for the agent's call, from a bench with nothing measured.
+    app.world_mut().resource_mut::<BenchReports>().by_rig.clear();
 
     put_on_one_rig(&mut app);
     let measured_before = app.world().resource::<BenchReports>().by_rig.len();
@@ -122,6 +132,7 @@ fn c_and_an_agent_check_every_rig_through_one_operation() {
     for _ in 0..400 {
         app.update();
     }
+    assert_eq!(app.world().resource::<BenchReports>().by_rig.len(), rigs, "an agent's check queued every rig with no report for the watcher");
     put_on_one_rig(&mut app);
     let said = apply(&mut app, "rig_check_all", json!({}));
     assert_eq!(said["outcome"], "applied", "{said}");

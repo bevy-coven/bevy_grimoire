@@ -380,6 +380,47 @@ fn cmd_z_and_an_agent_step_the_tab_history_through_one_operation() {
     assert_eq!(refused["outcome"], "refused", "nothing to undo: {refused}");
 }
 
+/// **`Cmd+Z` says what it could not do in the right voice** (E-002, #129 slice 30 review): nothing to undo is a note the next
+/// keystroke replaces, and any other refusal is a problem — a project whose log cannot be written is not "nothing to undo".
+/// The old `Cmd+Z` depended on neither, so the key files each as it always did.
+#[test]
+fn cmd_z_with_nothing_to_undo_is_a_note_and_an_unwritable_log_is_a_problem() {
+    let mut app = editor("history_voice");
+    take_in_hand(&mut app);
+    let mods = [bevy_cauldron::keys::MOD_KEYS[0]];
+
+    apply(&mut app, "tile_member_nudge", json!({"x": 1}));
+    app.update();
+    app.update();
+    let nudged = stands(&app).0;
+    assert!(nudged.0 > 0.0);
+    // **The log cannot be written**: a directory is where its file goes.
+    let log = bevy_cauldron::ops::oplog_path_at(&app.world().resource::<Project>().root);
+    let _ = std::fs::remove_file(&log);
+    std::fs::create_dir_all(&log).expect("a directory where the log goes");
+
+    tap(&mut app, &mods, KeyCode::KeyZ);
+    {
+        let status = &app.world().resource::<bevy_cauldron::tiles::ImportState>().status;
+        assert!(status.has_problem(), "an unwritable log is a problem on the key, not a note");
+        assert_ne!(status.problem_text(), "nothing to undo", "and it is not the empty-history sentence");
+    }
+    assert_eq!(stands(&app).0, nudged, "a refused step leaves the tile where it was");
+
+    // With the log writable again the history steps back past the nudge and past the opening of the tile, to no tile at all;
+    // one more is nothing to undo, which is guidance: a note, and no problem.
+    std::fs::remove_dir(&log).expect("the directory goes");
+    app.world_mut().resource_mut::<bevy_cauldron::tiles::ImportState>().status.dismiss();
+    tap(&mut app, &mods, KeyCode::KeyZ);
+    assert_eq!(stands(&app).0, (0.0, 0.0), "Cmd+Z takes the nudge back once the log can be written");
+    tap(&mut app, &mods, KeyCode::KeyZ);
+    app.world_mut().resource_mut::<bevy_cauldron::tiles::ImportState>().status.dismiss();
+    tap(&mut app, &mods, KeyCode::KeyZ);
+    let status = &app.world().resource::<bevy_cauldron::tiles::ImportState>().status;
+    assert!(!status.has_problem(), "nothing to undo is guidance, not a problem: {:?}", status.problem_text());
+    assert_eq!(status.note_text(), "nothing to undo", "the key says what the operation refused with");
+}
+
 /// **The two history actions name the operation they dispatch**, which is what takes them off the allowlist.
 #[test]
 fn the_two_history_actions_name_the_operation_they_dispatch() {
