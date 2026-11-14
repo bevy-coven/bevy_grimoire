@@ -1,0 +1,39 @@
+# **A run of repeated pieces** (BM-04, #414).
+#
+# Six plants in a row along one edge is the work `run_add` exists for: a piece, a pitch and two ends, laid
+# as the posts of one run. An agent may equally place six plants one by one; what is measured is the map the
+# editor draws: six plants, every one within 0.8 m of the south edge (`z = 3` in this 8 x 6 m garden), none
+# on top of another, and the bench untouched.
+id: hedge-along-the-south-edge
+title: A hedge of six plants along the south edge
+split: dev
+tags: [runs]
+map: bench_garden
+prompt: |
+  Make a hedge along the south edge of the garden: six plants (plant_b) in one row, all within 0.8 m of the
+  south edge (the z = 3 side), side by side and not on top of one another. Leave the bench where it is.
+
+  When the hedge is done, hand the result back with grimoire_present.
+setup: []
+solution:
+  - op: run_add
+    params:
+      id: hedge
+      run:
+        descriptor: plant_b
+        from: [-1.25, 2.6]
+        to: [1.25, 2.6]
+        pitch: 0.5
+  - op: grimoire_present
+    params:
+      title: A hedge of six plants
+      summary: Six plants stand in one row 0.5 m apart along the south edge, from x = -1.25 to x = 1.25. The bench has not moved.
+      specified:
+        - six plants in one row
+        - along the south edge
+checks:
+  - placements_within: {piece: plant_b, count: 6, x: [-4.0, 4.0], z: [2.2, 3.0]}
+  - placement_exists: {piece: bench, count: 1}
+  - no_problem: [overlap]
+  - handback_contains: [six]
+budget: {wall_s: 600, tool_calls: 60}

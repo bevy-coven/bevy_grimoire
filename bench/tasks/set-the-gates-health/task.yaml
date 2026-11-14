@@ -1,0 +1,35 @@
+# **Change one number in the game's data** (BM-04, #414).
+#
+# The project registers a data file, `tuning/game`, and `data_set` changes one leaf of it and nothing else.
+# The wall's health and the gate's armour sit beside the number to change, so a run that rewrote the file
+# whole, or that set the wrong leaf, is caught by the two numbers it must leave.
+id: set-the-gates-health
+title: Set the gate's health to 40 in the game's data
+split: dev
+tags: [data]
+map: bench_bedroom
+prompt: |
+  In the game's data, set the gate's health to 40. Change nothing else in the data.
+
+  When it is done, hand the result back with grimoire_present.
+setup: []
+solution:
+  - op: data_set
+    params:
+      file: tuning/game
+      path: gate.health
+      value: 40
+  - op: grimoire_present
+    params:
+      title: The gate's health is 40
+      summary: The gate's health in the game's tuning data is 40, down from 100. Nothing else in the file changed.
+      specified:
+        - the gate's health is 40
+checks:
+  - file_value: {file: furniture/data/game.yaml, path: gate.health, equals: 40}
+  - file_value: {file: furniture/data/game.yaml, path: gate.armour, equals: 3}
+  - file_value: {file: furniture/data/game.yaml, path: wall.health, equals: 250}
+  - unchanged: [maps/bench_bedroom.map.yaml]
+  - oplog_has: {op: data_set, min: 1}
+  - handback_contains: [gate]
+budget: {wall_s: 600, tool_calls: 60}

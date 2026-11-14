@@ -1,0 +1,34 @@
+# **Make a map** (BM-04, #414).
+#
+# `map_create` writes `maps/cellar.map.yaml` with the bounds it is given, in metres on each axis as
+# [x, y, z]. "12 by 8" is x and z; the height is the agent's own choice, so the check holds only x and z.
+id: make-a-cellar-map
+title: Make a new map called cellar, 12 by 8
+split: dev
+tags: [maps]
+map: bench_bedroom
+prompt: |
+  Make a new map called cellar, 12 m wide (x) and 8 m deep (z). Leave the bedroom map alone.
+
+  When the map is made, hand the result back with grimoire_present.
+setup: []
+solution:
+  - op: map_create
+    params:
+      name: cellar
+      bounds: [12.0, 3.0, 8.0]
+  - op: grimoire_present
+    params:
+      title: A cellar map
+      summary: A new map called cellar, 12 m wide and 8 m deep, is made. The bedroom map is unchanged.
+      specified:
+        - a new map called cellar
+        - 12 m by 8 m
+checks:
+  - file_value: {file: maps/cellar.map.yaml, path: name, equals: cellar}
+  - file_value: {file: maps/cellar.map.yaml, path: "bounds[0]", equals: 12}
+  - file_value: {file: maps/cellar.map.yaml, path: "bounds[2]", equals: 8}
+  - unchanged: [maps/bench_bedroom.map.yaml]
+  - oplog_has: {op: map_create, min: 1}
+  - handback_contains: [cellar]
+budget: {wall_s: 600, tool_calls: 60}

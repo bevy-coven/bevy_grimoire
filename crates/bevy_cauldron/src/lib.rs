@@ -85,6 +85,8 @@ pub mod library_browser;
 pub mod game_ui_preview;
 pub mod game_view;
 pub mod agent_view;
+// **A hand-back the person kept becomes a benchmark task draft** (BM-07, #417).
+pub mod bench_draft;
 pub mod shell_view;
 pub mod app_verbs;
 pub mod menu_bar;

@@ -1,0 +1,14 @@
+# **A map the first benchmark suite opens** (BM-04, #414). See bench/fixture/README.md.
+version: 9
+name: bench_hallway
+note: "An empty hallway, 6 m long and 2 m wide."
+origin:
+- 0.0
+- 0.0
+- 0.0
+bounds:
+- 6.0
+- 3.0
+- 2.0
+bash: null
+placements: []

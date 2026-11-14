@@ -61,6 +61,25 @@ pub fn lay_out(root: &Path, into: &Path) -> Result<Vec<String>, String> {
     Ok(laid)
 }
 
+/// **[`lay_out`], and then the files only one task's trial is given** — the `fixture/` directory beside its
+/// `task.yaml`, laid over the copy after the suite's own fixture.
+///
+/// This is how a held-out task brings its own map: the scene is in the trial's project, and nothing else of
+/// the task is. Its prompt, `solution` and `checks` are never written into a trial's directory, and neither is
+/// another task's map, because each task lays only its own.
+pub fn lay_out_task(root: &Path, task_dir: &Path, into: &Path) -> Result<Vec<String>, String> {
+    let mut laid = lay_out(root, into)?;
+    if task_dir.as_os_str().is_empty() {
+        return Ok(laid);
+    }
+    let own = task_dir.join(crate::task::TASK_FIXTURE).join(PROJECT_DIR);
+    if own.is_dir() {
+        lay_over(&own, &into.join(PROJECT_DIR), into, &mut laid)?;
+        laid.sort();
+    }
+    Ok(laid)
+}
+
 /// **Copy `from` to `to`**, making `to` and every directory under it.
 fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
     std::fs::create_dir_all(to).map_err(|e| format!("{}: {e}", to.display()))?;

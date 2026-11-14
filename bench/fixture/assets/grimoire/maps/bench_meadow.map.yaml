@@ -1,0 +1,14 @@
+# **A map the first benchmark suite opens** (BM-04, #414). See bench/fixture/README.md.
+version: 9
+name: bench_meadow
+note: "A flat meadow, 20 m by 20 m, with terrain and no pieces."
+origin:
+- 0.0
+- 0.0
+- 0.0
+bounds:
+- 20.0
+- 6.0
+- 20.0
+bash: null
+placements: []

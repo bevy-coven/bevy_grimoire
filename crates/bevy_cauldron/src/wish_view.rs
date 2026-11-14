@@ -732,6 +732,7 @@ fn open_this_wish(
     activate: On<Activate>,
     buttons: Query<&WishOf, With<WishOpen>>,
     wishes: Option<Res<Wishes>>,
+    handbacks: Option<Res<crate::present::HandBacks>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
     mut commands: Commands,
 ) {
@@ -741,10 +742,25 @@ fn open_this_wish(
     if queued.state != WishState::Waiting {
         return;
     }
-    let url = queued.url.clone();
+    // **A benchmark task drafted from this wish's hand-back is named in the issue** (BM-07, #417): the tool the wish asks for can then be
+    // measured on the task that motivated it. The address is built again with the line in its context; one GitHub would not take keeps the
+    // address the wish was queued with, which is the wish as the agent made it — and **the status line says the line was left out**, so
+    // a person who wanted the task named in the issue knows to add it by hand.
+    let mut left_out = String::new();
+    let url = match handbacks.as_deref().and_then(|h| h.draft_for_key(&queued.key)) {
+        Some(path) => {
+            let mut wish = queued.wish.clone();
+            wish.context = format!("{}\nBenchmark task: {path}", wish.context);
+            wish.issue_url().unwrap_or_else(|_| {
+                left_out = format!(" (without the line naming the benchmark task `{path}`: the address would be too long for GitHub; add it by hand)");
+                queued.url.clone()
+            })
+        }
+        None => queued.url.clone(),
+    };
     let title = queued.wish.title();
     if let Some(state) = state.as_mut() {
-        state.status.note(format!("opening {title} on GitHub"));
+        state.status.note(format!("opening {title} on GitHub{left_out}"));
     }
     // **Through the one opener**, queued on the world because an opener is a process, not a frame's
     // work — and because a headless run records the address instead of launching a browser.
@@ -760,7 +776,7 @@ fn open_this_wish(
         }
         if let Some(mut state) = world.get_resource_mut::<crate::editor::EditorState>() {
             match opened {
-                Ok(()) => state.status.note(format!("opened {title} on GitHub")),
+                Ok(()) => state.status.note(format!("opened {title} on GitHub{left_out}")),
                 Err(reason) => state.status.problem(format!("GitHub did not open: {reason}")),
             }
         }

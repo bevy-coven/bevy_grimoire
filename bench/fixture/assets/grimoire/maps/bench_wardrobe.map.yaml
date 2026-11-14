@@ -1,0 +1,32 @@
+# **A map the first benchmark suite opens** (BM-04, #414). See bench/fixture/README.md.
+version: 9
+name: bench_wardrobe
+note: "A wardrobe against the north wall with its doors turned to the wall."
+origin:
+- 0.0
+- 0.0
+- 0.0
+bounds:
+- 6.0
+- 3.0
+- 5.0
+bash: null
+placements:
+- id: wardrobe
+  descriptor: dresser_tall
+  at:
+  - 0.0
+  - -2.2
+  yaw: 270.0
+- id: bed
+  descriptor: bed_double
+  at:
+  - 1.8
+  - 0.5
+  yaw: 0.0
+- id: chair
+  descriptor: chair
+  at:
+  - -1.8
+  - 1.2
+  yaw: 0.0

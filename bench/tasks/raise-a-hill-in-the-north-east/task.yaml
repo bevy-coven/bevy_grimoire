@@ -1,0 +1,42 @@
+# **Shape the ground** (BM-04, #414).
+#
+# The meadow is 20 x 20 m, flat, with a terrain file of 21 x 21 cells of 1 m from (-10, -10). North is -z
+# and east is +x, so the north-east corner is around (8, -8). A `Raise` brush adds `strength` metres at its
+# centre, falling off to nothing at the radius, so a stroke of strength 2 at (8, -8) makes the ground there
+# 2.0 m high. The check samples the saved ground at the corner, and at the opposite corner to say that the
+# whole meadow was not raised.
+id: raise-a-hill-in-the-north-east
+title: Raise a 2 m hill in the north-east corner
+split: dev
+tags: [terrain]
+map: bench_meadow
+prompt: |
+  The meadow is flat. Raise a hill about 2 m high in its north-east corner, around x = 8, z = -8 (the map is
+  20 m by 20 m, centred on the origin, with north at -z). Do not change the rest of the ground.
+
+  When the hill is raised, hand the result back with grimoire_present.
+setup: []
+solution:
+  - op: terrain_stroke
+    params:
+      map: bench_meadow
+      stroke:
+        brush: Raise
+        radius_m: 4.0
+        strength: 2.0
+        points: [[8.0, -8.0]]
+  - op: grimoire_present
+    params:
+      title: A hill in the north-east corner
+      summary: A hill 2 m high stands at (8, -8), falling away over 4 m. The rest of the meadow is flat.
+      specified:
+        - a hill about 2 m high
+        - in the north-east corner
+checks:
+  - terrain_height: {map: bench_meadow, at: [8.0, -8.0], min_m: 1.7, max_m: 2.4}
+  - terrain_height: {map: bench_meadow, at: [-8.0, 8.0], max_m: 0.1}
+  - terrain_height: {map: bench_meadow, at: [0.0, 0.0], max_m: 0.3}
+  - unchanged: [maps/bench_meadow.map.yaml]
+  - oplog_has: {op: terrain_stroke, min: 1}
+  - handback_contains: [hill]
+budget: {wall_s: 600, tool_calls: 60}

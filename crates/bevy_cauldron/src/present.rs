@@ -454,6 +454,14 @@ pub struct HandBack {
     pub title: String,
     /// The operations the turn listed, whose names the wish carries as its context.
     pub operation_ids: Vec<String>,
+    /// **What the person asked for**, as the agent quoted it back in `specified` (BM-07, #417): a benchmark
+    /// task's prompt. Empty for a note, which carries its own text.
+    pub specified: Vec<String>,
+    /// **Whether the person kept the result** — the hand-back a benchmark task can be made from.
+    pub accepted: bool,
+    /// **The benchmark task drafted from this hand-back**, as a path relative to the project root, once the
+    /// person pressed Make a benchmark task. A wish the person keeps names it (see `wish_view`).
+    pub draft: Option<String>,
 }
 
 /// **A note's key**: the map file it stands on, and its id, which is unique on that file alone.
@@ -463,7 +471,7 @@ fn note_key(map_path: &std::path::Path, id: &str) -> String {
 
 impl HandBacks {
     /// **Record a presentation**, numbering it for the session, and say what the agent will cite.
-    pub fn ask(&mut self, root: &std::path::Path, title: String, operation_ids: Vec<String>) -> String {
+    pub fn ask(&mut self, root: &std::path::Path, title: String, specified: Vec<String>, operation_ids: Vec<String>) -> String {
         self.asked += 1;
         let id = format!("present-{}", self.asked);
         self.hands.push(HandBack {
@@ -474,9 +482,45 @@ impl HandBacks {
             id: id.clone(),
             root: root.to_path_buf(),
             title,
+            specified,
             operation_ids,
+            accepted: false,
+            draft: None,
         });
         id
+    }
+
+    /// **Mark a presentation as kept**: the person read it and accepted what it made (BM-07, #417).
+    pub fn accept(&mut self, id: &str) {
+        if let Some(held) =
+            self.hands.iter_mut().rev().find(|h| h.kind == HandBackKind::Presentation && h.id == id)
+        {
+            held.accepted = true;
+        }
+    }
+
+    /// **The hand-backs of one project the person kept, newest first**: the rows an Agent workspace offers
+    /// Make a benchmark task on.
+    pub fn kept_in<'a>(&'a self, root: &'a std::path::Path) -> impl Iterator<Item = &'a HandBack> {
+        self.hands.iter().rev().filter(move |h| h.accepted && h.kind == HandBackKind::Presentation && h.root == root)
+    }
+
+    /// **Remember the benchmark task drafted from a hand-back**, by its path under the project root.
+    pub fn set_draft(&mut self, id: &str, root: &std::path::Path, path: String) {
+        if let Some(held) = self
+            .hands
+            .iter_mut()
+            .rev()
+            .find(|h| h.kind == HandBackKind::Presentation && h.id == id && h.root == root)
+        {
+            held.draft = Some(path);
+        }
+    }
+
+    /// **The benchmark task drafted from the hand-back with this key**, if the person made one: what a kept
+    /// wish names in the issue it files.
+    pub fn draft_for_key(&self, key: &str) -> Option<&str> {
+        self.hands.iter().rev().find(|h| h.key == key).and_then(|h| h.draft.as_deref())
     }
 
     /// **The hand-back a wish cites**, or nothing.
@@ -538,7 +582,10 @@ impl HandBacks {
                 key,
                 root: root.to_path_buf(),
                 title,
+                specified: Vec::new(),
                 operation_ids,
+                accepted: false,
+                draft: None,
             }),
         }
     }
@@ -733,6 +780,7 @@ pub struct ClientName {
 /// **`false` (N, or Esc) keeps.** That is the safe default for a key that can arrive by reflex, and
 /// it is the one answer that changes nothing — so a presentation the person never read costs them
 /// nothing.
+#[allow(clippy::too_many_arguments)] // a Bevy system's parameters are its queries and resources, one each
 fn answer_presentation(
     mut confirm: ResMut<crate::confirm::Confirm>,
     mut reply: ResMut<PresentationReply>,
@@ -741,6 +789,7 @@ fn answer_presentation(
     mut open: Option<ResMut<crate::project::OpenMap>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
     mut due: Option<ResMut<crate::watch::Due>>,
+    mut handbacks: Option<ResMut<HandBacks>>,
 ) {
     // The modal's answer (Yes undoes, No keeps) or the block's button, one or the other.
     let replied = match confirm.answer(Asked::Presentation) {
@@ -760,6 +809,13 @@ fn answer_presentation(
             _ => ("kept", "kept the agent's result"),
         };
         presented.answer = Some(answer.to_owned());
+        // **Kept is the one answer that makes a hand-back a task a person can ask for** (BM-07, #417): the
+        // person read it and accepted what it made. A dismissal kept the result unread, which proves nothing.
+        if answer == "kept"
+            && let Some(handbacks) = handbacks.as_mut()
+        {
+            handbacks.accept(&presented.id);
+        }
         if let Some(state) = state.as_mut() {
             state.status.note(said.to_owned());
         }

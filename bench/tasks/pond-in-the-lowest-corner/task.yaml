@@ -1,0 +1,39 @@
+# **Read the ground, then put water where it runs** (BM-04, #414).
+#
+# The yard slopes: the ground is 0.05 m higher for every metre east and every metre north, so the lowest
+# corner is the south-west one, around (-10, 10), where it is 0 m, and the highest is the north-east, 2 m. A
+# pond belongs in the lowest corner, and which corner that is is the thing to find out (the terrain file is in
+# the project). The check wants one lake centred in that corner at least 3 m across, its level between the
+# ground at its centre and a metre over it (water that is under the ground is not there, and a metre of
+# water is not a pond), and the ground left as it was: a pond is not dug.
+id: pond-in-the-lowest-corner
+title: A pond in the yard's lowest corner
+split: dev
+tags: [terrain, water]
+map: bench_yard
+prompt: |
+  The yard slopes down towards one of its corners. Put a pond in the lowest corner: one lake at least 3 m
+  across. Do not change the ground.
+
+  When the pond is placed, hand the result back with grimoire_present.
+setup: []
+solution:
+  - op: water_place
+    params:
+      map: bench_yard
+      place:
+        Lake: {x: -8.0, z: 8.0, radius_m: 2.5, level_m: 0.4}
+  - op: grimoire_present
+    params:
+      title: A pond in the south-west corner
+      summary: The yard falls to its south-west corner, and a pond 5 m across is there at (-8, 8). The ground is unchanged.
+      specified:
+        - a pond in the lowest corner
+      inferred:
+        - the lowest corner is the south-west one, read from the terrain
+checks:
+  - water_lake: {map: bench_yard, x: [-10.0, -4.0], z: [4.0, 10.0], min_radius_m: 1.5, level_above_ground_m: [0.0, 1.0]}
+  - unchanged: [furniture/terrain/bench_yard.yaml, maps/bench_yard.map.yaml]
+  - oplog_has: {op: water_place, min: 1}
+  - handback_contains: [pond]
+budget: {wall_s: 600, tool_calls: 60}

@@ -23,7 +23,7 @@ use bevy_grimoire_core::vocab::{Masks, Vocabularies};
 
 /// Where a project's own files live, under its root. Inside `assets/` rather than beside it, so a
 /// descriptor's `mesh` path means the same thing to this editor and to the game that loads the map.
-const GRIMOIRE_DIR: &str = "assets/grimoire";
+pub const GRIMOIRE_DIR: &str = "assets/grimoire";
 /// **Where the vocabulary lives** — public because the file watcher names it.
 pub const VOCAB: &str = "assets/grimoire/vocab.yaml";
 /// **The library file's name** — public because the file watcher names it.

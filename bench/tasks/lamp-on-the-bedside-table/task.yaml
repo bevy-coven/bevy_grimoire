@@ -1,0 +1,37 @@
+# **Mount one piece on another** (BM-04, #414).
+#
+# A lamp is a piece that stands on a surface (a `worktop` one), so "on the table" is something the editor
+# decides from where the lamp is put: a lamp placed over the table takes the table as its host (`on`), and a
+# lamp placed beside it is refused, because it has nothing to stand on. The check reads the host the map names, so an agent that puts the
+# lamp a hand's width off the table fails by the measurement and not by a person's eye.
+id: lamp-on-the-bedside-table
+title: The lamp on the small table by the bed
+split: dev
+tags: [place, mount]
+map: bench_bedside
+prompt: |
+  Put a lamp on the small table beside the bed in the bedroom.
+
+  When the lamp is in place, hand the result back with grimoire_present.
+setup: []
+solution:
+  - op: placement_add
+    params:
+      piece: lamp
+      at: [0.1, -2.1]
+  - op: grimoire_present
+    params:
+      title: The lamp on the small table by the bed
+      summary: A lamp stands on the small table beside the bed, near the bed's head.
+      specified:
+        - the lamp is on the small table beside the bed
+      inferred:
+        - the lamp is centred on the table's top
+checks:
+  - placement_exists: {piece: lamp, count: 1}
+  - placement_rests_on: {piece: lamp, host: table}
+  - placement_total: {count: 4}
+  - no_problem: [overlap]
+  - oplog_has: {op: placement_add, min: 1}
+  - handback_contains: [lamp]
+budget: {wall_s: 600, tool_calls: 60}

@@ -1,0 +1,32 @@
+# **A map the first benchmark suite opens** (BM-04, #414). See bench/fixture/README.md.
+version: 9
+name: bench_mistake
+note: "A bedroom that has just had one change made to it."
+origin:
+- 0.0
+- 0.0
+- 0.0
+bounds:
+- 6.0
+- 3.0
+- 5.0
+bash: null
+placements:
+- id: bed
+  descriptor: bed_double
+  at:
+  - -1.5
+  - -1.39
+  yaw: 0.0
+- id: bedside
+  descriptor: bedside_table
+  at:
+  - -0.3
+  - -2.25
+  yaw: 0.0
+- id: desk
+  descriptor: desk
+  at:
+  - 1.5
+  - 0.5
+  yaw: 0.0

@@ -1,0 +1,43 @@
+# **A placement in a relation, and a facing** (BM-04, #414).
+#
+# The desk's front is its west face, so the chair that goes with it stands west of the desk and looks east
+# at it. A chair's front is its south face at yaw 0 (`front: South`), so facing east is a yaw of 90
+# (`forward = (sin yaw, cos yaw)`): the arithmetic a person does without noticing and an agent has to do.
+#
+# The desk is 1.897 x 0.895 m, so its west edge is at x = 0.5 - 0.9485 = -0.4485. Turned 90 degrees the chair
+# is 0.51 m along x, so its east edge is at cx + 0.255, and a chair 0 to 0.3 m clear of the desk has its
+# centre between -1.0035 and -0.7035.
+id: chair-west-of-the-desk-facing-it
+title: The chair to the left of the desk, facing it
+split: dev
+tags: [place, relations]
+map: bench_study
+prompt: |
+  Put a chair to the left of the desk in the study (the west side, with north at the top of the map), close
+  to it and turned to face the desk.
+
+  When the chair is in place, hand the result back with grimoire_present.
+setup: []
+solution:
+  - op: placement_add
+    params:
+      piece: chair
+      at: [-0.85, -1.0]
+      yaw: 90.0
+  - op: grimoire_present
+    params:
+      title: A chair at the desk's west side
+      summary: A chair stands to the west of the desk, 0.15 m from it, turned to face east towards the desk.
+      specified:
+        - the chair is to the left of the desk
+        - the chair faces the desk
+      inferred:
+        - left of the desk is its west side on a map with north at the top
+checks:
+  - placement_exists: {piece: chair, count: 1}
+  - placement_relative: {piece: chair, other: {id: desk}, direction: west, max_gap_m: 0.3}
+  - placement_at: {piece: chair, at: [-0.85, -1.0], tolerance_m: 0.6, yaw_deg: 90.0, yaw_tolerance_deg: 20.0}
+  - placement_total: {count: 3}
+  - no_problem: [overlap]
+  - handback_contains: [chair]
+budget: {wall_s: 600, tool_calls: 60}

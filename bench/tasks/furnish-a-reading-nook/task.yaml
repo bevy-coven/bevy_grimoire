@@ -1,0 +1,50 @@
+# **Compose several pieces** (BM-04, #414).
+#
+# A reading nook is three pieces in a relation: a chair, a small table beside it, and a lamp on the table, all
+# in the empty north-west corner of the loft (x from -4 to -1.5, z from -3 to -0.5; north is -z). The
+# relations are measured: the table is east of the chair and within 0.6 m of it, the lamp rests on a table
+# (whichever id the editor gave it), and nothing overlaps.
+id: furnish-a-reading-nook
+title: Furnish the empty corner as a reading nook
+split: dev
+tags: [compose]
+map: bench_loft
+prompt: |
+  The north-west corner of the loft is empty (x from -4 to -1.5, z from -3 to -0.5; north is -z). Furnish it
+  as a reading nook: a chair, a small table (the coffee table) to the chair's east and close to it, and a lamp standing on the
+  table. Keep all three inside that corner and clear of one another.
+
+  When the nook is furnished, hand the result back with grimoire_present.
+setup: []
+solution:
+  - op: placement_add
+    params:
+      piece: chair
+      at: [-3.2, -2.0]
+      yaw: 90.0
+  - op: placement_add
+    params:
+      piece: coffee_table
+      at: [-2.5, -2.0]
+  - op: placement_add
+    params:
+      piece: lamp
+      at: [-2.5, -2.0]
+  - op: grimoire_present
+    params:
+      title: A reading nook in the north-west corner
+      summary: A chair faces east in the corner, with a coffee table just east of it and a lamp on the table.
+      specified:
+        - a chair
+        - a table beside the chair
+        - a lamp on the table
+checks:
+  - placements_within: {piece: chair, count: 1, x: [-4.0, -1.5], z: [-3.0, -0.5]}
+  - placements_within: {piece: coffee_table, count: 1, x: [-4.0, -1.5], z: [-3.0, -0.5]}
+  - placements_within: {piece: lamp, count: 1, x: [-4.0, -1.5], z: [-3.0, -0.5]}
+  - placement_rests_on: {piece: lamp, host_piece: coffee_table}
+  - placement_relative: {piece: coffee_table, other: {piece: chair}, direction: east, max_gap_m: 0.6}
+  - placement_total: {count: 5}
+  - no_problem: [overlap]
+  - handback_contains: [chair, lamp]
+budget: {wall_s: 600, tool_calls: 60}

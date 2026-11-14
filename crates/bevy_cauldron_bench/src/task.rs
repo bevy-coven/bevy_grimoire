@@ -33,6 +33,12 @@ pub const TASK_TOOL_CALLS_DEFAULT: u32 = 60;
 /// **The name of the file a task is read from**, inside its own directory.
 pub const TASK_FILE: &str = "task.yaml";
 
+/// **The directory beside a task's file that holds the files only that task's trial is given**: a project
+/// tree (`assets/grimoire/maps/…`) laid over the trial's copy after the suite's own fixture.
+///
+/// A held-out task uses it for its own map, so a trial of one never carries another's scene.
+pub const TASK_FIXTURE: &str = "fixture";
+
 /// **Which half of a suite a task belongs to.**
 ///
 /// `dev` is the tasks a person iterates against; `held_out` is the tasks a change is scored on, and the
@@ -124,6 +130,9 @@ pub struct Task {
     /// When the trial is stopped.
     #[serde(default)]
     pub budget: Budget,
+    /// **The directory this task was read from**, which is where its own fixture is. Not a field of the file.
+    #[serde(skip)]
+    pub dir: PathBuf,
 }
 
 impl Task {
@@ -149,7 +158,8 @@ impl Task {
                     .fix("check the task directory holds a task.yaml a person can read"),
             )
         })?;
-        let task: Task = bevy_grimoire_core::yaml::from_str(&text, &shown)?;
+        let mut task: Task = bevy_grimoire_core::yaml::from_str(&text, &shown)?;
+        task.dir = dir.to_path_buf();
         let lines = bevy_grimoire_core::yaml::lines(&text);
         task.validate(dir, root, known, &shown, &lines)?;
         Ok(task)
@@ -229,7 +239,13 @@ impl Task {
         }
         // **A map, and every file a check names, has to be there.** A check about a file nothing holds
         // would pass or fail for a reason the task does not state.
-        let held = |rel: &str| fixture_or_project(root, rel).is_some();
+        let own = dir.join(TASK_FIXTURE).join(crate::fixture::PROJECT_DIR);
+        let held = |rel: &str| {
+            fixture_or_project(root, rel).is_some()
+                || rel
+                    .strip_prefix(&format!("{}/", crate::fixture::PROJECT_DIR))
+                    .is_some_and(|inner| own.join(inner).is_file())
+        };
         if !held(&format!("assets/grimoire/maps/{}.map.yaml", self.map)) {
             return Err(refuse_at(
                 shown,

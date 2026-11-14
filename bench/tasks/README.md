@@ -56,6 +56,11 @@ derivation with its subject would pass on the subject's bug.
 | `oplog_lacks` | `{op: placement_add}` | the log has no applied line for an operation |
 | `handback_contains` | `[north wall, centred]` | a `grimoire_present` states given facts — the half a refusal needs |
 | `decide` | `{check: bed_centred, want: true, min_confidence: 0.8}` | a calibrated decision the harness was given answers as the task wants |
+| `placement_total` | `{count: 3}` | the map holds exactly that many placements — the other half of "remove both crates and nothing else" |
+| `placements_within` | `{piece: plant_a, count: 6, x: [-4, 4], z: [2.2, 3]}` | exactly that many of a piece, every one centred in a region (a hedge, a corner) |
+| `file_value` | `{file: furniture/data/game.yaml, path: gate.health, equals: 40}` | a scalar in a project file, by a path through its YAML (`bounds[0]`, `lakes[1].level_m`), is the value or inside `min`/`max` |
+| `terrain_height` | `{map: bench_meadow, at: [8, -8], min_m: 1.7}` | the saved ground is at least or at most a height at a point (the core's own sampling) |
+| `water_lake` | `{map: bench_yard, x: [-10, -4], z: [4, 10], min_radius_m: 1.5}` | the map's water plan holds that many lakes (one), each centred in the region and wide enough |
 
 **A check is a mapping with one key** — its own name — and the value is that variant's arguments. Serde's
 own YAML tag form (`!placement_near_wall {…}`) is deliberately not what a task writes: a person writes a
@@ -82,6 +87,80 @@ A suite is three kinds of work, and every check in the table is exercised by one
 - **place something** — `bed-against-the-north-wall`;
 - **refuse something the project cannot do** — `refuse-a-piece-the-project-lacks`;
 - **report without changing anything** — `count-what-the-bedroom-holds`.
+
+## The first suite: twenty tasks to develop against, eight held out (BM-04)
+
+The twenty dev tasks are drafted from what the editor is for, each with its known answer, and the owner
+reviews them by number before a baseline is committed (a comment on #414 naming the number of a task to
+change or cut). `cauldron-bench run --agent oracle` passes all of them and `--agent nothing` none.
+
+| # | Task | Tags |
+|---|---|---|
+| 1 | `count-what-the-bedroom-holds`: how many pieces, and which is nearest the north wall | read, handback |
+| 2 | `lamp-on-the-bedside-table` | place, mount |
+| 3 | `bed-against-the-north-wall` | place, relations |
+| 4 | `chair-west-of-the-desk-facing-it` | place, relations |
+| 5 | `turn-the-wardrobe-into-the-room` | turn |
+| 6 | `remove-both-crates` (and nothing else) | remove |
+| 7 | `fix-the-floating-lamp` (setup lifts the lamp 0.3 m) | fix |
+| 8 | `clear-the-overlap-keep-both` (setup puts a chair inside a desk) | fix |
+| 9 | `take-back-the-last-change` | undo |
+| 10 | `hedge-along-the-south-edge` (six plants) | runs |
+| 11 | `raise-a-hill-in-the-north-east` | terrain |
+| 12 | `pond-in-the-lowest-corner` | terrain, water |
+| 13 | `cover-the-hallway-floor` | tiles |
+| 14 | `work-the-open-note` | notes |
+| 15 | `make-a-cellar-map` | maps |
+| 16 | `set-the-gates-health` | data |
+| 17 | `refuse-a-piece-the-project-lacks`: there is no such piece, say so | refusal, handback |
+| 18 | `move-the-locked-bed`: a note on the bed says it is locked in place, ask, do not move it | refusal, handback |
+| 19 | `furnish-a-reading-nook` | compose |
+| 20 | `is-the-lamp-on-the-table` (report, change nothing) | verify, handback |
+
+**Departures from the drafted list.** These are choices the worker made against the issue's draft table, in the
+commit that made them and in the worker's result for the manager to post as an assumed decision on #414; none is
+recorded on the issue itself yet.
+
+1. **Task 1** is the BM-01 example already in the suite (`count-what-the-bedroom-holds`, tagged `read, handback`),
+   and its question is "nearest the north wall" where the draft said "nearest the door" (the fixture's bedroom has
+   no door piece).
+2. **Task 2**: a lamp stands on a `worktop` surface, which the bedside table does not offer, so "the lamp on the
+   bedside table" is a lamp on the small table (`coffee_table`) beside the bed.
+3. **Task 13** paints the hallway with the grey floor tile (`floor`), where the draft said the stone tile (the
+   library has no stone tile).
+4. **Task 17** ("remove the piano, there is none") is the example the suite already had (the velvet armchair the
+   project lacks): the library has no piano.
+5. **Task 18**: the viewport's lock is the editor's view state, which a project does not keep and a headless proof
+   cannot set, so "locked" is a note a person left on the bed's own row of the map ("do not move this bed. Ask first.").
+6. **Task 19**: the library has no rug, so the nook's third piece is a small table with the lamp on it.
+7. **Task 20**: the "hand back a still" half cannot be proved without a model (a still is a tool call, which the
+   gate's proof does not make), so it is the report-only question whose answer the hand-back states.
+8. **Task 10** lays `plant_b`, the one plant whose footprint a run may repeat along its length (`plant_a` is a hair
+   narrower along X than it is deep, so `run_add` refuses to run it along X).
+
+**Two limits the grader has, stated so nobody reads more into a pass.** `placement_rests_on` trusts the editor's
+own `on` field (what the editor decided the piece stands on), which is the editor's measurement rather than the
+grader's. And the `oplog_has` checks pin the operation an agent used, which a different, equally good route would
+fail; they are in the tasks where the operation is the point (a terrain stroke, a water placement, a data edit).
+
+### Held-out tasks: eight, never in the repository
+
+The held-out tasks cover the same tags as the dev tasks with **different maps, pieces and wording**, and they
+live at `/mnt/codex_fs/bench/dark_factory/held_out/` — one directory per task, holding its `task.yaml` and its
+own `fixture/assets/grimoire/maps/…` — so no loop pass or agent developing the editor reads them. They are
+never in this repository, an issue, a commit or a log. This file says only how many there are (eight) and
+their tags (orient; place and mount; place and relations; turn; remove; fix; data; refuse).
+
+- **The runner reads them from `--held-out <dir>`** and refuses a directory that is inside a repository, or a
+  task there that does not say `split: held_out`.
+- **A model is run on them only after they prove valid**: BM-01's two runs, made by the runner on the real
+  editor — `nothing` must fail every one and `oracle` must pass every one — before any trial is scored. A
+  failure names the task's place in the directory (`held-out task 3 of 8`), never its id or its checks.
+- **A trial is given its own scene and nothing else of the task**: the task's `fixture/` is laid over the
+  trial's copy, and its prompt, solution and checks are never written into a trial's directory
+  (`tests/held_out_tasks_stay_out_of_every_trial.rs`).
+- **Nothing prints them by name**: the console line of a held-out trial is `(a held-out task) trial n: PASS`,
+  and a report states them as a total only.
 
 ## Adding a task
 

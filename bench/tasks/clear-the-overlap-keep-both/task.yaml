@@ -1,0 +1,40 @@
+# **Clear the problems list without losing a piece** (BM-04, #414).
+#
+# A chair dropped inside a desk is an overlap the editor's problems list shows. The pieces are all still
+# wanted: the fix is to put the chair somewhere it fits, and a run that clears the list by deleting the chair
+# has not done what was asked.
+id: clear-the-overlap-keep-both
+title: Clear the problems list without removing anything
+split: dev
+tags: [fix]
+map: bench_cramped
+prompt: |
+  The problems list shows an overlap: the chair is inside the desk. Clear it, and keep every piece the room
+  has: the chair, the desk and the plant.
+
+  When the list is clear, hand the result back with grimoire_present.
+setup: []
+solution:
+  - op: placement_remove
+    params: {id: chair}
+  - op: placement_add
+    params:
+      piece: chair
+      at: [0.0, 1.1]
+      yaw: 180.0
+  - op: grimoire_present
+    params:
+      title: The chair is clear of the desk
+      summary: The chair stands 0.65 m south of the desk, facing it, and the overlap is gone. The desk and the plant are where they were.
+      specified:
+        - the overlap is cleared
+        - no piece is lost
+checks:
+  - no_problem: [overlap]
+  - placement_exists: {piece: chair, count: 1}
+  - placement_exists: {piece: desk, count: 1}
+  - placement_exists: {piece: plant_a, count: 1}
+  - placement_at: {id: desk, at: [0.0, 0.0], tolerance_m: 0.01}
+  - placement_total: {count: 3}
+  - handback_contains: [chair]
+budget: {wall_s: 600, tool_calls: 60}

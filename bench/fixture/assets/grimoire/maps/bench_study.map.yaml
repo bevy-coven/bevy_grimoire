@@ -1,0 +1,26 @@
+# **A map the first benchmark suite opens** (BM-04, #414). See bench/fixture/README.md.
+version: 9
+name: bench_study
+note: "A study: a desk with its front to the west, and a plant in the corner."
+origin:
+- 0.0
+- 0.0
+- 0.0
+bounds:
+- 6.0
+- 3.0
+- 5.0
+bash: null
+placements:
+- id: desk
+  descriptor: desk
+  at:
+  - 0.5
+  - -1.0
+  yaw: 0.0
+- id: plant
+  descriptor: plant_a
+  at:
+  - 2.4
+  - 1.7
+  yaw: 0.0

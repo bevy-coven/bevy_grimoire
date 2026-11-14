@@ -157,6 +157,54 @@ A trial whose agent was **offered** a tool outside that set (the editor's `grimo
 editor's, and so is one whose model provider refused a turn (an HTTP 429 or 402): the provider's answer is
 not a result about the agent.
 
+## Held-out tasks (BM-04)
+
+The suite is twenty dev tasks (`bench/tasks/`, to iterate against) and eight **held-out** ones, which a change is
+scored on and never tuned against, so they are **never in the repository, an issue, a commit or a log**. They
+live outside every checkout, at `/mnt/codex_fs/bench/dark_factory/held_out/`, one folder per task holding its
+`task.yaml` and its own scene (`fixture/assets/grimoire/maps/…`).
+
+```sh
+cauldron-bench run --agent oracle  --held-out /mnt/codex_fs/bench/dark_factory/held_out   # all 28: must pass every one
+cauldron-bench run --agent nothing --held-out /mnt/codex_fs/bench/dark_factory/held_out   # must pass none
+cauldron-bench run --trials 5 --label baseline --held-out /mnt/codex_fs/bench/dark_factory/held_out
+```
+
+- **The runner proves them valid first.** Before a model is run on a held-out task, `nothing` must fail it and
+  `oracle` must pass it, on the real editor: BM-01's two runs, which the push gate cannot make for tasks it
+  cannot read. A failure says `held-out task 3 of 8`, never the id or the checks.
+- **A trial is given its own scene and nothing of the task**: the task's `fixture/` is laid over the trial's
+  copy, and its prompt, solution and checks are not written into a trial's folder.
+- **A held-out trial is filed by ordinal and recorded as a count.** Its folder is `held-out-<n>/trial-<k>/`,
+  never the task's id, and its `trial.json` holds the outcome, how many checks held, and how many calls, refusals, wishes
+  and files changed behind the tools there were, and nothing of the task: no id, prompt, title, tags, check text, call
+  arguments or wish text (the lists are placeholders of the right length). The folder is an ancestor of every later
+  trial's working directory, and a model that reads `../trial-1/trial.json` learns what a score is and nothing about what
+  it scored. The validity proofs (whose records hold the solution) are written to a scratch directory under `$TMPDIR`
+  and deleted before any model trial starts. A refusal of the held-out directory, or a harness error on a held-out task,
+  says `task 3 of 8` and never the id or a path under the directory.
+- **The share is readable and trusted; the protection is that nothing a trial can reach names a held-out task.** The
+  directory is written down here (`HELD_OUT_DIR`) and given to the runner on its command line (`--held-out <dir>`, which
+  `ps` shows), so it is not a secret, and it is readable on the hosts that mount it. `omp` has no sandbox, so an agent that
+  went looking for it could read the tasks. A run on a host that mounts it trusts the agent not to go looking, the way a
+  student is trusted with an exam in the next room. What the runner guarantees is narrower and is tested: **nothing under a
+  trial's working directory or any of its ancestors, up to the run's directory, names a held-out task or holds its prompt,
+  solution or checks**, and the validity scratch under `$TMPDIR` is gone before a model trial starts. The fixes above remove
+  every place a *run* writes the tasks; they do not make the share private.
+- **Nothing prints them by name**: a console line is `(a held-out task) trial 2: PASS`, and a report states
+  them as a total (`held-out (total only)`), never by task, tag or prompt.
+- **The directory is refused if it is inside a repository**, and so is a task there that does not say
+  `split: held_out`.
+
+## Task drafts (BM-07)
+
+A hand-back a person kept can be made a benchmark task: **Make a benchmark task** on its row in the Agent
+workspace's history writes `.dark_factory/bench/drafts/<id>/task.yaml` in the project. Its prompt is what the
+person asked for, its `fixture/` is the map as it was before the agent's first change (rebuilt on a copy; the open
+map is never touched), its `solution` is what the agent did, and its `checks` are drafted from the change. **A
+draft is never run**: the loader skips `drafts/`, and the person moves a draft up into `.dark_factory/bench/` once
+they have read it. A wish the person keeps from that hand-back names the draft in its issue (`Benchmark task:`).
+
 ## Another project's suite
 
 `--project <root> --suite <dir>` runs a game's own suite (its `.dark_factory/bench/`) against that game's

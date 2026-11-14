@@ -48,6 +48,9 @@ usage: cauldron-bench run [options]
   --model <name>      the model the harness runs (omp default: ollama-cloud/deepseek-v4.1-flash:1017; claude-code: sonnet)
   --variant <name>    an arm from <suite>/variants.yaml
   --task <id>         only this task; repeatable
+  --held-out <dir>    also run the held-out tasks in <dir>, which must be outside every repository (the share
+                      keeps them at /mnt/codex_fs/bench/dark_factory/held_out). A model is run on them only
+                      after `nothing` fails and `oracle` passes each one; they are reported as a total only
   --editor <path>     the editor binary under test (default: the one beside this binary)
   --server <path>     the MCP server binary beside it (default: beside this binary)
   --run <name>        the name of this run's directory under ~/.local/state/cauldron-bench
@@ -87,15 +90,15 @@ fn main() -> std::process::ExitCode {
         }
         None => argv.clone(),
     };
-    let options = match parse(&rest) {
-        Ok(options) => options,
+    let (options, held_out) = match parse(&rest) {
+        Ok(parsed) => parsed,
         Err(e) => {
             eprintln!("cauldron-bench: {e}");
             eprintln!("Try `cauldron-bench --help`.");
             return std::process::ExitCode::FAILURE;
         }
     };
-    let records = match run::run(&options) {
+    let records = match run::run(&options, held_out.as_deref()) {
         Ok(records) => records,
         Err(e) => {
             eprintln!("cauldron-bench: {e}");
@@ -139,8 +142,9 @@ fn main() -> std::process::ExitCode {
     }
 }
 
-/// **The options a command line names**, refusing an argument this build does not take.
-fn parse(argv: &[String]) -> Result<Options, String> {
+/// **The options a command line names**, refusing an argument this build does not take, and the directory
+/// `--held-out` names (a place on this host, which is not one of a run's settings).
+fn parse(argv: &[String]) -> Result<(Options, Option<PathBuf>), String> {
     let here = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(PathBuf::from))
@@ -163,6 +167,7 @@ fn parse(argv: &[String]) -> Result<Options, String> {
         label: String::new(),
         publish: None,
     };
+    let mut held_out: Option<PathBuf> = None;
     let mut run_name: Option<String> = None;
     let mut label: Option<String> = None;
     let mut model: Option<String> = None;
@@ -186,6 +191,7 @@ fn parse(argv: &[String]) -> Result<Options, String> {
             "--server" => options.server = PathBuf::from(value()?),
             "--run" => run_name = Some(value()?),
             "--label" => label = Some(value()?),
+            "--held-out" => held_out = Some(PathBuf::from(value()?)),
             other => return Err(format!("`{other}` is not an argument this command takes")),
         }
     }
@@ -206,7 +212,7 @@ fn parse(argv: &[String]) -> Result<Options, String> {
         .as_ref()
         .map(|_| options.root.join(bevy_cauldron_bench::index::BENCH_DOCS_DIR));
     options.label = label.unwrap_or(name);
-    Ok(options)
+    Ok((options, held_out))
 }
 
 /// **`cauldron-bench matrix --pairs a,b,...`**: one suite across several agent and model pairs, success
@@ -237,14 +243,14 @@ fn matrix_command(argv: &[String]) -> std::process::ExitCode {
             return std::process::ExitCode::FAILURE;
         }
     };
-    let options = match parse(&rest) {
-        Ok(options) => options,
+    let (options, held_out) = match parse(&rest) {
+        Ok(parsed) => parsed,
         Err(e) => {
             eprintln!("cauldron-bench: {e}");
             return std::process::ExitCode::FAILURE;
         }
     };
-    match matrix::run(&options, &pairs) {
+    match matrix::run(&options, held_out.as_deref(), &pairs) {
         Ok((matrix, written)) => {
             println!("{}", matrix.markdown());
             for path in written {

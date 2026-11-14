@@ -1,0 +1,39 @@
+# **A map the first benchmark suite opens** (BM-04, #414). See bench/fixture/README.md.
+version: 9
+name: bench_floating
+note: "A room with a lamp standing on its table."
+origin:
+- 0.0
+- 0.0
+- 0.0
+bounds:
+- 6.0
+- 3.0
+- 5.0
+bash: null
+placements:
+- id: desk
+  descriptor: desk
+  at:
+  - -0.5
+  - -1.5
+  yaw: 0.0
+- id: table
+  descriptor: coffee_table
+  at:
+  - 1.8
+  - -2.1
+  yaw: 0.0
+- id: lamp
+  descriptor: lamp
+  at:
+  - 1.8
+  - -2.1
+  yaw: 0.0
+  on: table
+- id: chair
+  descriptor: chair
+  at:
+  - -1.0
+  - 0.5
+  yaw: 180.0
