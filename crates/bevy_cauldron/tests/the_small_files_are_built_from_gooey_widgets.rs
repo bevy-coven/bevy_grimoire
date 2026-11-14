@@ -97,6 +97,9 @@ fn the_game_workspaces_sections_are_gooey_rows_and_columns() {
     let build = the::<BuildButton>(&mut app);
     let line = parent(&app, build);
     assert_row(&app, line, "the BUILD line");
+    let node = app.world().get::<Node>(line).expect("the BUILD line has a Node");
+    assert_eq!(node.flex_shrink, 0.0, "the BUILD line keeps its height when the panel is short");
+    assert_eq!(node.align_items, AlignItems::Center, "the Build button and its line of words stand level");
     assert_column(&app, parent(&app, line), "the BUILD section's block");
     let found = the::<GameEntities>(&mut app);
     assert_column(&app, found, "the entity list");
@@ -149,13 +152,16 @@ fn the_library_browser_is_a_gooey_column_with_a_wrapping_row_of_tags() {
     assert_eq!(node.flex_wrap, FlexWrap::Wrap, "the tag toggles wrap onto a second line instead of running off the panel");
 }
 
-/// **A panel heading's row** (the title and its "?") is a gooey row whose cells stand level.
+/// **Every panel heading's row** (the title and its "?") is a gooey row whose cells stand level.
 #[test]
-fn a_panel_headings_row_is_a_gooey_row_level_with_its_words() {
+fn every_panel_headings_row_is_a_gooey_row_level_with_its_words() {
     use bevy_cauldron::help::PanelHeading;
     let mut app = editor("heading", Mode::Map);
-    let row = the::<PanelHeading>(&mut app);
-    assert_row(&app, row, "the heading row");
-    let node = app.world().get::<Node>(row).expect("the heading row has a Node");
-    assert_eq!(node.align_items, AlignItems::Center, "the \"?\" stands level with the heading's words");
+    let rows: Vec<Entity> = app.world_mut().query_filtered::<Entity, With<PanelHeading>>().iter(app.world()).collect();
+    assert!(!rows.is_empty(), "at least one panel has a heading row");
+    for row in rows {
+        assert_row(&app, row, "a heading row");
+        let node = app.world().get::<Node>(row).expect("the heading row has a Node");
+        assert_eq!(node.align_items, AlignItems::Center, "the \"?\" stands level with the heading's words");
+    }
 }
