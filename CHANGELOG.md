@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-13
 
+- **ops-review-26-28** `77c1fae8` The agent guide names every operation a slice added, and a refused lattice step or a scrub press on a frame of no time behaves (#129 review) *No clip: a docs and API fix behind existing keys; proved by every_operation_has_a_row_in_the_agent_guide, lattice_cursor_is_an_operation and stage_is_an_operation*
 - **tile-in-hand-operations** `9123e37e` The tile in hand: Space, the member keys, J, R and the remove keys are operations an agent calls too (tile_hand_arm, tile_member_focus, tile_grid_deepen, tile_member_turn, tile_member_remove, tile_clear) *No clip: an API behind existing keys, no new picture; proved by tile_in_hand_is_operations*
 - **lattice-cursor-operation** `69c9d194` The lattice grid cursor keys (F, H, T, G, [ and ]) are one operation an agent calls too (lattice_cursor_step) *No clip: an API behind existing keys, no new picture; proved by lattice_cursor_is_an_operation*
 - **stage-operations** `69c9d194` The rig bench stage keys (Space, the held left and right arrows, V) are operations an agent calls too (stage_play, stage_scrub, stage_camera) *No clip: an API behind existing keys, no new picture; proved by stage_is_an_operation*
