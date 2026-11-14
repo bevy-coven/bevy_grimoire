@@ -119,32 +119,54 @@ const CUBE_LEVELS: [u8; 6] = [0x00, 0x5f, 0x87, 0xaf, 0xd7, 0xff];
 const GREY_FIRST: u8 = 8;
 const GREY_STEP: u8 = 10;
 
-/// The colour a program named by index.
-///
-/// Out-of-range is impossible — the type is `u8` and every value 0–255 has an answer — so this
-/// returns a `Color` rather than an `Option`, and a caller has no branch to get wrong.
-pub fn resolve(index: u8) -> Color {
-    if index < 16 {
-        // **Built once per ink** (review, 2026-11-10; #428): `ansi()` mixes the ink into sixteen colours, and a terminal repaints a
-        // whole screen of cells per frame, so a rebuild per cell was work repeated for an answer that cannot change while the
-        // ink does not. The ink is the theme's and changes live, so the table is built again when the four inks it takes
-        // (danger, accent, text, muted) are not the ones it was built from, and only then.
-        static ANSI: std::sync::Mutex<Option<([Color; 4], [Color; 16])>> = std::sync::Mutex::new(None);
+/// **One ink's colours, taken once** (#428): the sixteen ANSI slots and the two defaults a screen builds its rows from. The ink is
+/// the theme's and changes live, so nothing is kept for the process: a rows build takes a `Palette` at its start and asks it for
+/// every cell, which costs one read of the live ink per build and not one per cell. [`Palette::ink`] is the ink it was taken from,
+/// which the screen keeps to know when its rows are stale.
+pub struct Palette {
+    ink: chrome::Ink,
+    ansi: [Color; 16],
+}
+
+impl Palette {
+    /// The palette of the ink the editor is drawing with now.
+    pub fn now() -> Palette {
         let ink = chrome::ink();
-        let key = [ink.danger, ink.accent, ink.text, ink.muted];
-        let mut built = ANSI.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let table = match &*built {
-            Some((from, table)) if *from == key => *table,
-            _ => {
-                let table = ansi(&ink);
-                *built = Some((key, table));
-                table
-            }
-        };
-        return table[index as usize];
+        Palette { ansi: ansi(&ink), ink }
     }
-    let (r, g, b) = rgb(index);
-    Color::srgb_u8(r, g, b)
+
+    /// The ink this palette was taken from.
+    pub fn ink(&self) -> chrome::Ink {
+        self.ink
+    }
+
+    /// [`default_fg`], from this palette's ink.
+    pub fn default_fg(&self) -> Color {
+        self.ink.text
+    }
+
+    /// [`default_bg`], from this palette's ink.
+    pub fn default_bg(&self) -> Color {
+        self.ink.panel_bg
+    }
+
+    /// The colour a program named by index.
+    ///
+    /// Out-of-range is impossible — the type is `u8` and every value 0–255 has an answer — so this
+    /// returns a `Color` rather than an `Option`, and a caller has no branch to get wrong.
+    pub fn resolve(&self, index: u8) -> Color {
+        if index < 16 {
+            return self.ansi[index as usize];
+        }
+        let (r, g, b) = rgb(index);
+        Color::srgb_u8(r, g, b)
+    }
+}
+
+/// The colour a program named by index, in the ink now: what the tests ask, one colour at a time.
+#[cfg(test)]
+pub fn resolve(index: u8) -> Color {
+    Palette::now().resolve(index)
 }
 
 /// The xterm RGB triple for an index: the cube for 16–231, the grey ramp above it, and the cube's

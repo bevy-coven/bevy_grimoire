@@ -683,8 +683,11 @@ impl TerminalScreen {
         }
         let offset = self.term.grid().display_offset() as i32;
         let cols = self.cols as usize;
-        let fg_default = palette::default_fg();
-        let bg_default = palette::default_bg();
+        // **The ink is read once for the whole build**, not once per cell: a screen of ten thousand cells asked the live ink
+        // (a lock and a copy) ten thousand times. The rows are built from this one, and `built_ink` says which it was.
+        let colours = palette::Palette::now();
+        let fg_default = colours.default_fg();
+        let bg_default = colours.default_bg();
 
         let mut rows: Vec<Line> = Vec::with_capacity(self.rows_count as usize);
         let mut row: Vec<Cell> = Vec::with_capacity(cols);
@@ -738,11 +741,11 @@ impl TerminalScreen {
             // The blank takes the cell's own colours below, so an inverse or selected wide character is
             // grounded across both of its columns.
             let spacer = cell.flags.contains(Flags::WIDE_CHAR_SPACER) || cell.flags.contains(Flags::LEADING_WIDE_CHAR_SPACER);
-            let (mut fg, mut bg) = (colour_of(cell.fg, fg_default), colour_of(cell.bg, bg_default));
+            let (mut fg, mut bg) = (colour_of(cell.fg, fg_default, &colours), colour_of(cell.bg, bg_default, &colours));
             if cell.flags.contains(Flags::BOLD) {
                 // The standard's rule for a bold named colour: it becomes the bright slot. This is
                 // what makes `ls`'s directories and `grep`'s matches stand out.
-                fg = brightened(cell.fg, fg);
+                fg = brightened(cell.fg, fg, &colours);
             }
             if cell.flags.contains(Flags::DIM) {
                 fg = fg.mix(&bg, 0.4);
@@ -791,7 +794,7 @@ impl TerminalScreen {
             shape,
         };
         self.rows = rows;
-        self.built_ink = Some(crate::chrome::ink());
+        self.built_ink = Some(colours.ink());
         self.stamp = NEXT_STAMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 }
@@ -841,49 +844,50 @@ fn finish_row(mut cells: Vec<Cell>, wraps: bool) -> Line {
 }
 
 /// The `Color` a cell's ANSI colour means here.
-fn colour_of(colour: AnsiColor, default: Color) -> Color {
+fn colour_of(colour: AnsiColor, default: Color, colours: &palette::Palette) -> Color {
     match colour {
-        AnsiColor::Named(named) => named_colour(named, default),
+        AnsiColor::Named(named) => named_colour(named, default, colours),
         AnsiColor::Spec(rgb) => Color::srgb_u8(rgb.r, rgb.g, rgb.b),
-        AnsiColor::Indexed(index) => palette::resolve(index),
+        AnsiColor::Indexed(index) => colours.resolve(index),
     }
 }
 
 /// A named colour, through the same palette table as an index — which is what makes the shell's
 /// `ESC[31m` and `ESC[38;5;1m` the same red, as they are in every terminal.
-fn named_colour(named: NamedColor, default: Color) -> Color {
+fn named_colour(named: NamedColor, default: Color, colours: &palette::Palette) -> Color {
+    let ground = colours.default_bg();
     match named {
-        NamedColor::Foreground | NamedColor::BrightForeground => palette::default_fg(),
-        NamedColor::Background => palette::default_bg(),
+        NamedColor::Foreground | NamedColor::BrightForeground => colours.default_fg(),
+        NamedColor::Background => ground,
         NamedColor::Cursor => default,
         // The dim ramp is the normal sixteen at half strength, which is what `ESC[2m` asks for; the
         // pane mixes rather than storing it, so this is only reached by a program that named it.
-        NamedColor::DimBlack => palette::resolve(0).mix(&palette::default_bg(), 0.4),
-        NamedColor::DimRed => palette::resolve(1).mix(&palette::default_bg(), 0.4),
-        NamedColor::DimGreen => palette::resolve(2).mix(&palette::default_bg(), 0.4),
-        NamedColor::DimYellow => palette::resolve(3).mix(&palette::default_bg(), 0.4),
-        NamedColor::DimBlue => palette::resolve(4).mix(&palette::default_bg(), 0.4),
-        NamedColor::DimMagenta => palette::resolve(5).mix(&palette::default_bg(), 0.4),
-        NamedColor::DimCyan => palette::resolve(6).mix(&palette::default_bg(), 0.4),
-        NamedColor::DimWhite => palette::resolve(7).mix(&palette::default_bg(), 0.4),
-        NamedColor::DimForeground => palette::default_fg().mix(&palette::default_bg(), 0.4),
+        NamedColor::DimBlack => colours.resolve(0).mix(&ground, 0.4),
+        NamedColor::DimRed => colours.resolve(1).mix(&ground, 0.4),
+        NamedColor::DimGreen => colours.resolve(2).mix(&ground, 0.4),
+        NamedColor::DimYellow => colours.resolve(3).mix(&ground, 0.4),
+        NamedColor::DimBlue => colours.resolve(4).mix(&ground, 0.4),
+        NamedColor::DimMagenta => colours.resolve(5).mix(&ground, 0.4),
+        NamedColor::DimCyan => colours.resolve(6).mix(&ground, 0.4),
+        NamedColor::DimWhite => colours.resolve(7).mix(&ground, 0.4),
+        NamedColor::DimForeground => colours.default_fg().mix(&ground, 0.4),
         // The sixteen named slots, in the enum's own order: `NamedColor`'s discriminants 0–15 are
-        // exactly the ANSI indices, which `palette::resolve` takes.
-        other => palette::resolve(other as u8),
+        // exactly the ANSI indices, which `Palette::resolve` takes.
+        other => colours.resolve(other as u8),
     }
 }
 
 /// A named colour's bright slot, for `ESC[1m31m`.
-fn brightened(colour: AnsiColor, otherwise: Color) -> Color {
+fn brightened(colour: AnsiColor, otherwise: Color, colours: &palette::Palette) -> Color {
     match colour {
-        AnsiColor::Named(NamedColor::Black) => palette::resolve(8),
-        AnsiColor::Named(NamedColor::Red) => palette::resolve(9),
-        AnsiColor::Named(NamedColor::Green) => palette::resolve(10),
-        AnsiColor::Named(NamedColor::Yellow) => palette::resolve(11),
-        AnsiColor::Named(NamedColor::Blue) => palette::resolve(12),
-        AnsiColor::Named(NamedColor::Magenta) => palette::resolve(13),
-        AnsiColor::Named(NamedColor::Cyan) => palette::resolve(14),
-        AnsiColor::Named(NamedColor::White) => palette::resolve(15),
+        AnsiColor::Named(NamedColor::Black) => colours.resolve(8),
+        AnsiColor::Named(NamedColor::Red) => colours.resolve(9),
+        AnsiColor::Named(NamedColor::Green) => colours.resolve(10),
+        AnsiColor::Named(NamedColor::Yellow) => colours.resolve(11),
+        AnsiColor::Named(NamedColor::Blue) => colours.resolve(12),
+        AnsiColor::Named(NamedColor::Magenta) => colours.resolve(13),
+        AnsiColor::Named(NamedColor::Cyan) => colours.resolve(14),
+        AnsiColor::Named(NamedColor::White) => colours.resolve(15),
         // An indexed or 24-bit colour has no bright slot of its own; the standard says bold is a
         // no-op there, and inventing a lighter version would make `ESC[1m` change a colour the
         // program chose deliberately.
