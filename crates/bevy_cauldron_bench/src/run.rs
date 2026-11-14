@@ -880,15 +880,10 @@ pub fn run(options: &Options, held_out: Option<&Path>) -> Result<Vec<TrialRecord
     } else {
         let mut chosen = Vec::with_capacity(options.only.len());
         for id in &options.only {
-            match suite.tasks.iter().chain(held.iter()).find(|t| &t.id == id) {
+            match held.iter().find(|t| &t.id == id) {
                 Some(task) => chosen.push(task.clone()),
-                None => {
-                    return Err(format!(
-                        "`{id}` is not a task in {} — it holds {}",
-                        suite.dir.display(),
-                        suite.tasks.iter().map(|t| t.id.as_str()).collect::<Vec<_>>().join(", ")
-                    ));
-                }
+                // **The dev suite answers, and refuses in its own words**, which name only its own ids.
+                None => chosen.extend(suite.select(std::slice::from_ref(id))?.into_iter().cloned()),
             }
         }
         chosen
@@ -942,10 +937,19 @@ pub fn run(options: &Options, held_out: Option<&Path>) -> Result<Vec<TrialRecord
         .map_err(|e| format!("{}: {e}", options.out.display()))?;
 
     // **One work list, one worker per `jobs`**, so a `--jobs` of 1 is the same code as a `--jobs` of 4.
-    let mut work: Vec<(Task, u32)> = Vec::new();
+    // **A held-out task's trials are filed by ordinal**, never by id: the trial's directory is an ancestor of
+    // the agent's working directory, and its name is the one thing in the path an agent reads without looking.
+    let mut work: Vec<(Task, String, u32)> = Vec::new();
+    let mut held_seen = 0usize;
     for task in &selected {
+        let label = if task.split == crate::task::Split::HeldOut {
+            held_seen += 1;
+            held_out_label(held_seen)
+        } else {
+            task.id.clone()
+        };
         for trial in 1..=options.trials {
-            work.push((task.clone(), trial));
+            work.push((task.clone(), label.clone(), trial));
         }
     }
     let next = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
@@ -961,10 +965,10 @@ pub fn run(options: &Options, held_out: Option<&Path>) -> Result<Vec<TrialRecord
         handles.push(std::thread::spawn(move || {
             loop {
                 let i = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                let Some((task, trial)) = work.get(i) else {
+                let Some((task, label, trial)) = work.get(i) else {
                     return;
                 };
-                let record = one_trial(&options, task, *trial, variant.as_ref());
+                let record = one_trial(&options, task, label, *trial, variant.as_ref());
                 if let Ok(mut records) = records.lock() {
                     records.push(record);
                 }
@@ -996,26 +1000,32 @@ pub fn run(options: &Options, held_out: Option<&Path>) -> Result<Vec<TrialRecord
 /// task's content is not to reach a log. The trial's own `trial.json`, under the state directory, says more.
 pub fn validate_held_out(options: &Options, tasks: &[Task]) -> Result<(), String> {
     let mut problems: Vec<String> = Vec::new();
+    // **The proof's files are deleted before any model trial starts.** An oracle trial's record holds the task's
+    // own solution (every call it made, with its arguments) and its project holds the solved scene; they are the
+    // answer key. They are written under a scratch directory of this process, never under the run's output
+    // directory, which is an ancestor of every model trial's working directory.
+    let scratch = std::env::temp_dir().join(format!("cauldron-bench-validity-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
     for (n, task) in tasks.iter().enumerate() {
         for agent in [Agent::Nothing, Agent::Oracle] {
             let mut proof = options.clone();
             proof.agent = agent;
-            proof.out = options.out.join("validity").join(agent.name());
-            let record = one_trial(&proof, task, 1, None);
+            proof.out = scratch.join(agent.name());
+            let record = one_trial(&proof, task, &held_out_label(n + 1), 1, None);
             let wanted = if agent == Agent::Nothing { Outcome::Fail } else { Outcome::Pass };
             if record.outcome != wanted {
                 problems.push(format!(
-                    "held-out task {} of {} under `{}` ended `{}` and should end `{}` (see {})",
+                    "held-out task {} of {} under `{}` ended `{}` and should end `{}`; the proof's files were deleted with the rest, so read the task in the held-out directory",
                     n + 1,
                     tasks.len(),
                     agent.name(),
                     record.outcome.name(),
                     wanted.name(),
-                    record.dir.join("trial.json").display()
                 ));
             }
         }
     }
+    let _ = std::fs::remove_dir_all(&scratch);
     if problems.is_empty() {
         Ok(())
     } else {
@@ -1145,12 +1155,20 @@ fn check_model(model: &str) -> Result<(), String> {
     ))
 }
 
+/// **What a held-out task is called in a path and in a record**: its place among the held-out tasks of the run.
+pub fn held_out_label(ordinal: usize) -> String {
+    format!("held-out-{ordinal}")
+}
+
 /// **One trial, from the copy to its `trial.json`**, and never a `pass` for a harness that failed.
-fn one_trial(options: &Options, task: &Task, trial: u32, variant: Option<&Variant>) -> TrialRecord {
-    let dir = options.out.join(&task.id).join(format!("trial-{trial}"));
+///
+/// `label` is what the trial is filed and recorded under: the task's id for a dev task, and
+/// [`held_out_label`] for a held-out one, whose id is not to reach a path an agent can read.
+fn one_trial(options: &Options, task: &Task, label: &str, trial: u32, variant: Option<&Variant>) -> TrialRecord {
+    let dir = options.out.join(label).join(format!("trial-{trial}"));
     let _ = std::fs::remove_dir_all(&dir);
     let record = |outcome: Outcome, reason: String| TrialRecord {
-        task: task.id.clone(),
+        task: label.to_owned(),
         trial,
         agent: options.agent.name().to_owned(),
         model: options.agent.has_model().then(|| options.model.clone()),
@@ -1766,6 +1784,36 @@ pub fn handback_of(params: &Value) -> Handback {
 /// **Write a trial's `trial.json`**, beside its project.
 fn write_record(record: &TrialRecord, task: &Task, sentence: &str) {
     let path = record.dir.join("trial.json");
+    let text = match serde_json::to_string_pretty(&record_json(record, task, sentence)) {
+        Ok(text) => text + "\n",
+        Err(_) => return,
+    };
+    let _ = bevy_grimoire_core::atomic_file::write(&path, text);
+}
+
+/// **What `trial.json` says of a trial.**
+///
+/// A dev trial's record names its task, quotes its prompt and states every check with what it measured, so a
+/// report is built from the trials alone. **A held-out trial's record is a count and nothing else of the
+/// task**: no id (its label is an ordinal), no prompt, title or tags, no sentence, and each check is only
+/// whether it held. The record sits in a directory that is an ancestor of every later trial's working
+/// directory, and a model that reads `../trial-1/trial.json` must learn what a score is and nothing about the
+/// task it was a score of.
+pub fn record_json(record: &TrialRecord, task: &Task, sentence: &str) -> Value {
+    if record.held_out {
+        let mut shown = record.clone();
+        shown.reason = if record.outcome == Outcome::HarnessError { record.reason.clone() } else { String::new() };
+        shown.checks = record
+            .checks
+            .iter()
+            .map(|c| crate::Verdict { check: "held-out".to_owned(), asks: String::new(), passed: c.passed, measured: String::new() })
+            .collect();
+        let mut value = shown.to_json();
+        if let Some(object) = value.as_object_mut() {
+            object.insert("split".to_owned(), json!(task.split.name()));
+        }
+        return value;
+    }
     let mut value = record.to_json();
     if let Some(object) = value.as_object_mut() {
         object.insert("prompt".to_owned(), json!(task.prompt));
@@ -1776,9 +1824,5 @@ fn write_record(record: &TrialRecord, task: &Task, sentence: &str) {
         object.insert("split".to_owned(), json!(task.split.name()));
         object.insert("tags".to_owned(), json!(task.tags));
     }
-    let text = match serde_json::to_string_pretty(&value) {
-        Ok(text) => text + "\n",
-        Err(_) => return,
-    };
-    let _ = bevy_grimoire_core::atomic_file::write(&path, text);
+    value
 }

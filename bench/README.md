@@ -175,19 +175,21 @@ cauldron-bench run --trials 5 --label baseline --held-out /mnt/codex_fs/bench/da
   cannot read. A failure says `held-out task 3 of 8`, never the id or the checks.
 - **A trial is given its own scene and nothing of the task**: the task's `fixture/` is laid over the trial's
   copy, and its prompt, solution and checks are not written into a trial's folder.
+- **A held-out trial is filed by ordinal and recorded as a count.** Its folder is `held-out-<n>/trial-<k>/`,
+  never the task's id, and its `trial.json` holds the outcome and how many checks held and nothing of the task: no id,
+  prompt, title, tags or check text. The folder is an ancestor of every later trial's working directory, and a
+  model that reads `../trial-1/trial.json` learns what a score is and nothing about what it scored. The validity
+  proofs (whose records hold the solution) are written to a scratch directory and deleted before any model trial
+  starts.
+- **The separation is a path nobody is told, and that is all it is.** The share is world-readable on the hosts
+  that mount it and `omp` has no sandbox, so an agent that searched the filesystem for task files could find them.
+  The fixes above remove every place a *run* writes the tasks; they do not make the share private. A benchmark
+  run on a host that mounts it trusts the agent not to go looking, the way a student is trusted with an exam in
+  the next room.
 - **Nothing prints them by name**: a console line is `(a held-out task) trial 2: PASS`, and a report states
   them as a total (`held-out (total only)`), never by task, tag or prompt.
 - **The directory is refused if it is inside a repository**, and so is a task there that does not say
   `split: held_out`.
-
-## Task drafts (BM-07)
-
-A hand-back a person kept can be made a benchmark task: **Make a benchmark task** on its row in the Agent
-workspace's history writes `.dark_factory/bench/drafts/<id>/task.yaml` in the project. Its prompt is what the
-person asked for, its `fixture/` is the map as it was before the agent's first change (rebuilt on a copy; the open
-map is never touched), its `solution` is what the agent did, and its `checks` are drafted from the change. **A
-draft is never run**: the loader skips `drafts/`, and the person moves a draft up into `.dark_factory/bench/` once
-they have read it. A wish the person keeps from that hand-back names the draft in its issue (`Benchmark task:`).
 
 ## Another project's suite
 

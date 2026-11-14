@@ -2,8 +2,13 @@
 #
 # The lamp near the table is on the floor beside it, not on it, so the right answer is "no, it is on
 # the floor". The question is the second report-only task in the suite: the map must be byte-identical, and the
-# hand-back must say what the lamp stands on. `floor` is the word that separates the right answer from the
-# wrong one (a hand-back that says the lamp is on the table does not say floor).
+# hand-back must say what the lamp stands on.
+#
+# **What the grade can and cannot tell.** Words are matched, not understood, so the answer is asked for in a
+# marker: the summary begins `ANSWER: yes` or `ANSWER: no`. The right answer states `answer: no` and `floor`,
+# and states no `answer: yes`; a hand-back that says the lamp is on the table fails on the marker, whatever
+# else it says. What it cannot tell is a hand-back that writes `ANSWER: no` and then describes the wrong
+# scene; that is a model reading the map wrongly and a person reading the transcript can see it.
 id: is-the-lamp-on-the-table
 title: Check whether the lamp sits on the table
 split: dev
@@ -11,18 +16,20 @@ tags: [verify, handback]
 map: bench_lamp_check
 prompt: |
   Check whether the lamp in the bedroom is sitting on the small table beside the bed. Do not change anything. Tell me what
-  you found with grimoire_present: say what the lamp is standing on.
+  you found with grimoire_present: begin the summary with `ANSWER: yes` or `ANSWER: no`, then say what the lamp is
+  standing on.
 setup: []
 solution:
   - op: grimoire_present
     params:
       title: The lamp is not on the table
-      summary: No. The lamp is standing on the floor beside the small table, not on it. Nothing was changed.
+      summary: "ANSWER: no. The lamp is standing on the floor beside the small table, not on it. Nothing was changed."
       specified:
         - whether the lamp sits on the small table
 checks:
   - project_unchanged: {}
   - unchanged: [maps/bench_lamp_check.map.yaml]
   - oplog_lacks: {op: placement_add}
-  - handback_contains: [floor]
+  - handback_contains: ["answer: no", floor]
+  - handback_lacks: ["answer: yes"]
 budget: {wall_s: 600, tool_calls: 60}

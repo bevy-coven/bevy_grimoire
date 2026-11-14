@@ -211,3 +211,60 @@ fn the_repositorys_suite_holds_no_held_out_task() {
     }
     assert!(checked >= 20, "the suite holds its twenty dev tasks, and this walk saw {checked}");
 }
+
+/// **A held-out trial is filed by ordinal**, so the task's id is not in the path of the agent's working directory.
+#[test]
+fn a_held_out_trial_is_filed_by_its_place_and_not_its_id() {
+    assert_eq!(bevy_cauldron_bench::run::held_out_label(1), "held-out-1");
+    assert_eq!(bevy_cauldron_bench::run::held_out_label(8), "held-out-8");
+}
+
+/// **What `trial.json` says of a held-out trial is a count and nothing of the task**, because the file sits in a
+/// directory that is an ancestor of every later trial's working directory, and a model can read `..`.
+#[test]
+fn a_held_out_record_says_how_many_checks_held_and_nothing_of_the_task() {
+    let root = project("record");
+    let held = held_dir("record");
+    let suite = Suite::load_held_out(&root, &held, &[]).unwrap_or_else(|p| panic!("the held-out tasks load: {}", p.line()));
+    let alpha = suite.tasks.iter().find(|t| t.id == "alpha-task").expect("alpha loads");
+    let verdict = |name: &str, passed: bool| bevy_cauldron_bench::Verdict {
+        check: name.to_owned(),
+        asks: "ALPHA-ASKS".to_owned(),
+        passed,
+        measured: "ALPHA-MEASURED".to_owned(),
+    };
+    let record = |held_out: bool| TrialRecord {
+        task: if held_out { bevy_cauldron_bench::run::held_out_label(1) } else { "alpha-task".to_owned() },
+        trial: 2,
+        agent: "omp".to_owned(),
+        model: None,
+        variant: None,
+        outcome: Outcome::Fail,
+        reason: "ALPHA-REASON".to_owned(),
+        checks: vec![verdict("placement_at", true), verdict("handback_contains", false)],
+        tool_calls: Vec::new(),
+        tool_log: Vec::new(),
+        tokens: None,
+        cost_reported_usd: None,
+        edits_behind: Vec::new(),
+        wall_s: 1.0,
+        tools_offered: Vec::new(),
+        wishes: Vec::new(),
+        dir: std::path::PathBuf::new(),
+        held_out,
+    };
+    let shown = bevy_cauldron_bench::run::record_json(&record(true), alpha, "ALPHA-SENTENCE").to_string();
+    for secret in ["alpha-task", "ALPHA", "placement_at", "handback_contains", "title", "prompt", "tags", "sentence"] {
+        assert!(!shown.contains(secret), "a held-out record carries `{secret}`: {shown}");
+    }
+    assert!(shown.contains("held-out-1"), "it is recorded by its place: {shown}");
+    assert!(shown.contains(r#""split":"held_out""#), "and still says what it is, which a report needs: {shown}");
+    assert!(shown.contains(r#""passed":1"#) && shown.contains(r#""total":2"#), "and keeps the score: {shown}");
+    // A dev record is the whole account, as a report is built from it.
+    let dev = bevy_cauldron_bench::run::record_json(&record(false), alpha, "ALPHA-SENTENCE").to_string();
+    for kept in ["alpha-task", "ALPHA-ASKS", "ALPHA-MEASURED", "ALPHA-SENTENCE", "ALPHA-SECRET-prompt"] {
+        assert!(dev.contains(kept), "a dev record still carries `{kept}`: {dev}");
+    }
+    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&held);
+}

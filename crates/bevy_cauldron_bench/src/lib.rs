@@ -80,7 +80,7 @@ pub mod suite;
 pub mod task;
 
 pub use check::{
-    Axis, Check, Direction, FileValue, HandbackContains, HandbackFact, NoProblem, PlacementAt, PlacementExists,
+    Axis, Check, Direction, FileValue, HandbackContains, HandbackFact, HandbackLacks, NoProblem, PlacementAt, PlacementExists,
     PlacementNearWall, PlacementRef, PlacementRefField, PlacementRelative, PlacementRestsOn, PlacementTotal,
     PlacementsWithin, ProblemKind, TerrainHeight, Unchanged, Verdict, Wall, WaterLake, CHECK_NAMES,
 };

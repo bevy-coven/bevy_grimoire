@@ -463,6 +463,12 @@ pub struct WaterLake {
     /// The least a lake's radius may be, metres.
     #[serde(default)]
     pub min_radius_m: Option<f32>,
+    /// **How far above the ground at its centre the lake's level may stand**, `[least, most]` metres. The
+    /// ground is the map's saved terrain (flat at 0 when it has none). A pond whose level is under the
+    /// ground at its centre is not water there, and one a metre over it is a tower of water: a check on
+    /// the position alone passes both.
+    #[serde(default)]
+    pub level_above_ground_m: Option<(f32, f32)>,
     /// How many lakes the plan holds. One.
     #[serde(default = "one")]
     pub count: usize,
@@ -525,6 +531,19 @@ pub struct HandbackContains {
     pub facts: Vec<HandbackFact>,
 }
 
+/// **A hand-back exists and states none of these**, written as a list: the wrong answers a task names.
+///
+/// `handback_contains` can only say what a right answer includes, and a wrong answer often includes it too
+/// ("it is on the floor" and "it is not on the floor" both say `floor`). A task that has a right and a wrong
+/// answer pairs the two: the right one states a marker (`answer: no`) and the wrong one's marker is listed
+/// here. **No hand-back at all fails this too**: silence is not a right answer.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct HandbackLacks {
+    /// The facts, each a substring matched without case across everything the hand-back says.
+    pub facts: Vec<HandbackFact>,
+}
+
 /// **A calibrated decision the harness made about the result answers as the task wants.**
 ///
 /// The decision is made by the harness (a `grimoire_decide` call, BM-02) and handed to the grader, so this
@@ -576,6 +595,7 @@ pub enum Check {
     OplogLacks(OplogLacks),
     /// A hand-back states every named fact.
     HandbackContains(HandbackContains),
+    HandbackLacks(HandbackLacks),
     /// A calibrated decision answers as the task wants.
     Decide(Decide),
     /// The map holds exactly this many placements.
@@ -603,6 +623,7 @@ pub const CHECK_NAMES: &[&str] = &[
     "oplog_has",
     "oplog_lacks",
     "handback_contains",
+    "handback_lacks",
     "decide",
     "placement_total",
     "placements_within",
@@ -685,6 +706,9 @@ impl Check {
             "handback_contains" => built(serde_json::from_value::<HandbackContains>(args.clone())
                 .map(Check::HandbackContains)
                 .map_err(|e| format!("{e}; it is a list of facts, like `[north wall, centred]`"))),
+            "handback_lacks" => built(serde_json::from_value::<HandbackLacks>(args.clone())
+                .map(Check::HandbackLacks)
+                .map_err(|e| format!("{e}; it is a list of facts, like `[answer: yes]`"))),
             "decide" => built(serde_json::from_value::<Decide>(args.clone())
                 .map(Check::Decide)
                 .map_err(|e| e.to_string())),
@@ -738,6 +762,7 @@ impl Check {
             Check::OplogHas(_) => "oplog_has",
             Check::OplogLacks(_) => "oplog_lacks",
             Check::HandbackContains(_) => "handback_contains",
+            Check::HandbackLacks(_) => "handback_lacks",
             Check::Decide(_) => "decide",
             Check::PlacementTotal(_) => "placement_total",
             Check::PlacementsWithin(_) => "placements_within",
@@ -765,7 +790,7 @@ impl Check {
         !matches!(
             self,
             Check::Unchanged(_) | Check::ProjectUnchanged(_) | Check::OplogHas(_) | Check::OplogLacks(_)
-                | Check::HandbackContains(_) | Check::Decide(_) | Check::FileValue(_)
+                | Check::HandbackContains(_) | Check::HandbackLacks(_) | Check::Decide(_) | Check::FileValue(_)
                 | Check::TerrainHeight(_) | Check::WaterLake(_)
         )
     }
@@ -889,6 +914,7 @@ impl Check {
             Check::OplogHas(o) => format!("at least {} applied `{}` line(s)", o.min, o.op),
             Check::OplogLacks(o) => format!("no applied `{}` line", o.op),
             Check::HandbackContains(h) => format!("a hand-back stating {}", h.facts.join(", ")),
+            Check::HandbackLacks(h) => format!("a hand-back stating none of {}", h.facts.join(", ")),
             Check::Decide(d) => format!(
                 "the decision `{}` answers {} with confidence ≥ {:.2}",
                 d.check, d.want, d.min_confidence
@@ -1121,6 +1147,22 @@ pub fn grade(check: &Check, baseline: &Snapshot, left: &Snapshot) -> Verdict {
                 },
             )
         }
+        Check::HandbackLacks(h) => {
+            let Some(handback) = left.handbacks.first() else {
+                return verdict(false, "no hand-back was made".to_owned());
+            };
+            let text = handback.text().to_lowercase();
+            let said: Vec<&String> = h.facts.iter().filter(|f| text.contains(&f.to_lowercase())).collect();
+            verdict(
+                said.is_empty(),
+                if said.is_empty() {
+                    format!("the hand-back `{}` states none of the {} wrong fact(s)", handback.title, h.facts.len())
+                } else {
+                    let says: Vec<String> = said.iter().map(|f| format!("`{f}`")).collect();
+                    format!("the hand-back `{}` states {}", handback.title, says.join(", "))
+                },
+            )
+        }
         Check::PlacementTotal(t) => {
             let n = left.map.placements.len();
             verdict(n == t.count, format!("{n} placement(s) on the map, and the task wants {}", t.count))
@@ -1343,11 +1385,16 @@ fn path_steps(path: &str) -> Result<Vec<Step<'_>>, String> {
     Ok(steps)
 }
 
+/// **How far apart two numbers may be and still be the same value**, in the number's own unit. A YAML
+/// scalar written `40` and one written `40.0` are one number, and the float a parser reads is never
+/// exact to the last place; nothing a task asks about is finer than a billionth.
+const SCALAR_EPSILON: f64 = 1e-9;
+
 /// **Whether two scalars are the same value**: numbers by value (so `40` and `40.0` agree), everything
 /// else as written.
 fn same_scalar(a: &Value, b: &Value) -> bool {
     match (a.as_f64(), b.as_f64()) {
-        (Some(x), Some(y)) => (x - y).abs() < 1e-9,
+        (Some(x), Some(y)) => (x - y).abs() < SCALAR_EPSILON,
         _ => a == b,
     }
 }
@@ -1487,6 +1534,17 @@ fn grade_water_lake(
             && lake.radius_m < min
         {
             fails.push(format!("lake {i} is under {min:.3} m wide"));
+        }
+        if let Some((least, most)) = w.level_above_ground_m {
+            let ground = left
+                .text(&format!("{AUTHORING_KIT}/terrain/{}.yaml", w.map))
+                .and_then(|t| bevy_grimoire_core::heightfield::Heightfield::parse(&t).ok())
+                .map_or(0.0, |field| field.height_at(lake.x, lake.z));
+            let above = lake.level_m - ground;
+            says.push(format!("lake {i} stands {above:.3} m over the ground at its centre"));
+            if !(least..=most).contains(&above) {
+                fails.push(format!("lake {i} stands {above:.3} m over the ground, and the task wants {least:.2}..{most:.2} m"));
+            }
         }
     }
     if plan.lakes.len() != w.count {

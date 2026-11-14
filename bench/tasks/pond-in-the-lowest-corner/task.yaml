@@ -3,8 +3,9 @@
 # The yard slopes: the ground is 0.05 m higher for every metre east and every metre north, so the lowest
 # corner is the south-west one, around (-10, 10), where it is 0 m, and the highest is the north-east, 2 m. A
 # pond belongs in the lowest corner, and which corner that is is the thing to find out (the terrain file is in
-# the project). The check wants one lake centred in that corner at least 3 m across, and the ground left as it
-# was: a pond is not dug.
+# the project). The check wants one lake centred in that corner at least 3 m across, its level between the
+# ground at its centre and a metre over it (water that is under the ground is not there, and a metre of
+# water is not a pond), and the ground left as it was: a pond is not dug.
 id: pond-in-the-lowest-corner
 title: A pond in the yard's lowest corner
 split: dev
@@ -31,7 +32,7 @@ solution:
       inferred:
         - the lowest corner is the south-west one, read from the terrain
 checks:
-  - water_lake: {map: bench_yard, x: [-10.0, -4.0], z: [4.0, 10.0], min_radius_m: 1.5}
+  - water_lake: {map: bench_yard, x: [-10.0, -4.0], z: [4.0, 10.0], min_radius_m: 1.5, level_above_ground_m: [0.0, 1.0]}
   - unchanged: [furniture/terrain/bench_yard.yaml, maps/bench_yard.map.yaml]
   - oplog_has: {op: water_place, min: 1}
   - handback_contains: [pond]

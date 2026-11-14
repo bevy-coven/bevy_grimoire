@@ -150,6 +150,58 @@ fn a_lake_is_found_in_a_region() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// **A lake's level is read against the ground at its centre**, so a pond is water over a bed and not a number
+/// that happens to sit in the right corner.
+#[test]
+fn a_lakes_level_is_read_against_the_ground_under_it() {
+    let root = project("water_level");
+    // The lake's level is -0.2 and the ground at its centre is 0, so it stands 0.2 m *under* the ground.
+    holds(&root, "water_lake: {map: m, x: [-4.0, -2.0], z: [2.0, 4.0], level_above_ground_m: [-0.5, 0.0]}");
+    let said = fails(&root, "water_lake: {map: m, x: [-4.0, -2.0], z: [2.0, 4.0], level_above_ground_m: [0.0, 1.0]}");
+    assert!(said.contains("-0.200"), "the failure says how far over the ground the water stands: {said}");
+    fails(&root, "water_lake: {map: m, x: [-4.0, -2.0], z: [2.0, 4.0], level_above_ground_m: [-1.0, -0.3]}");
+    // A map with no terrain is flat at 0, so the same arithmetic holds there.
+    write(&root, "furniture/water/flat.yaml", "version: 1\nlakes:\n- x: 0.0\n  z: 0.0\n  radius_m: 1.0\n  level_m: 0.3\n");
+    let snap = Snapshot::read(&root, "m", Vec::<Handback>::new(), Default::default());
+    let on_flat = grade(&check("water_lake: {map: flat, x: [-1.0, 1.0], z: [-1.0, 1.0], level_above_ground_m: [0.0, 1.0]}"), &snap, &snap);
+    assert!(on_flat.passed, "water 0.3 m over flat ground is a pond: {}", on_flat.measured);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **A hand-back is graded for what it must say and for what it must not**: `handback_lacks` is the wrong
+/// answer's marker, and silence fails it too.
+#[test]
+fn a_handback_is_graded_for_what_it_must_not_say() {
+    let root = project("handback_lacks");
+    let said = |summary: &str| {
+        vec![Handback {
+            id: "present-1".to_owned(),
+            title: "The lamp".to_owned(),
+            summary: summary.to_owned(),
+            specified: Vec::new(),
+            inferred: Vec::new(),
+            check: Vec::new(),
+        }]
+    };
+    let graded = |handbacks: Vec<Handback>, text: &str| {
+        let snap = Snapshot::read(&root, "m", handbacks, Default::default());
+        grade(&check(text), &snap, &snap)
+    };
+    let lacks = r#"handback_lacks: ["answer: yes"]"#;
+    let right = graded(said("ANSWER: no. The lamp stands on the floor."), lacks);
+    assert!(right.passed, "a hand-back that states no wrong fact passes: {}", right.measured);
+    let wrong = graded(said("answer: YES, it is on the table."), lacks);
+    assert!(!wrong.passed, "the wrong marker fails, whatever the case: {}", wrong.measured);
+    assert!(wrong.measured.contains("answer: yes"), "and the failure names it: {}", wrong.measured);
+    let silent = graded(Vec::new(), lacks);
+    assert!(!silent.passed, "no hand-back is not a right answer: {}", silent.measured);
+    // **The pair is what tells right from wrong**: the right answer holds both, the wrong one only fails the second.
+    let pair = r#"handback_contains: ["answer: no", floor]"#;
+    assert!(graded(said("ANSWER: no. The lamp stands on the floor."), pair).passed);
+    assert!(!graded(said("ANSWER: yes. It is on the floor-lamp stand."), pair).passed, "a marker that is not the right one fails the contains half");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// **How many pieces stand on the map, and how many of one piece stand in a region.**
 #[test]
 fn pieces_are_counted_on_the_map_and_in_a_region() {

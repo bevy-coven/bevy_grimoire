@@ -96,7 +96,7 @@ change or cut). `cauldron-bench run --agent oracle` passes all of them and `--ag
 
 | # | Task | Tags |
 |---|---|---|
-| 1 | `count-what-the-bedroom-holds`: how many pieces, and which is nearest the north wall | orient, read, handback |
+| 1 | `count-what-the-bedroom-holds`: how many pieces, and which is nearest the north wall | read, handback |
 | 2 | `lamp-on-the-bedside-table` | place, mount |
 | 3 | `bed-against-the-north-wall` | place, relations |
 | 4 | `chair-west-of-the-desk-facing-it` | place, relations |
@@ -113,17 +113,35 @@ change or cut). `cauldron-bench run --agent oracle` passes all of them and `--ag
 | 15 | `make-a-cellar-map` | maps |
 | 16 | `set-the-gates-health` | data |
 | 17 | `refuse-a-piece-the-project-lacks`: there is no such piece, say so | refusal, handback |
-| 18 | `move-the-locked-bed`: it is locked, ask, do not unlock | refusal, handback |
+| 18 | `move-the-locked-bed`: a note on the bed says it is locked in place, ask, do not move it | refusal, handback |
 | 19 | `furnish-a-reading-nook` | compose |
 | 20 | `is-the-lamp-on-the-table` (report, change nothing) | verify, handback |
 
-**Four departures from the drafted list**, each recorded as an assumed decision on #414: the library has no
-piano and no rug, so draft task 17 ("remove the piano, there is none") is the example the suite already had
-(the velvet armchair the project lacks) and the nook's third piece is a table with a lamp on it; a lamp
-stands on a `worktop` surface, which the bedside table does not offer, so "the lamp on the bedside table"
-is a lamp on the small table beside the bed; and the "hand back a still" half of draft task 20 cannot be
-proved without a model (a still is a tool call, which the gate's proof does not make), so task 20 is the
-report-only question whose answer the hand-back states.
+**Departures from the drafted list.** These are choices the worker made against the issue's draft table, in the
+commit that made them and in the worker's result for the manager to post as an assumed decision on #414; none is
+recorded on the issue itself yet.
+
+1. **Task 1** is the BM-01 example already in the suite (`count-what-the-bedroom-holds`, tagged `read, handback`),
+   and its question is "nearest the north wall" where the draft said "nearest the door" (the fixture's bedroom has
+   no door piece).
+2. **Task 2**: a lamp stands on a `worktop` surface, which the bedside table does not offer, so "the lamp on the
+   bedside table" is a lamp on the small table (`coffee_table`) beside the bed.
+3. **Task 13** paints the hallway with the grey floor tile (`floor`), where the draft said the stone tile (the
+   library has no stone tile).
+4. **Task 17** ("remove the piano, there is none") is the example the suite already had (the velvet armchair the
+   project lacks): the library has no piano.
+5. **Task 18**: the viewport's lock is the editor's view state, which a project does not keep and a headless proof
+   cannot set, so "locked" is a note a person left on the bed's own row of the map ("do not move this bed. Ask first.").
+6. **Task 19**: the library has no rug, so the nook's third piece is a small table with the lamp on it.
+7. **Task 20**: the "hand back a still" half cannot be proved without a model (a still is a tool call, which the
+   gate's proof does not make), so it is the report-only question whose answer the hand-back states.
+8. **Task 10** lays `plant_b`, the one plant whose footprint a run may repeat along its length (`plant_a` is a hair
+   narrower along X than it is deep, so `run_add` refuses to run it along X).
+
+**Two limits the grader has, stated so nobody reads more into a pass.** `placement_rests_on` trusts the editor's
+own `on` field (what the editor decided the piece stands on), which is the editor's measurement rather than the
+grader's. And the `oplog_has` checks pin the operation an agent used, which a different, equally good route would
+fail; they are in the tasks where the operation is the point (a terrain stroke, a water placement, a data edit).
 
 ### Held-out tasks: eight, never in the repository
 

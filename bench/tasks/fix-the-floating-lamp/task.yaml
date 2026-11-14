@@ -3,7 +3,10 @@
 # The setup lifts the lamp 0.3 m above the table it stands on, so it floats. The prompt does not say
 # which piece: finding it is the task (`grimoire_state`, the piece list, a picture). The fix is to put the
 # lift back to zero, and the checks hold the table and the desk where they were, because an agent that
-# "fixes" a floating lamp by removing the lamp has not fixed it.
+# "fixes" a floating lamp by removing the lamp has not fixed it. The lamp is found by its piece and not its
+# id, so an agent that takes the lamp away and puts a new one back (which the editor names `lamp@1`) is
+# graded on the lamp that is there. The lift is the check that fails on the untouched scene; the lamp's
+# position only guards against a fix that carries it off.
 id: fix-the-floating-lamp
 title: Something in the bedroom is floating
 split: dev
@@ -29,8 +32,8 @@ solution:
       inferred:
         - the lamp was the floating piece
 checks:
-  - placement_at: {id: lamp, lift_m: 0.0, lift_tolerance_m: 0.02}
-  - placement_rests_on: {id: lamp, host: table}
+  - placement_at: {piece: lamp, lift_m: 0.0, lift_tolerance_m: 0.02}
+  - placement_at: {piece: lamp, at: [1.8, -2.1], tolerance_m: 0.5}
   - placement_at: {id: table, at: [1.8, -2.1], tolerance_m: 0.01}
   - placement_at: {id: desk, at: [-0.5, -1.5], tolerance_m: 0.01}
   - placement_total: {count: 4}
