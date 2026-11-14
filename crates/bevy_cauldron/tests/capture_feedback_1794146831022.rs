@@ -26,6 +26,7 @@ use crate::fixtures;
 fn editor(name: &str) -> App {
     let root = fixtures::Fixture::new(name).descriptor("floor", "alpha").build("m");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("the fixture project must open: {e}"));
+    app.world_mut().resource_mut::<bevy_cauldron::terminal::Terminal>().set_collapsed(false); // #424: the pane starts collapsed; this test needs it raised
     bevy_cauldron::harness::resize_surface(&mut app, 1280, 720).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..12 {
         app.update();

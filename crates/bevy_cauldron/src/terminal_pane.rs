@@ -245,6 +245,25 @@ pub struct TerminalCdChip;
 #[derive(Component)]
 pub struct TerminalCloseTab;
 
+/// **The status bar's `Terminal Cmd+J` label** (#424): one click raises the pane, as the chord does. The pane starts collapsed on
+/// every screen, so this is where a person who has not met the chord finds it; the label says the chord too.
+#[derive(Component)]
+pub struct TerminalStatusLabel;
+
+/// **What the status bar's terminal label says**: `Terminal`, and the chord that raises and lowers the pane on this platform.
+pub fn status_label_words() -> String {
+    format!("Terminal {}", chord_words(&COLLAPSE_CHORD))
+}
+
+/// **A chord as the editor spells it on screen**: in words, `Cmd+J` on a mac and `Ctrl+J` elsewhere, as the status band's hint does
+/// (`keys::chord`), and not the glyphs (`⌘J`) `Shortcut::label` draws on a mac.
+pub fn chord_words(chord: &bevy_gooey::Shortcut) -> String {
+    chord.label_with(bevy_gooey::Platform::current(), bevy_gooey::ChordGlyphs::Words)
+}
+
+/// What the label's tooltip says.
+const TIP_STATUS_LABEL: &str = "Show or hide the terminal: the same as the chord it names";
+
 /// **The `Agent` chip**: another agent tab, in the open project. Shown while the settings choose an
 /// agent (`terminal_agent`) and the pane is not the one inviting the first (see [`offers_another_agent`]).
 #[derive(Component)]
@@ -496,6 +515,13 @@ impl Plugin for TerminalPanePlugin {
                     .in_set(crate::terminal_view::TerminalChordSet),
             )
             .add_systems(Update, resume_the_agent_that_was_running)
+            // **The status bar carries the terminal's label, and the choice a person makes is kept** (#424).
+            .add_systems(
+                OnEnter(crate::screen::Screen::Editor),
+                spawn_the_status_label.after(chrome::FrameSystems).after(chrome::spawn_status_band),
+            )
+            .add_systems(Update, keep_the_pane_choice)
+            .add_observer(the_label_flips_the_pane)
             .add_observer(a_click_takes_the_keyboard)
             .add_observer(a_click_elsewhere_gives_it_back)
             .add_observer(a_drag_begins)
@@ -1012,15 +1038,88 @@ fn collapse_on_the_chord(
     if !COLLAPSE_CHORD.just_pressed(&keys) {
         return;
     }
+    flip_the_pane(&mut panes, &mut focus, &mut terminal);
+}
+
+/// **Collapse the pane when it is raised, raise it when it is collapsed**, and put the keys where a person means them: back to the
+/// screen when it collapses, in the shell when it comes back. The one thing the chord and the status bar's label both do.
+fn flip_the_pane(panes: &mut Query<&mut Node, With<TerminalPaneRoot>>, focus: &mut TerminalFocus, terminal: &mut Terminal) {
     let Some(mut node) = panes.iter_mut().next() else {
         return;
     };
     let collapse = node.display != Display::None;
-    show(&mut node, &mut terminal, collapse);
+    show(&mut node, terminal, collapse);
     if collapse {
         focus.release();
     } else {
         focus.take();
+    }
+}
+
+/// **Build the status bar's terminal label** (#424), the last thing in the band, as the editor's frame is entered.
+fn spawn_the_status_label(mut commands: Commands, frame: Option<Res<chrome::Frame>>) {
+    let Some(frame) = frame else {
+        return;
+    };
+    commands.entity(frame.status).with_children(|band| {
+        chrome::chip(
+            band,
+            TerminalStatusLabel,
+            &status_label_words(),
+            chrome::text::CONTROL,
+            chrome::ink().text,
+            chrome::ink().bar_bg,
+            chrome::ink().panel_edge,
+        )
+        .insert(bevy_gooey::Tooltip::new(TIP_STATUS_LABEL));
+    });
+}
+
+/// **A click on the status bar's label raises the pane, or lowers it, as the chord does** (#424). It is outside the pane, so
+/// [`a_click_elsewhere_gives_it_back`] leaves it alone: the click is this one's.
+fn the_label_flips_the_pane(
+    mut click: On<bevy::picking::events::PointerClick>,
+    labels: Query<(), With<TerminalStatusLabel>>,
+    mut panes: Query<&mut Node, With<TerminalPaneRoot>>,
+    mut focus: ResMut<TerminalFocus>,
+    mut terminal: ResMut<Terminal>,
+) {
+    if !labels.contains(click.entity) {
+        return;
+    }
+    click.propagate(false);
+    flip_the_pane(&mut panes, &mut focus, &mut terminal);
+}
+
+/// **A raise or a lower a person made is kept** (#424), in the user's settings file as `terminal_collapsed`, so the next launch opens
+/// the pane as it was left, the way the window's arrangement is kept (`ui::save_the_layout`).
+///
+/// It follows the pane's state rather than each chord, so every way of raising and lowering it is kept. It writes nothing for the
+/// state the pane started in, nothing for a change the file itself made (the setting already says so), and nothing without a user
+/// settings file: a headless test that raises the pane never writes the real config.
+fn keep_the_pane_choice(
+    terminal: Res<Terminal>,
+    file: Option<Res<crate::settings::UserSettingsFile>>,
+    settings: Option<Res<crate::settings::EditorSettings>>,
+    mut state: Option<ResMut<crate::editor::EditorState>>,
+    mut seen: Local<Option<bool>>,
+) {
+    let collapsed = terminal.is_collapsed();
+    let Some(before) = seen.replace(collapsed) else {
+        return;
+    };
+    if before == collapsed || settings.as_deref().is_some_and(|settings| settings.terminal_collapsed == Some(collapsed)) {
+        return;
+    }
+    let Some(file) = file else {
+        return;
+    };
+    if let Err(why) = crate::setting_catalogue::edit_layer(&file.0, |layer| {
+        layer.terminal_collapsed = Some(collapsed);
+        Ok(())
+    }) && let Some(state) = state.as_deref_mut()
+    {
+        state.status.problem(format!("the terminal's state was not saved: {why}"));
     }
 }
 
@@ -1490,9 +1589,14 @@ fn a_click_elsewhere_gives_it_back(
     click: On<bevy::picking::events::PointerClick>,
     ancestors: Query<&ChildOf>,
     roots: Query<(), With<TerminalPaneRoot>>,
+    labels: Query<(), With<TerminalStatusLabel>>,
     mut focus: ResMut<TerminalFocus>,
 ) {
     if !focus.holds() || click.entity != click.original_event_target() {
+        return;
+    }
+    // The status bar's label raises and lowers the pane itself, and says where the keys go.
+    if labels.contains(click.entity) || ancestors.iter_ancestors(click.entity).any(|up| labels.contains(up)) {
         return;
     }
     if !landed_in_the_pane(click.entity, &ancestors, &roots) {
@@ -2102,7 +2206,9 @@ fn resume_the_agent_that_was_running(
     mut commands: Commands,
     mut tried: Local<Option<std::path::PathBuf>>,
 ) {
-    if terminal.agent() != crate::settings::TerminalAgent::OhMyPi || !terminal.invites_the_agent() {
+    // **It waits for the pane** (#424): the pane starts collapsed, and an agent that woke up behind it would run where nobody can see
+    // its state. A raised pane (or a person who raised it before) is when the resume happens.
+    if terminal.is_collapsed() || terminal.agent() != crate::settings::TerminalAgent::OhMyPi || !terminal.invites_the_agent() {
         return;
     }
     let (Some(setup), Some(project)) = (setup.as_deref(), root.as_deref().and_then(crate::project_assets::ProjectRoot::current)) else {

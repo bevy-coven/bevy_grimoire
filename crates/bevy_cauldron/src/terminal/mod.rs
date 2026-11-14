@@ -86,12 +86,12 @@ pub struct Terminal {
     /// **The open project's root** (#324): `CAULDRON_PROJECT` in every shell opened while a project is open, so
     /// a script or an agent run in the terminal knows which project the editor holds. `None` is no project.
     project_root: Option<PathBuf>,
-    /// **The person collapsed the pane** (Primary+J, or the chord that lowers it), and every screen's
-    /// pane is built and kept collapsed until they restore it (#315). `false` at launch: the terminal is
-    /// open on every screen from the application's first frame (#314, the owner's ask of 2026-11-06).
-    /// Kept here, on the session's one resource, because a pane is rebuilt on every screen and the
-    /// person's choice must outlive it.
-    collapsed: bool,
+    /// **The person has raised the pane** (Primary+J, the status bar's `Terminal` label, or the chord that raises it), and every
+    /// screen's pane is built and kept as they left it (#315). `false` at launch: the pane is on every screen but **starts
+    /// collapsed** (the owner, 2026-11-11, replacing #314's raised default), and a raise is kept across a relaunch
+    /// (`settings::EditorSettings::terminal_collapsed`). Kept here, on the session's one resource, because a pane is rebuilt on
+    /// every screen and the person's choice must outlive it. Stored as *raised* so `Terminal::default()` is the collapsed one.
+    raised: bool,
     /// **The caret a shell gets when its program asks for none** (#324): the person's
     /// `terminal_cursor` setting, given to every open screen and to each one spawned after.
     default_caret: CaretShape,
@@ -443,14 +443,14 @@ impl Terminal {
         self.height = px.clamp(crate::terminal_pane::TERMINAL_MIN_H, crate::terminal_pane::TERMINAL_MAX_H);
     }
 
-    /// Has the person collapsed the pane? Every screen's pane is drawn collapsed while this holds.
+    /// Is the pane collapsed? Every screen's pane is drawn collapsed while this holds, which is the state it starts in (#424).
     pub fn is_collapsed(&self) -> bool {
-        self.collapsed
+        !self.raised
     }
 
     /// Collapse the pane, or restore it, for this screen and every one after it.
     pub fn set_collapsed(&mut self, collapsed: bool) {
-        self.collapsed = collapsed;
+        self.raised = !collapsed;
     }
 
     /// **The project the editor holds** (#324): `CAULDRON_PROJECT` in each shell opened from now on.

@@ -207,15 +207,26 @@ fn holds(app: &App) -> bool {
     app.world().resource::<TerminalFocus>().holds()
 }
 
+/// **The pane starts collapsed** (#424, replacing #314's raised default), so a test that works in the shell raises it first, as a
+/// person does with Primary+J.
+fn raise(app: &mut App) {
+    app.world_mut().resource_mut::<Terminal>().set_collapsed(false);
+    settle(app, 3);
+}
+
 #[test]
-fn the_home_opens_with_the_terminal_raised_and_a_shell_running() {
+fn a_raised_terminal_is_on_the_home_with_a_shell_running() {
     let mut app = the_application("terminal_on_the_home");
+    // Owner exception (2026-11-14): this test pinned "raised on start" (#314); #424 starts the pane collapsed (asserted on the home by
+    // `primary_j_collapses_the_terminal_on_every_screen...`), so here the person raises it on the door, as they would, and the rest holds.
+    raise(&mut app);
+    until(&mut app, "the door's terminal never started a shell", |app| !app.world().resource::<Terminal>().is_empty());
     go_to(&mut app, Screen::Launcher);
     assert!(
         pane_is_under_a_root_named(&mut app, "projects home"),
         "the projects home has no terminal docked in it"
     );
-    assert!(pane(&mut app).1, "the terminal is raised on the home from the start, not waiting for a chord");
+    assert!(pane(&mut app).1, "a raised terminal is raised on the home, not waiting for a chord");
     until(&mut app, "the home's terminal never started a shell", |app| {
         !app.world().resource::<Terminal>().is_empty() && screen_text(app).contains('$')
     });
@@ -227,10 +238,12 @@ fn the_home_opens_with_the_terminal_raised_and_a_shell_running() {
 }
 
 #[test]
-fn the_editor_opens_with_the_terminal_raised_and_every_screen_shows_the_same_scrollback() {
+fn the_editor_opens_with_the_terminal_collapsed_and_every_screen_shows_the_same_scrollback() {
     let (mut app, project) = the_application_and_its_project("terminal_every_screen");
-    // The harness stands on a door: the editor's own frame has the pane, raised, with no chord pressed.
-    assert!(pane(&mut app).1, "the editor's terminal is raised from the door's first frame");
+    // The harness stands on a door: the editor's own frame has the pane, collapsed, with no chord pressed (#424; this test pinned "raised").
+    assert!(!pane(&mut app).1, "the editor's terminal starts collapsed");
+    raise(&mut app);
+    assert!(pane(&mut app).1, "and is raised once the person raises it");
     until(&mut app, "the editor's terminal never started a shell", |app| screen_text(app).contains('$'));
     assert!(!holds(&app), "a door opens without the terminal holding the keyboard");
 
@@ -255,7 +268,9 @@ fn the_editor_opens_with_the_terminal_raised_and_every_screen_shows_the_same_scr
 fn primary_j_collapses_the_terminal_on_every_screen_and_brings_it_back_with_the_keys() {
     let mut app = the_application("terminal_primary_j");
     go_to(&mut app, Screen::Launcher);
-    assert!(pane(&mut app).1, "raised to begin with");
+    assert!(!pane(&mut app).1, "collapsed to begin with (#424; this test pinned raised)");
+    raise(&mut app);
+    assert!(pane(&mut app).1, "raised");
 
     primary(&mut app, KeyCode::KeyJ);
     assert!(!pane(&mut app).1, "Primary+J collapses the terminal on the home");
@@ -276,6 +291,7 @@ fn primary_j_collapses_the_terminal_on_every_screen_and_brings_it_back_with_the_
 #[test]
 fn primary_j_never_reaches_the_shell() {
     let mut app = the_application("terminal_j_not_a_newline");
+    raise(&mut app);
     until(&mut app, "no shell", |app| screen_text(app).contains('$'));
     app.world_mut().resource_mut::<TerminalFocus>().take();
     settle(&mut app, 2);
@@ -299,6 +315,7 @@ fn primary_j_never_reaches_the_shell() {
 #[test]
 fn the_home_does_not_act_on_keys_the_shell_has() {
     let mut app = the_application("terminal_holds_the_keys");
+    raise(&mut app);
     go_to(&mut app, Screen::Launcher);
     until(&mut app, "no shell", |app| screen_text(app).contains('$'));
     app.world_mut().resource_mut::<TerminalFocus>().take();

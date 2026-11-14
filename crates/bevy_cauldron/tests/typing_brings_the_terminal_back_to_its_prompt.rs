@@ -36,6 +36,7 @@ fn editor(tag: &str) -> App {
     let guard = SHELL_ENV.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     unsafe { std::env::set_var("SHELL", "/bin/sh") };
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    app.world_mut().resource_mut::<bevy_cauldron::terminal::Terminal>().set_collapsed(false); // #424: the pane starts collapsed; this test needs it raised
     app.insert_non_send(PosixShell(guard));
     app.world_mut().spawn((
         Window { resolution: bevy::window::WindowResolution::new(1280, 720), ..default() },

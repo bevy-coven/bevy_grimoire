@@ -324,6 +324,11 @@ pub struct EditorSettings {
     /// The shell line `TerminalAgent::Custom` types. Deliberately not in the settings catalogue: the
     /// Settings screen has no text control (#324), so this key is set in the file only.
     pub terminal_agent_command: Option<String>,
+    /// **Did the person leave the terminal collapsed or raised?** (#424) `None` until they raise or lower it: the pane then starts
+    /// collapsed, on every screen. The editor writes `true` or `false` to the user's file when the pane is raised or lowered, so a
+    /// relaunch opens it as it was left, the way the window's arrangement is kept. Not in the settings catalogue: it is a thing a
+    /// person does with a chord, not a row they set.
+    pub terminal_collapsed: Option<bool>,
     /// **The program a new terminal tab runs** (#324): VS Code's `terminal.integrated.defaultProfile`.
     /// `None` is `$SHELL`, then `/bin/sh`. Tabs already open keep the shell they started with. Like
     /// `terminal_agent_command`, not in the settings catalogue: the Settings screen has no text control.
@@ -361,6 +366,7 @@ impl Default for EditorSettings {
             terminal_scrollback: crate::terminal::SCROLLBACK,
             terminal_agent: TerminalAgent::default(),
             terminal_agent_command: None,
+            terminal_collapsed: None,
             terminal_shell: None,
             terminal_shell_args: Vec::new(),
             workspace_layout: BTreeMap::new(),
@@ -420,6 +426,8 @@ pub struct SettingsLayer {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_agent_command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_collapsed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_shell: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_shell_args: Option<Vec<String>>,
@@ -456,6 +464,7 @@ impl Default for SettingsLayer {
             terminal_scrollback: None,
             terminal_agent: None,
             terminal_agent_command: None,
+            terminal_collapsed: None,
             terminal_shell: None,
             terminal_shell_args: None,
             workspace_layout: BTreeMap::new(),
@@ -573,6 +582,9 @@ impl EditorSettings {
             out.terminal_agent = layer.terminal_agent.unwrap_or(out.terminal_agent);
             if let Some(command) = &layer.terminal_agent_command {
                 out.terminal_agent_command = Some(command.clone());
+            }
+            if let Some(collapsed) = layer.terminal_collapsed {
+                out.terminal_collapsed = Some(collapsed);
             }
             // **A shell and its arguments are one value**: a layer that names a shell brings its own
             // arguments (none when it gives none), never the earlier layer's, which were for another program.
