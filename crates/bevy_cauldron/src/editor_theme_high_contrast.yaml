@@ -1,0 +1,197 @@
+# **High contrast, as the editor draws it** (#428): the colour half of a skin, gooey's
+# `GooeySkin::high_contrast()` (opaque black, white text, amber accent) with the editor's whole eight-step
+# ladder and its own tones, held to 7:1 for body text. Read by `ui::skin_for`, which lays it over
+# `editor_skin.yaml`'s sizes, so a theme never moves a layout. No shadows: a high-contrast look is edges.
+background: !LinearRgba
+  red: 0.0
+  green: 0.0
+  blue: 0.0
+  alpha: 1.0
+surface: !Srgba
+  red: 0.02
+  green: 0.02
+  blue: 0.02
+  alpha: 1.0
+surface_raised: !Srgba
+  red: 0.133
+  green: 0.133
+  blue: 0.133
+  alpha: 1.0
+text: !LinearRgba
+  red: 1.0
+  green: 1.0
+  blue: 1.0
+  alpha: 1.0
+text_muted: !Srgba
+  red: 0.72
+  green: 0.72
+  blue: 0.72
+  alpha: 1.0
+accent: !Srgba
+  red: 1.0
+  green: 0.66
+  blue: 0.0
+  alpha: 1.0
+accent_text: !LinearRgba
+  red: 0.0
+  green: 0.0
+  blue: 0.0
+  alpha: 1.0
+danger: !Srgba
+  red: 1.0
+  green: 0.5
+  blue: 0.5
+  alpha: 1.0
+focus_ring: !Srgba
+  red: 0.2
+  green: 0.9
+  blue: 1.0
+  alpha: 1.0
+outline: !Srgba
+  red: 0.96
+  green: 0.96
+  blue: 0.96
+  alpha: 1.0
+surface_edge: !LinearRgba
+  red: 1.0
+  green: 1.0
+  blue: 1.0
+  alpha: 1.0
+scrim: !Srgba
+  red: 0.0
+  green: 0.0
+  blue: 0.0
+  alpha: 0.8
+surfaces:
+- !Srgba
+  red: 0.0
+  green: 0.0
+  blue: 0.0
+  alpha: 1.0
+- !Srgba
+  red: 0.035
+  green: 0.035
+  blue: 0.035
+  alpha: 1.0
+- !Srgba
+  red: 0.075
+  green: 0.075
+  blue: 0.075
+  alpha: 1.0
+- !Srgba
+  red: 0.133
+  green: 0.133
+  blue: 0.133
+  alpha: 1.0
+- !Srgba
+  red: 0.17
+  green: 0.17
+  blue: 0.17
+  alpha: 1.0
+- !Srgba
+  red: 0.215
+  green: 0.215
+  blue: 0.215
+  alpha: 1.0
+- !Srgba
+  red: 0.27
+  green: 0.27
+  blue: 0.27
+  alpha: 1.0
+- !Srgba
+  red: 0.6
+  green: 0.6
+  blue: 0.6
+  alpha: 1.0
+tones:
+  bounds_line: !Srgba
+    red: 1.0
+    green: 0.85
+    blue: 0.2
+    alpha: 1.0
+  focus_bg: !Srgba
+    red: 0.0
+    green: 0.0
+    blue: 0.04
+    alpha: 1.0
+  grid_line: !Srgba
+    red: 0.4
+    green: 0.4
+    blue: 0.4
+    alpha: 1.0
+  key: !Srgba
+    red: 0.97
+    green: 0.97
+    blue: 0.9
+    alpha: 1.0
+  label: !Srgba
+    red: 0.85
+    green: 0.85
+    blue: 0.85
+    alpha: 1.0
+  labeled: !Srgba
+    red: 0.45
+    green: 1.0
+    blue: 0.45
+    alpha: 1.0
+  muted: !Srgba
+    red: 0.7
+    green: 0.7
+    blue: 0.62
+    alpha: 1.0
+  overlay_bg: !Srgba
+    red: 0.08
+    green: 0.08
+    blue: 0.08
+    alpha: 1.0
+  overlay_dark: !LinearRgba
+    red: 0.05
+    green: 0.12
+    blue: 0.45
+    alpha: 0.35
+  overlay_lit: !LinearRgba
+    red: 1.0
+    green: 0.62
+    blue: 0.12
+    alpha: 0.85
+  row_pressed: !Srgba
+    red: 0.012
+    green: 0.012
+    blue: 0.012
+    alpha: 1.0
+  snip_wash: !Srgba
+    red: 1.0
+    green: 0.66
+    blue: 0.0
+    alpha: 0.28
+  suggest: !Srgba
+    red: 0.45
+    green: 0.8
+    blue: 1.0
+    alpha: 1.0
+  veil: !Srgba
+    red: 0.0
+    green: 0.0
+    blue: 0.0
+    alpha: 0.35
+hover: !Srgba
+  red: 0.215
+  green: 0.215
+  blue: 0.215
+  alpha: 1.0
+pressed: !Srgba
+  red: 0.012
+  green: 0.012
+  blue: 0.012
+  alpha: 1.0
+card: !Srgba
+  red: 0.08
+  green: 0.08
+  blue: 0.08
+  alpha: 1.0
+preview_edge: !Srgba
+  red: 0.96
+  green: 0.96
+  blue: 0.96
+  alpha: 1.0
+elevation: {}

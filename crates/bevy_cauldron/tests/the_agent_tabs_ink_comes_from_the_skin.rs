@@ -238,7 +238,12 @@ fn the_card_and_the_chip_are_repainted_from_the_running_skin() {
     );
     // **And it is the skin's, not the palette's**, whatever state the post is in — the two palettes
     // disagree on every one of the four inks `a_skin_of_its_own` sets, so this cannot pass by luck.
-    let palette = AgentInk::of(None);
+    // **Owner exception (2026-11-14, #428):** this was `AgentInk::of(None)`, "the shipped palette". With no skin
+    // `AgentInk::of` reads `chrome::ink()`, which is the *running* skin's ink since #428 — this very test's own
+    // skin, so the two could never differ. The shipped palette is the default theme's, `editor_skin.yaml`, so
+    // that is what it is compared with: the same four inks, from the same file, as before. Every check kept.
+    let shipped = bevy_cauldron::chrome::Ink::of(&bevy_cauldron::ui::editor_skin());
+    let palette = AgentInk { read: shipped.text, muted: shipped.muted, good: shipped.labeled, danger: shipped.danger };
     assert_ne!(
         (expect.read, expect.muted, expect.good, expect.danger),
         (palette.read, palette.muted, palette.good, palette.danger),

@@ -166,6 +166,7 @@ pub mod light_view;
 pub mod fixture;
 pub mod palette_menu;
 pub mod piece_menu;
+pub mod theme_ink;
 pub mod ui;
 pub mod ui_budget;
 pub mod ui_skin;

@@ -57,26 +57,23 @@ use crate::keys::{self};
 // surface they sit in, because pushed-in and typed-into are the two states where the metaphor is a
 // well rather than a card.
 
-/// **The editor's own ink, and the only place a colour is named** (UI-02, #210).
+/// **The editor's own ink, and the only place a colour is named** (UI-02, #210; follows the theme, #428).
 ///
 /// This module used to declare 28 `pub const … : Color` — a table the 2026-08-17 audit had already
 /// caught drifting against itself twice. They are gone: every colour the chrome paints is a field
-/// here, and every field is read from **the editor's own skin** (`src/editor_skin.yaml`, through
-/// [`crate::ui::editor_skin`]), which is the same data `bevy_gooey` restyles the widgets from and
-/// the same data `GooeySkin::problems()` measures. One palette, one file, one check.
+/// here, and every field is read from **the running skin** ([`Ink::of`]) — the same data `bevy_gooey`
+/// restyles the widgets from and the same data `GooeySkin::problems()` measures. One palette, one
+/// skin, one check. Tool dark's is `src/editor_skin.yaml`; Parchment's and High contrast's are
+/// `src/editor_theme_*.yaml` laid over it by [`crate::ui::skin_for`].
 ///
-/// # Why a struct and not a resource
+/// # Why a struct, and why [`ink`] is a function of the skin and not a parameter
 ///
 /// The chrome is sixty-one spawn systems and helpers that hold no `Res<GooeySkin>`, and threading a
-/// skin through all of them would be a second parameter on every call for a value that never varies
-/// at run time: the editor's chrome paints with **the editor's** skin whatever a project ships
-/// (UI-03, #211 — a game's palette belongs inside the Game UI preview panel and nowhere else). So
-/// the ink is a function of a compiled-in file, built once, and [`ink`] hands out a reference.
-///
-/// **A theme does not move it, and that is the honest state of things.** A theme (`ui::skin_for`)
-/// reaches the gooey-drawn widgets; the chrome's labels stay the editor's measured darks, which is
-/// why [`crate::ui::honoured_from`] refuses a theme whose ground would leave them unreadable rather
-/// than painting one and calling it accessible.
+/// skin through all of them would be a second parameter on every call. So the ink is one live value
+/// ([`ink`]), rebuilt by `crate::theme_ink::follow_the_skin` whenever the running skin changes colour,
+/// and the same system moves everything already on screen onto the new one: **a theme changes every
+/// colour the editor draws, live** (#428). A project's skin never reaches it (UI-03, #211 — a game's
+/// palette belongs inside the Game UI preview panel and nowhere else): only the running skin does.
 ///
 /// # The tone names are the file's keys
 ///
@@ -211,21 +208,80 @@ impl Ink {
         }
     }
 
-    /// **The editor's own ink**, from `src/editor_skin.yaml` — what every painter in this crate uses.
-    ///
-    /// Built once and handed out by [`ink`]: the file is compiled in, so the value cannot change
-    /// under a running editor, and parsing it per call site would be work with no answer at the end
-    /// of it.
+    /// **The ink the editor starts with**, from `src/editor_skin.yaml` — the Tool dark theme, and the
+    /// value [`ink`] holds until a skin says otherwise.
     pub fn editor() -> Ink {
         Ink::of(&crate::ui::editor_skin())
     }
+
+    /// **Every field, in declaration order**, so a theme change can say "the colour that was `panel_bg`
+    /// is now this theme's `panel_bg`" ([`Ink::remap`]) without naming 28 fields twice. The pattern has
+    /// no `..`, so a field added to [`Ink`] fails to compile here until it is listed.
+    pub fn fields(&self) -> [Color; INK_FIELDS] {
+        let Ink {
+            panel_bg, row_bg, row_hover, row_selected, row_pressed, text, dim, accent, key, label, danger, scrim, veil, muted, suggest,
+            unchecked, labeled, slot_bg, overlay_bg, focus_bg, header_bg, grid_line, bounds_line, void, bar_bg, panel_edge, edge_strong,
+            snip_wash,
+        } = *self;
+        [
+            panel_bg, row_bg, row_hover, row_selected, row_pressed, text, dim, accent, key, label, danger, scrim, veil, muted, suggest,
+            unchecked, labeled, slot_bg, overlay_bg, focus_bg, header_bg, grid_line, bounds_line, void, bar_bg, panel_edge, edge_strong,
+            snip_wash,
+        ]
+    }
+
+    /// **What a colour drawn from `from` becomes when the ink is `to`** (#428), or `None` when it was
+    /// not drawn from `from` at all.
+    ///
+    /// A colour that *is* a field of `from` takes the same field of `to`, alpha and all. One that has the
+    /// field's colour at another alpha (a fade, the shortcut key's step back) keeps its own alpha and
+    /// takes the new field's colour. Anything else — a measured colour, a game's, a terminal program's —
+    /// is not the editor's ink and is left alone, which is the point of asking.
+    pub fn remap(from: &Ink, to: &Ink, colour: Color) -> Option<Color> {
+        let (from, to) = (from.fields(), to.fields());
+        let same = |a: Color, b: Color| {
+            let (a, b) = (Srgba::from(a), Srgba::from(b));
+            [a.red - b.red, a.green - b.green, a.blue - b.blue].iter().all(|d| d.abs() <= INK_MATCH_TOLERANCE)
+        };
+        let alpha = Srgba::from(colour).alpha;
+        let exact = from.iter().position(|f| same(*f, colour) && (Srgba::from(*f).alpha - alpha).abs() <= INK_MATCH_TOLERANCE);
+        if let Some(at) = exact {
+            return Some(to[at]);
+        }
+        let at = from.iter().position(|f| same(*f, colour))?;
+        Some(to[at].with_alpha(alpha))
+    }
 }
 
-/// **The editor's ink, built once.** See [`Ink`] for why this is a function of a compiled-in file
-/// rather than a resource: the chrome paints with the editor's skin whatever a project ships.
-pub fn ink() -> &'static Ink {
-    static INK: std::sync::OnceLock<Ink> = std::sync::OnceLock::new();
-    INK.get_or_init(Ink::editor)
+/// How many colours an [`Ink`] holds.
+pub const INK_FIELDS: usize = 28;
+
+/// **How near two sRGB channels must be to be the same ink**: a thousandth, well under one 8-bit step
+/// (1/255), so a colour that went through a `Color` conversion still matches and two inks that differ
+/// by a step do not.
+const INK_MATCH_TOLERANCE: f32 = 1.0e-3;
+
+/// **The ink the editor is drawing with right now** — the running skin's, by [`Ink::of`] (#428).
+///
+/// There is one, and `crate::theme_ink::follow_the_skin` is the only thing that writes it: whenever the
+/// running [`bevy_gooey::GooeySkin`] changes colour (a theme chosen in Settings, a settings file edited
+/// by hand) the ink is rebuilt from it and everything already drawn is moved onto it. Until a skin says
+/// otherwise it is the editor's own, `src/editor_skin.yaml`.
+///
+/// It is a process-wide value rather than a resource because 300 call sites paint from [`ink`] where no
+/// system parameter reaches — the same reason [`text_scale`] is one atomic. A process has one editor.
+static LIVE_INK: std::sync::LazyLock<std::sync::RwLock<Ink>> = std::sync::LazyLock::new(|| std::sync::RwLock::new(Ink::editor()));
+
+/// **The editor's ink now**, by value (28 colours, `Copy`): what a painter reads, whatever theme is
+/// running. A value and not a reference, because it changes under a running editor.
+pub fn ink() -> Ink {
+    // A poisoned lock still holds a whole `Ink`: it is only ever replaced, never edited in place.
+    *LIVE_INK.read().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Replaces the editor's ink and returns the one it replaced. Only `crate::theme_ink` calls it.
+pub(crate) fn swap_ink(next: Ink) -> Ink {
+    std::mem::replace(&mut *LIVE_INK.write().unwrap_or_else(std::sync::PoisonError::into_inner), next)
 }
 
 /// **How far a ground fill steps back while the shortcuts key is held.**

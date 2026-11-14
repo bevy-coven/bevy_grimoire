@@ -8,15 +8,14 @@
 //! choosing Parchment in the settings screen wrote the file, resolved into `EditorSettings`, and left
 //! the editor dark. `text_scale` had none either.
 //!
-//! # What a theme can be, today, and why
+//! # What a theme can be
 //!
-//! **`chrome.rs` still draws the editor's labels from 28 colour constants** — the other half of #210,
-//! which needs the protected colour tests re-pinned, so a worker may not finish it. High contrast is
-//! therefore honourable, because a white-on-black ground keeps near-white labels readable (the tightest
-//! pair is 4.94:1); **Parchment is not**, because a cream ground under near-white labels is 1.12:1. So
-//! the theme is applied only when the ground it paints still leaves the editor's own inks readable —
-//! `ui::honoured_from` — and Parchment is refused, on the status line, with the pair that failed.
-//! `tests/the_theme_refuses_one_it_cannot_paint` is that refusal as an assertion, and
+//! **Every theme the editor offers is painted** (#428). `chrome.rs` used to draw the editor's labels from the
+//! dark theme's colours whatever ran, so High contrast was honourable (white-on-black keeps near-white
+//! labels readable) and **Parchment was refused**, because a cream ground under near-white labels is
+//! 1.12:1. The chrome's ink is the running skin's now (`tests/the_theme_moves_every_colour.rs`), so a
+//! theme's own labels sit on its own ground and nothing is refused.
+//! `every_theme_is_painted_and_its_inks_clear_its_grounds` is the measurement, and
 //! `choosing_a_theme_changes_the_running_skin` is the theme that does reach the running skin.
 //!
 //! **Text size reaches gooey's own widgets**, because gooey scales `type_size` by `text_scale`. It does
@@ -111,61 +110,53 @@ fn choosing_a_theme_changes_the_running_skin() {
     assert_eq!(running.text, GooeySkin::high_contrast().text, "and its ink");
 }
 
-/// **Parchment is refused, and says why** (UI-73, #251). This is the regression the review caught:
-/// applying Parchment painted its cream `surface` under the editor's near-white `chrome.rs` labels —
-/// **1.12:1**, measured — and every screen in the editor became unreadable. Until #210 finishes moving
-/// those constants onto the skin there is no light theme the editor can paint, so `honoured_from`
-/// refuses one, naming the pair, and the theme that was running stays.
+/// **Every theme is painted, Parchment included** (UI-73, #251; #428).
 ///
-/// The refusal is a *validation* rather than a silent fallback: the same function answers `Ok` for the
-/// two themes this editor can paint, so nothing here is a special case keyed on a theme's name.
+/// **Owner exception (2026-11-14, #428): this test was `the_theme_refuses_one_it_cannot_paint`.** It pinned
+/// the regression the review of #251 caught — Parchment's cream `surface` under the editor's near-white
+/// `chrome.rs` labels, **1.12:1** — by making `honoured_from` refuse the theme. #428 is the other half of
+/// that item: the chrome's ink is the running skin's, so a theme's own labels sit on its own ground and
+/// there is nothing to refuse (`honoured_from` is gone). What the test measured is kept and now holds for
+/// all three: every ink clears every ground it is drawn on, by `unreadable_pairs`, which is the same
+/// measurement; and the 1.12:1 pair is asserted *gone* for Parchment instead of present.
 #[test]
-fn the_theme_refuses_one_it_cannot_paint() {
-    // **The two that can be painted**, so the refusal is a measurement and not a list of one.
-    for theme in [Theme::ToolDark, Theme::HighContrast] {
-        let skin = bevy_cauldron::ui::honoured_from(theme)
-            .unwrap_or_else(|e| panic!("{theme:?} is paintable today and must not be refused: {e}"));
+fn every_theme_is_painted_and_its_inks_clear_its_grounds() {
+    for theme in [Theme::ToolDark, Theme::Parchment, Theme::HighContrast] {
+        let skin = bevy_cauldron::ui::skin_for(theme);
         assert_eq!(
             bevy_cauldron::ui::unreadable_pairs(&skin),
             Vec::<String>::new(),
             "{theme:?}: every ink clears every ground it is drawn on"
         );
     }
-    // **The one that cannot**, and the pair that stops it.
-    let why = bevy_cauldron::ui::honoured_from(Theme::Parchment)
-        .expect_err("a cream ground under near-white labels is not a theme this editor can paint");
-    assert!(why.contains("Parchment"), "the refusal names the theme a person chose: {why}");
-    assert!(why.contains("text on surface"), "and the pair that failed, so it can be looked at: {why}");
-    assert!(why.contains("4.5:1"), "and the floor it missed, in the numbers WCAG is written in: {why}");
     let parchment = bevy_cauldron::ui::skin_for(Theme::Parchment);
-    let unreadable = bevy_cauldron::ui::unreadable_pairs(&parchment);
-    assert!(!unreadable.is_empty(), "Parchment's ground leaves the editor's own inks unreadable: {unreadable:?}");
+    let ink = bevy_cauldron::chrome::Ink::of(&parchment);
+    let ratio = |ink: Color, ground: Color| {
+        let c = |colour: Color| {
+            let c = Srgba::from(colour);
+            [c.red, c.green, c.blue]
+        };
+        bevy_gooey::contrast_ratio(c(ink), c(ground))
+    };
     assert!(
-        unreadable.iter().any(|pair| pair.starts_with("text on surface ")),
-        "and the first failure is `text` on the panel's own ground: {unreadable:?}"
+        ratio(ink.text, parchment.solid_surface()) >= bevy_gooey::TEXT_CONTRAST,
+        "Parchment's `text` on its own panel is no longer the 1.12:1 the refusal named"
     );
 }
 
-/// **A person who chooses Parchment keeps the editor they had, and reads why.**
+/// **A person who chooses Parchment gets Parchment**, and the status line has nothing to say about it.
 ///
-/// The unit above is the measurement; this is what a person gets. The status line is where this editor
-/// says things, so the reason is there rather than only in a log — and the ground on screen is the one
-/// that was running, not the cream that would have made every label unreadable.
+/// **Owner exception (2026-11-14, #428): this test was
+/// `choosing_a_theme_that_cannot_be_painted_keeps_the_editor_it_had`.** It asserted the refused theme left
+/// the dark ground running and the reason on the status line. The theme is painted now, so the ground on
+/// screen is Parchment's; the status line's silence is asserted by
+/// `a_theme_the_editor_paints_says_nothing_on_the_status_line`.
 #[test]
-fn choosing_a_theme_that_cannot_be_painted_keeps_the_editor_it_had() {
-    let app = editor("theme_refused", Theme::Parchment, 1.0);
+fn choosing_parchment_makes_its_ground_the_running_one() {
+    let app = editor("theme_parchment", Theme::Parchment, 1.0);
     let running = app.world().resource::<GooeySkin>().clone();
-    assert_eq!(
-        running.surface,
-        bevy_cauldron::ui::editor_skin().surface,
-        "the panel's ground is the one that was running, not Parchment's cream"
-    );
-    let said: Vec<String> =
-        app.world().resource::<bevy_cauldron::editor::EditorState>().status.problems().iter().map(|p| p.text.clone()).collect();
-    assert!(
-        said.iter().any(|line| line.contains("Parchment") && line.contains("4.5:1")),
-        "the status line says why the theme was not applied: {said:?}"
-    );
+    assert_eq!(running.surface, GooeySkin::parchment().surface, "the panel's ground is Parchment's cream");
+    assert_eq!(running.text, GooeySkin::parchment().text, "and its ink");
 }
 
 /// **A settled editor never rewrites the running skin** (UI-73, #251).
@@ -196,31 +187,25 @@ fn a_settled_editor_does_not_rewrite_the_running_skin() {
     );
 }
 
-/// **A refused theme is said once, not once a frame** (UI-73, #251).
+/// **Parchment says nothing, however many frames go by** (UI-73, #251; #428).
 ///
-/// The status line is what a person reads, and `Status` collapses *consecutive repeats* into a tally. A
-/// refusal raised on every pass would therefore climb to `(x30)` in a second — a line that says the
-/// editor is shouting. `follow_the_theme` keeps the sentence it last said (`refused`) for exactly this,
-/// so the count is **one**, however many frames go by. This fails on a version with no such guard.
+/// **Owner exception (2026-11-14, #428): this test was `a_refused_theme_is_said_once`.** Parchment was
+/// refused because the chrome's labels were the dark theme's near-white (1.12:1 on cream), and a refusal
+/// raised on every pass would have climbed to `(x30)` on the status line. #428 moves the chrome's ink onto
+/// the running skin, so there is no refusal to say once. The check this made is kept, turned the right way
+/// round: a theme the editor now paints puts **no** sentence about itself on the status line, on the first
+/// frame or the thirtieth.
 #[test]
-fn a_refused_theme_is_said_once() {
-    let mut app = editor("theme_said_once", Theme::Parchment, 1.0);
+fn a_theme_the_editor_paints_says_nothing_on_the_status_line() {
+    let mut app = editor("theme_said_nothing", Theme::Parchment, 1.0);
     for _ in 0..30 {
         app.update();
     }
-    let refusal = app
-        .world()
-        .resource::<bevy_cauldron::editor::EditorState>()
-        .status
-        .problems()
-        .iter()
-        .find(|p| p.text.contains("Parchment"))
-        .map(|p| (p.text.clone(), p.count))
-        .expect("choosing a theme the editor cannot paint says so");
-    assert_eq!(
-        refusal.1, 1,
-        "the refusal is raised once over thirty frames, not every frame: {:?}",
-        refusal.0
+    let said: Vec<String> =
+        app.world().resource::<bevy_cauldron::editor::EditorState>().status.problems().iter().map(|p| p.text.clone()).collect();
+    assert!(
+        said.iter().all(|line| !line.contains("Parchment")),
+        "choosing a theme the editor paints says nothing about it, on any frame: {said:?}"
     );
 }
 

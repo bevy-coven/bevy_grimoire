@@ -1,0 +1,252 @@
+# **Parchment, as the editor draws it** (#428): the colour half of a skin, the cream and brown of gooey's
+# `GooeySkin::parchment()` made into a whole ladder and the editor's own tones. Read by `ui::skin_for`, which
+# lays it over `editor_skin.yaml`'s sizes, so a theme never moves a layout. `surface`, `text` and `accent`
+# are the preset's own; `surface_raised` (lighter than the panel, so a row stands off it), `text_muted`,
+# `danger` and the tones are set so every ink the editor draws reads on every ground it is drawn on
+# (`tests/the_theme_moves_every_colour.rs`).
+background: !Srgba
+  red: 0.18
+  green: 0.13
+  blue: 0.09
+  alpha: 1.0
+surface: !Srgba
+  red: 0.91
+  green: 0.85
+  blue: 0.72
+  alpha: 0.95
+surface_raised: !Srgba
+  red: 0.955
+  green: 0.925
+  blue: 0.86
+  alpha: 1.0
+text: !Srgba
+  red: 0.2
+  green: 0.14
+  blue: 0.09
+  alpha: 1.0
+text_muted: !Srgba
+  red: 0.33
+  green: 0.25
+  blue: 0.16
+  alpha: 1.0
+accent: !Srgba
+  red: 0.55
+  green: 0.16
+  blue: 0.12
+  alpha: 1.0
+accent_text: !Srgba
+  red: 0.97
+  green: 0.93
+  blue: 0.85
+  alpha: 1.0
+danger: !Srgba
+  red: 0.56
+  green: 0.08
+  blue: 0.06
+  alpha: 1.0
+focus_ring: !Srgba
+  red: 0.12
+  green: 0.38
+  blue: 0.55
+  alpha: 1.0
+outline: !Srgba
+  red: 0.48
+  green: 0.38
+  blue: 0.27
+  alpha: 1.0
+surface_edge: null
+scrim: !Srgba
+  red: 0.08
+  green: 0.05
+  blue: 0.02
+  alpha: 0.7
+surfaces:
+- !Srgba
+  red: 0.18
+  green: 0.13
+  blue: 0.09
+  alpha: 1.0
+- !Srgba
+  red: 0.8735
+  green: 0.814
+  blue: 0.6885
+  alpha: 1.0
+- !Srgba
+  red: 0.8
+  green: 0.735
+  blue: 0.6
+  alpha: 1.0
+- !Srgba
+  red: 0.955
+  green: 0.925
+  blue: 0.86
+  alpha: 1.0
+- !Srgba
+  red: 0.985
+  green: 0.972
+  blue: 0.93
+  alpha: 1.0
+- !Srgba
+  red: 0.925
+  green: 0.865
+  blue: 0.735
+  alpha: 1.0
+- !Srgba
+  red: 0.82
+  green: 0.71
+  blue: 0.5
+  alpha: 1.0
+- !Srgba
+  red: 0.52
+  green: 0.42
+  blue: 0.3
+  alpha: 1.0
+tones:
+  bounds_line: !Srgba
+    red: 0.45
+    green: 0.33
+    blue: 0.15
+    alpha: 1.0
+  focus_bg: !Srgba
+    red: 0.99
+    green: 0.98
+    blue: 0.95
+    alpha: 1.0
+  grid_line: !Srgba
+    red: 0.7
+    green: 0.62
+    blue: 0.48
+    alpha: 1.0
+  key: !Srgba
+    red: 0.09
+    green: 0.06
+    blue: 0.03
+    alpha: 1.0
+  label: !Srgba
+    red: 0.35
+    green: 0.27
+    blue: 0.18
+    alpha: 1.0
+  labeled: !Srgba
+    red: 0.14
+    green: 0.34
+    blue: 0.12
+    alpha: 1.0
+  muted: !Srgba
+    red: 0.38
+    green: 0.29
+    blue: 0.2
+    alpha: 1.0
+  overlay_bg: !Srgba
+    red: 0.97
+    green: 0.945
+    blue: 0.89
+    alpha: 1.0
+  overlay_dark: !LinearRgba
+    red: 0.05
+    green: 0.12
+    blue: 0.45
+    alpha: 0.35
+  overlay_lit: !LinearRgba
+    red: 1.0
+    green: 0.62
+    blue: 0.12
+    alpha: 0.85
+  row_pressed: !Srgba
+    red: 0.8
+    green: 0.73
+    blue: 0.58
+    alpha: 1.0
+  snip_wash: !Srgba
+    red: 0.55
+    green: 0.16
+    blue: 0.12
+    alpha: 0.28
+  suggest: !Srgba
+    red: 0.1
+    green: 0.27
+    blue: 0.4
+    alpha: 1.0
+  veil: !Srgba
+    red: 1.0
+    green: 1.0
+    blue: 1.0
+    alpha: 0.35
+hover: !Srgba
+  red: 0.925
+  green: 0.865
+  blue: 0.735
+  alpha: 1.0
+pressed: !Srgba
+  red: 0.8
+  green: 0.73
+  blue: 0.58
+  alpha: 1.0
+card: !Srgba
+  red: 0.97
+  green: 0.945
+  blue: 0.89
+  alpha: 1.0
+preview_edge: !Srgba
+  red: 0.48
+  green: 0.38
+  blue: 0.27
+  alpha: 1.0
+elevation:
+  raised:
+  - x: 0.0
+    y: 1.0
+    blur: 2.0
+    spread: 0.0
+    color: !Srgba
+      red: 0.06
+      green: 0.07
+      blue: 0.11
+      alpha: 0.16
+  - x: 0.0
+    y: 0.0
+    blur: 0.0
+    spread: 0.5
+    color: !Srgba
+      red: 0.0
+      green: 0.0
+      blue: 0.0
+      alpha: 0.1
+  floating:
+  - x: 0.0
+    y: 4.0
+    blur: 8.0
+    spread: 0.0
+    color: !Srgba
+      red: 0.06
+      green: 0.07
+      blue: 0.11
+      alpha: 0.16
+  - x: 0.0
+    y: 0.0
+    blur: 0.0
+    spread: 0.5
+    color: !Srgba
+      red: 0.0
+      green: 0.0
+      blue: 0.0
+      alpha: 0.1
+  overlay:
+  - x: 0.0
+    y: 8.0
+    blur: 16.0
+    spread: 0.0
+    color: !Srgba
+      red: 0.06
+      green: 0.07
+      blue: 0.11
+      alpha: 0.16
+  - x: 0.0
+    y: 0.0
+    blur: 0.0
+    spread: 0.5
+    color: !Srgba
+      red: 0.0
+      green: 0.0
+      blue: 0.0
+      alpha: 0.1
