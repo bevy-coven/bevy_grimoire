@@ -219,13 +219,19 @@ pub enum Stage {
     Kits,
     /// Every mesh's triangle count, read from its file.
     MeasureMeshes,
-    /// The door's map. Told on every door so the stages are always the same four; instant on a door that has no map.
+    /// The door's map. Told on every door so the stages are always the same ones; instant on a door that has no map.
     Maps,
+    /// **The editor's own first frames** (#430): its panels, strip and map are built on the main thread, in the
+    /// frames after the loading screen hands over, and they hold the window for longer than a frame (measured
+    /// headless on an empty project: 105 ms for the first frame, 27 ms for the second). That work cannot move to
+    /// a thread, so the loading screen says it before it begins: [`crate::loading`] tells this stage, and keeps
+    /// saying it for [`crate::loading::HANDOFF_FRAMES`] drawn frames, then hands over.
+    BuildEditor,
 }
 
 impl Stage {
     /// Every stage, in the order an open runs them.
-    pub const ALL: [Stage; 4] = [Stage::ReadProject, Stage::Kits, Stage::MeasureMeshes, Stage::Maps];
+    pub const ALL: [Stage; 5] = [Stage::ReadProject, Stage::Kits, Stage::MeasureMeshes, Stage::Maps, Stage::BuildEditor];
 
     /// What the loading screen calls it.
     pub fn label(self) -> &'static str {
@@ -234,6 +240,7 @@ impl Stage {
             Stage::Kits => "Loading the kits",
             Stage::MeasureMeshes => "Measuring the meshes",
             Stage::Maps => "Opening the map",
+            Stage::BuildEditor => "Building the editor",
         }
     }
 

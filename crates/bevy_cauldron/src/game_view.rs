@@ -429,6 +429,8 @@ fn remove_the_log(project: Option<Res<Project>>, crossing: Option<Res<crate::scr
 /// **Quitting removes the log**, so a normal quit leaves nothing in the temporary directory. The game writes to the file itself, so it
 /// is not hurt by the file going.
 fn remove_the_log_on_quit(project: Option<Res<Project>>) {
+    // A file removal of the exit: listed with its bound, so a quit stuck in it is named (`exit_watchdog.rs`, #427).
+    let _wait = crate::exit_watchdog::waiting("removing the game's log", std::time::Duration::from_secs(1));
     if let Some(project) = project {
         ops_play::remove_log(&project.root);
     }

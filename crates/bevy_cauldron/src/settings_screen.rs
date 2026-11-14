@@ -27,13 +27,15 @@
 use std::path::PathBuf;
 
 use bevy::ecs::spawn::{SpawnIter, SpawnWith};
+use bevy::input_focus::{FocusCause, InputFocus};
+use bevy::ui::{Checked, ComputedNode, ScrollPosition};
 use bevy::ecs::relationship::RelatedSpawner;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::picking::events::PointerRelease;
-use bevy::ui_widgets::{SliderPrecision, SliderRange, SliderStep, SliderValue};
+use bevy::ui_widgets::{SliderPrecision, SliderStep, SliderValue};
 use bevy_gooey::{
-    Activate, Cancel, TextHint, ValueChange, button, choice, dialog, heading, label, list, menu, observe, slider, tab_page, tabs, text_input,
+    Activate, Cancel, ChoiceValue, TextHint, ValueChange, button, choice, dialog, heading, label, list, menu, observe, slider, tab_page, tabs, text_input,
     toggle,
 };
 
@@ -74,9 +76,13 @@ pub struct SettingsDialog {
     pub writes: u32,
 }
 
-/// What the rows were last built from, so they are built again only when it changes.
+/// What the rows were last built from, so they are brought up to date only when it changes.
 #[derive(Component, Default)]
-struct Built(Option<Snapshot>);
+struct Built {
+    snapshot: Option<Snapshot>,
+    /// The search the pages were built for: the settings listed follow from it alone.
+    query: Option<String>,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 struct Snapshot {
@@ -147,6 +153,36 @@ struct Rows(usize);
 #[derive(Component)]
 struct ProblemLine;
 
+/// The control of a setting's row and the value the row shows it with, so a change moves it in place
+/// and a click on a slider's rail is compared with what the row shows now.
+#[derive(Component)]
+struct SettingControl {
+    key: &'static str,
+    shown: Value,
+}
+
+/// A row built as "unreadable value": it has no control to move, so a change builds the rows again.
+#[derive(Component)]
+struct SettingUnreadable;
+
+/// The line under a row's description, and what it holds now: the default, whether the file being edited
+/// sets the key (the *Modified* mark and its Reset), and what the project says when it overrides it.
+#[derive(Component, PartialEq)]
+struct SettingLine {
+    key: &'static str,
+    own: bool,
+    overridden: Option<Value>,
+    default: Option<Value>,
+}
+
+/// The words of a row's line that are always there: *Default: ...*.
+#[derive(Component)]
+struct LineDefault;
+
+/// A word or button of a row's line that comes and goes with the file: *Modified*, its Reset, or what the project says.
+#[derive(Component)]
+struct LineMark;
+
 /// The dialog's two files, as this app names them — and, beside them, **what this machine has** (#341).
 #[derive(SystemParam)]
 pub(crate) struct Files<'w> {
@@ -204,13 +240,35 @@ pub struct SettingsScreenPlugin;
 
 impl Plugin for SettingsScreenPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<OpenSettings>().add_systems(Update, (chord, open, refresh).chain()).add_systems(
+        app.add_message::<OpenSettings>().add_systems(Update, (chord, open, refresh, clamp_the_scroll).chain()).add_systems(
             Update,
             // After gooey has written its own readout (the number), so the percentage is the last word.
             say_the_percentage.after(bevy_gooey::GooeySystems::Style),
         );
     }
 }
+
+/// **The scroll a list is stored at is the one it is drawn at** (#429). Layout clamps what is drawn to the content, but leaves
+/// the stored [`ScrollPosition`] where it was, so a list that got shorter (a Reset took a mark off its last row) kept a stale
+/// offset that came back, as a jump, the next time it grew. Only this dialog's lists are held to it.
+fn clamp_the_scroll(
+    dialogs: Query<Entity, With<SettingsDialog>>,
+    mut lists: Query<(Entity, &mut ScrollPosition, &ComputedNode), With<bevy_gooey::ListView>>,
+    parents: Query<&ChildOf>,
+) {
+    let Ok(dialog) = dialogs.single() else { return };
+    for (list, mut scroll, node) in &mut lists {
+        let drawn = node.scroll_position.y * node.inverse_scale_factor();
+        // **Stale means nobody moved it this frame**: a wheel or a glide writes the offset before layout has seen it, and
+        // would be cut back to last frame's if it were looked at here.
+        if !scroll.is_changed() && scroll.y > drawn + SCROLL_SLACK_PX && parents.iter_ancestors(list).any(|ancestor| ancestor == dialog) {
+            scroll.y = drawn;
+        }
+    }
+}
+
+/// How far the stored scroll may be past the drawn one before it is pulled back, in logical px: layout floors the drawn one.
+const SCROLL_SLACK_PX: f32 = 1.0;
 
 /// Cmd/Ctrl+, : open the screen, or take it down when it is open. Not from a text field, where the
 /// comma is a comma.
@@ -345,25 +403,40 @@ fn open(mut asks: MessageReader<OpenSettings>, existing: Query<(), With<Settings
         });
 }
 
-/// Build the rows again when what they are built from changed: a choice, a search, or either file.
+/// A setting's control and what it shows: a switch is `Checked`, a slider has a value, a choice has an option.
+type ControlState = (Entity, &'static mut SettingControl, Option<&'static mut ChoiceValue>, Option<&'static SliderValue>, Has<Checked>);
+
+/// **Follow what the rows are built from**: a choice, a search, or either file.
+///
+/// A search changes which settings are listed, so it builds the pages again. Anything else (a write from a
+/// control, a Reset, an edit made by hand, the Applies-to choice) changes only what a row shows: the
+/// control's value and the line's *Modified* mark, Reset and project note are updated where they stand, so
+/// the list keeps its scroll offset, its focus and its layout (#429).
+#[allow(clippy::too_many_arguments)]
 fn refresh(
     time: Res<Time>,
     files: Files,
     mut dialogs: Query<(Ref<SettingsDialog>, &mut Built)>,
     pages: Query<(Entity, &Rows)>,
-    mut problem_line: Query<&mut Text, With<ProblemLine>>,
+    mut problem_line: Query<&mut Text, (With<ProblemLine>, Without<LineDefault>)>,
+    mut controls: Query<ControlState>,
+    mut lines: Query<(Entity, &mut SettingLine, &Children)>,
+    mut defaults: Query<&mut Text, (With<LineDefault>, Without<ProblemLine>)>,
+    marks: Query<(), With<LineMark>>,
+    unreadable: Query<(), With<SettingUnreadable>>,
     mut since: Local<f32>,
+    mut focus: Option<ResMut<InputFocus>>,
     mut commands: Commands,
 ) {
     let Ok((dialog, mut built)) = dialogs.single_mut() else { return };
     *since += time.delta_secs();
-    if *since < LOOK_EVERY && !dialog.is_changed() && built.0.is_some() {
+    if *since < LOOK_EVERY && !dialog.is_changed() && built.snapshot.is_some() {
         return;
     }
     *since = 0.0;
     // The tab is not part of what the rows are built from (every tab's page is built), so turning one rebuilds nothing.
     let snapshot = Snapshot { dialog: SettingsDialog { tab: 0, ..(*dialog).clone() }, user: Layer::of(files.user().as_ref()), project: Layer::of(files.project().as_ref()) };
-    if built.0.as_ref() == Some(&snapshot) {
+    if built.snapshot.as_ref() == Some(&snapshot) {
         return;
     }
 
@@ -397,37 +470,143 @@ fn refresh(
         "terminal_agent" => Some(Value::Option(crate::setting_catalogue::agent_index(files.machine_agent()))),
         _ => setting_catalogue::default_value(key),
     };
-    for (page, Rows(tab)) in &pages {
-        commands.entity(page).despawn_children();
-        let category = tab.checked_sub(1).and_then(|i| CATEGORIES.get(i)).copied();
-        let found = setting_catalogue::search(&dialog.query, category);
-        if found.is_empty() {
-            commands.entity(page).with_children(|rows| {
-                rows.spawn(label(format!("No setting matches \"{}\".", dialog.query.trim())));
-            });
-            continue;
+    // One setting as a row shows it: what the edited file sets, what it shows, what the project overrides, the default.
+    let view = |setting: &'static Setting| {
+        let own = edited.get(setting.key);
+        let below = match dialog.scope {
+            Scope::User => default_of(setting.key),
+            Scope::Project => snapshot.user.get(setting.key).or_else(|| default_of(setting.key)),
+        };
+        let overridden = match dialog.scope {
+            Scope::User => snapshot.project.get(setting.key),
+            Scope::Project => None,
+        };
+        (own, below.unwrap_or(Value::On(false)), overridden, default_of(setting.key))
+    };
+
+    // The rows stand when the same settings are listed; they are built again when a search lists others, or
+    // when a control cannot show what its row now holds (a row built as "unreadable value", or a kind that
+    // does not match).
+    let mut rebuild = built.query.as_deref() != Some(dialog.query.as_str()) || !unreadable.is_empty();
+    let mut switches: Vec<(Entity, bool)> = Vec::new();
+    let mut sliders: Vec<(Entity, f32)> = Vec::new();
+    if !rebuild {
+        for (entity, mut control, choice, slider, checked) in &mut controls {
+            let Some(setting) = setting_catalogue::find(control.key) else {
+                rebuild = true;
+                break;
+            };
+            let (own, below, _, _) = view(setting);
+            let shown = own.unwrap_or(below);
+            let matched = match (setting.kind, shown) {
+                (Kind::Switch, Value::On(on)) => {
+                    if on != checked {
+                        switches.push((entity, on));
+                    }
+                    true
+                }
+                (Kind::Scale { .. }, Value::Number(n)) => slider.is_some_and(|s| {
+                    if s.0 != n {
+                        sliders.push((entity, n));
+                    }
+                    true
+                }),
+                (Kind::Options(_), Value::Option(i)) => choice.is_some_and(|mut c| {
+                    if c.0 != i {
+                        c.0 = i;
+                    }
+                    true
+                }),
+                _ => false,
+            };
+            if !matched {
+                rebuild = true;
+                break;
+            }
+            if control.shown != shown {
+                control.shown = shown;
+            }
         }
-        let rows: Vec<_> = found
-            .into_iter()
-            .map(|setting| {
-                let own = edited.get(setting.key);
-                let below = match dialog.scope {
-                    Scope::User => default_of(setting.key),
-                    Scope::Project => snapshot.user.get(setting.key).or_else(|| default_of(setting.key)),
-                };
-                let overridden = match dialog.scope {
-                    Scope::User => snapshot.project.get(setting.key),
-                    Scope::Project => None,
-                };
-                setting_row(setting, own, below.unwrap_or(Value::On(false)), overridden, default_of(setting.key))
-            })
-            .collect();
-        // A list, so a tab with more settings than the window is tall scrolls instead of running off it.
-        commands.entity(page).with_children(|p| {
-            p.spawn(list(LIST_ROWS, Children::spawn(SpawnIter(rows.into_iter()))));
-        });
     }
-    built.0 = Some(snapshot);
+
+    if rebuild {
+        for (page, Rows(tab)) in &pages {
+            commands.entity(page).despawn_children();
+            let category = tab.checked_sub(1).and_then(|i| CATEGORIES.get(i)).copied();
+            let found = setting_catalogue::search(&dialog.query, category);
+            if found.is_empty() {
+                commands.entity(page).with_children(|rows| {
+                    rows.spawn(label(format!("No setting matches \"{}\".", dialog.query.trim())));
+                });
+                continue;
+            }
+            let rows: Vec<_> = found
+                .into_iter()
+                .map(|setting| {
+                    let (own, below, overridden, default_value) = view(setting);
+                    setting_row(setting, own, below, overridden, default_value)
+                })
+                .collect();
+            // A list, so a tab with more settings than the window is tall scrolls instead of running off it.
+            commands.entity(page).with_children(|p| {
+                p.spawn(list(LIST_ROWS, Children::spawn(SpawnIter(rows.into_iter()))));
+            });
+        }
+        built.query = Some(dialog.query.clone());
+    } else {
+        for (entity, n) in sliders {
+            commands.entity(entity).insert(SliderValue(n));
+        }
+        for (entity, on) in switches {
+            if on {
+                commands.entity(entity).insert(Checked);
+            } else {
+                commands.entity(entity).remove::<Checked>();
+            }
+        }
+        for (entity, mut line, kids) in &mut lines {
+            let Some(setting) = setting_catalogue::find(line.key) else { continue };
+            let (own, _, overridden, default_value) = view(setting);
+            if line.default != default_value {
+                line.default = default_value;
+                for kid in kids.iter() {
+                    if let Ok(mut text) = defaults.get_mut(kid) {
+                        text.0 = default_text(setting, default_value);
+                    }
+                }
+            }
+            // Only the marks come and go: the default's label, the line and the row stay where they are.
+            if line.own != own.is_some() || line.overridden != overridden {
+                line.own = own.is_some();
+                line.overridden = overridden;
+                // **Focus never stays on a mark that is about to go** (#429): a keyboard Reset takes its own button away,
+                // and the focus would be left on a despawned entity. It moves to the row's own control.
+                let going: Vec<Entity> = kids.iter().filter(|kid| marks.contains(*kid)).collect();
+                if let Some(focus) = focus.as_deref_mut()
+                    && focus.get().is_some_and(|held| going.contains(&held))
+                {
+                    let key = line.key;
+                    match controls.iter().find(|(_, control, ..)| control.key == key) {
+                        Some((control, ..)) => focus.set(control, FocusCause::Navigated),
+                        None => focus.clear(),
+                    }
+                }
+                for kid in going {
+                    commands.entity(kid).despawn();
+                }
+                commands.entity(entity).with_children(|line| {
+                    if own.is_some() {
+                        line.spawn(modified_mark());
+                        line.spawn(reset_button(setting));
+                    }
+                    if let Some(over) = overridden {
+                        line.spawn(project_note(setting, over));
+                    }
+                });
+            }
+        }
+    }
+    built.snapshot = Some(snapshot);
 }
 
 /// A scale slider that was just built or whose value moved.
@@ -453,6 +632,10 @@ fn say_the_percentage(
 }
 
 /// One setting: its control, what it does, its default, whether it is modified and the Reset.
+///
+/// **The row is built once and then kept up to date in place** ([`refresh`]): the control carries
+/// [`SettingControl`] and the line under the description [`SettingLine`], so a change to the file moves the
+/// control's value and swaps the line's marks without the list being built again (#429).
 fn setting_row(setting: &'static Setting, own: Option<Value>, below: Value, overridden: Option<Value>, default_value: Option<Value>) -> impl Bundle {
     let shown = own.unwrap_or(below);
     let key = setting.key;
@@ -464,6 +647,7 @@ fn setting_row(setting: &'static Setting, own: Option<Value>, below: Value, over
                 (Kind::Switch, Value::On(on)) => {
                     row.spawn((
                         toggle(setting.label, on),
+                        SettingControl { key, shown },
                         observe(move |c: On<ValueChange<bool>>, mut w: Writer| w.set(key, Some(Value::On(c.value)))),
                     ));
                 }
@@ -471,20 +655,25 @@ fn setting_row(setting: &'static Setting, own: Option<Value>, below: Value, over
                     let mut control = row.spawn((
                         slider(setting.label, n, min..=max),
                         PercentReadout,
-                        // **A write is the end of a move, never the middle of one.** The rows are built
-                        // again from the file, so a write on every frame of a drag would rebuild the
-                        // slider under the pointer. A key press and the end of a drag are final.
+                        SettingControl { key, shown },
+                        // **A write is the end of a move, never the middle of one.** A write on every frame of
+                        // a drag would move the slider under the pointer. A key press and the end of a drag are final.
                         observe(move |c: On<ValueChange<f32>>, mut w: Writer| {
                             if c.is_final {
                                 w.set(key, Some(Value::Number(on_the_step(c.value))));
                             }
                         }),
                         // **And a click on the rail is final too**, though gooey calls it a change in
-                        // progress: it sends no end, so the release is where the click is done.
-                        observe(move |release: On<PointerRelease>, sliders: Query<(&SliderValue, &SliderRange)>, mut w: Writer| {
-                            if let Ok((value, _)) = sliders.get(release.entity) {
+                        // progress: it sends no end, so the release is where the click is done. The landing is
+                        // compared with what the row shows now, which the screen keeps current.
+                        observe(move |release: On<PointerRelease>, sliders: Query<(&SliderValue, &SettingControl)>, mut w: Writer| {
+                            if let Ok((value, control)) = sliders.get(release.entity) {
                                 let landed = on_the_step(value.0);
-                                if (landed - n).abs() > f32::EPSILON {
+                                let shown_now = match control.shown {
+                                    Value::Number(shown_now) => shown_now,
+                                    _ => n,
+                                };
+                                if (landed - shown_now).abs() > f32::EPSILON {
                                     w.set(key, Some(Value::Number(landed)));
                                 }
                             }
@@ -497,29 +686,56 @@ fn setting_row(setting: &'static Setting, own: Option<Value>, below: Value, over
                 (Kind::Options(names), Value::Option(i)) => {
                     row.spawn((
                         choice(setting.label, names.iter().copied(), i),
+                        SettingControl { key, shown },
                         observe(move |c: On<ValueChange<usize>>, mut w: Writer| w.set(key, Some(Value::Option(c.value)))),
                     ));
                 }
                 _ => {
-                    row.spawn(label(format!("{}: unreadable value", setting.label)));
+                    row.spawn((label(format!("{}: unreadable value", setting.label)), SettingUnreadable));
                 }
             }
             row.spawn(label(setting.description));
-            let default_text = default_value.map_or_else(String::new, |d| format!("Default: {}", setting_catalogue::say(setting, d)));
-            row.spawn(bevy_gooey::row_with(crate::chrome::GAP_GROUP_STEPS, bevy_gooey::RowLayout { align: Some(AlignItems::Center), wrap: Some(FlexWrap::Wrap), ..default() }))
-                .with_children(|line| {
-                    line.spawn(label(default_text));
-                    if own.is_some() {
-                        line.spawn(label("Modified"));
-                        line.spawn((
-                            button(format!("Reset {}", setting.label)),
-                            observe(move |_: On<Activate>, mut w: Writer| w.set(key, None)),
-                        ));
-                    }
-                    if let Some(over) = overridden {
-                        line.spawn(label(format!("This project sets it to {}", setting_catalogue::say(setting, over))));
-                    }
-                });
+            row.spawn((
+                bevy_gooey::row_with(crate::chrome::GAP_GROUP_STEPS, bevy_gooey::RowLayout { align: Some(AlignItems::Center), wrap: Some(FlexWrap::Wrap), ..default() }),
+                SettingLine { key, own: own.is_some(), overridden, default: default_value },
+                line_children(setting, own.is_some(), overridden, default_value),
+            ));
         })),
     )
+}
+
+/// What is on a row's line: the default, then, when the file being edited sets the key, *Modified* and its
+/// Reset, and, when the project overrides it, what the project says.
+fn line_children(setting: &'static Setting, own: bool, overridden: Option<Value>, default_value: Option<Value>) -> impl Bundle {
+    Children::spawn(SpawnWith(move |line: &mut RelatedSpawner<ChildOf>| {
+        line.spawn(default_label(setting, default_value));
+        if own {
+            line.spawn(modified_mark());
+            line.spawn(reset_button(setting));
+        }
+        if let Some(over) = overridden {
+            line.spawn(project_note(setting, over));
+        }
+    }))
+}
+
+fn default_label(setting: &'static Setting, default_value: Option<Value>) -> impl Bundle {
+    (label(default_text(setting, default_value)), LineDefault)
+}
+
+fn default_text(setting: &'static Setting, default_value: Option<Value>) -> String {
+    default_value.map_or_else(String::new, |d| format!("Default: {}", setting_catalogue::say(setting, d)))
+}
+
+fn modified_mark() -> impl Bundle {
+    (label("Modified"), LineMark)
+}
+
+fn reset_button(setting: &'static Setting) -> impl Bundle {
+    let key = setting.key;
+    (button(format!("Reset {}", setting.label)), LineMark, observe(move |_: On<Activate>, mut w: Writer| w.set(key, None)))
+}
+
+fn project_note(setting: &'static Setting, over: Value) -> impl Bundle {
+    (label(format!("This project sets it to {}", setting_catalogue::say(setting, over))), LineMark)
 }

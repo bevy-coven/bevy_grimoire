@@ -198,6 +198,9 @@ fn main() -> AppExit {
     // **A quit that does not finish is finished for it** (`exit_watchdog.rs`, #337): only the binary adds it, because
     // a test editor writes `AppExit` and goes on.
     app.add_plugins(bevy_cauldron::exit_watchdog::ExitWatchdogPlugin::ends_the_process());
+    // **And a second press of the quit key ends a quit that is stuck** (#427): read from the watchdog's own thread, because a quit
+    // that is stuck is stuck on the main thread, where no key event arrives.
+    app.insert_resource(bevy_cauldron::exit_watchdog::SecondPress::this_machine());
 
     // **Both screens' plugins, always added.** Which one *runs* is the state's business, not the
     // plugin list's — a list that changed with the screen would be two plugin graphs, and only one

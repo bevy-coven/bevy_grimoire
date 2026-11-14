@@ -208,6 +208,8 @@ fn watch_the_window(windows: Query<&Window, (With<PrimaryWindow>, Changed<Window
 
 /// Writes the window's frame to the recent-projects file: when a project opens, and when the editor closes.
 fn save_the_window(last: Res<LastFrame>, recents: Option<Res<RecentProjects>>) {
+    // A file write of the exit: listed with its bound, so a quit stuck in it is named (`exit_watchdog.rs`, #427).
+    let _wait = crate::exit_watchdog::waiting("saving the window's place", std::time::Duration::from_secs(1));
     if let (Some(frame), Some(recents)) = (last.0, recents)
         && let Err(e) = recent::remember_window(&recents.0, frame)
     {

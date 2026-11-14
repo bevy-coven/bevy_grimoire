@@ -24,6 +24,8 @@ mod a_project_skin_previews_only_in_the_panel;
 mod a_reference_is_followed_from_where_it_is_written;
 mod a_rigs_clip_is_found_by_the_finder;
 mod a_saved_arrangement_is_the_one_the_editor_shows;
+mod a_second_press_of_the_quit_key_ends_a_quit_that_is_stuck;
+mod a_settings_change_updates_only_its_row;
 mod a_sound_cue_is_listed_without_bevy_siren;
 mod a_style_edit_stays_in_design_and_an_undo_grants_nothing;
 mod a_style_rows_lines_are_gooey_rows;
@@ -33,6 +35,7 @@ mod back_and_forward_across_workspaces;
 mod back_and_forward_returns_to_a_cue_and_a_file;
 mod fixtures;
 mod new_topics_start_from_templates_in_the_design_workspace;
+mod opening_a_project_never_holds_a_frame_past_the_budget;
 mod the_agent_workspace_takes_a_change_back_from_its_row;
 mod the_finder_goes_to_cues_scripts_and_files;
 
