@@ -37,7 +37,7 @@ cauldron-bench: run the Cauldron's benchmark suite against a real editor and a r
 
 usage: cauldron-bench run [options]
        cauldron-bench report <run directory> [--label <name>] [--publish <docs/bench>]
-       cauldron-bench compare <a> <b> [--across]
+       cauldron-bench compare <a> <b> [--across] [--json]
        cauldron-bench matrix --pairs <agent:model,agent:model,...> [run options]
 
   --suite <dir>       the task directory (default: bench/tasks). A game's own is .dark_factory/bench
@@ -66,7 +66,8 @@ time, tool calls, refusals, undos, edits behind the editor's back, tokens and co
 `report` builds the same report from a run directory. `compare` takes two reports (the .json files a run
 published, or run directories) and says `better`, `worse` or `no measurable change` with a paired 95%
 bootstrap interval; it refuses a run with more than 10% harness errors, and two runs of different suites,
-agents or trial counts unless --across is given.";
+agents or trial counts unless --across is given. --json prints the comparison as JSON instead of text, which is
+what the release check (`tools/release/bench_gate.py`, BM-05) reads.";
 
 fn main() -> std::process::ExitCode {
     let argv: Vec<String> = std::env::args().skip(1).collect();
@@ -326,9 +327,11 @@ fn report_command(argv: &[String]) -> std::process::ExitCode {
 fn compare_command(argv: &[String]) -> std::process::ExitCode {
     let mut paths: Vec<PathBuf> = Vec::new();
     let mut across = false;
+    let mut json = false;
     for arg in argv {
         match arg.as_str() {
             "--across" => across = true,
+            "--json" => json = true,
             other if !other.starts_with("--") => paths.push(PathBuf::from(other)),
             other => {
                 eprintln!("cauldron-bench: `{other}` is not an argument `compare` takes. Try `--help`.");
@@ -345,6 +348,16 @@ fn compare_command(argv: &[String]) -> std::process::ExitCode {
         bevy_cauldron_bench::compare::compare(&a, &b, across)
     });
     match result {
+        Ok(comparison) if json => match serde_json::to_string_pretty(&comparison) {
+            Ok(text) => {
+                println!("{text}");
+                std::process::ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("cauldron-bench: the comparison did not serialize: {e}");
+                std::process::ExitCode::FAILURE
+            }
+        },
         Ok(comparison) => {
             println!("{}", comparison.markdown());
             std::process::ExitCode::SUCCESS

@@ -35,6 +35,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: false
+          # The benchmark gate below asks which commit a report was run at and which release came before this one: both
+          # need the history and the tags, which a one-commit checkout does not have.
+          fetch-depth: 0
       # The What's new page's stills are Git LFS objects. `lfs: false` keeps every clip out of this checkout; the stills are
       # all the page needs, and build_app.sh copies the ones it lists into the app.
       - name: Fetch the What's new stills
@@ -51,6 +54,19 @@ jobs:
             echo "tag $GITHUB_REF_NAME does not match bevy_cauldron $V" >&2
             exit 1
           fi
+      # **A release needs a benchmark run, and a regression stops it** (BM-05, #415): a published release is refused unless a
+      # report committed under docs/bench/runs/ is for the code being released and its comparison with the previous release's
+      # report is not `worse`. It reads the committed report; the run itself happens where an editor can open a window
+      # (docs/loop/RUNNING-A-LOOP.md). Before the signing, the notarization and the app build, so a refused release costs only
+      # the small `cauldron-bench` build (no editor), not the hours of the signed app. An ad-hoc build is never published and
+      # proves the build only, so it skips this.
+      - name: The benchmark gate
+        if: github.event_name == 'push' || inputs.publish
+        env:
+          V: ${{ steps.version.outputs.v }}
+        run: |
+          cargo build --release -p bevy_cauldron_bench --bin cauldron-bench
+          python3 tools/release/bench_gate.py check --release "$GITHUB_SHA" --version "$V" --bench "$CARGO_TARGET_DIR/release/cauldron-bench"
       - name: Import the Developer ID certificate and the notary key
         if: env.DEVELOPER_ID == 'true'
         env:
