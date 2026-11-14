@@ -236,7 +236,7 @@ fn refresh_problems_list(
             }
             Said::Rows(rows) => {
                 for row in rows {
-                    p.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_TIGHT), flex_shrink: 0.0, ..default() })
+                    crate::chrome::rigid_row(p, crate::chrome::GAP_TIGHT_STEPS, AlignItems::Center)
                         .with_children(|line| {
                             line.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() }).with_children(|words| {
                                 let colour = if row.hard { ink.danger } else { ink.read };

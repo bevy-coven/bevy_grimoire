@@ -182,3 +182,17 @@ fn the_familiars_readout_lines_are_gooey_rows_that_are_never_squeezed() {
         assert_eq!(node.align_items, AlignItems::FlexStart, "the label and the wrapped value start at the line's top");
     }
 }
+
+/// **The Map inspector's sections** (the problems list, the composition picker) are gooey columns inside gooey section blocks.
+#[test]
+fn the_map_inspectors_lists_are_gooey_columns_in_gooey_blocks() {
+    use bevy_cauldron::compose::picker::PickerBody;
+    use bevy_cauldron::problems_view::ProblemsList;
+    let mut app = editor("inspector", Mode::Map);
+    let problems = the::<ProblemsList>(&mut app);
+    assert_column(&app, problems, "the problems list");
+    assert_column(&app, parent(&app, problems), "the problems section's block");
+    let picker = the::<PickerBody>(&mut app);
+    assert_column(&app, picker, "the composition picker's body");
+    assert_column(&app, parent(&app, picker), "the compositions section's block");
+}
