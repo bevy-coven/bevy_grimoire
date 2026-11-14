@@ -207,5 +207,10 @@ fn the_wizard_grants_the_style_so_grimoire_style_serves_it_and_asks_nothing() {
     assert!(answer["text"].as_str().is_some_and(|t| t.contains("## Pillars")), "{answer}");
     assert!(answer["withheld"].as_array().is_none_or(Vec::is_empty), "nothing is withheld: {answer}");
     assert!(!app.world().resource::<Confirm>().is_open(), "a new project's style is never withheld from its author, so nothing is asked");
+    // The grant is one file's content at one path: an edited style, and the same text at another project's path, ask again.
+    assert_eq!(store.text_decision(&root, "design/style.md", &format!("{text}edited")).expect("resolves"), Decision::Untrusted, "an edited style is withheld again");
+    let clone = holder.join("a_clone");
+    std::fs::create_dir_all(&clone).unwrap();
+    assert_eq!(store.text_decision(&clone, "design/style.md", &text).expect("resolves"), Decision::Untrusted, "a clone at another path was never allowed");
     std::fs::remove_dir_all(&holder).unwrap();
 }
