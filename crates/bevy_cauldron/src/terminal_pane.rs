@@ -1207,6 +1207,8 @@ fn apply_the_maximise(
     let maximised = terminal.is_maximised();
     let top = menus.iter().next().map_or(0.0, |menu| menu.size().y * menu.inverse_scale_factor());
     for (mut node, mut layer) in &mut panes {
+        // PLACES-ITSELF-OK: a maximised terminal stands over the frame from the menu bar's foot to the window's edges (#426); it is a pane the
+        // person asked to be full-window, not a panel `chrome::Frame` places.
         let position = if maximised { PositionType::Absolute } else { PositionType::Relative };
         if node.position_type != position {
             node.position_type = position;
