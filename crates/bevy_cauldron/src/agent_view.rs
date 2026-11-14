@@ -110,6 +110,8 @@ struct Watch {
     rows: Vec<Change>,
     hands: Vec<HandBackRow>,
     drawn: bool,
+    /// Whether a map was open when the hand-backs were drawn: a Make a benchmark task is disabled without one.
+    had_map: bool,
 }
 
 pub struct AgentViewPlugin;
@@ -213,7 +215,9 @@ pub struct HandBackRow {
 }
 
 /// **The kept hand-backs of this project, newest first**, each with the reason it cannot be made a task, when it cannot.
-fn kept_handbacks(project: &Project, handbacks: &crate::present::HandBacks) -> Vec<HandBackRow> {
+///
+/// **No open map is a reason**: the draft is named for the map the hand-back was made on, so with none open there is nothing to rebuild it from.
+fn kept_handbacks(project: &Project, has_map: bool, handbacks: &crate::present::HandBacks) -> Vec<HandBackRow> {
     handbacks
         .kept_in(&project.root)
         .take(HISTORY_ROWS)
@@ -221,7 +225,13 @@ fn kept_handbacks(project: &Project, handbacks: &crate::present::HandBacks) -> V
             id: h.id.clone(),
             title: h.title.clone(),
             draft: h.draft.clone(),
-            cannot: if h.draft.is_some() { None } else { crate::bench_draft::cannot(project, h) },
+            cannot: if h.draft.is_some() {
+                None
+            } else if !has_map {
+                Some("no map is open, so the map before this hand-back cannot be rebuilt: open the map it was made on".to_owned())
+            } else {
+                crate::bench_draft::cannot(project, h)
+            },
         })
         .collect()
 }
@@ -229,6 +239,7 @@ fn kept_handbacks(project: &Project, handbacks: &crate::present::HandBacks) -> V
 /// **Draw the agent's last changes**, and the hand-backs the person kept, when the log or the hand-backs moved and they are different.
 fn draw_the_history(
     project: Option<Res<Project>>,
+    open: Option<Res<OpenMap>>,
     handbacks: Option<Res<crate::present::HandBacks>>,
     list: Query<(Entity, Option<&Children>), With<AgentHistory>>,
     mut watch: Local<Watch>,
@@ -245,11 +256,13 @@ fn draw_the_history(
     let (length, modified) = (meta.as_ref().map(std::fs::Metadata::len), meta.and_then(|m| m.modified().ok()));
     let unchanged = watch.root.as_ref() == Some(&project.root) && watch.length == length && watch.modified == modified;
     let hands_moved = handbacks.as_ref().is_some_and(|h| h.is_changed());
-    if unchanged && watch.drawn && !hands_moved {
+    let has_map = open.is_some();
+    if unchanged && watch.drawn && !hands_moved && watch.had_map == has_map {
         return;
     }
     let rows = if unchanged && !watch.rows.is_empty() { watch.rows.clone() } else { agent_changes(&project.root, HISTORY_ROWS) };
-    let hands = handbacks.as_deref().map(|h| kept_handbacks(&project, h)).unwrap_or_default();
+    let hands = handbacks.as_deref().map(|h| kept_handbacks(&project, has_map, h)).unwrap_or_default();
+    watch.had_map = has_map;
     watch.root = Some(project.root.clone());
     watch.length = length;
     watch.modified = modified;
@@ -311,8 +324,12 @@ fn on_make_task(
     mut commands: Commands,
 ) {
     let Ok(AgentMakeTask(id)) = buttons.get(activate.entity) else { return };
-    let (Some(project), Some(open), Some(handbacks), Some(state)) = (project.as_deref(), open.as_deref(), handbacks.as_mut(), state.as_mut()) else { return };
+    let (Some(project), Some(handbacks), Some(state)) = (project.as_deref(), handbacks.as_mut(), state.as_mut()) else { return };
     let Some(hand) = handbacks.kept_in(&project.root).find(|h| &h.id == id).cloned() else { return };
+    let Some(open) = open.as_deref() else {
+        state.status.problem("no benchmark task was made: no map is open, so the map before this hand-back cannot be rebuilt".to_owned());
+        return;
+    };
     match crate::bench_draft::make(project, open, &hand) {
         Ok(made) => {
             handbacks.set_draft(&hand.id, &project.root, made.rel.clone());

@@ -137,10 +137,37 @@ fn slug(title: &str) -> String {
     out.trim_matches('-').to_owned()
 }
 
-/// **A draft's id**: the hand-back's own id and its title, `present-1-the-bed-against-the-wall`.
+/// **A draft's id**: the hand-back's own id, its title and a stamp of the operations it covers,
+/// `present-1-the-bed-against-the-wall-3f9a01bc`.
+///
+/// **The stamp is what makes the id one hand-back's alone.** `present-<n>` restarts with every editor session, so a later
+/// session's `present-1` with the same title would otherwise open the earlier session's draft ("already drafted") and
+/// draft nothing. The operation ids are unique within a project and a hand-back's list is its own, so the same hand-back
+/// always gets the same id (a second press is "show me") and a different one never does.
 fn draft_id(handback: &HandBack) -> String {
     let slug = slug(&handback.title);
-    if slug.is_empty() { handback.id.clone() } else { format!("{}-{slug}", handback.id) }
+    let stamp = bevy_grimoire_core::glb::fnv1a(handback.operation_ids.join("\n").as_bytes()) as u32;
+    if slug.is_empty() { format!("{}-{stamp:08x}", handback.id) } else { format!("{}-{slug}-{stamp:08x}", handback.id) }
+}
+
+/// **A string an agent supplied, as one line of a comment**: every run of control characters, newlines and Unicode line breaks
+/// becomes one space, so nothing the agent wrote can end the comment and begin a line of the file.
+fn one_line(text: &str) -> String {
+    text.split(|c: char| c.is_control() || matches!(c, '\u{2028}' | '\u{2029}')).filter(|part| !part.is_empty()).collect::<Vec<_>>().join(" ")
+}
+
+/// **The comment a draft opens with.** Every line starts with `#`; the hand-back's title is the agent's own words and
+/// is written through [`one_line`].
+fn header(handback: &HandBack) -> String {
+    format!(
+        "# **A benchmark task drafted from hand-back {} ({}), for a person to read** (BM-07, #417).\n\
+         #\n\
+         # `fixture/` holds the maps as they were before the agent's first change; `solution` is what the agent did;\n\
+         # `checks` were drafted from the difference. Edit anything, then move this folder into a suite\n\
+         # (`.dark_factory/bench/`). It is never run from `drafts/`.\n",
+        one_line(&handback.id),
+        one_line(&handback.title)
+    )
 }
 
 /// **Copy a directory tree's YAML files**, folders included, into a place that does not exist yet.
@@ -366,11 +393,13 @@ pub fn make(project: &Project, open: &OpenMap, handback: &HandBack) -> Result<Ma
             None => {}
         }
     }
+    // **Only the checks drawn from the change count.** The `unchanged` check on the maps the hand-back left alone asks nothing about
+    // the hand-back: a run that does nothing passes it, so a draft whose only checks are those measures nothing.
+    if checks.is_empty() {
+        return Err("this hand-back changed no placement, so a task of it would have no check that asks for its change, and a task that asks for nothing measures nothing".to_owned());
+    }
     if !quiet.is_empty() {
         checks.push(json!({ "unchanged": quiet }));
-    }
-    if checks.is_empty() {
-        return Err("this hand-back changed no placement and no map file, so a task of it would have no check, and a task with no check measures nothing".to_owned());
     }
 
     let prompt = if handback.specified.is_empty() {
@@ -402,14 +431,7 @@ pub fn make(project: &Project, open: &OpenMap, handback: &HandBack) -> Result<Ma
         budget: Budget { wall_s: BUDGET_WALL_S, tool_calls: BUDGET_TOOL_CALLS },
     };
     let body = bevy_grimoire_core::yaml::to_string(&file).map_err(|p| format!("the draft could not be written: {}", p.line()))?;
-    let text = format!(
-        "# **A benchmark task drafted from hand-back {} ({}), for a person to read** (BM-07, #417).\n\
-         #\n\
-         # `fixture/` holds the maps as they were before the agent's first change; `solution` is what the agent did;\n\
-         # `checks` were drafted from the difference. Edit anything, then move this folder into a suite\n\
-         # (`.dark_factory/bench/`). It is never run from `drafts/`.\n{body}",
-        handback.id, handback.title
-    );
+    let text = format!("{}{body}", header(handback));
 
     // **The scene**: each map the change touched, as it was, in the task's own `fixture/`.
     let fixture = folder.join("fixture").join(GRIMOIRE_DIR);
@@ -462,5 +484,44 @@ mod tests {
             })
             .collect();
         assert_eq!(names, ["placement_at:turn", "placement_at:new", "placement_exists:gone"]);
+    }
+
+    fn hand(id: &str, title: &str, operations: &[&str]) -> HandBack {
+        HandBack {
+            kind: crate::present::HandBackKind::Presentation,
+            id: id.to_owned(),
+            key: id.to_owned(),
+            root: std::path::PathBuf::from("/p"),
+            title: title.to_owned(),
+            operation_ids: operations.iter().map(|s| (*s).to_owned()).collect(),
+            specified: Vec::new(),
+            accepted: true,
+            draft: None,
+        }
+    }
+
+    /// **Two sessions' `present-1` with one title are two drafts** (review): the number restarts with every editor session, so the id
+    /// carries a stamp of the operations. The same hand-back is the same draft, so a second press still finds it.
+    #[test]
+    fn a_later_sessions_handback_with_the_same_title_is_a_different_draft() {
+        let first = hand("present-1", "The bed", &["op-1", "op-2"]);
+        let later = hand("present-1", "The bed", &["op-7", "op-8"]);
+        assert_ne!(draft_id(&first), draft_id(&later), "two hand-backs share one draft folder");
+        assert_eq!(draft_id(&first), draft_id(&first.clone()), "one hand-back has one draft");
+        assert!(draft_id(&first).starts_with("present-1-the-bed-"), "{}", draft_id(&first));
+        assert_ne!(draft_id(&hand("present-1", "!!!", &["a"])), draft_id(&hand("present-1", "???", &["b"])), "an empty slug still tells hand-backs apart");
+    }
+
+    /// **An agent's title cannot end the comment** and put a line of its own in the file: a newline, a carriage return or a Unicode line
+    /// break in it is a space, and every line of the header stays a comment.
+    #[test]
+    fn a_title_with_a_newline_cannot_write_into_the_draft() {
+        for title in ["bed\nkey: value", "bed\r\nkey: value", "bed\u{2028}key: value", "bed\u{85}key: value", "bed\0key: value"] {
+            let text = header(&hand("present-1", title, &["op-1"]));
+            for line in text.lines() {
+                assert!(line.starts_with('#'), "`{title:?}` wrote a line that is not a comment: {line:?}");
+            }
+            assert!(text.contains("bed key: value"), "the title is kept, on one line: {text}");
+        }
     }
 }
