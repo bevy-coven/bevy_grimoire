@@ -359,9 +359,11 @@ fn enter_the_editor(
                 Name::new("preparing the view"),
             ))
             .with_children(|band| {
-                band.spawn(panel()).with_children(|card| {
-                    card.spawn(spinner());
-                    card.spawn(label(PREPARING_WORDS));
+                // **Nothing of the band takes a click** (#430): it stands for up to SETTLE_CAP_S over the editor's corner, and a panel that
+                // blocks the pointer would hold the person's clicks for that long.
+                band.spawn((panel(), Pickable::IGNORE)).with_children(|card| {
+                    card.spawn((spinner(), Pickable::IGNORE));
+                    card.spawn((label(PREPARING_WORDS), Pickable::IGNORE));
                 });
             });
         next.set(Screen::Editor);

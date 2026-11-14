@@ -15,7 +15,7 @@ use bevy::prelude::*;
 use bevy::window::WindowCloseRequested;
 use bevy_cauldron::app_verbs::QuitRequested;
 use bevy_cauldron::exit_watchdog::{
-    Cut, ExitWatchdog, ExitWatchdogPlugin, FROZEN_AFTER_MS, SecondPress, arm_exit, end_process_with, last_cut, overdue_waits, quit_chord_is_down, waiting, waits_now,
+    Cut, ExitState, ExitWatchdog, ExitWatchdogPlugin, FROZEN_AFTER_MS, SecondPress, arm_exit, end_process_with, last_cut, overdue_waits, quit_chord_is_down, spawn_watch, waiting, waits_now,
 };
 
 /// The deadline the tests give a quit: short enough to wait for, long enough to tell "not yet" from "done".
@@ -272,4 +272,123 @@ fn a_deadline_records_where_it_is_stuck_before_it_ends_the_process_and_a_second_
     end_process_with(Some(Cut::Deadline), sampled, killed);
     end_process_with(Some(Cut::SecondPress), sampled, killed);
     assert_eq!(*ORDER.lock().unwrap(), ["sample", "kill", "kill"], "the record of where it is stuck comes first (a dead process cannot be sampled), and only a deadline takes it");
+}
+
+static QUESTION_ENDED: AtomicUsize = AtomicUsize::new(0);
+
+fn question_ended() {
+    QUESTION_ENDED.fetch_add(1, Ordering::SeqCst);
+}
+
+#[test]
+fn a_quit_request_is_not_ended_by_a_pause_in_frames_while_the_unsaved_edits_question_is_open() {
+    let mut app = watched_app(DEADLINE, question_ended, never_down);
+    app.world_mut().write_message(QuitRequested);
+    app.update();
+    // The question is up, and then frames stop (a title-bar drag, a live resize, App Nap, an occluded window).
+    let state = app.world().resource::<ExitState>().clone();
+    state.set_question_open(true);
+    std::thread::sleep(DEADLINE * 2);
+    assert_eq!(QUESTION_ENDED.load(Ordering::SeqCst), 0, "the process was ended under a question about unsaved edits");
+    // The same pause with the question answered is a hang, as before.
+    state.set_question_open(false);
+    wait_for(&QUESTION_ENDED);
+    assert_eq!(last_cut().expect("recorded").why, Cut::Deadline);
+}
+
+static QUESTION_CHORD: AtomicBool = AtomicBool::new(false);
+static QUESTION_PRESS_ENDED: AtomicUsize = AtomicUsize::new(0);
+
+fn question_chord_is_down() -> bool {
+    QUESTION_CHORD.load(Ordering::SeqCst)
+}
+
+fn question_press_ended() {
+    QUESTION_PRESS_ENDED.fetch_add(1, Ordering::SeqCst);
+}
+
+fn press_once(chord: &AtomicBool) {
+    chord.store(true, Ordering::SeqCst);
+    std::thread::sleep(Duration::from_millis(60));
+    chord.store(false, Ordering::SeqCst);
+    std::thread::sleep(Duration::from_millis(60));
+}
+
+#[test]
+fn two_presses_on_a_frozen_app_do_not_end_it_while_the_unsaved_edits_question_is_open() {
+    let app = watched_app(Duration::from_secs(60), question_press_ended, question_chord_is_down);
+    let state = app.world().resource::<ExitState>().clone();
+    state.set_question_open(true);
+    std::thread::sleep(Duration::from_millis(FROZEN_AFTER_MS + 200));
+    press_once(&QUESTION_CHORD);
+    std::thread::sleep(DEBOUNCE);
+    press_once(&QUESTION_CHORD);
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(QUESTION_PRESS_ENDED.load(Ordering::SeqCst), 0, "a frozen app with the question open was ended by two presses");
+    // Answered, and still frozen: the next press is the second one.
+    state.set_question_open(false);
+    QUESTION_CHORD.store(true, Ordering::SeqCst);
+    wait_for(&QUESTION_PRESS_ENDED);
+    QUESTION_CHORD.store(false, Ordering::SeqCst);
+    assert_eq!(last_cut().expect("recorded").why, Cut::SecondPress);
+    drop(app);
+}
+
+#[test]
+fn the_state_follows_the_unsaved_edits_question() {
+    use bevy_cauldron::confirm::{Asked, Confirm};
+    let mut app = watched_app(Duration::from_secs(60), never_ended, never_down);
+    app.init_resource::<Confirm>();
+    app.update();
+    let state = app.world().resource::<ExitState>().clone();
+    assert!(!state.question_open(), "no question, none open");
+    app.world_mut().resource_mut::<Confirm>().ask_three(Asked::QuitApp, "Quit Cauldron?", "It has unsaved edits.", "Save and quit", "Discard changes", KeyCode::KeyD, "Stay");
+    app.update();
+    assert!(state.question_open(), "the quit question is open, and the watchdog knows it");
+}
+
+fn never_ended() {}
+
+static ACTIVE_CHORD: AtomicBool = AtomicBool::new(false);
+static ACTIVE_ENDED: AtomicUsize = AtomicUsize::new(0);
+
+fn active_chord_is_down() -> bool {
+    ACTIVE_CHORD.load(Ordering::SeqCst)
+}
+
+fn active_ended() {
+    ACTIVE_ENDED.fetch_add(1, Ordering::SeqCst);
+}
+
+#[test]
+fn a_press_while_another_app_is_in_front_is_not_a_press_of_this_one() {
+    // The quit has begun and has a long deadline: only a second press can end it.
+    let state = ExitState::new();
+    state.beat();
+    state.exiting();
+    state.set_app_active(false);
+    spawn_watch(state.clone(), Some(SecondPress { debounce: Duration::from_millis(200), poll: Duration::from_millis(10), down: active_chord_is_down }), Duration::from_secs(60), active_ended)
+        .unwrap_or_else(|e| panic!("{e}"));
+    std::thread::sleep(Duration::from_millis(300));
+    press_once(&ACTIVE_CHORD);
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(ACTIVE_ENDED.load(Ordering::SeqCst), 0, "Cmd+Q pressed in another app ended this one");
+    state.set_app_active(true);
+    std::thread::sleep(Duration::from_millis(50));
+    ACTIVE_CHORD.store(true, Ordering::SeqCst);
+    wait_for(&ACTIVE_ENDED);
+    ACTIVE_CHORD.store(false, Ordering::SeqCst);
+}
+
+#[test]
+fn the_primary_windows_focus_is_what_says_the_app_is_in_front() {
+    let mut app = watched_app(Duration::from_secs(60), never_ended, never_down);
+    let state = app.world().resource::<ExitState>().clone();
+    assert!(state.app_active(), "an app with no window counts as in front");
+    let window = app.world_mut().spawn((Window { focused: false, ..default() }, bevy::window::PrimaryWindow)).id();
+    app.update();
+    assert!(!state.app_active(), "a primary window that is not focused");
+    app.world_mut().get_mut::<Window>(window).expect("the window").focused = true;
+    app.update();
+    assert!(state.app_active(), "and when it is");
 }
