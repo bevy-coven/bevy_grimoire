@@ -78,6 +78,10 @@ pub const BOARD_PANEL_W: f32 = 380.0;
 /// page should not load whole on the UI thread.
 pub const PICTURE_MAX_BYTES: u64 = 8 * 1024 * 1024;
 
+/// **The most pixels a picture may have to be decoded**, 16,777,216 (4096 x 4096): a small file can hold a very large image (a decompression bomb in a
+/// cloned project), so the header's own size is read first ([`bevy_grimoire_core::image_header`]) and a picture over this is not decoded.
+pub const PICTURE_MAX_PIXELS: u64 = 4096 * 4096;
+
 /// **The game's own page**, which the Design workspace opens on and **Create style** writes.
 pub const GAME_PAGE: &str = "design/style.md";
 
@@ -287,7 +291,7 @@ impl DesignPictures {
         }
         let ext = full.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
         let handle = match ext.as_str() {
-            "png" | "jpg" | "jpeg" => std::fs::read(&full).ok().and_then(|bytes| {
+            "png" | "jpg" | "jpeg" => std::fs::read(&full).ok().filter(|bytes| within_the_pixel_cap(rel, bytes)).and_then(|bytes| {
                 Image::from_buffer(
                     &bytes,
                     ImageType::Extension(if ext == "png" { "png" } else { "jpg" }),
@@ -759,7 +763,7 @@ fn keep_the_top(
                 buttons.spawn((bevy_gooey::button("Edit page"), DesignAction::Edit, observe(on_action)));
             }
             buttons.spawn((bevy_gooey::toggle("As an agent reads it", key.as_agent), DesignAgentToggle, observe(on_agent_toggle)));
-            if matches!(key.page, PageKind::Missing) {
+            if matches!(key.page, PageKind::Missing) && key.selected.as_deref().is_some_and(|page| topic_of(page) == design::STYLE_TOPIC) {
                 buttons.spawn((bevy_gooey::button("Create style"), DesignAction::CreateStyle, observe(on_action)));
             }
             if !key.offered.is_empty() {
@@ -891,9 +895,13 @@ fn write_and_show(world: &mut World, project: &Project, written: Result<PathBuf,
     let rel = file.strip_prefix(&project.root).map(|p| p.to_string_lossy().replace('\\', "/")).map_err(|_| format!("{} is not inside the project", file.display()))?;
     let store_root = world.get_resource::<crate::trusted::StoreRoot>().cloned();
     let trust_file = world.get_resource::<EditorState>().and_then(|s| s.trust.file.clone());
-    crate::design_templates::grant_file(&project.root, &rel, store_root.as_ref(), trust_file.as_deref())?;
+    // **A grant that could not be written is said, on screen**: the page is written and shown, and grimoire_style will ask before it serves it.
+    let granted = crate::design_templates::grant_file(&project.root, &rel, store_root.as_ref(), trust_file.as_deref());
     if let Some(mut view) = world.get_resource_mut::<DesignView>() {
         view.select(&rel, None);
+    }
+    if let Err(why) = granted {
+        return Err(format!("wrote {rel}, but it could not be allowed ({why}), so grimoire_style will ask before it serves it"));
     }
     Ok(format!("wrote {rel}"))
 }
@@ -950,7 +958,7 @@ fn keep_the_body(
             });
         }
         Page::Agent(text) => {
-            // **Rendered against the project's root**: the chain's files sit in different folders, and each cites its pictures relative to its own.
+            // **Rendered against the project's root, and only the chain's words**: its files sit in different folders and each cites its pictures relative to its own, so a picture drawn from here is the missing box; the pictures a served file cites are listed under it as text.
             let base = pictures.base(server.as_deref(), &view.snap.root, "");
             commands.entity(body).with_children(|b| {
                 b.spawn((markdown_view(text, base), DesignPage, observe(on_link)));
@@ -977,9 +985,10 @@ fn on_link(link: On<MarkdownLink>, view: Res<DesignView>, mut commands: Commands
                 match bevy_gooey::markdown::resolve("", &format!("{dir}/{target}")) {
                     Ok(rel) if is_page(&rel) => show_file(world, &rel, None),
                     Ok(rel) => crate::crosslinks::open_in_files(world, &rel, None),
-                    Err(why) => {
+                    // **A fixed sentence**: the destination is the page's text, and the status line reaches an agent through grimoire_state.
+                    Err(_) => {
                         if let Some(mut state) = world.get_resource_mut::<EditorState>() {
-                            state.status.problem(format!("NOT OPENED: `{target}` {why}"));
+                            state.status.problem("NOT OPENED: a link in the page leaves the project");
                         }
                     }
                 }
@@ -990,6 +999,14 @@ fn on_link(link: On<MarkdownLink>, view: Res<DesignView>, mut commands: Commands
 
 /// **Ask the person before the system browser starts**: a page is the project's text, and a cloned project's link is not the person's choice.
 fn ask_about_an_address(world: &mut World, address: String) {
+    // **Only http and https are asked about**: gooey calls any `scheme:` a web link, and the opener would hand `file:`, `smb:`, `mailto:` or a
+    // custom handler to the system. A fixed sentence says so; the address is the page's text and goes nowhere an agent reads.
+    if !is_web_address(&address) {
+        if let Some(mut state) = world.get_resource_mut::<EditorState>() {
+            state.status.problem("NOT OPENED: a link in the page is not an http or https address, so nothing was opened");
+        }
+        return;
+    }
     let asked = {
         let Some(mut confirm) = world.get_resource_mut::<crate::confirm::Confirm>() else { return };
         confirm.ask(crate::confirm::Asked::OpenAddress, OPEN_ADDRESS_TITLE, address.clone(), "Open", "Not now");
@@ -998,6 +1015,18 @@ fn ask_about_an_address(world: &mut World, address: String) {
     if asked && let Some(mut view) = world.get_resource_mut::<DesignView>() {
         view.asked_address = Some(address);
     }
+}
+
+/// **Whether an address is one the editor asks to open**: `http://` or `https://`, in either case, and nothing else.
+pub fn is_web_address(address: &str) -> bool {
+    let lower = address.trim_start().to_ascii_lowercase();
+    lower.starts_with("http://") || lower.starts_with("https://")
+}
+
+/// **Whether a picture's own header says it is small enough to decode** ([`PICTURE_MAX_PIXELS`]). A header that does not read is refused too.
+fn within_the_pixel_cap(name: &str, bytes: &[u8]) -> bool {
+    let head = &bytes[..bytes.len().min(bevy_grimoire_core::image_header::HEAD)];
+    bevy_grimoire_core::image_header::read(name, head).is_ok_and(|h| u64::from(h.width) * u64::from(h.height) <= PICTURE_MAX_PIXELS)
 }
 
 /// **The answer to the address question**: Open starts the browser (or records the address when this run opens none), and anything else drops it.

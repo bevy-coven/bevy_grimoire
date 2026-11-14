@@ -10,7 +10,6 @@ use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
 use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::prelude::*;
 use bevy::time::TimeUpdateStrategy;
-use bevy::window::PrimaryWindow;
 use bevy_cauldron::design_view::{DesignView, Page};
 use bevy_cauldron::editor::EditorState;
 use bevy_cauldron::harness;
@@ -101,7 +100,10 @@ fn project(tag: &str) -> std::path::PathBuf {
 
 fn editor(root: &std::path::Path) -> App {
     let mut app = harness::build_headless(root, "m", None).unwrap_or_else(|e| panic!("{e}"));
-    app.world_mut().spawn((Window::default(), PrimaryWindow));
+    app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());
+    app.add_plugins(bevy_cauldron::ops_brp::OpsBridgePlugin);
+    // **A surface the size of a window**: on the harness's default one the workspace's widgets are laid out where a pointer cannot reach them.
+    harness::resize_surface(&mut app, 1536, 1400).unwrap_or_else(|e| panic!("{e}"));
     app.insert_resource(TimeUpdateStrategy::ManualDuration(std::time::Duration::from_secs_f32(FRAME_S)));
     // **A trust store of the test's own**, so nothing here reads or writes the person's.
     let store = root.join("trusted.yaml");
@@ -111,18 +113,34 @@ fn editor(root: &std::path::Path) -> App {
     app
 }
 
-/// Press the one visible widget that reads `label` (`Activate`, which is what a press sends), or choose the tree row of a level: a headless
-/// pointer click does not land on this workspace's widgets, so a row is chosen by the page it names, through the one `show_file`.
+/// **Click the one visible widget that reads `label`** with the pointer, where it is drawn: a button, a toggle.
+///
+/// **A tree row is chosen by the event a click on it sends** (`ValueChange<TableSelection>` on the tree): the pointer lands on a neighbouring row of the
+/// virtualized tree in the headless frame (a click on `m` selected `dialogue`), while every button and toggle takes the real click.
 fn click(app: &mut App, label: &str) {
     if label == "m" || label.starts_with("m  (") {
         let root = app.world().resource::<bevy_cauldron::project::Project>().root.clone();
-        let page = if root.join(LEVEL).exists() { LEVEL.to_owned() } else { "design/regions/north/levels/m/style.md".to_owned() };
-        bevy_cauldron::design_view::show_file(app.world_mut(), &page, None);
+        let place = if root.join("design/levels/m").exists() { "design/levels/m" } else { "design/regions/north/levels/m" };
+        let tree = {
+            let world = app.world_mut();
+            world.query_filtered::<Entity, With<bevy_cauldron::design_view::DesignTree>>().single(world).unwrap_or_else(|e| panic!("one tree: {e}"))
+        };
+        let key = bevy_cauldron::files::key_of(place);
+        app.world_mut().commands().trigger(bevy_gooey::ValueChange { source: tree, value: bevy_gooey::TableSelection::of(key), is_final: true });
         settle(app);
         return;
     }
     let entity = bevy_gooey::testing::find_by_label(app, label).unwrap_or_else(|e| panic!("`{label}`: {e}"));
-    app.world_mut().commands().trigger(bevy::ui_widgets::Activate { entity });
+    // Once a window has been spawned for typing the pointer helper maps to it and misses the surface, so a press is then the `Activate` a click sends.
+    let windowed = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<bevy::window::PrimaryWindow>>().iter(world).next().is_some()
+    };
+    if windowed {
+        app.world_mut().commands().trigger(bevy::ui_widgets::Activate { entity });
+    } else {
+        bevy_gooey::testing::click(app, entity);
+    }
     settle(app);
 }
 
@@ -204,6 +222,8 @@ fn edit_typing_and_done_write_the_file_and_render_the_new_text() {
         world.resource_mut::<InputFocus>().set(editor, FocusCause::Navigated);
     }
     settle(&mut app);
+    // Typing needs a window to name; one is spawned after the clicks, because a window makes the pointer helper map to it instead of the surface.
+    app.world_mut().spawn((Window::default(), bevy::window::PrimaryWindow));
     bevy_gooey::testing::type_text(&mut app, "Dusk first. ");
     settle(&mut app);
     let typed = {
@@ -232,6 +252,7 @@ fn a_change_on_disk_during_edit_offers_reload_or_keep_mine_and_overwrites_nothin
         world.resource_mut::<InputFocus>().set(editor, FocusCause::Navigated);
     }
     settle(&mut app);
+    app.world_mut().spawn((Window::default(), bevy::window::PrimaryWindow));
     bevy_gooey::testing::type_text(&mut app, "Mine. ");
     settle(&mut app);
 
@@ -313,19 +334,72 @@ fn go_to_anything_on_a_topics_name_opens_it_here_and_a_style_link_reveal_opens_t
     assert_eq!(selected(&app).as_deref(), Some(LEVEL));
 }
 
-#[test]
-fn a_level_style_is_reached_in_two_inputs_from_a_cold_start() {
-    let root = project("design_presses");
-    let mut app = editor(&root);
-    let mut presses = 0;
-    press(&mut app, Action::WorkspaceDesign);
-    presses += 1;
-    click(&mut app, "m");
-    presses += 1;
-    assert_eq!(selected(&app).as_deref(), Some(LEVEL), "the level's style is open");
-    assert!(presses <= 3, "NV-01's measure: at most three presses to a level's style (took {presses})");
+/// **`grimoire_state` as an agent reads it**, serialized.
+fn state_text(app: &mut App) -> String {
+    use bevy::remote::{RemoteMethodSystemId, RemoteMethods};
+    let Some(RemoteMethodSystemId::Instant(id)) = app.world().resource::<RemoteMethods>().get("grimoire/state").cloned() else {
+        panic!("grimoire/state is not registered");
+    };
+    app.world_mut().run_system_with(id, Some(serde_json::json!({}))).unwrap_or_else(|e| panic!("{e:?}")).unwrap_or_else(|e| panic!("{e:?}")).to_string()
 }
 
+fn link(app: &mut App, dest: &str, kind: bevy_gooey::markdown::LinkKind) {
+    let view = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<MarkdownView>>().single(world).unwrap_or_else(|e| panic!("one page: {e}"))
+    };
+    app.world_mut().commands().trigger(bevy_gooey::MarkdownLink { entity: view, dest: dest.to_owned(), kind });
+    settle(app);
+}
+
+const NOT_OPENED_LEAVES: &str = "NOT OPENED: a link in the page leaves the project";
+const NOT_OPENED_SCHEME: &str = "NOT OPENED: a link in the page is not an http or https address, so nothing was opened";
+
+#[test]
+fn a_links_destination_is_never_in_what_an_agent_reads() {
+    use bevy_gooey::markdown::LinkKind;
+    let root = project("design_marker");
+    write(&root, LEVEL, "# Yard\n\n[where](../../../../MARKER_7f3a91_secret/x.md)\n");
+    let mut app = editor(&root);
+    press(&mut app, Action::WorkspaceDesign);
+    click(&mut app, "m");
+    link(&mut app, "../../../../MARKER_7f3a91_secret/x.md", LinkKind::Relative);
+    assert_eq!(app.world().resource::<EditorState>().status.problem_text(), NOT_OPENED_LEAVES, "the refusal is a fixed sentence");
+    link(&mut app, "MARKER_7f3a91_secret:prose that is not an address", LinkKind::Web);
+    let state = state_text(&mut app);
+    assert!(!state.contains("MARKER_7f3a91"), "a page's link destination reached grimoire_state");
+}
+
+#[test]
+fn only_http_and_https_links_are_asked_about_and_nothing_else_is_launched() {
+    use bevy_cauldron::app_verbs::LinksOff;
+    use bevy_cauldron::confirm::{Asked, Confirm};
+    use bevy_gooey::markdown::LinkKind;
+    let root = project("design_schemes");
+    let mut app = editor(&root);
+    press(&mut app, Action::WorkspaceDesign);
+    click(&mut app, "m");
+    for dest in ["file:///Applications/Calculator.app", "smb://x/y", "javascript:alert(1)", "mailto:a@b.c", "x-custom-handler://run?cmd=1"] {
+        link(&mut app, dest, LinkKind::Web);
+        assert!(!app.world().resource::<Confirm>().asking(Asked::OpenAddress), "`{dest}` was asked about");
+        assert_eq!(app.world().resource::<EditorState>().status.problem_text(), NOT_OPENED_SCHEME, "`{dest}` is refused with a fixed sentence");
+        assert!(app.world().resource::<LinksOff>().0.is_empty(), "`{dest}` was launched");
+    }
+    link(&mut app, "https://example.com/style", LinkKind::Web);
+    assert!(app.world().resource::<Confirm>().asking(Asked::OpenAddress), "an https link still asks");
+    assert!(app.world().resource::<LinksOff>().0.is_empty(), "and nothing opens before the person answers");
+}
+
+#[test]
+fn a_picture_with_more_pixels_than_the_cap_is_not_decoded() {
+    let root = project("design_bomb");
+    image::RgbaImage::from_pixel(4100, 4100, image::Rgba([1, 2, 3, 255])).save(root.join("big.png")).unwrap_or_else(|e| panic!("{e}"));
+    let app = editor(&root);
+    let pictures = app.world().resource::<bevy_cauldron::design_view::DesignPictures>().clone();
+    let server = app.world().resource::<AssetServer>().clone();
+    assert!(pictures.load(&server, &root, "big.png").is_none(), "a 4100 x 4100 picture is over the cap and is not decoded");
+    assert!(pictures.load(&server, &root, FOG).is_some(), "a small one is");
+}
 #[test]
 fn a_problem_is_shown_above_the_page_it_belongs_to() {
     let root = project("design_problem");

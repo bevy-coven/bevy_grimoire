@@ -158,22 +158,6 @@ pub fn is_topic_name(name: &str) -> bool {
     is_area_name(name)
 }
 
-/// **The kind of place a folder path names, by its shape alone** (SG-07, #406): the game, a region, a level or an area, or `None` for
-/// anything that is not a place of the tree. Whether the folder exists is [`Tree`]'s to say; an operation that makes a page in a
-/// place with no folder yet needs the kind before there is a place to ask.
-pub fn kind_of_place_path(place: &str) -> Option<PlaceKind> {
-    if !crate::board::is_place(place) {
-        return None;
-    }
-    let parts: Vec<&str> = place.split('/').collect();
-    Some(match parts.as_slice() {
-        [_] => PlaceKind::Game,
-        [_, REGIONS_DIR, _] => PlaceKind::Region,
-        [_, LEVELS_DIR, _] | [_, REGIONS_DIR, _, LEVELS_DIR, _] => PlaceKind::Level,
-        _ => PlaceKind::Area,
-    })
-}
-
 /// **An area's folder**, relative to the project root: `<level>/areas/<name>`.
 pub fn area_folder(level: &str, name: &str) -> String {
     format!("{level}/{AREAS_DIR}/{name}")

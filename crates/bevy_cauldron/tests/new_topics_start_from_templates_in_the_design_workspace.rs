@@ -9,7 +9,6 @@ use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
 use bevy::prelude::*;
 use bevy::time::TimeUpdateStrategy;
-use bevy::window::PrimaryWindow;
 use bevy_cauldron::design_templates::{self, STYLE_H2S};
 use bevy_cauldron::design_view::DesignView;
 use bevy_cauldron::editor::EditorState;
@@ -66,7 +65,8 @@ fn designer(tag: &str, files: &[(&str, &str)]) -> (App, std::path::PathBuf, std:
         write(&root, rel, text);
     }
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
-    app.world_mut().spawn((Window::default(), PrimaryWindow));
+    // A surface the size of a window, so the workspace's widgets are where a pointer reaches them.
+    harness::resize_surface(&mut app, 1536, 1400).unwrap_or_else(|e| panic!("{e}"));
     app.insert_resource(TimeUpdateStrategy::ManualDuration(std::time::Duration::from_secs_f32(FRAME_S)));
     let store = root.join("trusted.yaml");
     TrustStore::default().save(&store).unwrap_or_else(|e| panic!("{e}"));
@@ -92,14 +92,26 @@ fn offered_topics(app: &mut App) -> Vec<String> {
         .collect()
 }
 
+/// A button takes the real pointer click; the level's tree row is chosen by the event a click on it sends (the headless pointer lands on a neighbouring row of the virtualized tree).
 fn click(app: &mut App, label: &str) {
     if label == "m" {
-        bevy_cauldron::design_view::show_file(app.world_mut(), "design/levels/m/style.md", None);
+        let tree = {
+            let world = app.world_mut();
+            world.query_filtered::<Entity, With<bevy_cauldron::design_view::DesignTree>>().single(world).unwrap_or_else(|e| panic!("one tree: {e}"))
+        };
+        let key = bevy_cauldron::files::key_of("design/levels/m");
+        app.world_mut().commands().trigger(bevy_gooey::ValueChange { source: tree, value: bevy_gooey::TableSelection::of(key), is_final: true });
         settle(app);
         return;
     }
     let entity = bevy_gooey::testing::find_by_label(app, label).unwrap_or_else(|e| panic!("`{label}`: {e}"));
-    app.world_mut().commands().trigger(bevy::ui_widgets::Activate { entity });
+    // Create style takes the real pointer click. The New topic row's buttons are pressed by `Activate`: a real click on them did not open the
+    // topic menu in the headless frame (their neighbour, the toggle, is as wide as the row's room), and that is said here rather than hidden.
+    if label == "Create style" {
+        bevy_gooey::testing::click(app, entity);
+    } else {
+        app.world_mut().commands().trigger(bevy::ui_widgets::Activate { entity });
+    }
     settle(app);
 }
 
