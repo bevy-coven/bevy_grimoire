@@ -413,6 +413,7 @@ mod the_design_tree_is_in_the_editors_state;
 mod the_door_switch_crosses;
 mod the_editor_and_the_game_agree;
 mod the_editor_follows_an_agents_change;
+mod the_editor_keeps_its_raw_nodes_counted;
 mod the_follow_never_moves_a_persons_camera;
 mod the_follow_opens_the_page_a_change_is_on;
 mod reading_a_reference_opens_what_it_names;
