@@ -23,6 +23,7 @@ use bevy_cauldron::ops;
 use bevy_cauldron_bench::run::{
     check_model, is_provider_refusal, preflight_turn, read_transcript, run_work, PROVIDER_REFUSALS_MAX,
 };
+use bevy_cauldron_bench::report::{Header, Report, RunData, REPORT_VERSION, RUN_FILE};
 use bevy_cauldron_bench::{Outcome, Task, TrialRecord, TASKS_DIR};
 
 /// What a spent quota says, as omp prints it in an assistant message.
@@ -284,5 +285,59 @@ fn a_trial_that_is_not_a_refusal_resets_the_count() {
         "two refusals, then something else, never three in a row, so every trial ran: {:?}",
         records.iter().map(|r| r.reason.clone()).collect::<Vec<_>>()
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **The report of an aborted run says why**: each trial's `trial.json` (the record's own JSON) is read back into a
+/// report, whose "Harness errors" section carries the provider's words and the reason the run was stopped.
+#[test]
+fn an_aborted_runs_report_carries_the_reason() {
+    let dir = scratch("report");
+    let run_dir = dir.join("run");
+    std::fs::create_dir_all(&run_dir).unwrap_or_else(|e| panic!("{e}"));
+    let header = Header {
+        version: REPORT_VERSION,
+        label: "aborted".to_owned(),
+        commit: "0123456789abcdef0123456789abcdef01234567".to_owned(),
+        guide_sha256: "ab".repeat(32),
+        agent: "omp".to_owned(),
+        agent_version: "omp/18.18.9".to_owned(),
+        model: Some(MODEL.to_owned()),
+        variant: None,
+        suite: "bench/tasks".to_owned(),
+        trials: 8,
+        host: "big".to_owned(),
+        date: "2026-11-14".to_owned(),
+        price: None,
+    };
+    std::fs::write(run_dir.join(RUN_FILE), serde_json::to_string_pretty(&header).unwrap_or_default()).unwrap_or_else(|e| panic!("{e}"));
+    let records = run_work(
+        &work(8),
+        1,
+        &|task, _, trial| {
+            let mut r = refused_trial(&dir, trial);
+            r.task = task.id.clone();
+            r
+        },
+        &not_run,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    for r in &records {
+        let d = run_dir.join(&r.task).join(format!("trial-{}", r.trial));
+        std::fs::create_dir_all(&d).unwrap_or_else(|e| panic!("{e}"));
+        let mut value = r.to_json();
+        if let Some(object) = value.as_object_mut() {
+            object.insert("split".to_owned(), serde_json::json!("dev"));
+            object.insert("title".to_owned(), serde_json::json!("t"));
+        }
+        std::fs::write(d.join("trial.json"), serde_json::to_string_pretty(&value).unwrap_or_default()).unwrap_or_else(|e| panic!("{e}"));
+    }
+    let report = Report::build(&RunData::read(&run_dir).unwrap_or_else(|e| panic!("the run reads: {e}")));
+    assert!(report.unfit.is_some(), "a run of nothing but harness errors is unfit");
+    assert_eq!(report.harness_errors, 8, "every trial is counted, those never started too");
+    let md = report.markdown();
+    assert!(md.contains("## Harness errors"), "{md}");
+    assert!(md.contains(QUOTA_WORDS), "the provider's own words are in the report: {md}");
+    assert!(md.contains("3 consecutive provider refusals"), "and why the run stopped: {md}");
     let _ = std::fs::remove_dir_all(&dir);
 }
