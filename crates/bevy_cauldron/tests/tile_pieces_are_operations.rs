@@ -226,6 +226,14 @@ fn shift_and_an_arrow_and_an_agent_put_the_member_flush() {
     apply(&mut app, "tile_slot_drop", json!({}));
     let refused = apply(&mut app, "tile_member_flush", json!({"x": 1}));
     assert_eq!(refused["outcome"], "refused", "a hole has no width to put flush: {refused}");
+    // And from the keyboard it is a problem, which sticks, and not a receipt the next keystroke erases.
+    tap(&mut app, &[KeyCode::ShiftLeft], KeyCode::ArrowLeft);
+    let status = &app.world().resource::<bevy_cauldron::tiles::ImportState>().status;
+    assert!(
+        status.has_problem() && status.problem_text().contains("a hole has no width to put flush"),
+        "Shift and an arrow on a hole files the operation's refusal as a problem: {:?}",
+        status.problem_text()
+    );
 }
 
 /// **Enter drops the piece the list has picked through the operation**, with the focus on it and the piece in hand, and an
