@@ -24,6 +24,7 @@ mod a_project_skin_previews_only_in_the_panel;
 mod a_reference_is_followed_from_where_it_is_written;
 mod a_rigs_clip_is_found_by_the_finder;
 mod a_saved_arrangement_is_the_one_the_editor_shows;
+mod a_settings_change_updates_only_its_row;
 mod a_sound_cue_is_listed_without_bevy_siren;
 mod a_style_edit_stays_in_design_and_an_undo_grants_nothing;
 mod a_style_rows_lines_are_gooey_rows;
