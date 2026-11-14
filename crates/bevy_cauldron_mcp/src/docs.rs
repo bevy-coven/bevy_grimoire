@@ -64,7 +64,13 @@ pub const TOOLS: &[ToolDoc] = &[
                       ids it covers. The editor shows it as a question: Keep, or Undo all (which undoes \
                       every listed operation, newest first). This call returns at once; read the person's \
                       answer from grimoire_state's presentation.answer (\"kept\", \"undone\", or why the undo \
-                      stopped). It does not change the map by itself.",
+                      stopped). It does not change the map by itself. If you called grimoire_style, also \
+                      cite the style lines you worked to: \
+                      followed, a list of {path, line} taken from a chain grimoire_style returned in \
+                      this session. The person's card lists each line's text with a link that opens it; \
+                      a line from a page you were never served, past a page's end, blank, or on a page \
+                      that has changed since is refused with the entry and the reason. A hand-back with \
+                      no style involved cites nothing.",
         read_only: false,
         destructive: false,
         idempotent: false,
@@ -417,6 +423,26 @@ pub const TOOLS: &[ToolDoc] = &[
         idempotent: true,
     },
     ToolDoc {
+        name: "grimoire_style_propose",
+        description: "Propose a change to a style page you may not write yourself: the game's \
+                      (design/style.md and the game's topic files) or a region's. Fields: path, the \
+                      page relative to the project root; edits, small exact edits in order, each \
+                      {find, replace} with find exactly once in the page as the edit before it left \
+                      it; why, one sentence on why the page should say it. The editor queues the \
+                      proposal in the AGENT block, shown as the change to the page, and the person \
+                      keeps or discards it: only their Keep writes, so this call writes nothing. It \
+                      returns at once with the proposal's id and \"waiting\"; read grimoire_state's \
+                      style_proposals for what became of it (\"kept\" or \"discarded\"). A find that \
+                      is not exactly once, a page the person has not allowed (you cannot change what \
+                      you have not been shown), a result over the style limits, a second proposal \
+                      for a page that has one waiting, and a why past its limit are refused with the \
+                      reason. A level's or an area's page is not proposed: change it with the \
+                      operation style_edit.",
+        read_only: false,
+        destructive: false,
+        idempotent: false,
+    },
+    ToolDoc {
         name: "grimoire_list_rules",
         description: "The block rules the project states for generating layouts, read from \
                       assets/grimoire/rules.yaml: for each block, the example map its grammar is learned from, the \
@@ -629,6 +655,19 @@ pub fn schemas() -> Value {
                     },
                 },
                 "operation_ids": {"type": "array", "items": {"type": "string"}},
+                "followed": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["path", "line"],
+                        "properties": {
+                            "path": {"type": "string", "description": "The page, as grimoire_style headed it."},
+                            "line": {"type": "integer", "minimum": 1, "description": "The line, counted from 1."},
+                        },
+                    },
+                    "description": "The style lines the work followed, from a chain grimoire_style returned in this session. Each must be a non-empty line a page still says.",
+                },
             },
         },
         "grimoire_wish": {
@@ -870,8 +909,36 @@ pub fn schemas() -> Value {
     if let Some(map) = document.as_object_mut() {
         map.insert("grimoire_lesson".to_owned(), lesson_schema());
         map.insert("grimoire_style".to_owned(), style_schema());
+        map.insert("grimoire_style_propose".to_owned(), style_propose_schema());
     }
     document
+}
+
+/// **The parameters of `grimoire_style_propose`** (SG-07, #406).
+fn style_propose_schema() -> Value {
+    serde_json::json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "edits", "why"],
+        "properties": {
+            "path": {"type": "string", "description": "The page, relative to the project root: design/style.md, or a region's page."},
+            "edits": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["find", "replace"],
+                    "properties": {
+                        "find": {"type": "string", "description": "The exact text to replace. It must be in the page exactly once; a span that matches twice is refused with the count, and you make it longer until it matches once."},
+                        "replace": {"type": "string", "description": "What takes its place; empty takes the span out."},
+                    },
+                },
+                "description": "Small exact edits of the page, applied in order. Not whole files: an exact span is what a person can review as a diff.",
+            },
+            "why": {"type": "string", "description": "One sentence on why the page should say it, with no newline."},
+        },
+    })
 }
 
 /// **The parameters of `grimoire_style`** (SG-02, #401), which the literal above cannot hold.

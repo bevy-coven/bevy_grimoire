@@ -158,6 +158,7 @@ fn style(
     project: Option<Res<crate::project::Project>>,
     store_root: Option<Res<crate::trusted::StoreRoot>>,
     state: Option<ResMut<crate::editor::EditorState>>,
+    mut served: Option<ResMut<crate::style_followed::StyleServed>>,
 ) -> Result<Value, String> {
     let Some(project) = project else {
         return Err("no project is open, so there is no style to read.".to_owned());
@@ -169,6 +170,14 @@ fn style(
     let answer = crate::agent_guide::serve_style(&mut state, &project, store_root.as_deref(), &request)?;
     if let Some(trouble) = &answer.trouble {
         state.status.problem(format!("style: {trouble}"));
+    }
+    // **What was served is what a hand-back may cite** (SG-09, #408): each page whose text the answer carries, as it reads now.
+    if let Some(served) = served.as_mut() {
+        for file in answer.files.iter().filter(|f| f.state == bevy_grimoire_core::style::FileState::Served) {
+            if let Ok(text) = std::fs::read_to_string(project.root.join(&file.path)) {
+                served.record(&project.root, &file.path, text);
+            }
+        }
     }
     Ok(answer.json())
 }
@@ -233,6 +242,21 @@ pub struct LessonParams {
     /// The one line the guide gains.
     pub lesson: String,
     /// Why it is worth the line.
+    pub why: String,
+}
+
+/// **The parameters of `grimoire/style_propose`** (SG-07, #406).
+///
+/// A change to a style page that an agent may not write itself (a game or region page), put in front of the person. **The call queues it and
+/// writes nothing**: only a person's Keep writes.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StyleProposeParams {
+    /// The page, relative to the project root: `design/style.md`.
+    pub path: String,
+    /// Small edits of the page, in order, each `find` exactly once in the text the one before left.
+    pub edits: Vec<crate::ops_design::TextEdit>,
+    /// Why the page should say this, one sentence.
     pub why: String,
 }
 
@@ -794,9 +818,18 @@ struct Gates<'w, 's> {
     /// **Where `right` lands** (E-002, #129 slice 37), read for `shelf_walk` and `shelf_focus` with the suggestions the labeller holds, as a
     /// key reads them.
     library_cursor: Option<Res<'w, crate::tiles::LibraryCursor>>,
+    /// **The person's trust store, where it is**, for the operations that grant (`style_edit`): the [`crate::trusted::StoreRoot`] a test or the
+    /// binary names, when the editor's state names no file.
+    store_root: Option<Res<'w, crate::trusted::StoreRoot>>,
 }
 
 impl Gates<'_, '_> {
+    /// **Where the person's trust store is, for the operations that grant**: the file the editor's state names, else the [`crate::trusted::StoreRoot`],
+    /// else the user's data directory. `style_edit` reads it to refuse a page the person has not allowed, and writes it for the text it leaves.
+    fn trust_file(&self, named: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
+        crate::trusted::resolve(self.store_root.as_deref(), named).ok()
+    }
+
     /// **The shelf as `shelf_walk` and `shelf_focus` read it** (E-002, #129 slice 37), for a call and a preview alike: the library and
     /// candidate lists as the Meshes or Tiles tab draws them. `None` on any other tab, so the operation is refused there.
     fn shelf_in(
@@ -1114,6 +1147,7 @@ struct Loaded<'w> {
     /// The file editor's open files and the tabs that say which is shown: `file_outline` is read from them.
     files: Option<Res<'w, crate::files::Files>>,
     session: Option<Res<'w, crate::session::Session>>,
+    style_proposals: Option<Res<'w, crate::style_proposals::StyleProposals>>,
 }
 
 /// **The parameters of `grimoire/state`.** Only the pin page is a parameter; the rest of the summary is
@@ -1181,7 +1215,7 @@ fn editor_state(
     #[cfg(feature = "bevy_elements")] clock: Option<Res<bevy_elements::WorldClock>>,
     #[cfg(feature = "bevy_elements")] scrub: Option<Res<crate::environment::ClockScrub>>,
 ) -> Result<Value, String> {
-    let Loaded { project, open, game, reloads, live, diagnostics, busy, files, session } = loaded;
+    let Loaded { project, open, game, reloads, live, diagnostics, busy, files, session, style_proposals } = loaded;
     // **The agent's presentation, and the person's answer to it** (S1.7). `None` until an agent
     // presents something; then an object whose `answer` is `null` while the question is up. This is
     // the only channel an agent has for what a person did after its call returned.
@@ -1190,6 +1224,8 @@ fn editor_state(
             "id": p.id,
             "title": p.title,
             "answer": p.answer,
+            // **The style lines the hand-back followed**: path and line only, never the line's text (a page is a prompt, and the state is the agent's).
+            "followed": p.followed.iter().map(|f| json!({"path": f.path, "line": f.line})).collect::<Vec<_>>(),
         })
     });
     // **The pins, named by id and reason.** A pin is the one thing an agent cannot see in the state
@@ -1415,6 +1451,9 @@ fn editor_state(
         // `discarded` that the person dropped it. Like a wish, a lesson is held here and not by the
         // MCP server, because it cites a hand-back and hand-backs live in the editor.
         "lessons": lessons.as_deref().map(|l| l.state_json()).unwrap_or(Value::Null),
+        // **The style changes the agent proposed this session** (SG-07, #406): `[{id, path, state, lines}]`, oldest first. `kept` means the change is in the page, which
+        // the editor wrote on the person's Keep, and `discarded` that the person dropped it. **No text of a page**: only names, paths and numbers.
+        "style_proposals": style_proposals.as_deref().map(|s| s.state_json()).unwrap_or(Value::Null),
         "frame": frame_json(diagnostics.as_deref(), busy.as_deref()),
         // **The game's verdict on the last reload** (S3.5): null, "pending", or {ok, message, at_unix_ms}.
         "game": game.as_deref().map_or(Value::Null, |g| g.state_json(open.as_ref().map(|o| o.map_path.as_path()))),
@@ -2046,7 +2085,10 @@ fn operation_preview(
             p.operation
         ));
     };
-    let ctx = context(project, open, menu);
+    let mut ctx = context(project, open, menu);
+    if p.operation == "style_edit" {
+        ctx.trust_file = gates.trust_file(state.as_deref().and_then(|s| s.trust.file.as_deref()));
+    }
     match ops::preview(&ctx, op.as_ref(), &p.parameters) {
         Ok(plan) => {
             let shown = ops::preview_shows(&ctx, op.as_ref(), &p.parameters);
@@ -2265,7 +2307,7 @@ fn operation_apply(
             view.rig.history = bench.history();
         }
         let ctx = Ctx {
-        view, trust_file: None,
+        view, trust_file: (p.operation == "style_edit").then(|| gates.trust_file(state.as_deref().and_then(|s| s.trust.file.as_deref()))).flatten(),
             root: menu.as_ref().map(|m| m.root.clone()),
             project: read_project.cloned(),
             open: read_open.cloned(),
@@ -2293,6 +2335,11 @@ fn operation_apply(
     }
     // **And the real thing**, which takes the editor's own map and project and gives them back.
     let mut ctx = take(&project, &open);
+    // **`style_edit` reads the person's store to refuse a page they have not allowed, and writes it for the text it leaves**: the store is where the
+    // editor says it is, which this door knows and `Ctx` does not.
+    if p.operation == "style_edit" {
+        ctx.trust_file = gates.trust_file(state.as_deref().and_then(|s| s.trust.file.as_deref()));
+    }
     // **The menu's root, when the menu is up**, so `map_create` has a directory before any door.
     ctx.root = menu.as_ref().map(|m| m.root.clone());
     ctx.view = op.changes_view().then(|| gates.view_in(state.as_deref(), ctx.project.as_ref(), import.as_deref(), filters.as_deref()));
@@ -2717,6 +2764,7 @@ fn operation_undo(
         let mut took: Vec<String> = Vec::new();
         for id in ids.iter().rev() {
             let mut ctx = take(&project, &open);
+            ctx.trust_file = gates.trust_file(state.as_deref().and_then(|s| s.trust.file.as_deref()));
             let undone = ops::undo(&mut ctx, Some(id));
             put_back(&mut project, &mut open, ctx);
             match undone {
@@ -2802,6 +2850,8 @@ fn operation_undo(
         });
     }
     let mut ctx = take(&project, &open);
+    // An undo of a `style_edit` writes the person's store for the text it puts back, so it is told where the store is.
+    ctx.trust_file = gates.trust_file(state.as_deref().and_then(|s| s.trust.file.as_deref()));
     let undone = match rows_refusal(state.as_deref(), &ctx, p.operation_id.as_deref()) {
         Some(refusal) => Err(refusal),
         None => ops::undo(&mut ctx, p.operation_id.as_deref()),
@@ -3535,6 +3585,24 @@ impl Plugin for OpsBridgePlugin {
             })),
             editor_lesson,
         );
+        app.add_debug_command(
+            DebugCommandInfo::new(
+                "grimoire/style_propose",
+                "A change to a game or region style page, which an agent may not write itself: the page, \
+                 small edits (`find` exactly once, `replace`) and why. Queued in the editor as a row in the \
+                 AGENT block, shown as the change to the page; a person keeps or discards it, and only \
+                 Keep writes. Returns at once; read grimoire/state's style_proposals for what became of it. \
+                 A page the person has not allowed, a `find` that is not exactly once and a result over the \
+                 style limits are refused with the reason.",
+            )
+            .params("path: a style page, e.g. design/style.md; edits: [{find, replace}]; why: one sentence.")
+            .example(json!({
+                "path": "design/style.md",
+                "edits": [{"find": "Warm light.", "replace": "Warm light, and long shadows at dusk."}],
+                "why": "the harbour's dusk reads cold without it",
+            })),
+            editor_style_propose,
+        );
     }
 }
 
@@ -3561,6 +3629,7 @@ fn editor_present(
     // switching. A presentation that framed through a mechanism of its own would fight the follow for
     // the camera the moment an agent placed something and then handed back.
     mut following: Option<ResMut<crate::follow::Following>>,
+    served: Option<Res<crate::style_followed::StyleServed>>,
 ) -> Result<Value, String> {
     if let (Some(mut activity), Some(time)) = (activity, time) {
         activity.hear("present", time.elapsed_secs_f64());
@@ -3609,6 +3678,15 @@ fn editor_present(
                 .and_then(|e| e.result.clone())
         })
         .collect();
+    // **A cited style line must be one the agent was served, and still says it** (SG-09, #408): refused with the entry and the reason, before anything is asked.
+    let followed = match (p.followed.is_empty(), project.as_deref()) {
+        (true, _) => Vec::new(),
+        (false, Some(record)) => {
+            let empty = crate::style_followed::StyleServed::default();
+            crate::style_followed::check(served.as_deref().unwrap_or(&empty), &record.root, &p.followed)?
+        }
+        (false, None) => return Err("no project is open, so there are no served style lines to cite".to_owned()),
+    };
     let body = crate::present::body(&p, &steps);
     // **With the AGENT block open and "Answer hand-backs here" on, the question is asked there**, beside the rest of what the
     // agent did; otherwise in the modal, as it always was. A block closed on a waiting question hands it to the modal.
@@ -3669,6 +3747,7 @@ fn editor_present(
         check: p.check.iter().map(|item| item.what.clone()).collect(),
         body,
         inline,
+        followed,
     });
     // **The turn is one undo step from here on (E-071).** Done at presentation rather than at the
     // answer, so Cmd+Z during the conversation takes the turn back — a person who does not want the
@@ -3920,6 +3999,75 @@ fn editor_lesson(
         "state": "waiting",
         "line": lesson.line(&crate::labels::date_today()),
         "queued": lessons.queued.len(),
+    }))
+}
+
+/// **`grimoire/style_propose` — a change to a style page, for the person to keep or discard** (SG-07, #406).
+///
+/// **The call writes nothing.** It judges the change by the rule `style_edit` judges one by (the page must be one the person has allowed, each
+/// `find` must match once, the result must be inside the limits), then queues it as a row. **One waiting proposal per page**, and at most
+/// [`crate::style_proposals::STYLE_WAITING_MAX`] waiting at all. The answer carries the id and the changed lines, never the page's text.
+#[allow(clippy::too_many_arguments)]
+fn editor_style_propose(
+    In(p): In<StyleProposeParams>,
+    project: Option<Res<crate::project::Project>>,
+    store_root: Option<Res<crate::trusted::StoreRoot>>,
+    state: Option<Res<crate::editor::EditorState>>,
+    mut proposals: Option<ResMut<crate::style_proposals::StyleProposals>>,
+    client: Option<Res<crate::present::AgentClient>>,
+    mut activity: Option<ResMut<crate::familiar::AgentActivity>>,
+    time: Option<Res<Time<Real>>>,
+) -> Result<Value, String> {
+    use crate::style_proposals::{STYLE_EDITS_MAX, STYLE_WAITING_MAX, STYLE_WHY_MAX_CHARS};
+    if let (Some(activity), Some(time)) = (activity.as_mut(), time) {
+        activity.hear("style_propose", time.elapsed_secs_f64());
+    }
+    let Some(proposals) = proposals.as_mut() else {
+        return Err("this editor keeps no queue of style proposals, so a proposal would be lost".to_owned());
+    };
+    // **The fields first**, so an agent that sent a paragraph is told that and not that its page is unknown.
+    let why = p.why.trim();
+    if why.is_empty() || why.contains('\n') || why.chars().count() > STYLE_WHY_MAX_CHARS {
+        return Err(format!("`why` is one sentence of at most {STYLE_WHY_MAX_CHARS} characters, with no newline, and it is never trimmed."));
+    }
+    if p.edits.is_empty() || p.edits.len() > STYLE_EDITS_MAX {
+        return Err(format!("`edits` holds between 1 and {STYLE_EDITS_MAX} edits; this one holds {}.", p.edits.len()));
+    }
+    let Some(project) = project.as_deref() else {
+        return Err("no project is open, so there is no style page to propose a change to.".to_owned());
+    };
+    if let Some(waiting) = proposals.waiting_for(&project.root, &p.path) {
+        return Err(format!("`{}` has a proposal waiting already (`{}`): the person answers it first, and then you propose again against the page as it is.", p.path, waiting.id));
+    }
+    if proposals.waiting() >= STYLE_WAITING_MAX {
+        return Err(format!("{STYLE_WAITING_MAX} proposals are waiting for the person already. Wait for them to answer before proposing more."));
+    }
+    let ctx = ops::Ctx {
+        project: Some(project.clone()),
+        source: ops::Source::Agent,
+        trust_file: crate::trusted::resolve(store_root.as_deref(), state.as_deref().and_then(|s| s.trust.file.as_deref())).ok(),
+        ..ops::Ctx::default()
+    };
+    let judged = crate::ops_design::propose(&ctx, &p.path, &p.edits).map_err(|e| e.0)?;
+    let lines = judged.lines();
+    let id = proposals.take(crate::style_proposals::QueuedStyle {
+        id: String::new(),
+        path: p.path.clone(),
+        why: why.to_owned(),
+        edits: p.edits,
+        root: project.root.clone(),
+        page_sha256: bevy_grimoire_core::trust::sha256_hex(judged.old.as_bytes()),
+        lines,
+        client: client.as_deref().and_then(|c| c.0.as_ref()).map(|c| format!("{} {}", c.name, c.version)).unwrap_or_default(),
+        state: crate::style_proposals::StyleState::Waiting,
+        note: None,
+    });
+    Ok(json!({
+        "id": id,
+        "path": p.path,
+        "state": "waiting",
+        "lines": lines,
+        "queued": proposals.queued.len(),
     }))
 }
 

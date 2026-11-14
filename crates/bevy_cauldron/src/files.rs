@@ -231,10 +231,24 @@ pub(crate) fn inside(root: &Path, rel: &str) -> Result<PathBuf, String> {
     }
     let full = root.join(path);
     // A symlink is followed only while it stays in the project: the tree never lists one, and a path typed by
-    // hand or sent by an agent must not reach what the project's folder does not hold.
-    if let (Ok(real), Ok(base)) = (std::fs::canonicalize(&full), std::fs::canonicalize(root))
-        && !real.starts_with(&base)
-    {
+    // hand or sent by an agent must not reach what the project's folder does not hold. **A path that is not there yet is judged by the nearest
+    // folder that is** (a new page under a folder that links out of the project is outside it), and **a link that leads nowhere is outside too**,
+    // because a write through it would make the file where the link points.
+    let Ok(base) = std::fs::canonicalize(root) else { return Ok(full) };
+    let mut probe = full.as_path();
+    let real = loop {
+        match std::fs::canonicalize(probe) {
+            Ok(real) => break Some(real),
+            Err(_) if std::fs::symlink_metadata(probe).is_ok_and(|m| m.file_type().is_symlink()) => {
+                return Err(format!("{rel} is outside the project"));
+            }
+            Err(_) => match probe.parent() {
+                Some(parent) => probe = parent,
+                None => break None,
+            },
+        }
+    };
+    if real.is_some_and(|real| !real.starts_with(&base)) {
         return Err(format!("{rel} is outside the project"));
     }
     Ok(full)

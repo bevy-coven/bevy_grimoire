@@ -7914,6 +7914,7 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(crate::ops_notes::NoteAdd),
         Box::new(crate::ops_board::BoardSet),
         Box::new(crate::ops_design::DesignAreaSet),
+        Box::new(crate::ops_design::StyleEdit),
         Box::new(crate::ops_notes::NoteEdit),
         Box::new(crate::ops_notes::NoteRemove),
         Box::new(crate::ops_notes::NoteSend),
@@ -8339,6 +8340,9 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // **The area line (SG-06, #405)** — `area <name> <x0> <z0> <x1> <z1>` and `area <name> remove` in the terrain field dispatch
     // `design_area_set` through `set_area`, the same write an agent's `apply` makes.
     ("design_area_set", "set_area("),
+    // **Keep on a style proposal (SG-07, #406)** — the AGENT block's Keep for a change an agent proposed to a style page dispatches
+    // `style_edit` as the person's, through `keep_this_style_change`, so a kept proposal is logged, granted and undone as an edit is.
+    ("style_edit", "keep_this_style_change("),
     // **The Run tool (#115)** — a drag in run mode dispatches `run_add` through `add_run`; a drag that
     // starts on an end of a standing run moves that end through `set_run` (`run_set`); a click on a
     // run with the removal tool takes it off whole through `remove_run` (`run_remove`).

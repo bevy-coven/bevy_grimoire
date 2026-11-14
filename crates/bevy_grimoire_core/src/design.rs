@@ -246,6 +246,28 @@ impl PlaceKind {
     }
 }
 
+/// **The kind of place a folder is, from its path alone**: `design` is the game, `design/regions/<name>` a region,
+/// `design/levels/<map>` and `design/regions/<region>/levels/<map>` a level, and `<level>/areas/<name>` an area. `None` for
+/// a folder that is none of these. **No disk is read**, so it answers for a place whose folder is not made yet: the kind
+/// is the place's name, not the tree's walk (SG-07, #406 decides which of a place's files an agent may write by it).
+pub fn kind_of_folder(folder: &str) -> Option<PlaceKind> {
+    let parts: Vec<&str> = folder.split('/').collect();
+    let named = |part: &&str| is_area_name(part);
+    match parts.as_slice() {
+        [design] if *design == DESIGN_DIR => Some(PlaceKind::Game),
+        [design, regions, region] if *design == DESIGN_DIR && *regions == REGIONS_DIR && named(region) => Some(PlaceKind::Region),
+        [design, levels, map] if *design == DESIGN_DIR && *levels == LEVELS_DIR && named(map) => Some(PlaceKind::Level),
+        [design, regions, region, levels, map] if *design == DESIGN_DIR && *regions == REGIONS_DIR && *levels == LEVELS_DIR && named(region) && named(map) => {
+            Some(PlaceKind::Level)
+        }
+        [.., areas, area] if *areas == AREAS_DIR && named(area) => {
+            let level = &folder[..folder.len() - areas.len() - area.len() - 2];
+            (kind_of_folder(level) == Some(PlaceKind::Level)).then_some(PlaceKind::Area)
+        }
+        _ => None,
+    }
+}
+
 /// **One topic file of a place**, as it is on disk.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Topic {

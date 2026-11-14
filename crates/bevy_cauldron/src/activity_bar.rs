@@ -115,6 +115,11 @@ pub fn waiting(wishes: Option<&crate::present::Wishes>, lessons: Option<&crate::
     wishes.map_or(0, crate::present::Wishes::waiting) + lessons.map_or(0, crate::present::Lessons::waiting)
 }
 
+/// **Everything waiting for the person in the AGENT block**: the wishes, the lessons and the style proposals (SG-07, #406).
+pub fn waiting_on_you(wishes: Option<&crate::present::Wishes>, lessons: Option<&crate::present::Lessons>, styles: Option<&crate::style_proposals::StyleProposals>) -> usize {
+    waiting(wishes, lessons) + styles.map_or(0, crate::style_proposals::StyleProposals::waiting)
+}
+
 /// What [`keep_the_activity_bar`] reads, bundled so the system stays under clippy's argument limit.
 #[derive(SystemParam)]
 struct Wants<'w> {
@@ -123,6 +128,7 @@ struct Wants<'w> {
     reloads: Option<Res<'w, crate::live::EditorReloads>>,
     wishes: Option<Res<'w, crate::present::Wishes>>,
     lessons: Option<Res<'w, crate::present::Lessons>>,
+    styles: Option<Res<'w, crate::style_proposals::StyleProposals>>,
     game: Option<Res<'w, crate::game_view::GameView>>,
 }
 
@@ -144,7 +150,7 @@ fn keep_the_activity_bar(
     // not spawned, rather than hidden.
     let wanted = wants.settings.is_none_or(|s| s.show_activity_bar) && !wants.view.is_some_and(|v| v.zen);
     let problems = problems(wants.reloads.as_deref());
-    let waiting = waiting(wants.wishes.as_deref(), wants.lessons.as_deref());
+    let waiting = waiting_on_you(wants.wishes.as_deref(), wants.lessons.as_deref(), wants.styles.as_deref());
     let crashed = usize::from(wants.game.as_deref().is_some_and(crate::game_view::GameView::crashed));
     let shown: Vec<(Workspace, usize)> = registered()
         .into_iter()
