@@ -173,8 +173,6 @@ pub struct Options {
     pub publish: Option<PathBuf>,
     /// Only these tasks, by id.
     pub only: Vec<String>,
-    /// **Where the held-out tasks are**, outside every repository (`--held-out <dir>`). None: a dev-only run.
-    pub held_out: Option<PathBuf>,
 }
 
 /// **What a harness reported a model's turns used**, summed over the trial.
@@ -857,7 +855,11 @@ pub fn tool_text(answer: &Value) -> String {
 ///
 /// Trials run `jobs` at a time; each has its own port, its own display, and its own directory under
 /// [`Options::out`].
-pub fn run(options: &Options) -> Result<Vec<TrialRecord>, String> {
+///
+/// `held_out` is **where the held-out tasks are**, outside every repository (`--held-out <dir>`); `None` is a
+/// dev-only run. It is an argument and not a field of [`Options`] because it is not a property of a run's
+/// settings: it is a place on this host, which no report or header may carry.
+pub fn run(options: &Options, held_out: Option<&Path>) -> Result<Vec<TrialRecord>, String> {
     let known = operations(&options.editor)?;
     let known_refs: Vec<&str> = known.iter().map(String::as_str).collect();
     let suite = Suite::load(&options.root, &options.tasks, &known_refs)
@@ -865,7 +867,7 @@ pub fn run(options: &Options) -> Result<Vec<TrialRecord>, String> {
     // **The held-out tasks, when a directory names them**: read from outside the repository, refused when
     // the directory is inside one, and selected by id like any other (an id none of the two holds is
     // refused, naming only the dev ids, since a held-out id is not to reach a log).
-    let held: Vec<Task> = match &options.held_out {
+    let held: Vec<Task> = match held_out {
         Some(dir) => {
             Suite::load_held_out(&options.root, dir, &known_refs)
                 .map_err(|p| format!("the held-out tasks were refused: {}", p.line()))?

@@ -1,7 +1,7 @@
 # **A map the first benchmark suite opens** (BM-04, #414). See bench/fixture/README.md.
 version: 9
 name: bench_locked
-note: "A bedroom whose bed a person has locked."
+note: "A bedroom whose bed a person has fixed in place."
 origin:
 - 0.0
 - 0.0
@@ -14,6 +14,7 @@ bash: null
 placements:
 - id: bed
   descriptor: bed_double
+  note: "Locked in place by the owner: do not move this bed. Ask first."
   at:
   - 0.0
   - -1.39

@@ -32,7 +32,7 @@ solution:
         - the lowest corner is the south-west one, read from the terrain
 checks:
   - water_lake: {map: bench_yard, x: [-10.0, -4.0], z: [4.0, 10.0], min_radius_m: 1.5}
-  - unchanged: [terrain/bench_yard.yaml, maps/bench_yard.map.yaml]
+  - unchanged: [furniture/terrain/bench_yard.yaml, maps/bench_yard.map.yaml]
   - oplog_has: {op: water_place, min: 1}
   - handback_contains: [pond]
 budget: {wall_s: 600, tool_calls: 60}

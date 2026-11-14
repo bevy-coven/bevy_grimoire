@@ -10,8 +10,8 @@ This tree holds only what the suite adds:
 |---|---|
 | `assets/grimoire/maps/bench_bedroom.map.yaml` | The room the first three tasks open. Three pieces, no overlaps, and enough empty floor to place something in. |
 | `assets/grimoire/maps/bench_*.map.yaml` | One small map for each other dev task of the first suite (BM-04, #414): a bedside, a study, a wardrobe, a store room, a floating lamp, a chair inside a desk, a mistake, a garden, a meadow, a yard, a hallway, a note, a locked bed, a loft and a lamp check. Each is its task's whole scene, so a task's starting position is the suite's and moves only when the suite's own file does. |
-| `assets/grimoire/terrain/bench_meadow.yaml`, `bench_yard.yaml` | The ground of the two terrain maps: 21 x 21 cells of 1 m from (-10, -10). The meadow is flat; the yard slopes 0.05 m per metre down to its south-west corner, which is the lowest. |
-| `assets/grimoire/data.yaml`, `data/game.yaml` | The game's tuning data the data task edits: the registry, and the gate's and the wall's numbers. |
+| `assets/grimoire/furniture/terrain/bench_meadow.yaml`, `bench_yard.yaml` | The ground of the two terrain maps: 21 x 21 cells of 1 m from (-10, -10). The meadow is flat; the yard slopes 0.05 m per metre down to its south-west corner, which is the lowest. |
+| `assets/grimoire/furniture/data.yaml`, `furniture/data/game.yaml` | The game's tuning data the data task edits: the registry, and the gate's and the wall's numbers. |
 
 A task of its own (a held-out one, which is never in this repository) brings its map in a `fixture/` directory
 beside its `task.yaml`, laid over the trial's copy after this tree and only for that task's trial.

@@ -26,9 +26,9 @@ solution:
       specified:
         - the gate's health is 40
 checks:
-  - file_value: {file: data/game.yaml, path: gate.health, equals: 40}
-  - file_value: {file: data/game.yaml, path: gate.armour, equals: 3}
-  - file_value: {file: data/game.yaml, path: wall.health, equals: 250}
+  - file_value: {file: furniture/data/game.yaml, path: gate.health, equals: 40}
+  - file_value: {file: furniture/data/game.yaml, path: gate.armour, equals: 3}
+  - file_value: {file: furniture/data/game.yaml, path: wall.health, equals: 250}
   - unchanged: [maps/bench_bedroom.map.yaml]
   - oplog_has: {op: data_set, min: 1}
   - handback_contains: [gate]

@@ -49,12 +49,12 @@ fn project(test: &str) -> std::path::PathBuf {
     map.push_str(&piece("table@4", "table", 2.0, 0.0));
     map.push_str("- id: lamp@5\n  descriptor: lamp\n  at:\n  - 2.0\n  - 0.0\n  yaw: 0.0\n  on: table@4\n");
     write(&root, "maps/m.map.yaml", &map);
-    let mut heights = vec![0.0_f32; 25];
+    let mut heights = [0.0_f32; 25];
     heights[4] = 2.0; // ix 4, iz 0: (4, -4), the north-east corner.
     let heights: Vec<String> = heights.iter().map(|h| format!("- {h}")).collect();
     write(
         &root,
-        "terrain/m.yaml",
+        "furniture/terrain/m.yaml",
         &format!(
             "version: 1\norigin:\n- -4.0\n- -4.0\ncell_m: 2.0\nwidth: 5\ndepth: 5\nheights:\n{}\n",
             heights.join("\n")
@@ -62,7 +62,7 @@ fn project(test: &str) -> std::path::PathBuf {
     );
     write(
         &root,
-        "water/m.yaml",
+        "furniture/water/m.yaml",
         "version: 1\nlakes:\n- x: -3.0\n  z: 3.0\n  radius_m: 1.5\n  level_m: -0.2\n",
     );
     write(&root, "data/gate.yaml", "gate:\n  health: 40\n  armour: 2.5\n  tags:\n  - stone\n");

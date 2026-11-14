@@ -47,6 +47,11 @@ use crate::grade::{Found, Snapshot};
 /// out is 0.10 rather than a free pass.
 pub const FLUSH_M: f32 = 0.10;
 
+/// **The directory of the project's authoring kit, under `assets/grimoire/`**, where the editor keeps what
+/// a map does not: the ground (`terrain/<map>.yaml`), the water (`water/<map>.yaml`) and the game's data
+/// registry (`data.yaml`). It is `Project::grimoire_dir` for the benchmark's project.
+pub const AUTHORING_KIT: &str = "furniture";
+
 /// **The one field every check names a placement by**: its id, or its piece.
 ///
 /// **A piece is the safer subject for a task**, because an id is minted by the editor (`bed_double@1`) and a
@@ -431,7 +436,7 @@ pub struct FileValue {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TerrainHeight {
-    /// The map whose terrain is read: `terrain/<map>.yaml`.
+    /// The map whose terrain is read: `furniture/terrain/<map>.yaml` (the authoring kit's `terrain/`, which is where `terrain_stroke` writes).
     pub map: String,
     /// The point, `[x, z]` in world metres.
     pub at: (f32, f32),
@@ -445,7 +450,7 @@ pub struct TerrainHeight {
 
 /// **The map has exactly `count` lakes, every one centred in a region and at least a radius wide.**
 ///
-/// Read from the map's water plan, `water/<map>.yaml`, which is where `water_place` writes.
+/// Read from the map's water plan, `furniture/water/<map>.yaml`, which is where `water_place` writes.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WaterLake {
@@ -1423,7 +1428,7 @@ fn grade_terrain_height(
     if t.min_m.is_none() && t.max_m.is_none() {
         return verdict(false, "the check states no bound, so it would pass on any ground".to_owned());
     }
-    let file = format!("terrain/{}.yaml", t.map);
+    let file = format!("{AUTHORING_KIT}/terrain/{}.yaml", t.map);
     let Some(text) = left.text(&file) else {
         return verdict(
             false,
@@ -1460,7 +1465,7 @@ fn grade_water_lake(
     left: &Snapshot,
     verdict: &impl Fn(bool, String) -> Verdict,
 ) -> Verdict {
-    let file = format!("water/{}.yaml", w.map);
+    let file = format!("{AUTHORING_KIT}/water/{}.yaml", w.map);
     let Some(text) = left.text(&file) else {
         return verdict(false, format!("`{file}` is not in the project, so `{}` has no water", w.map));
     };

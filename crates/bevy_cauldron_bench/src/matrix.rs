@@ -393,6 +393,7 @@ impl Matrix {
 /// at a different commit, makes the matrix refuse, naming it, and every pair's report is still on disk.
 pub fn run(
     options: &crate::run::Options,
+    held_out: Option<&std::path::Path>,
     pairs: &[Pair],
 ) -> Result<(Matrix, Vec<std::path::PathBuf>), String> {
     let mut reports = Vec::with_capacity(pairs.len());
@@ -403,7 +404,7 @@ pub fn run(
         one.model = pair.model.clone();
         one.out = options.out.join(pair.slug());
         one.label = format!("{}-{}", options.label, pair.slug());
-        crate::run::run(&one)?;
+        crate::run::run(&one, held_out)?;
         let (report, paths) = crate::run::write_reports(&one)?;
         reports.push(report);
         written.extend(paths);
