@@ -319,6 +319,16 @@ pub struct TerminalAgentLed;
 #[derive(Component)]
 pub struct TerminalAgentCardLed;
 
+/// **An LED of this pane, and the type role its words are drawn at** (#422): the bar's at a chip's ([`chrome::text::CONTROL`]), the
+/// card's at a row's ([`chrome::text::LABEL`]). `bevy_gooey::led` sizes its words from the skin's own text size, which is not the
+/// editor's type scale, so [`size_the_leds`] sets them from the role, at the person's text size.
+#[derive(Component, Clone, Copy)]
+struct PaneLed(chrome::text::Role);
+
+/// The LED dot's side as a share of its word's size, which is `bevy_gooey`'s own (`LED_TEXT_SIZES`): the dot keeps its relation to the
+/// word when the word takes the editor's size.
+const LED_DOT_SIZES: f32 = 1.1;
+
 /// The least the card is wide, logical pixels: wide enough for the first check's row (`OK Tools server: bevy_cauldron_mcp
 /// on port 15702`), so the card does not start narrower than that and grow row by row.
 const AGENT_CARD_MIN_W: f32 = 320.0;
@@ -499,6 +509,8 @@ impl Plugin for TerminalPanePlugin {
             // frame draws — so a card built a moment ago and a card built before a theme edit both land
             // on the skin's colours, and a rebuild never shows the editor's own darks for a frame.
             .add_systems(PostUpdate, dress_the_agent_tab.run_if(the_pane_is_up))
+            // **The LEDs' words read at the size of the text they stand with** (#422), after bevy_gooey has sized them.
+            .add_systems(Update, size_the_leds.after(bevy_gooey::GooeySystems::Style).run_if(the_pane_is_up))
             // The two chords that are the pane's own. Read from `ButtonInput` here rather than
             // through `keys::BINDINGS`: the census is the table of what a *tab* does, and a chord
             // that belongs to the window is the case `command_palette::chords` already set the
@@ -1055,11 +1067,11 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
                         Name::new("terminal agent status"),
                     ))
                     .with_children(|status| {
-                        status.spawn((bevy_gooey::led(name, state), TerminalAgentLed));
+                        status.spawn((bevy_gooey::led(name, state), TerminalAgentLed, PaneLed(chrome::text::CONTROL)));
                     });
                 }
                 None => {
-                    bar.spawn((bevy_gooey::led(name, state), TerminalAgentLed));
+                    bar.spawn((bevy_gooey::led(name, state), TerminalAgentLed, PaneLed(chrome::text::CONTROL)));
                 }
             }
         }
@@ -1383,7 +1395,7 @@ fn spawn_the_agent_card(commands: &mut Commands, body: Entity, post: &crate::ter
                     TerminalAgentCardRow(Some(index)),
                 ));
             }
-            card.spawn((bevy_gooey::led(AGENT_LED_LABEL, post.led()), TerminalAgentCardLed));
+            card.spawn((bevy_gooey::led(AGENT_LED_LABEL, post.led()), TerminalAgentCardLed, PaneLed(chrome::text::LABEL)));
         })
         .id();
     commands.entity(body).add_child(card);
@@ -1647,6 +1659,38 @@ fn dress_the_agent_tab(
         };
         if colour.0 != want {
             colour.0 = want;
+        }
+    }
+}
+
+/// **Every LED of the pane reads at the size of the text beside it** (#422).
+///
+/// The words of a `bevy_gooey::led` (its name and its state word) are drawn at the skin's `text_size * text_scale`, while the editor's
+/// chips and rows are a type role times the person's text size ([`chrome::font`]); at a `text_scale` of 1.45 the two disagreed and the
+/// LED's word stood out. After gooey has styled them, each word is set to the size of its [`PaneLed`]'s role, and the dot to its
+/// word's size times [`LED_DOT_SIZES`], so the dot keeps its relation to the word. Each write is compared first, and gooey only
+/// restyles on a change, so a settled pane writes nothing.
+fn size_the_leds(
+    leds: Query<(&Children, &PaneLed)>,
+    roles: Query<&bevy_gooey::Role>,
+    mut fonts: Query<&mut TextFont, With<Text>>,
+    mut dots: Query<&mut Node>,
+) {
+    for (children, PaneLed(role)) in &leds {
+        let size = chrome::font(*role).font_size;
+        let side = Val::Px(role.px() * chrome::text_scale() * LED_DOT_SIZES);
+        for child in children.iter() {
+            if let Ok(mut font) = fonts.get_mut(child) {
+                if font.font_size != size {
+                    font.font_size = size;
+                }
+            } else if roles.get(child) == Ok(&bevy_gooey::Role::LedDot)
+                && let Ok(mut dot) = dots.get_mut(child)
+                && (dot.width != side || dot.height != side)
+            {
+                dot.width = side;
+                dot.height = side;
+            }
         }
     }
 }
