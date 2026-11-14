@@ -109,9 +109,13 @@ const REFUSALS: &[Site] = &[
     // `labels.rs` still files: an endpoint that is not answering before a walk is armed, a walk
     // whose warm-up failed with nothing sent, and a walk stopped because the endpoint went away
     // mid-batch.
+    // Owner exception (2026-11-13): re-pointed, because #129 slice 34 moved the sentence `no batch: {remedy}` into `labels_walk`
+    // (`ops_labeller.rs`), the operation the Shift+L key now dispatches, which refuses with it. **This row is weak, and says so**: its
+    // marker is the problem call itself, in `Labeller::dispatch`, where every refusal of the three label operations is filed. The
+    // No test asserts the sentence itself any more: the slot is the one `dispatch` files every refusal of the three operations in.
     Site {
         file: "labels.rs",
-        marker: "no batch: {remedy}",
+        marker: "state.status.problem(e.0)",
     },
     Site {
         file: "labels.rs",
