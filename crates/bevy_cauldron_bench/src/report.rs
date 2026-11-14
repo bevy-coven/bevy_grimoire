@@ -206,6 +206,10 @@ pub struct TrialData {
     /// The wishes the agent made, as `{tool, task}`.
     #[serde(default)]
     pub wishes: Vec<Value>,
+    /// **Whether the agent was stopped at its tool-call budget** (#433); absent from a `trial.json` written before it was
+    /// recorded, which reads as not stopped.
+    #[serde(default)]
+    pub call_budget_exhausted: bool,
 }
 
 fn dev_split() -> Split {
@@ -367,6 +371,12 @@ pub struct TaskReport {
     pub wishes: u32,
     /// Each failed trial's first failing check and last calls.
     pub failures: Vec<Failure>,
+    /// **Trials of this task the agent was stopped in at its tool-call budget** (#433).
+    #[serde(default)]
+    pub budget_exhausted: u32,
+    /// Which trials those were, in order.
+    #[serde(default)]
+    pub budget_exhausted_trials: Vec<u32>,
 }
 
 /// **A group of tasks stated as one**: the suite, a tag, or the held-out total.
@@ -509,6 +519,8 @@ impl TaskReport {
             cost_usd: if scored.is_empty() { None } else { sum_costs(scored.iter().map(|t| t.cost_usd(price))) },
             wishes: scored.iter().map(|t| t.wishes.len() as u32).sum(),
             failures,
+            budget_exhausted: scored.iter().filter(|t| t.call_budget_exhausted).count() as u32,
+            budget_exhausted_trials: scored.iter().filter(|t| t.call_budget_exhausted).map(|t| t.trial).collect(),
         }
     }
 
@@ -751,6 +763,26 @@ pub fn top(counts: &BTreeMap<String, u32>, shown: usize) -> String {
 }
 
 impl Report {
+    /// **The "Tool-call budget" section: the trials whose agent was stopped for making a call beyond its task's budget** (#433).
+    ///
+    /// Empty when none was. Such a trial was graded as it stood, so its failure may be the cut-off and not the agent's idea.
+    fn budget_markdown(&self) -> String {
+        let stopped: Vec<String> = self
+            .tasks
+            .iter()
+            .flat_map(|t| t.budget_exhausted_trials.iter().map(move |n| format!("`{}` trial {n}", t.task)))
+            .collect();
+        if stopped.is_empty() {
+            return String::new();
+        }
+        format!(
+            "## Tool-call budget\n\n{} trial(s) were stopped when the agent made a call beyond its task's `budget.tool_calls`, \
+             and graded as they stood: {}.\n\n",
+            stopped.len(),
+            stopped.join(", ")
+        )
+    }
+
     /// **The "Harness errors" section: every distinct cause, how many trials had it, and which** (#432, D1).
     ///
     /// Empty for a run with none. Trials with the same reason are one row (a hundred refused turns are one
@@ -825,6 +857,7 @@ impl Report {
             "\n{} trial(s), {} harness error(s). A harness error is never scored as a pass or a fail.\n\n",
             self.trials_total, self.harness_errors
         ));
+        out.push_str(&self.budget_markdown());
         out.push_str(&self.harness_errors_markdown());
 
         out.push_str("## The suite\n\n");

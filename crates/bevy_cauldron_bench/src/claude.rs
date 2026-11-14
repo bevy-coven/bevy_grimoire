@@ -149,8 +149,10 @@ pub fn run(
         .spawn()
         .map_err(|e| format!("claude did not start: {e}"))?;
     let mut calls = crate::run::ToolBudget::new(transcript.clone(), crate::run::claude_calls, budget.tool_calls);
-    crate::run::wait_for_agent(child, editor, budget.wall_s, "claude", Some(&mut calls))?;
-    read_stream(&transcript, dir, &server)
+    let end = crate::run::wait_for_agent(child, editor, budget.wall_s, "claude", Some(&mut calls))?;
+    let mut run = read_stream(&transcript, dir, &server)?;
+    run.call_budget_exhausted = end == crate::run::WaitEnd::CallBudget;
+    Ok(run)
 }
 
 /// **What a stream-json transcript says the agent did.**

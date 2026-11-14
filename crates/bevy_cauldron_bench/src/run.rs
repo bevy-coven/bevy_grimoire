@@ -322,6 +322,9 @@ pub struct TrialRecord {
     pub dir: PathBuf,
     /// **Whether the task is held out**, so nothing that prints the trial names it (see [`summary_line`]).
     pub held_out: bool,
+    /// **Whether the agent was stopped because it made a call beyond its task's `budget.tool_calls`** (#433): such a trial
+    /// was cut off, and what it left was graded as it stood.
+    pub call_budget_exhausted: bool,
 }
 
 impl TrialRecord {
@@ -372,6 +375,7 @@ impl TrialRecord {
             "cost_reported_usd": self.cost_reported_usd,
             "tools_offered": self.tools_offered,
             "wishes": self.wishes,
+            "call_budget_exhausted": self.call_budget_exhausted,
         })
     }
 }
@@ -1272,9 +1276,11 @@ impl ToolBudget {
         self.calls
     }
 
-    /// **Whether the agent has made all the calls it was given.**
+    /// **Whether the agent has made a call BEYOND the number it was given** (#433): an agent that uses exactly its budget
+    /// is not stopped, and so is not cut before its closing message. The call that went over has already finished by
+    /// the time it is counted, so it is the one the stop is about.
     pub fn spent(&mut self) -> bool {
-        self.calls() >= self.limit
+        self.calls() > self.limit
     }
 }
 
@@ -1305,16 +1311,28 @@ pub fn claude_calls(event: &Value) -> u32 {
 /// holding the trial's project (the follow-up #412's review named). The agent leads its own group
 /// ([`detach`]), so the group is the agent's and nothing else's.
 ///
-/// **An agent that has made all the calls its task gave it is stopped** as one that ran out of time is
+/// **An agent that has made a call beyond what its task gave it is stopped** as one that ran out of time is
 /// (`budget`, [`ToolBudget`]), and what it left is graded: the call budget is a bound on the run, not a failure of it.
+/// The answer says which way the wait ended, so a trial stopped at its budget can be recorded as such.
 pub fn wait_for_agent(
     child: Child,
     editor: &mut Editor,
     wall_s: u32,
     name: &str,
     budget: Option<&mut ToolBudget>,
-) -> Result<(), String> {
+) -> Result<WaitEnd, String> {
     wait_within(child, wall_s, name, budget, || editor_exit(editor))
+}
+
+/// **How the wait for an agent ended**, when it ended without an error.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WaitEnd {
+    /// The agent exited by itself.
+    Finished,
+    /// The wall budget ran out and the agent was stopped.
+    WallTime,
+    /// The agent made a call beyond its tool-call budget and was stopped.
+    CallBudget,
 }
 
 /// **[`wait_for_agent`] with the editor's death passed as a question**, so a stand-in agent needs no editor.
@@ -1324,17 +1342,22 @@ pub fn wait_within(
     name: &str,
     mut budget: Option<&mut ToolBudget>,
     mut editor_gone: impl FnMut() -> Option<String>,
-) -> Result<(), String> {
+) -> Result<WaitEnd, String> {
     let deadline = Instant::now() + Duration::from_secs(u64::from(wall_s));
+    let mut end = WaitEnd::WallTime;
     while Instant::now() < deadline {
         match child.try_wait() {
-            Ok(Some(_)) => break,
+            Ok(Some(_)) => {
+                end = WaitEnd::Finished;
+                break;
+            }
             Ok(None) => {
                 if let Some(reason) = editor_gone() {
                     stop_group(&mut child);
                     return Err(reason);
                 }
                 if budget.as_mut().is_some_and(|b| b.spent()) {
+                    end = WaitEnd::CallBudget;
                     break;
                 }
                 std::thread::sleep(Duration::from_millis(AGENT_POLL_INTERVAL_MS));
@@ -1343,7 +1366,7 @@ pub fn wait_within(
         }
     }
     stop_group(&mut child);
-    Ok(())
+    Ok(end)
 }
 
 /// **Kill an agent's process group while its leader still runs, then the agent itself, and wait for it.**
@@ -1584,6 +1607,7 @@ fn blank_record(
         wishes: Vec::new(),
         dir: trial_dir(options, label, trial),
         held_out: task.split == crate::task::Split::HeldOut,
+        call_budget_exhausted: false,
     }
 }
 
@@ -1730,6 +1754,7 @@ fn one_trial(options: &Options, task: &Task, label: &str, trial: u32, variant: O
     record.wall_s = wall_s;
     record.tools_offered = run.tools_offered.clone();
     record.wishes = run.wishes.clone();
+    record.call_budget_exhausted = run.call_budget_exhausted;
     let reason = graded.sentence();
     write_record(&record, task, &reason);
     record
@@ -1756,6 +1781,8 @@ pub struct AgentRun {
     pub tools_offered: Vec<String>,
     /// The decisions the harness made, by the name a `decide` check asks for.
     pub decisions: std::collections::BTreeMap<String, Decision>,
+    /// **Whether the agent was stopped at its tool-call budget** (#433).
+    pub call_budget_exhausted: bool,
 }
 
 /// **An agent that connects and stops**, which must pass no task.
@@ -1911,13 +1938,15 @@ fn run_omp(
     // ignores its own flag, and it is the same number so a trial is one budget and not two. **The calls it
     // was given are the other bound** (#432, D3): the transcript is counted while the agent runs.
     let mut calls = ToolBudget::new(transcript.clone(), omp_calls, task.budget.tool_calls);
-    wait_for_agent(child, editor, task.budget.wall_s, "omp", Some(&mut calls))?;
+    let end = wait_for_agent(child, editor, task.budget.wall_s, "omp", Some(&mut calls))?;
     let server = config
         .get("mcpServers")
         .and_then(Value::as_object)
         .and_then(|servers| servers.keys().next().cloned())
         .ok_or("the editor's MCP config names no server")?;
-    read_transcript(&transcript, dir, &server)
+    let mut run = read_transcript(&transcript, dir, &server)?;
+    run.call_budget_exhausted = end == WaitEnd::CallBudget;
+    Ok(run)
 }
 
 /// **Where a trial's harness records the tool list it was offered**, beside the transcript.
