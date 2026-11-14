@@ -5755,37 +5755,18 @@ fn step_mount(project: &mut Project, state: &mut ImportState) {
 fn suggestion_keys(
     keyboard: Res<ButtonInput<KeyCode>>,
     live: Res<crate::keys::Live>,
+    project: Option<Res<Project>>,
     mut state: ResMut<ImportState>,
-    stores: LabelStores<'_>,
+    filters: Res<crate::filter::Filters>,
+    mut labeller: crate::labels::Labeller,
 ) {
     if !keys::just_pressed(&keyboard, *live, Action::DiscardAllSuggestions) {
         return;
     }
-    let LabelStores {
-        mut suggestions,
-        mut generation,
-        mut label_queue,
-        mut label_tasks,
-        mut rig,
-    } = stores;
-    state.status.note(crate::labels::clear_all_labels(
-        &mut suggestions,
-        &mut generation,
-        &mut label_queue,
-        &mut label_tasks,
-        &mut rig,
-    ));
-}
-
-/// The label stores the discard-all key clears together, bundled so the system stays under the
-/// parameter cap. Each field is the access the bare parameter had.
-#[derive(bevy::ecs::system::SystemParam)]
-struct LabelStores<'w> {
-    suggestions: ResMut<'w, crate::labels::Suggestions>,
-    generation: ResMut<'w, crate::labels::LabelGeneration>,
-    label_queue: ResMut<'w, crate::labels::LabelQueue>,
-    label_tasks: ResMut<'w, crate::labels::LabelTasks>,
-    rig: ResMut<'w, crate::label_booth::ShotRig>,
+    let Some(project) = project else { return };
+    // **Through `labels_abandon`** (E-002, #129 slice 34), the operation an agent calls: what the labeller holds, counted and
+    // dropped by the one body behind the key and the call.
+    labeller.dispatch("labels_abandon", serde_json::json!({}), &project, &mut state, &filters);
 }
 
 /// **A label that arrives is a label that lands**, one per frame.

@@ -418,22 +418,19 @@ pub(crate) fn clear_all_labels(
     if proposals + queued + in_flight > 0 {
         generation.0 = generation.0.wrapping_add(1);
     }
-    format!(
-        "cleared {proposals} proposal(s), {queued} queued, {in_flight} in flight — applied \
-         labels are undone per piece with Cmd+Z"
-    )
+    crate::ops_labeller::cleared_says(proposals, queued, in_flight)
 }
 
-/// `L`: photograph the focused piece and ask the model for labels. The refusals are loud and name
-/// their remedies — an unconfigured endpoint or an empty focus is a status line, never a silent
-/// no-op.
+/// `L`: photograph the focused piece and ask the model for labels. **Through `labels_suggest`** (E-002, #129 slice 34), the
+/// operation an agent calls: the refusals are loud and name their remedies — an unconfigured endpoint or an empty focus is a
+/// status line, never a silent no-op.
 pub(crate) fn suggest_labels(
     keyboard: Res<ButtonInput<KeyCode>>,
     live: Res<crate::keys::Live>,
     project: Option<Res<Project>>,
     mut state: ResMut<crate::tiles::ImportState>,
-    tasks: Res<LabelTasks>,
-    mut rig: ResMut<ShotRig>,
+    filters: Res<crate::filter::Filters>,
+    mut labeller: Labeller,
 ) {
     if !crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::SuggestLabels) {
         return;
@@ -445,14 +442,13 @@ pub(crate) fn suggest_labels(
             .note("nothing focused — select a piece to label".to_owned());
         return;
     };
-    let Some(d) = state.placed_at_target(&target, &project) else {
-        return;
-    };
-    let asked = request_photos(target, &d.clone(), &tasks, &mut rig);
-    match asked {
-        Asked::Said(said) => state.status.note(said),
-        Asked::Refused(why) => state.status.problem(why),
-    }
+    labeller.dispatch(
+        "labels_suggest",
+        serde_json::json!({ "piece": name_of(&target) }),
+        &project,
+        &mut state,
+        &filters,
+    );
 }
 
 /// **Script driving, the devshot way**: `echo wall_light > labels.request` queues that library
@@ -975,171 +971,242 @@ pub(crate) fn judged_enough_to_build_with(d: &bevy_grimoire_core::descriptor::De
     !d.kind.is_empty() && d.note.is_some()
 }
 
-/// The walk's queue, and what it reads to skip what is already judged or in flight.
+/// **The labeller's resources, as one parameter** (E-002, #129 slice 34): what the three label operations read and what the
+/// front end changes to carry their answers out. Every field is an `Option`, because a world without the labeller (and the
+/// bridge, which runs in any editor) must skip a request and not panic its system.
 #[derive(bevy::ecs::system::SystemParam)]
-pub(crate) struct Walk<'w> {
-    queue: ResMut<'w, LabelQueue>,
-    suggestions: Res<'w, Suggestions>,
-    tasks: Res<'w, LabelTasks>,
+pub(crate) struct Labeller<'w> {
+    suggestions: Option<ResMut<'w, Suggestions>>,
+    generation: Option<ResMut<'w, LabelGeneration>>,
+    queue: Option<ResMut<'w, LabelQueue>>,
+    tasks: Option<ResMut<'w, LabelTasks>>,
+    rig: Option<ResMut<'w, ShotRig>>,
+    /// The question `labels_walk` raises when some pieces in scope are labelled already, and the one the bridge reads to know a
+    /// question is up.
+    pub(crate) confirm: Option<ResMut<'w, crate::confirm::Confirm>>,
+    /// For `arm_batch`, which stamps the warm-up's start so the wait can count itself.
+    time: Option<Res<'w, Time>>,
 }
 
-/// `Shift+L`: walk everything missing judgement fields through the labeler — or, when a walk is
-/// already running, cancel it. One key, both directions, stated in the status line.
+/// **The pieces a walk would take**, gathered by the front end beside the counts the operation reads: the set that has no
+/// judgement yet, and every piece in scope. The answer names which of them to walk.
+pub(crate) struct Gathered {
+    targets: Vec<EditTarget>,
+    everything: Vec<EditTarget>,
+}
+
+impl Labeller<'_> {
+    /// Whether the overwrite question is on screen.
+    fn asking(&self) -> bool {
+        self.queue.as_deref().is_some_and(|q| q.ask.is_some())
+    }
+
+    /// **The labeller as the operations read it**, and the pieces a walk would take. `probe` asks whether the endpoint is
+    /// reachable (a walk wants to know; a single piece's request lets the request judge it). `None` in a world without the
+    /// labeller.
+    pub(crate) fn cursor(
+        &self,
+        probe: bool,
+        project: &Project,
+        state: &crate::tiles::ImportState,
+        filters: &crate::filter::Filters,
+    ) -> Option<(crate::ops_view::LabelsCursor, Gathered)> {
+        let (suggestions, tasks, queue, rig) =
+            (self.suggestions.as_deref()?, self.tasks.as_deref()?, self.queue.as_deref()?, self.rig.as_deref()?);
+        // **The batch is scoped by the filter box** — the same predicate, on the same keys, that the list beside it is drawn
+        // with (`d.id` for a library row, `c.mesh` for a candidate).
+        //
+        // Asked for at the keyboard, 2026-08-15: *"scope it to just the ozea meshes."* With the kit cleared, an unscoped walk
+        // is all 778 meshes in `assets/` — characters, the prototype kit, barrels — against one GPU slot that serialises. A
+        // dedicated "which pack" control would be a second way to say what the filter already says, so `F`, type `ozea`,
+        // `Shift+L` is the whole feature, and it narrows to anything else the same way.
+        let pane = crate::filter::Pane::Candidates;
+        let scope = filters.text(pane).to_owned();
+        let mut targets: Vec<EditTarget> = Vec::new();
+        let mut everything: Vec<EditTarget> = Vec::new();
+        for d in &project.measured.descriptors {
+            // **The exclusion applies to what is already imported too.** It was checked for candidates and not for library
+            // rows, so a piece imported before its pack was excluded kept costing a GPU slot on every walk — the one thing
+            // `exclude` exists to stop.
+            let excluded = d.mesh.as_deref().is_some_and(|m| project.policy.excludes(m));
+            if excluded || d.mesh.is_none() || !filters.keeps(pane, &d.id) {
+                continue;
+            }
+            everything.push(EditTarget::Library(d.id.clone()));
+            if needs_labels(d) {
+                targets.push(EditTarget::Library(d.id.clone()));
+            }
+        }
+        // **A mesh this kit excludes is not a target.** The batch spent its tenth call of 778 describing
+        // `characters/cipher_field` — a character rig that could not be a tile under any circumstances — and each call is a GPU
+        // slot that serialises. See `Policy::exclude`.
+        for c in &state.candidates {
+            if c.blocked() || project.policy.excludes(&c.mesh) || !filters.keeps(pane, &c.mesh) {
+                continue;
+            }
+            everything.push(EditTarget::Candidate(c.mesh.clone()));
+            if needs_labels(&c.proposed) {
+                targets.push(EditTarget::Candidate(c.mesh.clone()));
+            }
+        }
+        // A piece holding a staged proposal or at the model is out of both: re-photographing it would throw away an answer
+        // nobody has looked at.
+        let free = |t: &EditTarget| suggestions.get(t).is_none() && !tasks.holds(t);
+        targets.retain(free);
+        everything.retain(free);
+
+        let (done, total) = queue.progress();
+        let running = queue.running();
+        let asking = queue.ask.is_some();
+        let unreachable = (probe && !running && !asking)
+            .then(|| match crate::decide_labels::probe(&endpoint_of(&project.root)) {
+                crate::decide_labels::Reach::Unreachable(remedy) => Some(remedy),
+                // A warming endpoint is NOT a refusal — a cold model load takes tens of seconds, so the batch starts rather than
+                // making the author retry until it happens to be up.
+                crate::decide_labels::Reach::Ready | crate::decide_labels::Reach::Warming(_) => None,
+            })
+            .flatten();
+        let cursor = crate::ops_view::LabelsCursor {
+            candidates: state.candidates.iter().map(|c| c.mesh.clone()).collect(),
+            busy: tasks.0.iter().map(|f| name_of(&f.target).to_owned()).collect(),
+            running,
+            paused: queue.paused(),
+            asking,
+            done,
+            total,
+            scope,
+            unjudged: targets.len(),
+            everything: everything.len(),
+            unreachable,
+            proposals: suggestions.pending(),
+            queued: queue.queue.len() + rig.queued(),
+            in_flight: tasks.in_flight(),
+            answer: crate::ops_view::LabelsAnswer::Nothing,
+        };
+        Some((cursor, Gathered { targets, everything }))
+    }
+
+    /// **Carry out what a label operation answered**, and say its sentence on the status line: the one body behind a key and an
+    /// agent's call.
+    pub(crate) fn take(
+        &mut self,
+        answer: crate::ops_view::LabelsAnswer,
+        said: &str,
+        gathered: Gathered,
+        project: &Project,
+        state: &mut crate::tiles::ImportState,
+    ) {
+        use crate::ops_view::LabelsAnswer;
+        let (Some(suggestions), Some(generation), Some(queue), Some(tasks), Some(rig)) = (
+            self.suggestions.as_deref_mut(),
+            self.generation.as_deref_mut(),
+            self.queue.as_deref_mut(),
+            self.tasks.as_deref_mut(),
+            self.rig.as_deref_mut(),
+        ) else {
+            return;
+        };
+        match answer {
+            LabelsAnswer::Nothing => state.status.note(said.to_owned()),
+            LabelsAnswer::Photograph { piece, candidate } => {
+                let target = if candidate { EditTarget::Candidate(piece) } else { EditTarget::Library(piece) };
+                let Some(d) = state.placed_at_target(&target, project).cloned() else {
+                    state.status.problem(format!("`{}` is not a piece the labeller can photograph", name_of(&target)));
+                    return;
+                };
+                match request_photos(target, &d, tasks, rig) {
+                    Asked::Said(said) => state.status.note(said),
+                    Asked::Refused(why) => state.status.problem(why),
+                }
+            }
+            // **A second press HOLDS the walk; it does not throw it away.** Cancelling meant re-photographing everything already
+            // done to get back to where you were, which after a few hundred meshes is the wrong default. Abandoning is still one
+            // key — `Shift+Y` drops the queue, the proposals and anything in flight together.
+            LabelsAnswer::Hold => {
+                queue.paused = true;
+                state.status.note(said.to_owned());
+            }
+            LabelsAnswer::Resume => {
+                queue.paused = false;
+                state.status.note(said.to_owned());
+            }
+            LabelsAnswer::Ask => {
+                let Some(confirm) = self.confirm.as_deref_mut() else { return };
+                // **Only ask when there is something to overwrite.** `everything` minus `targets` is the judged set.
+                let judged = gathered.everything.len().saturating_sub(gathered.targets.len());
+                confirm.ask(
+                    crate::confirm::Asked::RelabelJudged,
+                    "Re-label already-labelled pieces?",
+                    // **The counts go on the buttons, not in the sentence.** Each answer states its own number and the body
+                    // states only the fact you are deciding about.
+                    format!("{judged} of {} in scope are judged.", gathered.everything.len()),
+                    format!("All {}", gathered.everything.len()),
+                    format!("Only {}", gathered.targets.len()),
+                );
+                queue.ask = Some(Overwrite { unjudged: gathered.targets, all: gathered.everything });
+            }
+            LabelsAnswer::Start { all } => {
+                let targets = if all { gathered.everything } else { gathered.targets };
+                let now = self.time.as_deref().map_or(0.0, |t| t.elapsed_secs_f64());
+                arm_batch(queue, targets, &project.root, now);
+                state.status.note(said.to_owned());
+            }
+            LabelsAnswer::Abandon => {
+                let said = clear_all_labels(suggestions, generation, queue, tasks, rig);
+                state.status.note(said);
+            }
+        }
+    }
+
+    /// **A key's request to a label operation**: carry the labeller in, dispatch the operation an agent calls, carry its answer
+    /// out. A refusal is a problem where the author looks.
+    pub(crate) fn dispatch(
+        &mut self,
+        operation: &str,
+        params: serde_json::Value,
+        project: &Project,
+        state: &mut crate::tiles::ImportState,
+        filters: &crate::filter::Filters,
+    ) {
+        let Some((cursor, gathered)) = self.cursor(operation == "labels_walk", project, state, filters) else { return };
+        let mut ctx = crate::ops::Ctx {
+            project: Some(project.clone()),
+            source: crate::ops::Source::Human,
+            session: crate::ops::session_id(),
+            view: Some(crate::ops_view::View { labels: cursor, ..Default::default() }),
+            ..crate::ops::Ctx::default()
+        };
+        match crate::ops::dispatch(&mut ctx, operation, &params) {
+            Ok(crate::ops::Applied::Done { outcome, .. }) => {
+                let answer = ctx.view.take().map(|v| v.labels.answer).unwrap_or_default();
+                self.take(answer, &outcome.summary, gathered, project, state);
+            }
+            Ok(crate::ops::Applied::Refused(e)) | Err(e) => state.status.problem(e.0),
+        }
+    }
+}
+
+/// `Shift+L`: walk everything missing judgement fields through the labeler — or, when a walk is already running, hold it, or
+/// let a held one go on. **Through `labels_walk`** (E-002, #129 slice 34), the operation an agent calls: one key, every
+/// direction, stated in the status line.
 pub(crate) fn suggest_all(
     input: crate::keys::KeyInput,
     project: Option<Res<Project>>,
     mut state: ResMut<crate::tiles::ImportState>,
-    walk: Walk,
     // **The walk takes what the list is showing.** See the note where the targets are gathered.
     filters: Res<crate::filter::Filters>,
-    // For `arm_batch`, which stamps the warm-up's start so the wait can count itself.
-    time: Res<Time>,
-    mut confirm: ResMut<crate::confirm::Confirm>,
+    mut labeller: Labeller,
 ) {
     let crate::keys::KeyInput { keyboard, live } = input;
-    let Walk { mut queue, suggestions, tasks } = walk;
     if !crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::SuggestAll) {
         return;
     }
     // A question is already on screen; `Shift+L` must not stack a second one under it.
-    if queue.ask.is_some() {
-        return;
-    }
-    // **A second press HOLDS the walk; it does not throw it away.** Cancelling meant re-photographing
-    // everything already done to get back to where you were, which after a few hundred meshes is the
-    // wrong default. Abandoning is still one key — `Shift+Y` drops the queue, the proposals and
-    // anything in flight together — so nothing lost the ability to stop, only the ability to lose
-    // work by accident.
-    if queue.running() {
-        let (done, total) = queue.progress();
-        queue.paused = !queue.paused;
-        if queue.paused {
-            state.status.note(format!(
-                "batch held at {done}/{total} — Shift+L resumes, Shift+Y abandons it. Nothing already proposed is affected"
-            ));
-        } else {
-            state
-                .status
-                .note(format!("batch resumed at {done}/{total}"));
-        }
+    if labeller.asking() {
         return;
     }
     let Some(project) = project else { return };
-    // **Ask whether anybody is home before committing to a walk.**
-    //
-    // Configured and reachable are different questions, and only the first was being asked: with the
-    // endpoint down, `Shift+L` queued 778 meshes and reported 778 identical failures, one per mesh,
-    // burning the whole queue to learn one fact. Reported from the keyboard, 2026-08-15.
-    //
-    // A warming endpoint is NOT a refusal — a cold model load takes tens of seconds, so the batch
-    // starts and says so rather than making the author retry until it happens to be up.
-    match crate::decide_labels::probe(&endpoint_of(&project.root)) {
-        crate::decide_labels::Reach::Ready => {}
-        crate::decide_labels::Reach::Warming(why) => {
-            state.status.note(format!(
-                "{why} — starting anyway, the first shot may take a while"
-            ));
-        }
-        crate::decide_labels::Reach::Unreachable(remedy) => {
-            state.status.problem(format!("no batch: {remedy}"));
-            return;
-        }
-    }
-    // **The batch is scoped by the filter box** — the same predicate, on the same keys, that the
-    // list beside it is drawn with (`d.id` for a library row, `c.mesh` for a candidate).
-    //
-    // Asked for at the keyboard, 2026-08-15: *"scope it to just the ozea meshes."* With the kit
-    // cleared, an unscoped walk is all 778 meshes in `assets/` — characters, the prototype kit,
-    // barrels — against one GPU slot that serialises. A dedicated "which pack" control would be a
-    // second way to say what the filter already says, so `F`, type `ozea`, `Shift+L` is the whole
-    // feature, and it narrows to anything else the same way.
-    let pane = crate::filter::Pane::Candidates;
-    let scope = filters.text(pane).to_owned();
-    let mut targets: Vec<EditTarget> = Vec::new();
-    for d in &project.measured.descriptors {
-        // **The exclusion applies to what is already imported too.** It was checked for candidates
-        // and not for library rows, so a piece imported before its pack was excluded kept costing a
-        // GPU slot on every walk — the one thing `exclude` exists to stop.
-        let excluded = d.mesh.as_deref().is_some_and(|m| project.policy.excludes(m));
-        if !excluded && needs_labels(d) && d.mesh.is_some() && filters.keeps(pane, &d.id) {
-            targets.push(EditTarget::Library(d.id.clone()));
-        }
-    }
-    // **A mesh this kit excludes is not a target.** The batch spent its tenth call of 778 describing
-    // `characters/cipher_field` — a character rig that could not be a tile under any circumstances —
-    // and each call is a GPU slot that serialises. See `Policy::exclude`.
-    for c in &state.candidates {
-        if !c.blocked()
-            && !project.policy.excludes(&c.mesh)
-            && needs_labels(&c.proposed)
-            && filters.keeps(pane, &c.mesh)
-        {
-            targets.push(EditTarget::Candidate(c.mesh.clone()));
-        }
-    }
-    targets.retain(|t| suggestions.get(t).is_none() && !tasks.holds(t));
-
-    // **Everything in scope, judged or not** — the set `Enter` re-labels. Gathered beside the
-    // unjudged set rather than derived from it, because "judged" is a property of the piece and
-    // "already proposed this session" is a property of the run: a piece holding a staged proposal
-    // is out of both, since re-photographing it would throw away an answer nobody has looked at.
-    let mut everything: Vec<EditTarget> = Vec::new();
-    for d in &project.measured.descriptors {
-        let excluded = d.mesh.as_deref().is_some_and(|m| project.policy.excludes(m));
-        if !excluded && d.mesh.is_some() && filters.keeps(pane, &d.id) {
-            everything.push(EditTarget::Library(d.id.clone()));
-        }
-    }
-    for c in &state.candidates {
-        if !c.blocked() && !project.policy.excludes(&c.mesh) && filters.keeps(pane, &c.mesh) {
-            everything.push(EditTarget::Candidate(c.mesh.clone()));
-        }
-    }
-    everything.retain(|t| suggestions.get(t).is_none() && !tasks.holds(t));
-
-    // **Only ask when there is something to overwrite.** `everything` minus `targets` is the judged
-    // set; empty means every piece in scope is unjudged and the question has one real answer.
-    let judged = everything.len().saturating_sub(targets.len());
-    if judged > 0 {
-        confirm.ask(
-            crate::confirm::Asked::RelabelJudged,
-            "Re-label already-labelled pieces?",
-            // **The counts go on the buttons, not in the sentence.** The body used to spell out
-            // "Yes walks all 732; No walks only the 699 unjudged" — which is the buttons, read
-            // aloud, above the buttons. Each answer states its own number and the body states only
-            // the fact you are deciding about.
-            format!("{judged} of {} in scope are judged.", everything.len()),
-            format!("All {}", everything.len()),
-            format!("Only {}", targets.len()),
-        );
-        queue.ask = Some(Overwrite { unjudged: targets, all: everything });
-        return;
-    }
-
-    if targets.is_empty() {
-        // **Say which set was empty.** "Nothing is missing labels" is a lie when a filter is on and
-        // the unfiltered library is full of unjudged meshes.
-        state.status.note(if scope.is_empty() {
-            "nothing is missing labels — L re-asks for a single piece".to_owned()
-        } else {
-            format!(
-                "nothing matching `{scope}` is missing labels — Backspace in the filter widens it"
-            )
-        });
-        return;
-    }
-    arm_batch(&mut queue, targets, &project.root, time.elapsed_secs_f64());
-    state.status.note(if scope.is_empty() {
-        format!(
-            "labeling {} piece(s) — readying the endpoint first... Shift+L holds it",
-            queue.total
-        )
-    } else {
-        format!(
-            "labeling {} piece(s) matching `{scope}` — readying the endpoint first... Shift+L holds it",
-            queue.total
-        )
-    });
+    labeller.dispatch("labels_walk", serde_json::json!({}), &project, &mut state, &filters);
 }
 
 /// **Answer the overwrite question**: `Enter` re-labels everything in scope, `Esc` takes only the
@@ -1181,10 +1248,7 @@ pub(crate) fn answer_overwrite(
         return;
     }
     arm_batch(&mut queue, targets, &project.root, time.elapsed_secs_f64());
-    state.status.note(format!(
-        "labeling {} piece(s) — readying the endpoint first... Shift+L holds it",
-        queue.total
-    ));
+    state.status.note(crate::ops_labeller::labeling_says(queue.total, ""));
 }
 
 /// **Hold the batch until the model is loaded, and say so while it loads.**

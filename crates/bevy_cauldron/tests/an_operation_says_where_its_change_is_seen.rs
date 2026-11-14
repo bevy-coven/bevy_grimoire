@@ -77,6 +77,10 @@ const PINNED_NOWHERE: &[&str] = &[
     // Assumed owner exception (2026-11-13): the list grows by the operation #129 slice 33 registers, which reads the Meshes tab's
     // pack directory again: the candidate list a person is looking at, like the lattice cursor below.
     "kit_rescan",
+    // Assumed owner exception (2026-11-13): the list grows by the two operations #129 slice 34 registers, which hold or drop the
+    // labeller's batch: the status band and the Meshes tab's tab badge a person is looking at, like the stage's controls above.
+    "labels_walk",
+    "labels_abandon",
     // Assumed owner exception (2026-11-13): the list grows by the operation #129 slice 27 registers, the lattice grid's cursor,
     // which a person's own view holds, like the picker's above.
     "lattice_cursor_step",

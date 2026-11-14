@@ -128,6 +128,89 @@ pub struct View {
     /// request, not state: the front end reads it, scans, and the view goes. Not serialised while false.
     #[serde(default, skip_serializing_if = "is_false")]
     pub rescan: bool,
+    /// **The labeller, as the three label operations read it and answer it** (E-002, #129 slice 34): which pieces are at the model,
+    /// how far a walk is, how many pieces a walk would take, and the answer the front end carries out. Session state and requests,
+    /// nothing the project keeps. Not serialised while it is where a session opens.
+    #[serde(default, skip_serializing_if = "LabelsCursor::is_default")]
+    pub labels: LabelsCursor,
+}
+
+/// **The labeller's state and request, as a value an operation reads and answers** (E-002, #129 slice 34).
+///
+/// The labeller is a background worker (a photo booth, a queue and the model's endpoint), so a request to it is a view operation
+/// that answers what is wanted ([`LabelsAnswer`]) and the front end carries it out: the editor's key and an agent's call read the
+/// same facts in and take the same answer out, and the sentence either says is the operation's own. What a walk would take (the
+/// counts) is gathered by the front end from the library, the candidates, the filter box and what is already at the model.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LabelsCursor {
+    /// The mesh paths of the Meshes tab's candidates: pieces not in the library yet that the labeller can be asked about.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub candidates: Vec<String>,
+    /// The pieces at the model now, by library id or candidate mesh path.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub busy: Vec<String>,
+    /// Whether a walk has pieces still queued, and whether it is held.
+    #[serde(default)]
+    pub running: bool,
+    #[serde(default)]
+    pub paused: bool,
+    /// Whether the question "re-label what is already labelled?" is on screen.
+    #[serde(default)]
+    pub asking: bool,
+    /// How many of the walk's pieces are done, and how many it began with.
+    #[serde(default)]
+    pub done: usize,
+    #[serde(default)]
+    pub total: usize,
+    /// What the candidate filter box narrows a walk to; empty is everything.
+    #[serde(default)]
+    pub scope: String,
+    /// The pieces in scope with no judgement yet, and every piece in scope.
+    #[serde(default)]
+    pub unjudged: usize,
+    #[serde(default)]
+    pub everything: usize,
+    /// The remedy the endpoint's probe named, when it cannot be reached: a walk would burn its queue learning that.
+    #[serde(default)]
+    pub unreachable: Option<String>,
+    /// What abandoning the labeller would drop: proposals standing, pieces queued, requests in flight.
+    #[serde(default)]
+    pub proposals: usize,
+    #[serde(default)]
+    pub queued: usize,
+    #[serde(default)]
+    pub in_flight: usize,
+    /// **The answer**: what the front end is asked to do. Nothing for every other operation.
+    #[serde(default)]
+    pub answer: LabelsAnswer,
+}
+
+impl LabelsCursor {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// **What a label operation asks the front end to do** (E-002, #129 slice 34).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelsAnswer {
+    /// Nothing but the sentence (the piece is already at the model, or nothing is missing labels).
+    #[default]
+    Nothing,
+    /// Photograph this piece and ask the model for its labels.
+    Photograph { piece: String, candidate: bool },
+    /// Hold the running walk.
+    Hold,
+    /// Let the held walk go on.
+    Resume,
+    /// Ask the person which pieces to walk, because some in scope are labelled already.
+    Ask,
+    /// Begin a walk over the pieces in scope that have no judgement, or over every piece in scope.
+    Start { all: bool },
+    /// Drop the proposals, the queue, the booth's shots and everything in flight.
+    Abandon,
 }
 
 /// **Where the Map camera is**, as a value an operation can move (E-002, #129 slice 31).
@@ -556,6 +639,8 @@ mod tests {
             camera: CameraCursor::default(),
             // Owner exception (2026-11-13): the literal names the field #129 slice 33 adds (its default); the round trip is unchanged.
             rescan: false,
+            // Owner exception (2026-11-13): the literal names the field #129 slice 34 adds (its default); the round trip is unchanged.
+            labels: LabelsCursor::default(),
         };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);

@@ -7415,6 +7415,9 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(camera::camera_turn::CameraTurn),
         Box::new(rig_check_all::RigCheckAll),
         Box::new(kit_rescan::KitRescan),
+        Box::new(crate::ops_labeller::LabelsSuggest),
+        Box::new(crate::ops_labeller::LabelsWalk),
+        Box::new(crate::ops_labeller::LabelsAbandon),
         Box::new(lattice_cursor_step::LatticeCursorStep),
         Box::new(tile_hand::tile_hand_arm::TileHandArm),
         Box::new(tile_hand::tile_member_focus::TileMemberFocus),
@@ -7718,6 +7721,11 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     ("rig_check_all", "\"rig_check_all\""),
     // **The Meshes tab's rescan key** (E-002, #129 slice 33): `R` dispatches `kit_rescan`, through `tiles::rescan_key`.
     ("kit_rescan", "\"kit_rescan\""),
+    // **The labeller's keys** (E-002, #129 slice 34): `L` dispatches `labels_suggest`, `Shift+L` `labels_walk` and `Shift+Y`
+    // `labels_abandon`, through `labels::Labeller::dispatch`, the body an agent's call is carried out by too.
+    ("labels_suggest", "\"labels_suggest\""),
+    ("labels_walk", "\"labels_walk\""),
+    ("labels_abandon", "\"labels_abandon\""),
     // **The lattice grid's cursor keys** (E-002, #129 slice 27): `F`, `H`, `T`, `G`, `[` and `]` dispatch `lattice_cursor_step`,
     // through `tiles::lattice_keys`.
     ("lattice_cursor_step", "\"lattice_cursor_step\""),

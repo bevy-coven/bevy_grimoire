@@ -737,7 +737,9 @@ fn frame_json(
 /// alternative was a second bundle and two ways to name the same call's side effects.
 #[derive(bevy::ecs::system::SystemParam)]
 struct Gates<'w, 's> {
-    confirm: Option<Res<'w, crate::confirm::Confirm>>,
+    /// **The labeller and the question it raises** (E-002, #129 slice 34): what `labels_suggest`, `labels_walk` and `labels_abandon`
+    /// read and what carries their answers out, the same body a key's request uses. Its `confirm` is also what says a question is up.
+    labeller: crate::labels::Labeller<'w>,
     pause: Option<Res<'w, crate::familiar::AgentPause>>,
     activity: Option<ResMut<'w, crate::familiar::AgentActivity>>,
     time: Option<Res<'w, Time<Real>>>,
@@ -2130,7 +2132,7 @@ fn operation_apply(
     // 10 and 11).** A question on screen, a leaving question, or a door already waiting owns the next
     // frame. The refusal is the editor's own sentence, and nothing is written or logged.
     if p.operation == "door_open" {
-        let asking = gates.confirm.as_deref().is_some_and(|c| c.is_open());
+        let asking = gates.labeller.confirm.as_deref().is_some_and(|c| c.is_open());
         if let Some(why) = state
             .as_deref()
             .and_then(|s| crate::editor::door_refusal(s, asking))
@@ -2195,8 +2197,17 @@ fn operation_apply(
     if p.dry_run {
         let read_project = project.as_deref();
         let read_open = open.as_deref();
+        let mut view = op.changes_view().then(|| gates.view_in(state.as_deref(), read_project, import.as_deref(), filters.as_deref()));
+        // **A label operation reads the labeller** (E-002, #129 slice 34). A preview asks no endpoint whether it is reachable:
+        // that is a probe over the network, and a preview is the plan and nothing else.
+        if p.operation.starts_with("labels_")
+            && let (Some(view), Some(project), Some(import), Some(filters)) = (view.as_mut(), read_project, import.as_deref(), filters.as_deref())
+            && let Some((cursor, _)) = gates.labeller.cursor(false, project, import, filters)
+        {
+            view.labels = cursor;
+        }
         let ctx = Ctx {
-        view: op.changes_view().then(|| gates.view_in(state.as_deref(), read_project, import.as_deref(), filters.as_deref())), trust_file: None,
+        view, trust_file: None,
             root: menu.as_ref().map(|m| m.root.clone()),
             project: read_project.cloned(),
             open: read_open.cloned(),
@@ -2227,6 +2238,17 @@ fn operation_apply(
     // **The menu's root, when the menu is up**, so `map_create` has a directory before any door.
     ctx.root = menu.as_ref().map(|m| m.root.clone());
     ctx.view = op.changes_view().then(|| gates.view_in(state.as_deref(), ctx.project.as_ref(), import.as_deref(), filters.as_deref()));
+    // **A label operation reads the labeller, and its answer is carried out below** (E-002, #129 slice 34), by the body a key's
+    // request uses. A walk also asks whether the endpoint is reachable: it would otherwise burn its queue learning that.
+    let mut gathered = None;
+    if p.operation.starts_with("labels_")
+        && let (Some(view), Some(project), Some(import), Some(filters)) =
+            (ctx.view.as_mut(), ctx.project.as_ref(), import.as_deref(), filters.as_deref())
+        && let Some((cursor, taken)) = gates.labeller.cursor(p.operation == "labels_walk", project, import, filters)
+    {
+        view.labels = cursor;
+        gathered = Some(taken);
+    }
     // **The proposal travels by value**, in and out, because it is not map data.
     ctx.proposal = proposal.as_deref_mut().and_then(|r| r.0.take());
     // **A proposal with no seed named gets the editor's own next one.** This is what makes two
@@ -2255,15 +2277,22 @@ fn operation_apply(
     // dispatch applied**: a call refused after its commit (a log line that could not be written takes the change back) told the
     // agent "refused" and must not move the camera, rescan or queue rigs either (#129 review of slices 31-33).
     let view = ctx.view.take().filter(|_| matches!(applied, Ok(ops::Applied::Done { .. })));
-    if let Some(view) = view {
+    if let Some(mut view) = view {
         // **A rescan is a request** (E-002, #129 slice 33): the operation says the directory is wanted and the scan is the
         // Meshes tab's own, run against the project the operation held.
         let rescan = view.rescan;
+        let labels_answer = std::mem::take(&mut view.labels.answer);
         gates.apply_view(view, state.as_deref_mut(), import.as_deref_mut(), filters.as_deref_mut());
         if rescan
             && let (Some(import), Some(project)) = (import.as_deref_mut(), ctx.project.as_ref())
         {
             crate::tiles::scan(project, import);
+        }
+        // **A label request is carried out** (E-002, #129 slice 34): the answer and the operation's own sentence.
+        if let (Some(taken), Ok(ops::Applied::Done { outcome, .. }), Some(import), Some(project)) =
+            (gathered, &applied, import.as_deref_mut(), ctx.project.as_ref())
+        {
+            gates.labeller.take(labels_answer, &outcome.summary, taken, project, import);
         }
     }
     // **A project the operation LOADED is installed here, before the map goes back.** `map_open` can

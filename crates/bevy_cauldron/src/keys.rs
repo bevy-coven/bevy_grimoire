@@ -1095,7 +1095,13 @@ impl Action {
             | Action::CheckAllRigs
             // **The Meshes tab's rescan** (E-002, #129 slice 33): the candidate list a person is looking at, read from the pack's
             // directory again; migrated to `kit_rescan`.
-            | Action::Rescan => Change::View,
+            | Action::Rescan
+            // **The labeller's three requests** (E-002, #129 slice 34): photograph the focused piece, walk or hold the batch, and
+            // drop everything the labeller holds. Requests to a background worker, not document changes (the labels that arrive
+            // land through their own undoable write); migrated to `labels_suggest`, `labels_walk` and `labels_abandon`.
+            | Action::SuggestLabels
+            | Action::SuggestAll
+            | Action::DiscardAllSuggestions => Change::View,
 
             // **Held, not pressed.** The effect is the hold: things fade, a pick is live, the overlay is
             // up. An operation whose effect reverses when a key is released is not a value an agent can
@@ -1124,11 +1130,7 @@ impl Action {
             | Action::UndoTile
             | Action::RedoTile
             | Action::UndoBench
-            | Action::RedoBench
-            // (`Rescan` left this list for `kit_rescan`.)
-            | Action::SuggestLabels
-            | Action::SuggestAll
-            | Action::DiscardAllSuggestions => Change::World,
+            | Action::RedoBench => Change::World,
 
             // Everything else writes the grimoire and owes an operation.
             _ => Change::Project,
@@ -1216,6 +1218,11 @@ impl Action {
             // **The Meshes tab's rescan is a request to read the pack's directory again** (E-002, #129 slice 33): `R` asks for it
             // through the operation an agent calls.
             Action::Rescan => Some("kit_rescan"),
+            // **The labeller's three requests** (E-002, #129 slice 34): `L`, `Shift+L` and `Shift+Y` ask the labeller through the
+            // operations an agent calls.
+            Action::SuggestLabels => Some("labels_suggest"),
+            Action::SuggestAll => Some("labels_walk"),
+            Action::DiscardAllSuggestions => Some("labels_abandon"),
             // **The tool keys** (E-002, #129): `B`, `Shift+B` and the run chord arm a tool through `tool_arm`.
             // **`Remove` and `NoteTool` arm a tool, so they name the arming operation** (E-002,
             // #129). They named `placement_remove` and `note_add`: a write neither key makes — its
