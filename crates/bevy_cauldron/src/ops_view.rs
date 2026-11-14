@@ -116,6 +116,32 @@ pub struct View {
     /// how deep the arrow ladder is, and whether the piece is taken. `None` is no tile open, so a verb that shapes one is refused.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tile_hand: Option<TileHand>,
+    /// **The Tiles tab's own history** (E-002, #129 slice 30): the tile as it stands, which member has the focus, and the
+    /// tiles `Cmd+Z` steps back to and `Cmd+Shift+Z` forward to. `None` is no history to step, so a step is refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tile_history: Option<TileHistoryCursor>,
+}
+
+/// **Where the Tiles tab's history stands**, as a value an operation can step (E-002, #129 slice 30).
+///
+/// The same facts `build::TileHistory` holds as its two stacks, with the tile and the focus they step against. A step takes
+/// the top of one stack, puts the tile as it stands on the other and makes the one taken the tile in hand; the front end
+/// applies the answer to the `Build` and the stacks, written only when it moved. The history is session state, like the
+/// draft it records: nothing is written to `compositions.yaml`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TileHistoryCursor {
+    /// The tile as it stands, or `None` when none is open (stepping back past the first edit lands there).
+    pub open: Option<bevy_grimoire_core::composition::Composition>,
+    /// Which member has the focus, as an index into `open`'s members.
+    #[serde(default)]
+    pub focus: usize,
+    /// The tiles a step back lands on, the nearest last.
+    #[serde(default)]
+    pub past: Vec<Option<bevy_grimoire_core::composition::Composition>>,
+    /// The tiles a step forward lands on, the nearest last.
+    #[serde(default)]
+    pub future: Vec<Option<bevy_grimoire_core::composition::Composition>>,
 }
 
 /// **The tile being assembled**, as a value an operation can change (E-002, #129 slice 28).
@@ -450,6 +476,8 @@ mod tests {
             lattice: None,
             // Owner exception (2026-11-13): the literal names the field #129 slice 28 adds (its default); the round trip is unchanged.
             tile_hand: None,
+            // Owner exception (2026-11-13): the literal names the field #129 slice 30 adds (its default); the round trip is unchanged.
+            tile_history: None,
         };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);

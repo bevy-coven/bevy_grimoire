@@ -152,6 +152,7 @@ Goal: know what an agent can change, and what undoes each change.
 | `tile_member_flush` | Puts the focused member flush against one side of the open tile, `x` or `z` set to -1 or 1 (one of them), as Shift and an arrow do. A hole has no width, so it is refused. | Not `operation_undo`: it edits the draft on the Tiles tab, and `Cmd+Z` there takes it back |
 | `tile_member_drop` | Drops a library piece into the open tile, `descriptor` its id, as Enter does. It lands in the middle, takes the focus and is taken in hand. Refused for a piece the library does not carry. | Not `operation_undo`: it edits the draft on the Tiles tab, and `Cmd+Z` there takes it back |
 | `tile_slot_drop` | Drops a hole into the open tile, as Shift and Enter do: `accepts` is a token of the project's slot axis, and absent is the first. Refused when the project declares none, or for a token it does not. | Not `operation_undo`: it edits the draft on the Tiles tab, and `Cmd+Z` there takes it back |
+| `tile_history_step` | Steps the Tiles tab's own history of the open tile, `by` `back` or `forward`, as Cmd+Z and Cmd+Shift+Z do. It records every change to the tile, an agent's or a person's, and stepping is its own inverse. Refused when there is nothing to step. | Not `operation_undo`: `by` `forward` puts back what `back` took, and so does Cmd+Shift+Z |
 | `label_set` | Sets one label axis (kind, effects, look, or surfaces) on a piece. | Puts the old labels back |
 
 `map_set_settings` refuses `bounds` and `axis` in the same call.

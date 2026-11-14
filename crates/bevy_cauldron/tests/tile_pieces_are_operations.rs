@@ -313,3 +313,55 @@ fn the_twelve_actions_name_the_operations_they_dispatch() {
     assert_eq!(Action::BuildDrop.operation(), Some("tile_member_drop"));
     assert_eq!(Action::BuildSlot.operation(), Some("tile_slot_drop"));
 }
+
+/// **`Cmd+Z` and `Cmd+Shift+Z` on the Tiles tab step the tab's history through the operation** (E-002, #129 slice 30), and an agent
+/// steps the same history: one logged line per key, the tile back where it was, and nothing to step is refused.
+#[test]
+fn cmd_z_and_an_agent_step_the_tab_history_through_one_operation() {
+    let mut app = editor("history");
+    take_in_hand(&mut app);
+    let mods = [bevy_cauldron::keys::MOD_KEYS[0]];
+    apply(&mut app, "tile_member_nudge", json!({"x": 1}));
+    app.update();
+    app.update();
+    let nudged = stands(&app).0;
+    assert!(nudged.0 > 0.0);
+
+    tap(&mut app, &mods, KeyCode::KeyZ);
+    assert_eq!(stands(&app).0, (0.0, 0.0), "Cmd+Z takes the nudge back");
+    let lines = logged(&app, "tile_history_step");
+    assert_eq!(lines.len(), 1, "one key, one logged operation: {lines:?}");
+    assert_eq!(lines[0].0, "human", "{:?}", lines[0]);
+    assert_eq!(lines[0].1["params"]["by"], "back", "{:?}", lines[0]);
+
+    tap(&mut app, &[mods[0], KeyCode::ShiftLeft], KeyCode::KeyZ);
+    assert_eq!(stands(&app).0, nudged, "Cmd+Shift+Z puts it back");
+    let lines = logged(&app, "tile_history_step");
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    assert_eq!(lines[1].1["params"]["by"], "forward", "{:?}", lines[1]);
+
+    let said = apply(&mut app, "tile_history_step", json!({"by": "back"}));
+    assert_eq!(said["outcome"], "applied", "an agent's call is applied, not refused for want of a view: {said}");
+    assert_eq!(stands(&app).0, (0.0, 0.0), "an agent steps the editor's own history back");
+    let said = apply(&mut app, "tile_history_step", json!({"by": "forward"}));
+    assert_eq!(said["outcome"], "applied", "{said}");
+    assert_eq!(stands(&app).0, nudged, "and forward");
+    let refused = apply(&mut app, "tile_history_step", json!({"by": "forward"}));
+    assert_eq!(refused["outcome"], "refused", "there is nothing left to put back: {refused}");
+    let refused = apply(&mut app, "tile_history_step", json!({"by": "sideways"}));
+    assert_eq!(refused["outcome"], "refused", "a direction that is not one is refused: {refused}");
+
+    // Back past the first edit lands on no tile at all, as it always did, and then there is nothing to undo.
+    apply(&mut app, "tile_history_step", json!({"by": "back"}));
+    apply(&mut app, "tile_history_step", json!({"by": "back"}));
+    assert!(build(&app).open.is_none(), "the history reaches back to before the tile was opened");
+    let refused = apply(&mut app, "tile_history_step", json!({"by": "back"}));
+    assert_eq!(refused["outcome"], "refused", "nothing to undo: {refused}");
+}
+
+/// **The two history actions name the operation they dispatch**, which is what takes them off the allowlist.
+#[test]
+fn the_two_history_actions_name_the_operation_they_dispatch() {
+    assert_eq!(Action::UndoBuild.operation(), Some("tile_history_step"));
+    assert_eq!(Action::RedoBuild.operation(), Some("tile_history_step"));
+}

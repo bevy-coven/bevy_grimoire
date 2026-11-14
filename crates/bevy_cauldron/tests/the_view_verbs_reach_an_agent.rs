@@ -253,6 +253,7 @@ fn an_operation_that_needs_a_view_says_so() {
             "tile_clear",
             "tile_grid_deepen",
             "tile_hand_arm",
+            "tile_history_step",
             "tile_member_drop",
             "tile_member_flush",
             "tile_member_focus",

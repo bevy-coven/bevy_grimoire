@@ -4658,6 +4658,102 @@ pub mod tile_hand {
             landing
         );
     }
+
+    /// **Step the Tiles tab's own history**, back or forward, as `Cmd+Z` and `Cmd+Shift+Z` do (E-002, #129 slice 30): the tile
+    /// as it stood before the last change, or after the last one taken back. The tab's history records every change to the
+    /// tile in hand, whoever made it, so this takes back an agent's nudge as it takes back a key's; it is its own inverse, and
+    /// the two directions are one body so they cannot drift apart. Nothing to step is refused, in the tab's own words.
+    pub mod tile_history_step {
+        use super::*;
+        use crate::ops_view::TileHistoryCursor;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// `"back"` undoes, `"forward"` redoes.
+            pub by: String,
+        }
+
+        /// The history after the step, the sentence for it and the answer.
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHistoryCursor, String, serde_json::Value), Refusal> {
+            let p: Params = serde_json::from_value(params.clone())
+                .map_err(|e| Refusal::new(format!("these are not a step: {e}. The only field is `by`, `back` or `forward`.")))?;
+            let back = match p.by.as_str() {
+                "back" => true,
+                "forward" => false,
+                other => return Err(Refusal::new(format!("`{other}` is not a direction; say `back` or `forward`"))),
+            };
+            let now = need_view(ctx, "step the history of")?
+                .tile_history
+                .as_ref()
+                .ok_or_else(|| Refusal::new("no tile history is in hand, so there is nothing to step."))?;
+            let (mut past, mut future) = (now.past.clone(), now.future.clone());
+            let Some(to) = (if back { past.pop() } else { future.pop() }) else {
+                return Err(Refusal::new(if back { "nothing to undo" } else { "nothing to redo" }));
+            };
+            // The description is made from copies: the stacks take the value.
+            let said = crate::build::step_says(&now.open, &to);
+            if back {
+                future.push(now.open.clone());
+            } else {
+                past.push(now.open.clone());
+            }
+            let n = to.as_ref().map_or(0, |c| c.members.len());
+            // The focus can outlive the members it indexed.
+            let focus = now.focus.min(n.saturating_sub(1));
+            let what = if back { "undo" } else { "redo" };
+            let after = json!({ "members": n, "past": past.len(), "future": future.len() });
+            Ok((TileHistoryCursor { open: to, focus, past, future }, format!("{what}: {said} — {n} in the tile"), after))
+        }
+
+        pub struct TileHistoryStep;
+
+        impl Operation for TileHistoryStep {
+            fn name(&self) -> &'static str {
+                "tile_history_step"
+            }
+            fn changes_view(&self) -> bool {
+                true
+            }
+            fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+                Shown::Nowhere
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &[]
+            }
+            fn undo(&self) -> Undo {
+                Undo::None
+            }
+            fn schema(&self) -> serde_json::Value {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["by"],
+                    "properties": {
+                        "by": {"type": "string", "enum": ["back", "forward"], "description": "`back` takes back the last change to the tile in hand, as Cmd+Z does; `forward` puts back what was taken back, as Cmd+Shift+Z does. Refused when there is nothing to step."},
+                    },
+                })
+            }
+            fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+                let (_, _, after) = landing(ctx, params)?;
+                Ok(after)
+            }
+            fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+                let (landed, summary, after) = landing(ctx, params)?;
+                let Some(view) = ctx.view.as_mut() else {
+                    return Err(Refusal::new("no view is in hand, so there is no tile history to step."));
+                };
+                // **The tile in hand is kept in step**, so a front end that applies it too does not put the old one back:
+                // a step that lands on no tile at all leaves none in hand.
+                view.tile_hand = landed.open.clone().map(|open| {
+                    let held = view.tile_hand.as_ref();
+                    TileHand { open, focus: landed.focus, depth: held.map_or(0, |h| h.depth), placing: held.is_some_and(|h| h.placing) }
+                });
+                view.tile_history = Some(landed);
+                Ok(Outcome { summary, affected: 0, saved: false, inverse: None, after: Some(after) })
+            }
+        }
+    }
 }
 
 pub mod view_cycle_grid {
@@ -6990,6 +7086,7 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(tile_hand::tile_member_drop::TileMemberDrop),
         Box::new(tile_hand::tile_slot_drop::TileSlotDrop),
         Box::new(tool_arm::ToolArm),
+        Box::new(tile_hand::tile_history_step::TileHistoryStep),
         Box::new(snip_arm::SnipArm),
         Box::new(map_create::MapCreate),
         Box::new(map_set_settings::MapSetSettings),
@@ -7291,6 +7388,9 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     ("tile_member_flush", "\"tile_member_flush\""),
     ("tile_member_drop", "\"tile_member_drop\""),
     ("tile_slot_drop", "\"tile_slot_drop\""),
+    // **The tab's history keys** (E-002, #129 slice 30): `Cmd+Z` and `Cmd+Shift+Z` on the Tiles tab dispatch `tile_history_step`,
+    // through `build::tile_history`.
+    ("tile_history_step", "\"tile_history_step\""),
     // **The clone and run keys**, which dispatch `tool_arm` through `arm_tool` (E-002, #129). Two keys,
     // one rule: press to arm, press again to return to `Tool::Place`.
     ("tool_arm", "\"tool_arm\""),

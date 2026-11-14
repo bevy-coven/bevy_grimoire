@@ -90,6 +90,9 @@ const PINNED_NOWHERE: &[&str] = &[
     "tile_member_flush",
     "tile_member_drop",
     "tile_slot_drop",
+    // Assumed owner exception (2026-11-13): the list grows by the operation #129 slice 30 registers, which steps the Tiles tab's
+    // own history of the draft back and forward: the same draft as the ten above, which a person's own view holds.
+    "tile_history_step",
     "tool_arm",
     "snip_arm",
     "brush_arm",

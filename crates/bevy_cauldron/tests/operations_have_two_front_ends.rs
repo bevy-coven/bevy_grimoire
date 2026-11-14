@@ -266,8 +266,6 @@ const UNMIGRATED: &[Action] = &[
     Action::RedoTile,
     Action::TileListPrev,
     Action::TileListNext,
-    Action::UndoBuild,
-    Action::RedoBuild,
     Action::BuildNew,
     Action::FocusCandidates,
     Action::CopyInfo,
@@ -320,7 +318,8 @@ const UNMIGRATED: &[Action] = &[
 // 65 -> 59: `CellLeft`, `CellRight`, `CellForward`, `CellBack`, `LayerDown` and `LayerUp` -> `lattice_cursor_step` (E-002, #129 slice 27): `F`, `H`, `T` and `G` step the lattice grid's selected cell and `[` and `]` the layer it shows, through the operation an agent calls. Assumed owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the six from the `Camera` set for the same reason; nothing is skipped.
 // 59 -> 52: `BuildArm`, `MemberPrev`, `MemberNext`, `BuildRung`, `BuildTurn`, `BuildDropMember` and `ClearTile` -> `tile_hand_arm`, `tile_member_focus`, `tile_grid_deepen`, `tile_member_turn`, `tile_member_remove` and `tile_clear` (E-002, #129 slice 28): `Space` takes the piece, `,` and `.` walk the tile's members, `J` deepens the ladder, `R` turns, the remove key removes and Shift with it empties the tile in hand, through the operations an agent calls. Assumed owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the seven from the `Camera` set for the same reason; nothing is skipped.
 // 52 -> 40: `BuildForward`, `BuildBack`, `BuildLeft`, `BuildRight`, `BuildUp`, `BuildDown`, `AlignForward`, `AlignBack`, `AlignLeft`, `AlignRight`, `BuildDrop` and `BuildSlot` -> `tile_member_nudge`, `tile_member_flush`, `tile_member_drop` and `tile_slot_drop` (E-002, #129 slice 29): the arrows and `[` and `]` nudge the focused member along its ladder, Shift with an arrow puts it flush, Enter drops the picked piece and the hole key drops a hole, through the operations an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the twelve from the `Camera` set for the same reason; nothing is skipped.
-const UNMIGRATED_MAX: usize = 40;
+// 40 -> 38: `UndoBuild` and `RedoBuild` -> `tile_history_step` (E-002, #129 slice 30): `Cmd+Z` and `Cmd+Shift+Z` on the Tiles tab step the draft's own history back and forward through the operation an agent calls. Owner exception (2026-11-13): the ratchet number the slice's own work lowers, and `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses the two from the `World` set for the same reason; nothing is skipped.
+const UNMIGRATED_MAX: usize = 38;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///
@@ -656,7 +655,7 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     assert_eq!(
         world,
         [
-            "Undo", "Redo", "Rescan", "UndoTile", "RedoTile", "UndoBuild", "RedoBuild", "SuggestLabels",
+            "Undo", "Redo", "Rescan", "UndoTile", "RedoTile", "SuggestLabels",
             "SuggestAll", "DiscardAllSuggestions", "UndoBench", "RedoBench", "CheckAllRigs",
         ],
         "the `World` set changed. A verb belongs here when its handler takes `Commands`, an \

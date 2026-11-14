@@ -1066,7 +1066,11 @@ impl Action {
             | Action::AlignLeft
             | Action::AlignRight
             | Action::BuildDrop
-            | Action::BuildSlot => Change::View,
+            | Action::BuildSlot
+            // **The Tiles tab's own history** (E-002, #129 slice 30): `Cmd+Z` and `Cmd+Shift+Z` step the draft's record of
+            // itself, session state like the draft; migrated to `tile_history_step`.
+            | Action::UndoBuild
+            | Action::RedoBuild => Change::View,
 
             // **Held, not pressed.** The effect is the hold: things fade, a pick is live, the overlay is
             // up. An operation whose effect reverses when a key is released is not a value an agent can
@@ -1100,8 +1104,6 @@ impl Action {
             | Action::Redo
             | Action::UndoTile
             | Action::RedoTile
-            | Action::UndoBuild
-            | Action::RedoBuild
             | Action::UndoBench
             | Action::RedoBench
             | Action::Rescan
@@ -1183,6 +1185,9 @@ impl Action {
             Action::AlignForward | Action::AlignBack | Action::AlignLeft | Action::AlignRight => Some("tile_member_flush"),
             Action::BuildDrop => Some("tile_member_drop"),
             Action::BuildSlot => Some("tile_slot_drop"),
+            // **The tab's history** (E-002, #129 slice 30): `Cmd+Z` and `Cmd+Shift+Z` on the Tiles tab step it back and forward,
+            // through the operation an agent calls.
+            Action::UndoBuild | Action::RedoBuild => Some("tile_history_step"),
             // **The tool keys** (E-002, #129): `B`, `Shift+B` and the run chord arm a tool through `tool_arm`.
             // **`Remove` and `NoteTool` arm a tool, so they name the arming operation** (E-002,
             // #129). They named `placement_remove` and `note_add`: a write neither key makes — its

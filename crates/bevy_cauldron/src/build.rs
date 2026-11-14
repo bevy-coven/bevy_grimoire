@@ -1049,6 +1049,41 @@ pub struct TileHistory {
     run: Option<usize>,
 }
 
+impl TileHistory {
+    /// **The history as a value an operation can step** (E-002, #129 slice 30): the tile as it stands, the focus and the two
+    /// stacks.
+    pub(crate) fn cursor(&self, build: &Build) -> crate::ops_view::TileHistoryCursor {
+        crate::ops_view::TileHistoryCursor {
+            open: build.open.clone(),
+            focus: build.focus,
+            past: self.past.clone(),
+            future: self.future.clone(),
+        }
+    }
+
+    /// **Whether the history and the tile are already as an operation answered.** Compared first by the caller, because a write
+    /// through a `ResMut` marks the resource changed, and the 3-D stage and the panels rebuild on a change to the tile.
+    pub(crate) fn is_at(&self, build: &Build, cursor: &crate::ops_view::TileHistoryCursor) -> bool {
+        build.open == cursor.open && build.focus == cursor.focus && self.past == cursor.past && self.future == cursor.future
+    }
+
+    /// **Put the tile and its history where an operation answered.** Stepping through history ends the run — the next
+    /// nudge is a new act, not a continuation of one the author has already walked away from — and the tile it lands on is
+    /// the one the next change is measured against, so the step is not recorded as an edit of its own.
+    pub(crate) fn set_cursor(&mut self, build: &mut Build, cursor: &crate::ops_view::TileHistoryCursor) {
+        if build.open != cursor.open {
+            build.open = cursor.open.clone();
+        }
+        if build.focus != cursor.focus {
+            build.focus = cursor.focus;
+        }
+        self.past = cursor.past.clone();
+        self.future = cursor.future.clone();
+        self.seen = Some(cursor.open.clone());
+        self.run = None;
+    }
+}
+
 /// **Which single member two tiles differ by, if they differ only by adjusting one.**
 ///
 /// `Some(i)` when both hold the same members in the same order and exactly one of them has moved,
@@ -1096,7 +1131,7 @@ fn adjusted_member(before: &Option<Composition>, after: &Option<Composition>) ->
 ///
 /// Naming the piece removes the ambiguity without touching the ordering, which exists so the file is
 /// the same on every machine.
-fn step_says(from: &Option<Composition>, to: &Option<Composition>) -> String {
+pub(crate) fn step_says(from: &Option<Composition>, to: &Option<Composition>) -> String {
     let names = |c: &Option<Composition>| -> Vec<String> {
         c.as_ref()
             .map(|c| c.members.iter().map(|m| m.id.clone()).collect())
@@ -1139,6 +1174,7 @@ pub fn tile_history(
     mut build: ResMut<Build>,
     mut history: ResMut<TileHistory>,
     mut state: ResMut<crate::tiles::ImportState>,
+    project: Option<Res<crate::project::Project>>,
 ) {
     if *mode != crate::tiles::Mode::Tiles {
         return;
@@ -1173,43 +1209,26 @@ pub fn tile_history(
     let back = crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::UndoBuild);
     let forward = crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::RedoBuild);
     if back || forward {
-        let step = if back {
-            history.past.pop()
-        } else {
-            history.future.pop()
+        // **Through `tile_history_step`** (E-002, #129 slice 30), the operation an agent calls: the stacks, the tile, the
+        // focus that can outlive the members it indexed and the sentence for the step are its. What `Cmd+Z` finds to undo
+        // is whatever changed the tile, whoever it was, because this system records every change to it.
+        let mut ctx = crate::ops::Ctx {
+            project: project.as_deref().cloned(),
+            source: crate::ops::Source::Human,
+            session: crate::ops::session_id(),
+            view: Some(crate::ops_view::View { tile_history: Some(history.cursor(&build)), ..Default::default() }),
+            ..crate::ops::Ctx::default()
         };
-        match step {
-            Some(to) => {
-                let from = build.open.clone();
-                // Kept for the readout below — the stacks take the value, so the description has to
-                // be made from a copy rather than from what was just pushed.
-                let said = step_says(&from, &to);
-                if back {
-                    history.future.push(from);
-                } else {
-                    history.past.push(from);
+        let params = serde_json::json!({ "by": if back { "back" } else { "forward" } });
+        match crate::ops::dispatch(&mut ctx, "tile_history_step", &params) {
+            Ok(crate::ops::Applied::Done { outcome, .. }) => {
+                if let Some(landed) = ctx.view.and_then(|v| v.tile_history) {
+                    history.set_cursor(&mut build, &landed);
                 }
-                build.open = to.clone();
-                // The focus can outlive the members it indexed.
-                let n = build.open.as_ref().map_or(0, |c| c.members.len());
-                build.focus = build.focus.min(n.saturating_sub(1));
-                history.seen = Some(to);
-                // Stepping through history ends the run: the next nudge is a new act, not a
-                // continuation of one the author has already walked away from.
-                history.run = None;
-                let what = if back { "undo" } else { "redo" };
-                state
-                    .status
-                    .note(format!("{what}: {said} — {n} in the tile"));
+                state.status.note(outcome.summary);
             }
-            None => state.status.note(
-                if back {
-                    "nothing to undo"
-                } else {
-                    "nothing to redo"
-                }
-                .to_owned(),
-            ),
+            // Nothing to step is guidance, as it always was: a note the next keystroke replaces.
+            Ok(crate::ops::Applied::Refused(e)) | Err(e) => state.status.note(e.0),
         }
         return;
     }

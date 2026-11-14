@@ -777,6 +777,8 @@ struct Gates<'w, 's> {
     camera: Option<ResMut<'w, crate::anim_stage::BenchCamera>>,
     /// **The lattice grid's cursor** (E-002, #129 slice 27): what `lattice_cursor_step` changes, carried by the same view.
     cells: Option<ResMut<'w, crate::tiles::CellEdit>>,
+    /// **The Tiles tab's history** (E-002, #129 slice 30): what `tile_history_step` steps, carried by the same view.
+    tile_history: Option<ResMut<'w, crate::build::TileHistory>>,
 }
 
 impl Gates<'_, '_> {
@@ -812,6 +814,7 @@ impl Gates<'_, '_> {
             filter_pane: filters.and_then(|f| f.focus_name()),
             lattice: self.cells.as_deref().zip(import).zip(project).and_then(|((edit, import), project)| crate::tiles::lattice_cursor(edit, import, project)),
             tile_hand: self.build.as_deref().and_then(|b| b.hand()),
+            tile_history: self.tile_history.as_deref().zip(self.build.as_deref()).map(|(history, build)| history.cursor(build)),
             stage: crate::ops_view::StageCursor {
                 playing: self.scrub.as_deref().is_none_or(|s| s.playing),
                 phase: self.scrub.as_deref().map(|s| s.phase).unwrap_or_default(),
@@ -925,6 +928,16 @@ impl Gates<'_, '_> {
             && let Some(edit) = self.cells.as_deref_mut()
         {
             edit.set_cursor(&cursor);
+        }
+        // **The Tiles tab's history** (E-002, #129 slice 30), written only when it moved: the stacks and the tile they step.
+        // **Before the tile in hand**, which a history step keeps in step with its own answer: any other operation hands back
+        // the history as it found it, and applying the hand first would make that read as a step taken back.
+        if let Some(cursor) = view.tile_history
+            && self.tile_history.as_deref().zip(self.build.as_deref()).is_some_and(|(h, b)| !h.is_at(b, &cursor))
+            && let Some(history) = self.tile_history.as_deref_mut()
+            && let Some(build) = self.build.as_deref_mut()
+        {
+            history.set_cursor(build, &cursor);
         }
         // **The tile in hand** (E-002, #129 slice 28), written only when it moved: the draft is the tab's own, and the 3-D
         // stage and the tile history rebuild on a change to it.
