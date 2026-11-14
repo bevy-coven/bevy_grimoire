@@ -108,7 +108,7 @@ impl Plugin for StyleAreasPlugin {
                     .run_if(on_the_map)
                     .run_if(resource_exists::<OpenMap>)
                     .run_if(resource_exists::<Project>),
-                name_the_areas.after(refresh),
+                name_the_areas.after(refresh).before(bevy_gooey::GooeySystems::Style),
             ),
         );
     }

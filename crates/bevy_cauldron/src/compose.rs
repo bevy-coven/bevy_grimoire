@@ -291,7 +291,7 @@ impl Plugin for ComposePlugin {
             // off-tab, which a system that has stopped running cannot do.
             .add_systems(
                 Update,
-                ((rebuild_labels, place_labels).chain().after(restage_group),)
+                ((rebuild_labels, place_labels).chain().after(restage_group).before(bevy_gooey::GooeySystems::Style),)
                     .run_if(in_state(crate::screen::Screen::Editor)),
             )
             // Not gated on the mode: the armed group is shown on the Map tab too, and a panel that

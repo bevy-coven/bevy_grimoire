@@ -263,7 +263,7 @@ fn open(mut asks: MessageReader<OpenSettings>, existing: Query<(), With<Settings
         })
         .with_children(|dialog| {
             dialog
-                .spawn(bevy_gooey::sized_panel(bevy_gooey::CardWidth::Px(crate::launcher::CARD_WIDTH)))
+                .spawn(bevy_gooey::sized_panel(bevy_gooey::CardWidth::Text(crate::launcher::DIALOG_CARD_TEXT_SIZES)))
                 .with_children(|card| {
                     card.spawn(heading("Settings"));
                     if available.len() > 1 {

@@ -225,7 +225,7 @@ fn open(mut asks: MessageReader<OpenKeymap>, existing: Query<(), With<KeymapDial
         })
         .with_children(|dialog| {
             dialog
-                .spawn(bevy_gooey::sized_panel(bevy_gooey::CardWidth::Px(crate::launcher::CARD_WIDTH)))
+                .spawn(bevy_gooey::sized_panel(bevy_gooey::CardWidth::Text(crate::launcher::DIALOG_CARD_TEXT_SIZES)))
                 .with_children(|card| {
                     card.spawn(heading("Keymap"));
                     card.spawn(label(

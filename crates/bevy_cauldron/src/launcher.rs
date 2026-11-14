@@ -70,6 +70,11 @@ pub struct News {
 /// How wide the launcher's card is, in logical pixels: wide enough for a project's row, narrower than the window.
 pub const CARD_WIDTH: f32 = 840.0;
 
+/// **How wide a dialog's card is, in body text sizes**: the ceiling gooey's dialog skin gave a card under its scrim (36 text sizes, about 397 px at the editor's
+/// text), which every dialog here was effectively drawn at while its own `width` asked for 520 to 840 px. `CardWidth::Text` states it, so a card is the width a
+/// person saw before the card was built with `sized_panel` (which writes `width` and no ceiling): measured 396.7 px at the harness window both ways.
+pub const DIALOG_CARD_TEXT_SIZES: f32 = 36.0;
+
 /// The launcher's splash: pixel art by Retro Diffusion (`tools/ui/splash-jobs.json`), embedded like the icon sheet.
 pub const SPLASH_PNG: &[u8] = include_bytes!("../assets/ui/splash.png");
 
@@ -520,9 +525,11 @@ pub(crate) fn card_node() -> Node {
     Node { flex_direction: FlexDirection::Column, width: Val::Px(CARD_PX), padding: UiRect::all(Val::Px(crate::chrome::PAD)), row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }
 }
 
-/// The picture's box inside a card: gooey's `image_box`, so it holds its room while the picture loads.
-pub(crate) fn thumb(picture: ImageNode) -> impl Bundle {
-    bevy_gooey::image_box(picture.image, THUMB)
+/// **The picture's box inside a card**: gooey's `image_box`, so it holds its room while the picture loads. A cropped picture is `.insert(picture)`ed over it:
+/// `project_picture` chose the middle band that fits the box and put it on the `ImageNode`'s `rect`, and `image_box` alone would draw the whole image squeezed
+/// into the box.
+pub(crate) fn thumb_box(image: Handle<Image>) -> impl Bundle {
+    bevy_gooey::image_box(image, THUMB)
 }
 
 /// Decodes the splash once, into `splash`.
@@ -1002,7 +1009,7 @@ fn project_card(grid: &mut ChildSpawnerCommands, row: &Listed, art: &mut Art) {
     ))
     .with_children(|card| {
         if let Some(picture) = picture {
-            card.spawn(thumb(picture));
+            card.spawn(thumb_box(picture.image.clone())).insert(picture);
         }
         card.spawn((Text::new(name_of(&path)), Role::ButtonText, Pickable::IGNORE));
         card.spawn((quiet(shown_folder(&path)), Pickable::IGNORE));
@@ -1218,7 +1225,7 @@ fn news_page(page: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut Art
         ))
         .with_children(|entry| {
             if let Some(handle) = picture {
-                entry.spawn(thumb(ImageNode::new(handle)));
+                entry.spawn(thumb_box(handle));
             }
             // **The prose keeps a measure, and it has the room to.** `flex_shrink` alone let the column
             // take whatever the window gave it — 118 characters a line at the capture's own width —

@@ -166,7 +166,7 @@ fn open(
         })
         .with_children(|dialog| {
             dialog
-                .spawn(bevy_gooey::sized_panel(bevy_gooey::CardWidth::Px(crate::launcher::CARD_WIDTH)))
+                .spawn(bevy_gooey::sized_panel(bevy_gooey::CardWidth::Text(crate::launcher::DIALOG_CARD_TEXT_SIZES)))
                 .with_children(|card| {
                     card.spawn(heading("Project configuration"));
                     card.spawn((bevy_gooey::column(0.0), Lines));

@@ -750,7 +750,7 @@ fn map_card(grid: &mut ChildSpawner, map: &MapEntry, picture: Option<ImageNode>,
             ))
             .with_children(|card| {
                 if let Some(picture) = picture {
-                    card.spawn(launcher::thumb(picture));
+                    card.spawn(launcher::thumb_box(picture.image.clone())).insert(picture);
                 }
                 card.spawn((Text::new(name.clone()), Role::ButtonText, Pickable::IGNORE));
                 card.spawn((launcher::quiet(size_in_metres(*bounds)), Pickable::IGNORE));

@@ -120,3 +120,22 @@ fn a_wish_rows_header_and_answers_lines_are_gooey_rows_that_are_never_squeezed()
     let discard = of_wish::<WishDiscard>(&mut app, &id);
     assert_eq!(parent(&app, discard), answers, "Open and Discard stand in the one line");
 }
+
+/// **A wish row and its header fill the width they stand in**, now that they no longer ask for `width: 100%`: the row is as wide as the list it is in, and
+/// the header as wide as the row.
+#[test]
+fn a_wish_row_and_its_header_fill_the_width_they_stand_in() {
+    let (mut app, id) = editor_with_a_wish("width");
+    let header = of_wish::<WishUnfold>(&mut app, &id);
+    let row = parent(&app, header);
+    let list = parent(&app, row);
+    let logical = |entity: Entity| {
+        let computed = app.world().get::<bevy::ui::ComputedNode>(entity).expect("laid out");
+        (computed.size().x * computed.inverse_scale_factor(), computed.content_box().width() * computed.inverse_scale_factor())
+    };
+    let (header_w, _) = logical(header);
+    let (row_w, row_room) = logical(row);
+    let (_, list_room) = logical(list);
+    assert!((row_w - list_room).abs() < 1.0, "the wish row is {row_w} px wide in a list with {list_room} px of room");
+    assert!((header_w - row_room).abs() < 1.0, "the header is {header_w} px wide in a row with {row_room} px of room");
+}
