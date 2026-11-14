@@ -161,6 +161,8 @@ pub enum RowKind {
     Wish,
     /// A lesson: one line for the project's guide, which the person keeps or discards (#351).
     Lesson,
+    /// **A proposal to a style page** an agent may not write itself, which the person keeps or discards (SG-07, #406).
+    Style,
 }
 
 impl RowKind {
@@ -169,6 +171,7 @@ impl RowKind {
         match self {
             RowKind::Wish => "WISH",
             RowKind::Lesson => "LESSON",
+            RowKind::Style => "STYLE",
         }
     }
 }
@@ -246,6 +249,34 @@ pub struct LessonDiscard;
 #[derive(Component)]
 pub struct LessonAnswered(pub crate::present::LessonState);
 
+// ── a style proposal's row (SG-07, #406) ─────────────────────────────────────────────────────────
+
+/// **A style row's one-line title**: whose it is and the page it would change.
+#[derive(Component)]
+pub struct StyleTitle;
+
+/// One `NAME  words` line of a style row: `WHY`, `PAGE`, and for each edit `FROM` and `TO`.
+#[derive(Component)]
+pub struct StyleField {
+    pub name: &'static str,
+}
+
+/// **The row's Keep button**: the person's own act, and the only thing that writes the change.
+#[derive(Component)]
+pub struct StyleKeep;
+
+/// The row's Discard button.
+#[derive(Component)]
+pub struct StyleDiscard;
+
+/// The row's button that shows the page in the Design workspace, at the first line the change touches.
+#[derive(Component)]
+pub struct StyleShow;
+
+/// The row's answer, when one was already given: `kept` or `discarded`.
+#[derive(Component)]
+pub struct StyleAnswered(pub crate::style_proposals::StyleState);
+
 /// The row's clickable header, which unfolds it.
 #[derive(Component)]
 pub struct WishUnfold;
@@ -280,6 +311,7 @@ pub struct WishRows;
 struct RowsShown {
     wishes: Vec<RowShown>,
     lessons: Vec<LessonShown>,
+    styles: Vec<StyleShown>,
 }
 
 /// **One wish row's own state**, as the list is rebuilt by it.
@@ -308,8 +340,23 @@ struct LessonShown {
     note: Option<String>,
 }
 
+/// **One style row's own state**, as [`RowsShown`] compares it.
+#[derive(Clone, PartialEq, Eq)]
+struct StyleShown {
+    id: String,
+    unfolded: bool,
+    state: crate::style_proposals::StyleState,
+    note: Option<String>,
+}
+
 impl RowsShown {
-    fn of(wishes: &Wishes, lessons: &crate::present::Lessons, open: &WishOpenRows, client: Option<&crate::present::ClientName>) -> RowsShown {
+    fn of(
+        wishes: &Wishes,
+        lessons: &crate::present::Lessons,
+        styles: &crate::style_proposals::StyleProposals,
+        open: &WishOpenRows,
+        client: Option<&crate::present::ClientName>,
+    ) -> RowsShown {
         RowsShown {
             wishes: wishes
                 .queued
@@ -334,6 +381,11 @@ impl RowsShown {
                     state: q.state,
                     note: q.note.clone(),
                 })
+                .collect(),
+            styles: styles
+                .queued
+                .iter()
+                .map(|q| StyleShown { id: q.id.clone(), unfolded: open.is_open(&q.id), state: q.state, note: q.note.clone() })
                 .collect(),
         }
     }
@@ -375,10 +427,12 @@ fn follow_the_search_lines(wishes: Option<Res<Wishes>>, mut lines: Query<(&mut T
 }
 
 /// **The block's list follows the wishes**: a row per wish, saying everything it is.
+#[allow(clippy::too_many_arguments)]
 fn follow_the_rows(
     mut commands: Commands,
     wishes: Option<Res<Wishes>>,
     lessons: Option<Res<crate::present::Lessons>>,
+    styles: Option<Res<crate::style_proposals::StyleProposals>>,
     open: Option<Res<WishOpenRows>>,
     client: Option<Res<crate::present::AgentClient>>,
     lists: Query<(Entity, Option<&RowsShown>), With<WishRows>>,
@@ -391,7 +445,9 @@ fn follow_the_rows(
     let empty = crate::present::Lessons::default();
     let lessons = lessons.as_deref().unwrap_or(&empty);
     let client = client.as_deref().and_then(|c| c.0.as_ref());
-    let now = RowsShown::of(&wishes, lessons, &open, client);
+    let no_styles = crate::style_proposals::StyleProposals::default();
+    let styles = styles.as_deref().unwrap_or(&no_styles);
+    let now = RowsShown::of(&wishes, lessons, styles, &open, client);
     for (list, built) in &lists {
         if built.is_some_and(|built| *built == now) {
             continue;
@@ -405,6 +461,9 @@ fn follow_the_rows(
             }
             for queued in &lessons.queued {
                 spawn_a_lesson_row(list, queued, &open);
+            }
+            for queued in &styles.queued {
+                spawn_a_style_row(list, queued, &open);
             }
         });
     }
@@ -696,6 +755,131 @@ fn lesson_line_of(parent: &mut ChildSpawnerCommands, name: &'static str, id: &st
         });
 }
 
+/// **A style proposal's row** (SG-07, #406): on one line, whose it is and the page it would change; unfolded, why, the page and lines, each edit's span and
+/// what replaces it, and the three buttons — Show the page in the Design workspace, Keep and Discard.
+///
+/// **It reuses the list's own shapes** (`RowOf`, `WishOf`, `WishUnfold`, `WishBody`), as the lesson's row does.
+fn spawn_a_style_row(list: &mut ChildSpawnerCommands, queued: &crate::style_proposals::QueuedStyle, open: &WishOpenRows) {
+    use crate::style_proposals::StyleState;
+    let id = queued.id.clone();
+    let answered = queued.state;
+    let unfolded = open.is_open(&id);
+    list.spawn((
+        RowOf,
+        WishRow { id: id.clone(), kind: RowKind::Style },
+        WishOf(id.clone()),
+        Name::new(format!("style {}", queued.id)),
+        Node { flex_direction: FlexDirection::Column, width: Val::Percent(100.0), flex_shrink: 0.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+    ))
+    .with_children(|row| {
+        row.spawn((
+            WishUnfold,
+            WishOf(id.clone()),
+            // CHROME-OK: the row is a fold, not a chip or a list row: its own header is the whole unfold target and wears no rest/hover/selected states of its own.
+            bevy::ui_widgets::Button,
+            Hovered::default(),
+            Node { flex_direction: FlexDirection::Column, width: Val::Percent(100.0), flex_shrink: 0.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+        ))
+        .observe(unfold_this_row)
+        .with_children(|header| {
+            header
+                .spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_TIGHT), flex_shrink: 0.0, ..default() })
+                .with_children(|line| {
+                    line.spawn((Text::new(RowKind::Style.label()), TextColor(crate::chrome::ink().dim), crate::chrome::typed(crate::chrome::text::LABEL)));
+                    line.spawn((
+                        StyleTitle,
+                        WishOf(id.clone()),
+                        Text::new(style_title(queued)),
+                        TextColor(crate::chrome::ink().text),
+                        crate::chrome::typed(crate::chrome::text::BODY),
+                        Node { flex_grow: 1.0, min_width: Val::Px(0.0), ..default() },
+                        TextLayout::new(Justify::Left, LineBreak::WordBoundary),
+                    ));
+                });
+            if answered != StyleState::Waiting {
+                header.spawn((
+                    StyleAnswered(answered),
+                    WishOf(id.clone()),
+                    Text::new(style_answer_says(answered)),
+                    TextColor(crate::chrome::ink().dim),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
+                ));
+            }
+        });
+        if !unfolded {
+            return;
+        }
+        row.spawn((WishBody, WishOf(id.clone()), Node { flex_direction: FlexDirection::Column, flex_shrink: 0.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }))
+            .with_children(|body| {
+                style_line_of(body, "WHY", &id, &queued.why);
+                style_line_of(body, "PAGE", &id, &style_page_says(queued));
+                for edit in &queued.edits {
+                    style_line_of(body, "FROM", &id, &edit.find);
+                    style_line_of(body, "TO", &id, if edit.replace.is_empty() { "(taken out)" } else { &edit.replace });
+                }
+                if let Some(note) = &queued.note {
+                    body.spawn((
+                        Text::new(note.clone()),
+                        TextColor(crate::chrome::ink().danger),
+                        crate::chrome::typed(crate::chrome::text::LABEL),
+                        Node { flex_shrink: 0.0, ..default() },
+                        TextLayout::new(Justify::Left, LineBreak::WordBoundary),
+                    ));
+                }
+                body.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(crate::chrome::GAP_TIGHT), flex_shrink: 0.0, ..default() })
+                    .with_children(|answers| {
+                        crate::chrome::button(answers, (StyleShow, WishOf(id.clone())), "Show the page", crate::chrome::Severity::Plain).observe(show_this_style_page);
+                        if queued.state != StyleState::Waiting {
+                            return;
+                        }
+                        crate::chrome::button(answers, (StyleKeep, WishOf(id.clone())), "Keep", crate::chrome::Severity::Plain).observe(keep_this_style_proposal);
+                        crate::chrome::button(answers, (StyleDiscard, WishOf(id.clone())), "Discard", crate::chrome::Severity::Plain).observe(discard_this_style_proposal);
+                    });
+            });
+    });
+}
+
+/// **A style row's one-line title**: whose it is and the page it would change.
+pub fn style_title(queued: &crate::style_proposals::QueuedStyle) -> String {
+    let who = if queued.client.trim().is_empty() { "an agent" } else { queued.client.trim() };
+    format!("{who}: {}", queued.path)
+}
+
+/// The words a style proposal's answer is written in.
+pub fn style_answer_says(state: crate::style_proposals::StyleState) -> String {
+    match state {
+        crate::style_proposals::StyleState::Waiting => String::new(),
+        crate::style_proposals::StyleState::Kept => "you kept it, so the page says it now".to_owned(),
+        crate::style_proposals::StyleState::Discarded => "you discarded it, and the page is as it was".to_owned(),
+    }
+}
+
+/// **The row's `PAGE` line**: the page and the lines the change touches.
+fn style_page_says(queued: &crate::style_proposals::QueuedStyle) -> String {
+    match queued.lines {
+        Some([first, last]) if first == last => format!("{}, line {first}", queued.path),
+        Some([first, last]) => format!("{}, lines {first} to {last}", queued.path),
+        None => queued.path.clone(),
+    }
+}
+
+/// One `NAME  words` line of a style row, its own name on it so a test can ask for it.
+fn style_line_of(parent: &mut ChildSpawnerCommands, name: &'static str, id: &str, words: &str) {
+    parent.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::FlexStart, flex_shrink: 0.0, ..default() }).with_children(|line| {
+        crate::chrome::row_label(line, crate::editor::READOUT_LABEL_W, name);
+        line.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() }).with_children(|col| {
+            col.spawn((
+                Text::new(words.to_owned()),
+                TextColor(crate::chrome::ink().text),
+                crate::chrome::typed(crate::chrome::text::BODY),
+                StyleField { name },
+                WishOf(id.to_owned()),
+                TextLayout::new(Justify::Left, LineBreak::WordBoundary),
+            ));
+        });
+    });
+}
+
 /// One `NAME  words` line of a row, carrying the field's own name so a test can ask for it.
 fn line_of(parent: &mut ChildSpawnerCommands, name: &'static str, id: &str, words: &str) {
     parent
@@ -902,6 +1086,79 @@ fn discard_this_lesson(
     }
 }
 
+// ── a style proposal's three answers (SG-07, #406) ──────────────────────────────────────────────
+
+/// **Show the page**: the Design workspace on the proposal's page, at the first line the change touches.
+fn show_this_style_page(
+    activate: On<Activate>,
+    buttons: Query<&WishOf, With<StyleShow>>,
+    proposals: Option<Res<crate::style_proposals::StyleProposals>>,
+    mut commands: Commands,
+) {
+    let Ok(button) = buttons.get(activate.entity) else { return };
+    let Some(queued) = proposals.as_deref().and_then(|p| p.queued.iter().find(|q| q.id == button.0)) else { return };
+    let path = queued.path.clone();
+    let line = queued.lines.map(|[first, _]| first as usize);
+    commands.queue(move |world: &mut World| crate::design_view::show_file(world, &path, line));
+}
+
+/// **Keep**: the person's own act, and the only thing that writes a proposed change.
+///
+/// **It dispatches `style_edit` as the person's** ([`crate::style_proposals::keep_this_style_change`]), so the change is one log line and one undo step and the new text is allowed.
+/// A page that changed since the proposal was made, or any other refusal, is the row's note and the proposal stays waiting: a change that was not written is not an answer.
+fn keep_this_style_proposal(
+    activate: On<Activate>,
+    buttons: Query<&WishOf, With<StyleKeep>>,
+    mut proposals: Option<ResMut<crate::style_proposals::StyleProposals>>,
+    project: Option<Res<crate::project::Project>>,
+    store_root: Option<Res<crate::trusted::StoreRoot>>,
+    mut state: Option<ResMut<crate::editor::EditorState>>,
+) {
+    let Ok(button) = buttons.get(activate.entity) else { return };
+    let id = button.0.clone();
+    let (Some(proposals), Some(project)) = (proposals.as_mut(), project.as_deref()) else { return };
+    let Some(queued) = proposals.queued.iter_mut().find(|q| q.id == id) else { return };
+    if queued.state != crate::style_proposals::StyleState::Waiting {
+        return;
+    }
+    let trust_file = crate::trusted::resolve(store_root.as_deref(), state.as_deref().and_then(|s| s.trust.file.as_deref())).ok();
+    match crate::style_proposals::keep_this_style_change(queued, project, trust_file) {
+        Ok((line, summary)) => {
+            queued.state = crate::style_proposals::StyleState::Kept;
+            queued.note = None;
+            if let Some(state) = state.as_mut() {
+                state.record_logged(line, summary.clone(), false);
+                state.status.note(format!("kept the change: {summary}"));
+            }
+        }
+        Err(why) => {
+            queued.note = Some(why.clone());
+            if let Some(state) = state.as_mut() {
+                state.status.problem(why);
+            }
+        }
+    }
+}
+
+/// **Discard**: the proposal is dropped, and the page is not touched.
+fn discard_this_style_proposal(
+    activate: On<Activate>,
+    buttons: Query<&WishOf, With<StyleDiscard>>,
+    mut proposals: Option<ResMut<crate::style_proposals::StyleProposals>>,
+    mut state: Option<ResMut<crate::editor::EditorState>>,
+) {
+    let Ok(button) = buttons.get(activate.entity) else { return };
+    let Some(proposals) = proposals.as_mut() else { return };
+    let Some(queued) = proposals.queued.iter_mut().find(|q| q.id == button.0) else { return };
+    if queued.state != crate::style_proposals::StyleState::Waiting {
+        return;
+    }
+    queued.state = crate::style_proposals::StyleState::Discarded;
+    if let Some(state) = state.as_mut() {
+        state.status.note(format!("discarded the change to {}", queued.path));
+    }
+}
+
 // ── GitHub's search ─────────────────────────────────────────────────────────────────────────────
 
 /// **Ask GitHub what already exists**, once per row the person unfolds.
@@ -1050,6 +1307,7 @@ pub fn chip_says(waiting: usize) -> String {
 fn follow_the_chip(
     wishes: Option<Res<Wishes>>,
     lessons: Option<Res<crate::present::Lessons>>,
+    styles: Option<Res<crate::style_proposals::StyleProposals>>,
     blocks: Query<(), With<crate::familiar::Familiar>>,
     mut chips: Query<(&mut Node, &mut ChipShown), With<WishChip>>,
     mut texts: Query<&mut Text, With<WishChipText>>,
@@ -1057,7 +1315,7 @@ fn follow_the_chip(
     let Some(wishes) = wishes else { return };
     let hiding = blocks.is_empty();
     // **Wishes and lessons are one count**: both are rows in the block, and both wait for the person.
-    let waiting = crate::activity_bar::waiting(Some(&wishes), lessons.as_deref());
+    let waiting = crate::activity_bar::waiting_on_you(Some(&wishes), lessons.as_deref(), styles.as_deref());
     let said = if hiding { chip_says(waiting) } else { String::new() };
     for (mut node, mut shown) in &mut chips {
         let display = if said.is_empty() { Display::None } else { Display::Flex };
@@ -1077,12 +1335,14 @@ fn follow_the_chip(
 
 /// **A click on the chip opens the block on the row it was counting**: the View row is ticked, and the
 /// first waiting row is unfolded, because that is the wish the chip was about.
+#[allow(clippy::too_many_arguments)]
 fn open_the_block_on_click(
     click: On<PointerClick>,
     chips: Query<(), With<WishChip>>,
     rows: Query<Entity, With<crate::familiar::FamiliarItem>>,
     wishes: Option<Res<Wishes>>,
     lessons: Option<Res<crate::present::Lessons>>,
+    styles: Option<Res<crate::style_proposals::StyleProposals>>,
     mut open: Option<ResMut<WishOpenRows>>,
     mut commands: Commands,
 ) {
@@ -1092,7 +1352,8 @@ fn open_the_block_on_click(
     let first = wishes
         .as_deref()
         .and_then(Wishes::first_waiting)
-        .or_else(|| lessons.as_deref().and_then(crate::present::Lessons::first_waiting));
+        .or_else(|| lessons.as_deref().and_then(crate::present::Lessons::first_waiting))
+        .or_else(|| styles.as_deref().and_then(crate::style_proposals::StyleProposals::first_waiting));
     let Some(first) = first else { return };
     let first = first.to_owned();
     if let Some(open) = open.as_mut() {

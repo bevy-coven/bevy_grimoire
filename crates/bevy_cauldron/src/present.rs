@@ -156,6 +156,7 @@ impl Plugin for PresentPlugin {
             .init_resource::<HandBacks>()
             .init_resource::<Wishes>()
             .init_resource::<Lessons>()
+            .init_resource::<crate::style_proposals::StyleProposals>()
             .init_resource::<AgentClient>()
             .add_systems(
                 Update,

@@ -35,6 +35,7 @@
 //! | `grimoire_feedback_list` | the reports the person filed about Cauldron itself, newest first |
 //! | `grimoire_project_feedback_list` | the reports the person filed about the open project, newest first |
 //! | `grimoire_style` | the style of one place, game to area, behind the person's trust, with the pictures it cites |
+//! | `grimoire_style_propose` | propose a change to the game's or a region's style page, which the person keeps or discards |
 //! | `grimoire_list_rules` | the block rules a layout is generated from, as the project states them |
 //! | `grimoire_run_command` | run a registered editor command by its id, as its shortcut would |
 //! | `grimoire_jobs_stop` | ask a background job, such as the palette's thumbnail bake, to stop |
@@ -42,7 +43,7 @@
 //! | `grimoire_open_project` | open a project folder in the running editor, from any screen including the Projects home |
 //! | `grimoire_self_test` | the power-on self test an agent runs when Cauldron's terminal starts it |
 //!
-//! **Twenty-seven tools, and the set is small on purpose.** An agent's context is spent on the tools it
+//! **Twenty-eight tools, and the set is small on purpose.** An agent's context is spent on the tools it
 //! is offered, and a catalogue of ninety-six verbs is a catalogue of ninety-six things to choose
 //! badly from. **The operation tools are a discovery surface**: the first names what exists, and
 //! the others preview, run and take back what it names. Later iterations add one tool per
@@ -291,6 +292,28 @@ pub struct StyleParams {
     /// **A topic the game states**, such as `dialogue`: each place that has a file for it adds that file.
     #[serde(default)]
     pub topic: Option<String>,
+}
+
+/// **One small edit of a style page**: the exact span and what replaces it.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct StyleEditParam {
+    /// **The exact text to replace**, which must be in the page exactly once.
+    pub find: String,
+    /// What takes its place; empty takes the span out.
+    pub replace: String,
+}
+
+/// **The parameters of `grimoire_style_propose`** (SG-07, #406).
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct StyleProposeParams {
+    /// **The page**, relative to the project root: `design/style.md`.
+    pub path: String,
+    /// **Small edits, in order**, each `find` exactly once in the page as the edit before it left it.
+    pub edits: Vec<StyleEditParam>,
+    /// **Why the page should say this**, one sentence.
+    pub why: String,
 }
 
 /// **One report, as an agent reads it**: the record, both picture paths, and the log tail's path.
@@ -1848,6 +1871,58 @@ impl Grimoire {
             }
         };
         Ok(style_answer(&answer))
+    }
+
+    /// **`grimoire_style_propose` -- a change to a style page an agent may not write itself** (SG-07, #406).
+    ///
+    /// **A level's or an area's page is changed with the operation `style_edit`; the game's and a region's by this proposal.** Those pages hold the
+    /// whole game together, so the change is queued in the editor as a row in the AGENT block beside the wishes and the lessons, shown as the change
+    /// to the page, and only a person's **Keep** writes it. **The call returns at once**, because a call that blocked on a person would deadlock
+    /// with the editor's own frame; what became of it is read from `grimoire_state.style_proposals`. The editor judges the change by the rule
+    /// `style_edit` uses, so a proposal that could never apply is refused at the door, with the reason.
+    #[tool(
+        name = "grimoire_style_propose",
+        description = "Propose a change to a style page you may not write yourself: the game's \
+                       (design/style.md and the game's topic files) or a region's. Fields: path, the \
+                       page relative to the project root; edits, small exact edits in order, each \
+                       {find, replace} with find exactly once in the page as the edit before it left \
+                       it; why, one sentence on why the page should say it. The editor queues the \
+                       proposal in the AGENT block, shown as the change to the page, and the person \
+                       keeps or discards it: only their Keep writes, so this call writes nothing. It \
+                       returns at once with the proposal's id and \"waiting\"; read grimoire_state's \
+                       style_proposals for what became of it (\"kept\" or \"discarded\"). A find that \
+                       is not exactly once, a page the person has not allowed (you cannot change what \
+                       you have not been shown), a result over the style limits, a second proposal \
+                       for a page that has one waiting, and a why past its limit are refused with the \
+                       reason. A level's or an area's page is not proposed: change it with the \
+                       operation style_edit.",
+        annotations(
+            title = "Propose a change to a style page",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn style_propose(
+        &self,
+        Parameters(p): Parameters<StyleProposeParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        match self
+            .editor
+            .call(
+                "grimoire/style_propose",
+                json!({
+                    "path": p.path,
+                    "edits": p.edits.iter().map(|e| json!({"find": e.find, "replace": e.replace})).collect::<Vec<_>>(),
+                    "why": p.why,
+                }),
+            )
+            .await
+        {
+            Ok(v) => Ok(CallToolResult::structured(v)),
+            Err(e) => Ok(refusal(&e)),
+        }
     }
 
     /// **`grimoire_list_rules` -- the rules a layout is generated from, as the project states them.**

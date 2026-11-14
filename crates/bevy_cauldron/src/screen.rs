@@ -548,6 +548,8 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::present::Wishes", Ownership::Session),
     // A lesson cites a hand-back, so it lives as long as the hand-backs do (#351).
     ("bevy_cauldron::present::Lessons", Ownership::Session),
+    // **A proposal to a style page is the design's, which no door change moves** (SG-07, #406): it waits for the person in the AGENT block until answered.
+    ("bevy_cauldron::style_proposals::StyleProposals", Ownership::Session),
     ("bevy_cauldron::ui_budget::UiFrame", Ownership::Session),
     ("bevy_cauldron::ui_budget::GooeySpan", Ownership::Session),
     // **`Session`**: whether this run opens no addresses (it records them instead) is the run's own fact, true for as long as the app runs.

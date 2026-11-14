@@ -17,6 +17,15 @@
 //!
 //! Its inverse is the same operation sent a parameter only an undo may send (`put_back`: the rectangle as it was, or
 //! none, and the folder to move back).
+//!
+//! # `style_edit` (SG-07, #406)
+//!
+//! A **level's or an area's** style page is changed by `style_edit {path, edits: [{find, replace}]}` (or `{path, create}` for a new topic
+//! page): small edits, each `find` exactly once in the page, logged and undone like any other change, and followed — its `Shown::File`
+//! carries the changed lines, so the view goes to the Design workspace on that page. **A game or region page is not an agent's to write**:
+//! `grimoire_style_propose` queues the change as a row a person keeps or discards, and the person's **Keep** dispatches this operation as
+//! theirs. An edit or a kept proposal writes a `TextGrant` for the new text; a page the person has not allowed is refused, because an
+//! agent cannot change what it has not been shown.
 
 use std::path::Path;
 
@@ -349,5 +358,403 @@ impl Operation for DesignAreaSet {
     }
     fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
         apply(ctx, params, true)?.ok_or_else(|| Refusal::new("the area change was planned and not written, so nothing was changed."))
+    }
+}
+
+// ── style_edit ───────────────────────────────────────────────────────────────
+
+/// **One small edit of a style page**: the exact span, and what replaces it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TextEdit {
+    /// **The exact text to replace**, which must be in the page exactly once.
+    pub find: String,
+    /// What takes its place (it may be empty, which takes the span out).
+    pub replace: String,
+}
+
+/// **The page as it was**, for an undo: its whole old text, or none when there was no such page.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StylePutBack {
+    /// The old text, put back verbatim; `null` is "there was no page", which an undo puts back by taking the file away.
+    pub text: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StyleParams {
+    /// The page, relative to the project root: `design/levels/<map>/style.md`, `design/levels/<map>/areas/<a>/dialogue.md`.
+    pub path: String,
+    /// Small edits of a page that is there, in order, each seeing the text the one before it left.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edits: Option<Vec<TextEdit>>,
+    /// The whole text of a page that is not there yet (a new topic file).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub create: Option<String>,
+    /// Undo only: the page as it was.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub put_back: Option<StylePutBack>,
+}
+
+/// **The schema of a list of edits**, which `style_edit` and `grimoire_style_propose` state the same way.
+pub fn edits_schema() -> serde_json::Value {
+    json!({
+        "type": "array", "minItems": 1,
+        "items": {
+            "type": "object", "additionalProperties": false, "required": ["find", "replace"],
+            "properties": {
+                "find": {"type": "string", "description": "The exact text to replace. It must be in the page exactly once; a span that matches twice is refused with the count, and you make it longer until it matches once."},
+                "replace": {"type": "string", "description": "What takes its place; empty takes the span out."}
+            }
+        },
+        "description": "Small edits of a page that is there, applied in order. Not whole files: an exact span is what a person can review as a diff and what an undo can put back."
+    })
+}
+
+impl StyleParams {
+    pub fn schema() -> serde_json::Value {
+        json!({
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path"],
+            "properties": {
+                "path": {"type": "string", "description": "The page, relative to the project root: a Markdown file of a level or an area of the design tree, such as `design/levels/yard/style.md` or `design/levels/yard/areas/docks/dialogue.md`. A game or region page is changed only by a proposal (`grimoire_style_propose`); a board is changed only by `board_set` and an area's rectangle only by `design_area_set`."},
+                "edits": edits_schema(),
+                "create": {"type": "string", "description": "The whole text of a page that is not there yet (a new topic file). A topic below the game must be one the game already has. Give `edits` or `create`, not both."}
+            }
+        })
+    }
+
+    pub fn parse(raw: &serde_json::Value) -> Result<StyleParams, Refusal> {
+        let p: StyleParams = serde_json::from_value(raw.clone()).map_err(|e| {
+            Refusal::new(format!("these are not a style edit: {e}. The fields are `path`, and `edits` (`[{{find, replace}}]`) or `create` (the text of a new page), and nothing else."))
+        })?;
+        match (&p.edits, &p.create, &p.put_back) {
+            (Some(_), None, None) | (None, Some(_), None) | (None, None, Some(_)) => Ok(p),
+            (None, None, None) => Err(Refusal::new("a style edit gives `edits` (small edits of a page that is there) or `create` (the text of a new page). Nothing was changed.")),
+            _ => Err(Refusal::new("a style edit gives `edits`, or `create`, or is an undo: only one. Nothing was changed.")),
+        }
+    }
+}
+
+/// **What a style edit leaves**: the page as it was (`None` when there was none) and as it will be (`None` when it is taken away).
+struct Edited {
+    root: std::path::PathBuf,
+    old: Option<String>,
+    new: Option<String>,
+}
+
+/// **The folder of a page**, `design/levels/m` for `design/levels/m/style.md`.
+fn folder_of_page(path: &str) -> &str {
+    path.rsplit_once('/').map_or(design::DESIGN_DIR, |(folder, _)| folder)
+}
+
+/// **The topic a page is**, `style` for `design/levels/m/style.md`.
+fn topic_of_page(path: &str) -> &str {
+    path.rsplit('/').next().and_then(|n| n.strip_suffix(&format!(".{}", design::MARKDOWN_EXT))).unwrap_or_default()
+}
+
+/// **The pages a path may not be, with the sentence that says what changes it**: a board and an area's rectangle have an operation of their own.
+fn refuse_a_file_that_is_not_a_page(path: &str) -> Result<(), Refusal> {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    if name == bevy_grimoire_core::board::BOARD_FILE {
+        return Err(Refusal::new(format!("`{path}` is a board, which is changed only by `board_set`. Nothing was changed.")));
+    }
+    if name == AREA_FILE {
+        return Err(Refusal::new(format!("`{path}` is an area's rectangle, which is changed only by `design_area_set`. Nothing was changed.")));
+    }
+    if !crate::design_view::is_page(path) {
+        return Err(Refusal::new(format!("`{path}` is not a page of the game's style: a Markdown file under `design/`, inside the project. Nothing was changed.")));
+    }
+    Ok(())
+}
+
+/// **Whether the person has allowed this page as it stands**, from their own store: an agent may not change what it has not been shown.
+fn allowed(ctx: &Ctx, root: &Path, path: &str, text: &str) -> Result<bool, Refusal> {
+    let store = crate::trusted::load_at(None, ctx.trust_file.as_deref())
+        .map_err(|e| Refusal::new(format!("the person's trust store would not read ({e}), so `{path}` could not be checked. Nothing was changed.")))?;
+    let decision = store
+        .text_decision(root, path, text)
+        .map_err(|e| Refusal::new(format!("`{path}` could not be checked against what the person has allowed ({e}). Nothing was changed.")))?;
+    Ok(decision != bevy_grimoire_core::trust::Decision::Untrusted)
+}
+
+/// **Apply `edits` in order**, each `find` exactly once in the text the one before left.
+pub fn apply_edits(text: &str, edits: &[TextEdit]) -> Result<String, Refusal> {
+    let mut now = text.to_owned();
+    for (n, edit) in edits.iter().enumerate() {
+        let which = format!("edit {}", n + 1);
+        if edit.find.is_empty() {
+            return Err(Refusal::new(format!("{which}: `find` is empty, and an empty span is everywhere. Nothing was changed.")));
+        }
+        let count = now.matches(edit.find.as_str()).count();
+        if count != 1 {
+            return Err(Refusal::new(format!(
+                "{which}: `find` is in the page {count} times, and it must be there exactly once (0 means the page does not say that, and more than one means the span is not exact enough: make it longer). Nothing was changed."
+            )));
+        }
+        now = now.replacen(edit.find.as_str(), &edit.replace, 1);
+    }
+    Ok(now)
+}
+
+/// **A page's pictures that are not in the project**, by the path the page cites.
+fn missing_pictures(root: &Path, path: &str, text: &str) -> Vec<String> {
+    design::pictures(text, path).into_iter().filter_map(|p| p.file).filter(|file| !root.join(file).is_file()).collect()
+}
+
+/// **The places of the chain a page is in**: its own tree's, or — for a level whose folder is not made yet — the game's and its region's.
+fn chain_of_page<'a>(tree: &'a design::Tree, place: &str) -> Vec<&'a design::Place> {
+    if let Some(chain) = tree.chain_of(place) {
+        return chain;
+    }
+    let mut chain = tree.chain_to(None, None);
+    if let Some(region) = place.split("/levels/").next().filter(|r| *r != place).and_then(|r| tree.place(r)) {
+        chain.push(region);
+    }
+    chain
+}
+
+/// **The longest chain this page would be part of once it said `new_len` bytes**, over the topics the game states and the overall feel.
+fn longest_chain_with(tree: &design::Tree, path: &str, new_len: usize) -> usize {
+    let chain = chain_of_page(tree, folder_of_page(path));
+    let mut topics: Vec<String> = vec![design::STYLE_TOPIC.to_owned()];
+    topics.extend(tree.place(design::DESIGN_DIR).map(|g| g.topics.iter().map(|t| t.name.clone()).filter(|n| n != design::STYLE_TOPIC).collect::<Vec<_>>()).unwrap_or_default());
+    let edited_topic = topic_of_page(path).to_owned();
+    topics
+        .iter()
+        .map(|topic| {
+            let mut total = 0usize;
+            let mut saw_edited = false;
+            for place in &chain {
+                for name in [Some(design::STYLE_TOPIC), (topic != design::STYLE_TOPIC).then_some(topic.as_str())].into_iter().flatten() {
+                    if let Some(file) = place.topic(name) {
+                        if file.file == path {
+                            total += new_len;
+                            saw_edited = true;
+                        } else {
+                            total += file.bytes;
+                        }
+                    }
+                }
+            }
+            // A page being made is in no place of the tree yet: it joins the chains of its own topic and of the overall feel.
+            if !saw_edited && (edited_topic == *topic || edited_topic == design::STYLE_TOPIC) {
+                total += new_len;
+            }
+            total
+        })
+        .max()
+        .unwrap_or(new_len)
+}
+
+/// **What a change to a style page leaves**, with who is asking and why: a call of `style_edit` (an agent's, or a person's own Keep) and a
+/// proposal (`grimoire_style_propose`) are judged by one rule, so what a person is asked to keep is what a call would have done.
+pub struct Proposed {
+    /// The project root.
+    pub root: std::path::PathBuf,
+    /// The page as it is now.
+    pub old: String,
+    /// The page as it would be.
+    pub new: String,
+}
+
+impl Proposed {
+    /// **The lines that differ**, 1-based and inclusive, as an editor shows them.
+    pub fn lines(&self) -> Option<[u32; 2]> {
+        crate::files::changed_lines(&self.old, &self.new)
+    }
+}
+
+/// **Judge a change to a page that is there**, or say why it is refused. `proposing` is a proposal, which may be about a game or region page.
+pub fn propose(ctx: &Ctx, path: &str, edits: &[TextEdit]) -> Result<Proposed, Refusal> {
+    let params = StyleParams { path: path.to_owned(), edits: Some(edits.to_vec()), create: None, put_back: None };
+    let edited = StyleEdit::resolve(ctx, &params, true)?;
+    match (edited.old, edited.new) {
+        (Some(old), Some(new)) => Ok(Proposed { root: edited.root, old, new }),
+        _ => Err(Refusal::new(format!("`{path}` is not there, so there is nothing to propose a change to. Nothing was changed."))),
+    }
+}
+
+impl StyleEdit {
+    /// **What the call would leave, or the reason it is refused** — pure, so the plan, the place and the commit agree.
+    fn resolve(ctx: &Ctx, p: &StyleParams, proposing: bool) -> Result<Edited, Refusal> {
+        let Some(root) = ctx.root_or_project() else {
+            return Err(Refusal::new("no project is open, so there is no style page to change. Nothing was changed."));
+        };
+        refuse_a_file_that_is_not_a_page(&p.path)?;
+        let full = crate::files::project_path(&root, &p.path).map_err(|e| Refusal::new(format!("{e}. Nothing was changed.")))?;
+        let old = std::fs::read_to_string(&full).ok();
+        if let Some(back) = &p.put_back {
+            return Ok(Edited { root, old, new: back.text.clone() });
+        }
+        let place = folder_of_page(&p.path);
+        let kind = design::kind_of_folder(place).ok_or_else(|| Refusal::new(format!("`{place}` is not a place of the design tree. Nothing was changed.")))?;
+        // **Which files take which path is the place's decision, never the agent's.** A person's own Keep of a proposal is the one
+        // way a game or region page is written, and it comes through here as the person's (`Source::Human`).
+        if !proposing && ctx.source == crate::ops::Source::Agent && matches!(kind, design::PlaceKind::Game | design::PlaceKind::Region) {
+            return Err(Refusal::new(format!(
+                "`{}` is a {} page, and the whole game rests on it: an agent changes it only by proposing the change (`grimoire_style_propose`), which a person keeps or discards. `style_edit` changes the pages of a level or an area. Nothing was changed.",
+                p.path,
+                kind.word()
+            )));
+        }
+        if !proposing && crate::files::person_is_editing(&root, &p.path) {
+            return Err(Refusal::new(format!("the person is editing {}; wait or ask. Nothing was changed.", p.path)));
+        }
+        let new = match (&p.edits, &p.create) {
+            (Some(edits), _) => {
+                let Some(old_text) = old.as_deref() else {
+                    return Err(Refusal::new(format!("`{}` is not there, so there is nothing to edit; to make a new page pass `create` with its text. Nothing was changed.", p.path)));
+                };
+                // **An agent cannot change what it has not been shown**: a page the person has not allowed is refused.
+                if !allowed(ctx, &root, &p.path, old_text)? {
+                    return Err(Refusal::new(format!("`{}` is waiting for the person to allow it, and an agent cannot change what it has not been shown. Ask them to allow it in the editor. Nothing was changed.", p.path)));
+                }
+                apply_edits(old_text, edits)?
+            }
+            (None, Some(text)) => {
+                if proposing {
+                    return Err(Refusal::new(format!("a proposal changes a page that is there with `edits`; `{}` is for the person to make. Nothing was changed.", p.path)));
+                }
+                if old.is_some() {
+                    return Err(Refusal::new(format!("`{}` is there already, so it was not written over: change it with `edits`. Nothing was changed.", p.path)));
+                }
+                let topic = topic_of_page(&p.path);
+                if !design::is_topic_name(topic) {
+                    return Err(Refusal::new(format!("`{topic}` is not a name a page can have: letters, digits, `_` and `-`. Nothing was changed.")));
+                }
+                // A topic below the game is a topic the game states.
+                if topic != design::STYLE_TOPIC && !root.join(design::DESIGN_DIR).join(format!("{topic}.{}", design::MARKDOWN_EXT)).is_file() {
+                    return Err(Refusal::new(format!("the game has no `{topic}` topic, and a place below it can only take up the game's topics. Nothing was changed.")));
+                }
+                text.clone()
+            }
+            (None, None) => return Err(Refusal::new("a style edit gives `edits` or `create`. Nothing was changed.")),
+        };
+        if old.as_deref() == Some(new.as_str()) {
+            return Err(Refusal::new(format!("those edits leave `{}` as it is. Nothing was changed.", p.path)));
+        }
+        // **The result must still read**: inside the limits the tree serves a page by, and citing no picture that is not there. A page
+        // already over a limit may still be made shorter.
+        let growing = new.len() > old.as_deref().map_or(0, str::len);
+        if new.len() > design::STYLE_FILE_MAX_BYTES && growing {
+            return Err(Refusal::new(format!("`{}` would be {} bytes, over the {} a style page may be, and a page is served whole or not at all: shorten it or move part of it into a topic of its own. Nothing was changed.", p.path, new.len(), design::STYLE_FILE_MAX_BYTES)));
+        }
+        let tree = design::Tree::read(&root);
+        let chain = longest_chain_with(&tree, &p.path, new.len());
+        if chain > design::STYLE_CHAIN_MAX_BYTES && growing {
+            return Err(Refusal::new(format!("with this change the longest chain of style that reaches `{}` would be {chain} bytes, over the {} an agent is served, and a chain is never cut. Nothing was changed.", p.path, design::STYLE_CHAIN_MAX_BYTES)));
+        }
+        let before: std::collections::BTreeSet<String> = old.as_deref().map(|t| missing_pictures(&root, &p.path, t)).unwrap_or_default().into_iter().collect();
+        let now_missing: Vec<String> = missing_pictures(&root, &p.path, &new).into_iter().filter(|f| !before.contains(f)).collect();
+        if !now_missing.is_empty() {
+            return Err(Refusal::new(format!(
+                "`{}` would cite {}, which {} not in the project. Put the picture on the board first (`board_set`), or cite one that is there. Nothing was changed.",
+                p.path,
+                now_missing.iter().map(|f| format!("`{f}`")).collect::<Vec<_>>().join(", "),
+                if now_missing.len() == 1 { "is" } else { "are" }
+            )));
+        }
+        Ok(Edited { root, old, new: Some(new) })
+    }
+}
+
+/// **The text of a page as it is now**, for an undo's check.
+fn page_now(root: &Path, rel: &str) -> Option<String> {
+    std::fs::read_to_string(root.join(rel)).ok()
+}
+
+/// **A page's digest**, `null` when there is no page: what the log keeps of the text a change left, so an undo can tell the page is still that
+/// without the log holding every page twice.
+fn digest_of(text: Option<&str>) -> serde_json::Value {
+    text.map_or(serde_json::Value::Null, |t| json!(bevy_grimoire_core::trust::sha256_hex(t.as_bytes())))
+}
+
+/// **Change a level's or an area's style page by small edits, or make a new topic page** (SG-07, #406).
+///
+/// A game or region page is refused to an agent with the sentence that names `grimoire_style_propose`: those pages hold the whole game
+/// together, so a person has the final say on them. A person's own **Keep** of a proposal is the one way they are written, and comes
+/// through here as the person's, so it is logged and undoable like any other change.
+pub struct StyleEdit;
+
+impl Operation for StyleEdit {
+    fn name(&self) -> &'static str {
+        "style_edit"
+    }
+    fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        let Ok(p) = StyleParams::parse(params) else { return Shown::File { path: design::DESIGN_DIR.to_owned(), lines: None } };
+        // **The changed lines**, from the page as it is and as it will be, so the view goes to the Design page at the lines that moved.
+        let lines = Self::resolve(ctx, &p, false).ok().and_then(|e| match (e.old, e.new) {
+            (Some(old), Some(new)) => crate::files::changed_lines(&old, &new),
+            (None, Some(_)) => Some([1, 1]),
+            _ => None,
+        });
+        Shown::File { path: p.path, lines }
+    }
+    fn writes(&self) -> &'static [&'static str] {
+        &["design"]
+    }
+    fn undo(&self) -> Undo {
+        Undo::Inverse
+    }
+    fn only_as_undo(&self, params: &serde_json::Value) -> bool {
+        StyleParams::parse(params).is_ok_and(|p| p.put_back.is_some())
+    }
+    fn schema(&self) -> serde_json::Value {
+        StyleParams::schema()
+    }
+    fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+        let p = StyleParams::parse(params)?;
+        let e = Self::resolve(ctx, &p, false)?;
+        Ok(json!({"summary": format!("change {}", p.path), "path": p.path, "lines": e.old.as_deref().zip(e.new.as_deref()).and_then(|(o, n)| crate::files::changed_lines(o, n))}))
+    }
+    fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+        let p = StyleParams::parse(params)?;
+        let Edited { root, old, new } = Self::resolve(ctx, &p, false)?;
+        let full = root.join(&p.path);
+        match &new {
+            Some(text) => {
+                // **The person's own editor is where this was made, in front of them, and it can be undone**, so the new text is allowed:
+                // granted before it is written, so a store that will not take the grant leaves the page as it was.
+                let store_file = crate::trusted::store_path(ctx.trust_file.as_deref()).map_err(Refusal::new)?;
+                let mut store = bevy_grimoire_core::trust::TrustStore::load(&store_file)
+                    .map_err(|e| Refusal::new(format!("the person's trust store would not read ({e}), so nothing was written.")))?;
+                store.trust_text(&root, &p.path, text).map_err(Refusal::new)?;
+                store.save(&store_file).map_err(|e| Refusal::new(format!("the person's trust store would not take the grant ({e}), so nothing was written.")))?;
+                if let Some(folder) = full.parent() {
+                    std::fs::create_dir_all(folder).map_err(|e| Refusal::new(format!("{} cannot be made ({e}), so nothing was written.", folder.display())))?;
+                }
+                bevy_grimoire_core::atomic_file::write(&full, text).map_err(|e| Refusal::new(format!("{} was not written ({e}). Nothing was changed.", p.path)))?;
+            }
+            None => {
+                std::fs::remove_file(&full).map_err(|e| Refusal::new(format!("{} could not be taken away ({e}). Nothing was changed.", p.path)))?;
+                // An empty folder the page was the last of goes with it, and `remove_dir` refuses one that holds anything.
+                if let Some(folder) = full.parent() {
+                    let _ = std::fs::remove_dir(folder);
+                }
+            }
+        }
+        if ctx.source == crate::ops::Source::Agent {
+            crate::files::note_agent_edit(&root, &p.path);
+        }
+        let summary = match (&old, &new, p.put_back.is_some()) {
+            (_, _, true) => format!("put back {}", p.path),
+            (None, Some(_), _) => format!("created {}", p.path),
+            _ => format!("changed {}", p.path),
+        };
+        Ok(Outcome {
+            summary,
+            affected: 1,
+            saved: true,
+            inverse: Some(json!({"path": p.path, "put_back": {"text": old}})),
+            after: Some(json!({"path": p.path, "sha256": digest_of(new.as_deref())})),
+        })
+    }
+    fn state_of(&self, ctx: &Ctx, after: &serde_json::Value) -> Option<serde_json::Value> {
+        let root = ctx.root_or_project()?;
+        let path = after.get("path")?.as_str()?;
+        Some(json!({"path": path, "sha256": digest_of(page_now(&root, path).as_deref())}))
     }
 }

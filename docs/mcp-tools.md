@@ -20,6 +20,10 @@ The server speaks the Model Context Protocol over **stdio**, and reaches the run
 
 **A style file that says it is waiting for the person is not yours to read.** The person allows a project's style the way they allow its guide: that exact content, or the whole project, and one changed byte asks again. Until then the tool gives you one line in the file's place and never its text, so do not go round it with a shell: say in your hand-back that you worked without that file.
 
+**Change a level's or an area's style with `style_edit`, and propose a change to the game's or a region's.** `style_edit` is an operation, applied with `grimoire_apply_operation`: `{path, edits: [{find, replace}]}` makes small edits to a page that is there, or `{path, create}` makes a new topic page. Each `find` must be in the page exactly once, so make it longer until it is; a `find` that matches twice or not at all is refused with the count and nothing is written. The edit is logged and can be undone, and the view goes to the page. It is refused when the person has not allowed the page (you cannot change what you were never shown), when the page or its chain would pass the style limits, or when it would cite a picture that is not in the project. A board is changed only by `board_set` and an area's rectangle only by `design_area_set`, so `style_edit` refuses those files.
+
+**The game's pages and a region's are the person's to decide.** Call `grimoire_style_propose` with `path`, `edits` and `why` instead: the editor queues the change as a row in the AGENT block, shown as the change to the page, and the person's **Keep** writes it and **Discard** drops it. The call returns at once with the proposal's id; read `grimoire_state.style_proposals` for `kept` or `discarded`, and do not propose the same page again while one waits. A page that was changed after your proposal cannot be kept against, so propose again from the page as it is.
+
 **Say in your wish what the style did not tell you.** After the hand-back, `grimoire_wish` is where a question about the place that the style left unanswered belongs: it tells the person which file to write next.
 
 ## Change
@@ -294,6 +298,16 @@ The style of one place, as an agent should read it before shaping that place: th
 | `readOnlyHint` | true |
 | `destructiveHint` | false |
 | `idempotentHint` | true |
+
+### `grimoire_style_propose`
+
+Propose a change to a style page you may not write yourself: the game's (design/style.md and the game's topic files) or a region's. Fields: path, the page relative to the project root; edits, small exact edits in order, each {find, replace} with find exactly once in the page as the edit before it left it; why, one sentence on why the page should say it. The editor queues the proposal in the AGENT block, shown as the change to the page, and the person keeps or discards it: only their Keep writes, so this call writes nothing. It returns at once with the proposal's id and "waiting"; read grimoire_state's style_proposals for what became of it ("kept" or "discarded"). A find that is not exactly once, a page the person has not allowed (you cannot change what you have not been shown), a result over the style limits, a second proposal for a page that has one waiting, and a why past its limit are refused with the reason. A level's or an area's page is not proposed: change it with the operation style_edit.
+
+| annotation | value |
+|---|---|
+| `readOnlyHint` | false |
+| `destructiveHint` | false |
+| `idempotentHint` | false |
 
 ### `grimoire_list_rules`
 
