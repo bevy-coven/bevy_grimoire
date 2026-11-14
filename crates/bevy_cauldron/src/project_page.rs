@@ -292,14 +292,32 @@ impl GuidePage {
     }
 }
 
+/// **The home's page**: the screen before a door opens, when a project is chosen. Added by the home's plugins (`launcher::LauncherPlugin`).
 pub struct ProjectPagePlugin;
 
 impl Plugin for ProjectPagePlugin {
     fn build(&self, app: &mut App) {
+        if !app.is_plugin_added::<PageSystemsPlugin>() {
+            app.add_plugins(PageSystemsPlugin);
+        }
+        app.add_systems(OnEnter(Screen::Project), (build_page, fill_page).chain()).add_systems(
+            Update,
+            (back_on_escape.before(bevy_gooey::GooeySystems::Navigate), launcher::hide_the_divider).chain().before(act).run_if(in_state(Screen::Project)),
+        );
+    }
+}
+
+/// **What the page does wherever it is drawn** (NV-08, #385): its actions, dialogs, guide section and redraws, and the Project workspace's
+/// panel. Added by the editor, so the Project workspace draws its page in a build that has no home, and by [`ProjectPagePlugin`] when the
+/// editor has not (the order the plugins are added in does not matter). Nothing here needs the home's resources: the splash, the picture
+/// cache and the launcher are all optional, so a stepped editor without the home still gets a page.
+pub struct PageSystemsPlugin;
+
+impl Plugin for PageSystemsPlugin {
+    fn build(&self, app: &mut App) {
         app.add_message::<PageAction>()
-            .add_systems(OnEnter(Screen::Project), (build_page, fill_page).chain())
-            // **The same page inside the workbench** (NV-08, #385): spawned when the Project workspace is entered (the frame is rebuilt on
-            // every switch, `screen::cross`), and forgotten on the next switch that is not to it.
+            // **The same page inside the workbench**: spawned when the Project workspace is entered (the frame is rebuilt on every switch,
+            // `screen::cross`), and forgotten on the next switch that is not to it.
             .add_systems(
                 OnEnter(Screen::Editor),
                 (
@@ -309,18 +327,7 @@ impl Plugin for ProjectPagePlugin {
             )
             .add_systems(
                 Update,
-                (
-                    back_on_escape.before(bevy_gooey::GooeySystems::Navigate).run_if(in_state(Screen::Project)),
-                    launcher::hide_the_divider.run_if(in_state(Screen::Project)),
-                    act,
-                    the_guide_section,
-                    read_the_guide,
-                    answer_the_question,
-                    follow_the_files,
-                    redraw,
-                    fill_the_guide_buttons,
-                    show_the_form,
-                )
+                (act, the_guide_section, read_the_guide, answer_the_question, follow_the_files, redraw, fill_the_guide_buttons, show_the_form)
                     .chain()
                     .run_if(page_is_showing),
             );
@@ -365,42 +372,53 @@ fn read_the_page(root: PathBuf, state: Option<&crate::editor::EditorState>, stor
 
 /// **Spawn the project's page into the Project workspace's panel** (NV-08, #385): the body `fill_page` draws on the home, without the
 /// breadcrumb, in a panel of the left dock. Spawned on demand and not before, for the outliner's reason: its buttons and text boxes are
-/// entities the screens that count every button in the world would find on the Map.
+/// entities the screens that count every button in the world would find on the Map. The splash and the picture cache are the home's and
+/// optional: an editor stood up without the home draws the same page, with no splash picture and a cache of its own.
 #[allow(clippy::too_many_arguments)]
 fn spawn_the_workspace_page(
     mut commands: Commands,
     frame: Res<crate::chrome::Frame>,
     project: Option<Res<crate::project::Project>>,
     mut images: ResMut<Assets<Image>>,
-    mut splash: ResMut<SplashArt>,
-    mut pictures: ResMut<ProjectPictures>,
+    splash: Option<ResMut<SplashArt>>,
+    pictures: Option<ResMut<ProjectPictures>>,
     state: Option<Res<crate::editor::EditorState>>,
     store_root: Option<Res<crate::trusted::StoreRoot>>,
 ) {
     let Some(project) = project else { return };
-    launcher::ensure_splash(&mut images, &mut splash);
+    let mut splash = splash;
+    if let Some(splash) = splash.as_deref_mut() {
+        launcher::ensure_splash(&mut images, splash);
+    }
     let (page, problem) = read_the_page(project.root.clone(), state.as_deref(), store_root.as_deref(), true);
     if let Some(problem) = problem {
         commands.spawn(toast_alert(problem).sticky());
     }
     let panel = crate::chrome::panel_root(&mut commands, &frame, crate::chrome::Side::Left, WORKSPACE_PAGE_W, true, false, "PROJECT").insert(WorkspacePage).id();
-    let mut spawned = None;
+    let mut scroll = None;
     commands.entity(panel).with_children(|p| {
         crate::chrome::title(p, "PROJECT");
         // FOLLOW-OK: sections of cards and rows, not a list the arrows walk; the scroll exists for HEIGHT, as the Map's inspector's does.
-        crate::chrome::scroll_list(p, ()).with_children(|pane| {
-            let map_menu = pane.spawn((context_menu(()), MapMenu)).id();
-            let kit_menu = pane.spawn((context_menu(()), KitMenu)).id();
-            let body = pane
-                .spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, PageBody))
-                .id();
-            spawned = Some((map_menu, kit_menu, body));
-        });
+        scroll = Some(crate::chrome::scroll_list(p, ()).id());
     });
-    let Some((map_menu, kit_menu, body)) = spawned else { return };
-    spawn_menus(&mut commands, map_menu, kit_menu, &page.catalog);
-    draw_body(&mut commands, body, &page, map_menu, kit_menu, &mut images, splash.0.clone(), &mut pictures);
+    let Some(scroll) = scroll else { return };
+    let mut own_pictures = ProjectPictures::default();
+    let mut pictures = pictures;
+    let pictures = pictures.as_deref_mut().unwrap_or(&mut own_pictures);
+    spawn_the_page(&mut commands, scroll, &page, &mut images, splash.as_deref().and_then(|s| s.0.clone()), pictures);
     commands.insert_resource(page);
+}
+
+/// **The page's two context menus and its body, under `parent`, drawn**: the one path the home (`fill_page`) and the Project workspace
+/// (`spawn_the_workspace_page`) both take, so they cannot come to differ.
+fn spawn_the_page(commands: &mut Commands, parent: Entity, page: &ProjectPage, images: &mut Assets<Image>, splash: Option<(Handle<Image>, Vec2)>, pictures: &mut ProjectPictures) {
+    let map_menu = commands.spawn((context_menu(()), MapMenu, ChildOf(parent))).id();
+    let kit_menu = commands.spawn((context_menu(()), KitMenu, ChildOf(parent))).id();
+    spawn_menus(commands, map_menu, kit_menu, &page.catalog);
+    let body = commands
+        .spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, PageBody, ChildOf(parent)))
+        .id();
+    draw_body(commands, body, page, map_menu, kit_menu, images, splash, pictures);
 }
 
 /// **A page left behind by the Project workspace goes when another workspace is entered**, so nothing reads a stale catalog.
@@ -445,13 +463,7 @@ fn fill_page(
 ) {
     let (Some(page), Ok(sidebar), Ok(content)) = (page, sidebar.single(), content.single()) else { return };
     launcher::fill_sidebar(&mut commands, sidebar, &launcher, &splash, updater.as_deref());
-    let map_menu = commands.spawn((context_menu(()), MapMenu, ChildOf(content))).id();
-    let kit_menu = commands.spawn((context_menu(()), KitMenu, ChildOf(content))).id();
-    spawn_menus(&mut commands, map_menu, kit_menu, &page.catalog);
-    let body = commands
-        .spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, PageBody, ChildOf(content)))
-        .id();
-    draw_body(&mut commands, body, &page, map_menu, kit_menu, &mut images, splash.0.clone(), &mut pictures);
+    spawn_the_page(&mut commands, content, &page, &mut images, splash.0.clone(), &mut pictures);
 }
 
 /// The page's body: the breadcrumb, then the Maps section and the Kits section.
@@ -872,7 +884,7 @@ fn act(
     confirm: Option<ResMut<Confirm>>,
     mut next: ResMut<NextState<Screen>>,
     form: Option<Res<Form>>,
-    mut launcher: ResMut<Launcher>,
+    mut launcher: Option<ResMut<Launcher>>,
     dialogs: Query<Entity, With<PageDialog>>,
     open: Option<Res<crate::project::OpenMap>>,
 ) {
@@ -898,11 +910,11 @@ fn act(
             | PageAction::CreateGuide
             | PageAction::ReloadGuide
             | PageAction::KeepMyGuide => {}
-            // The workbench's page has no way back to the home (no breadcrumb, no Esc), so this cannot arrive there; it is refused all the same.
-            PageAction::Back if page.in_workspace => {}
             PageAction::Back => {
                 // The grid is the project's parent: the page's sidebar entry for it is Projects.
-                launcher.tab = launcher::HomeTab::Projects;
+                if let Some(launcher) = launcher.as_mut() {
+                    launcher.tab = launcher::HomeTab::Projects;
+                }
                 next.set(Screen::Launcher);
             }
             PageAction::OpenMap(name) => open_the_map(&mut commands, &page, name),
@@ -914,9 +926,13 @@ fn act(
                     commands.spawn(toast_alert(format!("`{label}` is not a bound kit, so there is nothing to open it as.")).sticky());
                 }
                 // Inside the workbench the kit's pieces are the Kit workspace's, one switch away: the project stays open.
+                // It shows every kit the project holds, not this one alone, and the toast says so.
                 Some(Some(_)) if page.in_workspace => {
-                    commands.queue(|world: &mut World| {
-                        if let Err(e) = crate::screen::cross(world, Workspace::Kit) {
+                    commands.queue(move |world: &mut World| match crate::screen::cross(world, Workspace::Kit) {
+                        Ok(()) => {
+                            world.spawn(toast(format!("The Kit workspace shows every kit of the project, `{label}` among them")));
+                        }
+                        Err(e) => {
                             world.spawn(toast_alert(e).sticky());
                         }
                     });
@@ -1010,9 +1026,25 @@ fn act(
 fn open_the_map(commands: &mut Commands, page: &ProjectPage, name: String) {
     if page.in_workspace {
         commands.queue(move |world: &mut World| {
-            crate::session::choose_map(world, &name);
-            if let Err(e) = crate::screen::cross(world, Workspace::Map) {
-                world.spawn(toast_alert(e).sticky());
+            // **Whatever the editor has open**: another map is switched to as its tab is (`choose_map`, which asks first when the open map has
+            // unsaved edits, and does nothing when this one is already open); an editor with NO map open, as one opened on a kit is, has
+            // nothing to ask about and opens this one (`open_map_now`: `choose_map` returns at once with no `OpenMap`).
+            let opened = if world.get_resource::<crate::project::OpenMap>().is_some() {
+                crate::session::choose_map(world, &name);
+                // **A question raised is answered where it was asked**: crossing to the Map workspace now would rebuild the editor's state
+                // and take the held request with it, so "Save and go" would go nowhere. The answer opens the map.
+                if world.get_resource::<crate::editor::EditorState>().is_some_and(|s| s.map_request.is_some()) {
+                    return;
+                }
+                Ok(())
+            } else {
+                crate::session::open_map_now(world, &name)
+            };
+            match opened.and_then(|()| crate::screen::cross(world, Workspace::Map)) {
+                Ok(()) => {}
+                Err(e) => {
+                    world.spawn(toast_alert(e).sticky());
+                }
             }
         });
     } else {
@@ -1418,9 +1450,9 @@ fn redraw(
     body: Query<Entity, With<PageBody>>,
     map_menu: Query<Entity, With<MapMenu>>,
     kit_menu: Query<Entity, With<KitMenu>>,
-    splash: Res<SplashArt>,
+    splash: Option<Res<SplashArt>>,
     mut images: ResMut<Assets<Image>>,
-    mut pictures: ResMut<ProjectPictures>,
+    pictures: Option<ResMut<ProjectPictures>>,
 ) {
     if !page.dirty {
         return;
@@ -1436,7 +1468,10 @@ fn redraw(
     }
     page.seen = fingerprint(&page.root);
     commands.entity(body).despawn_children();
-    draw_body(&mut commands, body, &page, map_menu, kit_menu, &mut images, splash.0.clone(), &mut pictures);
+    let mut own_pictures = ProjectPictures::default();
+    let mut pictures = pictures;
+    let pictures = pictures.as_deref_mut().unwrap_or(&mut own_pictures);
+    draw_body(&mut commands, body, &page, map_menu, kit_menu, &mut images, splash.as_deref().and_then(|s| s.0.clone()), pictures);
 }
 
 // ── the dialogs ──────────────────────────────────────────────────────────────────────────────────

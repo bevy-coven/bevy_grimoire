@@ -183,7 +183,7 @@ impl Workspace {
             Workspace::Agent => &[Mode::Agent],
             Workspace::Files => &[Mode::Files],
             // **The project's page, inside the workbench** (NV-08, #385): its maps, its kits and the agent guide. `Screen::Project` stays
-            // the home a project-less start, the launcher and Close project still need; this is the same page as one panel of the editor.
+            // the page of a project with no door open (Cmd+O, Close project); this is the same page as one panel of the editor.
             Workspace::Project => &[Mode::Project],
         }
     }

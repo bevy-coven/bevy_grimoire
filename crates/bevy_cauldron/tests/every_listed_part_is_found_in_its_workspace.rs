@@ -7,8 +7,8 @@
 //! - **Kit: the library browser** (UI-52, #238), which was a toggle of the Map's inspector until it moved here: it is asked for in the Kit
 //!   workspace (View ▸ Show library, offered only there) and the Map's inspector no longer holds it;
 //! - **Animation: the rig bench**, **Files: the file tree**;
-//! - **Project: the project's page** (its maps, its kits and the agent guide), drawn inside the workbench. `Screen::Project` stays the home a project-less
-//!   start needs; this is the same page as the Project workspace's panel.
+//! - **Project: the project's page** (its maps, its kits and the agent guide), drawn inside the workbench. `Screen::Project` stays the page of a project with
+//!   no door open; this is the same page as the Project workspace's panel.
 //!
 //! Each is read the way the sibling file reads it: a `Text` with exactly the heading's words, drawn (visible, with a laid-out box).
 
@@ -40,8 +40,7 @@ fn project(tag: &str) -> PathBuf {
 
 fn editor(tag: &str) -> App {
     let mut app = harness::build_headless(&project(tag), "m", None).unwrap_or_else(|e| panic!("{e}"));
-    // **The home's plugins, as `main.rs` adds them**: the project page is the home's, and the Project workspace draws it.
-    app.add_plugins(bevy_cauldron::launcher::LauncherPlugin);
+    // **No home's plugins** (`harness::build_headless` adds none): the Project workspace draws its page all the same.
     settle(&mut app);
     app
 }
@@ -165,21 +164,85 @@ fn the_project_page_is_found_by_label_in_the_project_workspace() {
     assert!(!shows(&mut app, "Maps"), "the project page stayed on screen when the Project workspace was left");
 }
 
-/// **A map opened from the Project workspace becomes the live one and the Map workspace is shown**, through the editor's own tabs: the project
-/// stays open, nothing goes through the home.
-#[test]
-fn opening_a_map_from_the_project_workspace_shows_it_in_the_map_workspace() {
-    use bevy_cauldron::project::OpenMap;
-    let mut app = editor("project_open");
-    switch_to(&mut app, Workspace::Project);
+/// **The project's folder with a second map**, `other`, beside the fixture's `m`.
+fn two_maps(tag: &str) -> PathBuf {
+    let root = project(tag);
+    fixtures::Fixture::write_map(&root, "other", 8.0, &[]);
+    root
+}
+
+fn editor_on(root: &std::path::Path) -> App {
+    let mut app = harness::build_headless(root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    settle(&mut app);
+    app
+}
+
+/// **Click the page's card for the map `name`**, as a person does: the `Activate` on the card, which asks the page to open it.
+fn click_the_card(app: &mut App, name: &str) {
     let card = {
         let world = app.world_mut();
         let mut q = world.query::<(Entity, &bevy_cauldron::project_page::MapCard)>();
-        q.iter(world).find(|(_, c)| c.0 == "m").map(|(e, _)| e).expect("the page draws the map `m` as a card")
+        q.iter(world).find(|(_, c)| c.0 == name).map(|(e, _)| e).unwrap_or_else(|| panic!("the page draws no card for the map `{name}`"))
     };
     app.world_mut().trigger(bevy_gooey::Activate { entity: card });
-    settle(&mut app);
+    settle(app);
+}
+
+fn open_map_name(app: &App) -> String {
+    app.world().resource::<bevy_cauldron::project::OpenMap>().map.name.clone()
+}
+
+/// **The map already open, clicked on the page, shows the Map workspace** and leaves it open: the project stays open, nothing goes through the home.
+#[test]
+fn clicking_the_open_map_shows_the_map_workspace() {
+    let mut app = editor("project_open");
+    switch_to(&mut app, Workspace::Project);
+    click_the_card(&mut app, "m");
     assert_eq!(app.world().resource::<Workspace>(), &Workspace::Map, "opening a map from the page shows the Map workspace");
-    assert_eq!(app.world().resource::<OpenMap>().map.name, "m", "and the map is the open one");
-    assert_eq!(*app.world().resource::<State<bevy_cauldron::screen::Screen>>().get(), bevy_cauldron::screen::Screen::Editor, "and the editor never left");
+    assert_eq!(open_map_name(&app), "m");
+    assert_eq!(*app.world().resource::<State<bevy_cauldron::screen::Screen>>().get(), bevy_cauldron::screen::Screen::Editor, "the editor never left");
+}
+
+/// **Another map, clicked while one is open, becomes the open one**, through the editor's own tab route.
+#[test]
+fn a_second_map_clicked_while_another_is_open_becomes_the_open_one() {
+    let mut app = editor_on(&two_maps("project_second"));
+    assert_eq!(open_map_name(&app), "m");
+    switch_to(&mut app, Workspace::Project);
+    click_the_card(&mut app, "other");
+    assert_eq!(open_map_name(&app), "other", "the clicked map did not become the open one");
+    assert_eq!(app.world().resource::<Workspace>(), &Workspace::Map, "and the Map workspace shows it");
+}
+
+/// **An editor with no map open (one opened on a kit) opens the map that was clicked**, not the project's last one and not nothing.
+#[test]
+fn an_editor_with_no_map_open_opens_the_map_that_was_clicked() {
+    use bevy_cauldron::project::{OpenMap, Project};
+    let mut app = editor_on(&two_maps("project_kit_only"));
+    switch_to(&mut app, Workspace::Project);
+    // The kit-only editor: no `OpenMap`, while the project remembers `m` as the map it was last on.
+    app.world_mut().remove_resource::<OpenMap>();
+    assert_eq!(app.world().resource::<Project>().open_map_name.as_deref(), Some("m"), "the project remembers the first map");
+    settle(&mut app);
+    click_the_card(&mut app, "other");
+    assert!(app.world().get_resource::<OpenMap>().is_some(), "clicking a map card opened nothing");
+    assert_eq!(open_map_name(&app), "other", "the editor opened another map than the one clicked");
+    assert_eq!(app.world().resource::<Workspace>(), &Workspace::Map);
+}
+
+/// **A map with unsaved edits asks first**, with the question the tab route raises, and stays open until it is answered.
+#[test]
+fn a_dirty_open_map_asks_before_another_is_opened() {
+    use bevy_cauldron::confirm::Confirm;
+    use bevy_cauldron::editor::EditorState;
+    use bevy_cauldron::project::OpenMap;
+    let mut app = editor_on(&two_maps("project_dirty"));
+    switch_to(&mut app, Workspace::Project);
+    app.world_mut().resource_mut::<OpenMap>().map.origin.0 += 1.0;
+    assert!(app.world().resource::<OpenMap>().dirty(), "the test's edit did not make the map dirty");
+    click_the_card(&mut app, "other");
+    assert_eq!(open_map_name(&app), "m", "the dirty map was left without asking");
+    assert_eq!(app.world().resource::<Workspace>(), &Workspace::Project, "the question is answered where it was asked: the workspace was changed under it");
+    assert_eq!(app.world().resource::<EditorState>().map_request.as_deref(), Some("other"), "the request to open `other` was not held for the answer");
+    assert!(app.world().resource::<Confirm>().is_open(), "no question was raised about the unsaved edits");
 }
