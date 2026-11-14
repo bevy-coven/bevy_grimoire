@@ -3868,7 +3868,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 // from the heading's own margins (the 2026-08-17 type-role decision).
                 crate::chrome::section(s, "MAP SIZE  (m)");
                 for axis in [Axis::X, Axis::Y, Axis::Z] {
-                    crate::chrome::gapped_row(s, crate::chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Center)
+                    crate::chrome::gapped_row(s, crate::chrome::GAP_TIGHT_STEPS, crate::chrome::NO_MARGIN, AlignItems::Center)
                     .with_children(|row| {
                         // `COL_TIGHT`: the label is a single axis letter, which is exactly what that
                         // column is for. It was a bare 14.
@@ -7192,7 +7192,7 @@ fn refresh_notes_list(
                     });
                 }
                 if !review.ops.is_empty() {
-                    crate::chrome::wrapping_row(p, crate::chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Stretch).with_children(|h| {
+                    crate::chrome::wrapping_row(p, crate::chrome::GAP_TIGHT_STEPS, crate::chrome::NO_MARGIN, AlignItems::Stretch).with_children(|h| {
                         for op in &review.ops {
                             crate::chrome::button(h, NoteOpButton { op: op.clone() }, op, crate::chrome::Severity::Plain);
                         }

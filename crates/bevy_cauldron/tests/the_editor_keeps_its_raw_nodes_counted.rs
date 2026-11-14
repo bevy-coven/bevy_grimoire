@@ -31,7 +31,7 @@ const NODES_LEFT: &[(&str, usize)] = &[
     ("activity_bar.rs", 1),
     ("badges.rs", 6),
     ("balloon.rs", 1),
-    ("chrome.rs", 42),
+    ("chrome.rs", 37),
     ("compass.rs", 3),
     ("compose.rs", 1),
     ("design_view.rs", 4),
@@ -46,10 +46,9 @@ const NODES_LEFT: &[(&str, usize)] = &[
     ("jobs.rs", 1),
     ("launcher.rs", 13),
     ("loading.rs", 2),
-    ("project_page.rs", 7),
+    ("project_page.rs", 2),
     ("report.rs", 4),
-    ("session.rs", 2),
-    ("settings_screen.rs", 1),
+    ("session.rs", 1),
     ("snip.rs", 1),
     ("terminal_pane.rs", 9),
     ("terminal_view.rs", 1),
@@ -60,7 +59,7 @@ const NODES_LEFT: &[(&str, usize)] = &[
 ];
 
 /// The sum of [`NODES_LEFT`]: the crate's raw `Node` literals outside the viewport surface. #260 closes when it is 0.
-const TOTAL_NODES_LEFT: usize = 132;
+const TOTAL_NODES_LEFT: usize = 120;
 
 /// The viewport surface: the files where a raw `Node` is allowed to stay and is not counted.
 const SURFACE_FILES: [&str; 2] = ["surface.rs", "view.rs"];

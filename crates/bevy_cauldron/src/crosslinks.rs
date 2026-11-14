@@ -350,7 +350,7 @@ fn draw_the_links(mut commands: Commands, time: Res<Time<Real>>, mut selected: S
                 .with_children(|l| {
                     chrome::list_heading(l, "USED BY");
                     l.spawn((UsedByLine, Text::new(""), TextColor(dim), chrome::typed(chrome::text::BODY)));
-                    chrome::wrapping_row(l, chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Stretch).with_children(|r| {
+                    chrome::wrapping_row(l, chrome::GAP_TIGHT_STEPS, crate::chrome::NO_MARGIN, AlignItems::Stretch).with_children(|r| {
                         chrome::button(r, OpenFileButton, "Open file", Severity::Plain);
                         chrome::button(r, OpenPieceFileButton, "Open piece file", Severity::Plain);
                     });

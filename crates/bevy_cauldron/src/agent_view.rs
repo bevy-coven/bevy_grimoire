@@ -281,7 +281,7 @@ fn draw_the_history(
             chrome::row_value(c, "The agent has made no changes yet", chrome::ink().dim, AgentChangeRow);
         }
         for row in &rows {
-            chrome::gapped_row(c, chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::FlexStart)
+            chrome::gapped_row(c, chrome::GAP_TIGHT_STEPS, crate::chrome::NO_MARGIN, AlignItems::FlexStart)
                 .with_children(|r| {
                     r.spawn(bevy_gooey::fill_column(0.0)).with_children(|col| {
                         chrome::row_value(col, row.text.clone(), chrome::ink().text, AgentChangeRow);
@@ -298,7 +298,7 @@ fn draw_the_history(
         // **The hand-backs the person kept** (BM-07, #417): a result is a benchmark task once somebody accepted it. Drawn only when there is
         // one, so a workspace that has kept nothing holds no extra button.
         for hand in &hands {
-            chrome::gapped_row(c, chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::FlexStart)
+            chrome::gapped_row(c, chrome::GAP_TIGHT_STEPS, crate::chrome::NO_MARGIN, AlignItems::FlexStart)
                 .with_children(|r| {
                     r.spawn(bevy_gooey::fill_column(0.0)).with_children(|col| {
                         chrome::row_value(col, format!("kept: {}", hand.title), chrome::ink().text, AgentHandBackRow);

@@ -367,7 +367,7 @@ fn show_the_report(
             for row in rows {
                 card.spawn((label(row), ReportRow));
             }
-            crate::chrome::gapped_row(card, crate::chrome::GAP_GROUP_STEPS, UiRect::ZERO, AlignItems::Stretch).with_children(|row| {
+            crate::chrome::gapped_row(card, crate::chrome::GAP_GROUP_STEPS, crate::chrome::NO_MARGIN, AlignItems::Stretch).with_children(|row| {
                 if open_anyway {
                     row.spawn((
                         button("Open anyway"),

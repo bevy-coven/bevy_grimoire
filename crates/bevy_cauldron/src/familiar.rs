@@ -551,7 +551,7 @@ fn follow_the_hand_back(
                         bevy_gooey::column_with(crate::chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { shrink: Some(0.0), ..default() }),
                     ))
                     .with_children(|card| {
-                        crate::chrome::wrapping_row(card, crate::chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Stretch)
+                        crate::chrome::wrapping_row(card, crate::chrome::GAP_TIGHT_STEPS, crate::chrome::NO_MARGIN, AlignItems::Stretch)
                             .with_children(|answers| {
                                 for (text, reply) in [
                                     ("Accept".to_owned(), crate::present::Reply::Accept),

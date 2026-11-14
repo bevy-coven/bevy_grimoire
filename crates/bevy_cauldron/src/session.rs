@@ -738,13 +738,8 @@ pub fn draw_the_tabs(
     let strip = commands
         .spawn((
             DocumentStrip,
-            Node {
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Stretch,
-                column_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                margin: UiRect::left(Val::Px(crate::chrome::GAP_GROUP)),
-                ..default()
-            },
+            bevy_gooey::row_with(crate::chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { align: Some(AlignItems::Stretch), ..default() }),
+            bevy_gooey::Spacing { margin: crate::chrome::margin_left(crate::chrome::STEP_GROUP), ..default() },
             bevy::a11y::AccessibilityNode::from(accesskit::Node::new(accesskit::Role::TabList)),
         ))
         .id();

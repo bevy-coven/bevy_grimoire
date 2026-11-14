@@ -800,7 +800,7 @@ fn projects_body(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut
         welcome(body, launcher, art);
         return;
     }
-    crate::chrome::gapped_row(body, crate::chrome::GAP_GROUP_STEPS, UiRect::ZERO, AlignItems::Center).with_children(|header| {
+    crate::chrome::gapped_row(body, crate::chrome::GAP_GROUP_STEPS, crate::chrome::NO_MARGIN, AlignItems::Center).with_children(|header| {
         header.spawn(heading("Projects"));
         header.spawn(Node { flex_grow: 1.0, ..default() });
         // The one accent button of the page: New project, or, with nothing else to start from, nothing.
@@ -816,7 +816,7 @@ fn projects_body(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut
     // scrolls a focused card into view, and the wheel scrolls the rest.
     // **Type-select (UI-R04, #334):** the cards are a group, so typing a project's first letters moves to it, as it does in a list.
     crate::chrome::scroll_list(body, (ProjectGrid, bevy_gooey::TypeSelectGroup)).with_children(|scroll| {
-        crate::chrome::wrapping_row(scroll, crate::chrome::GAP_GROUP_STEPS, UiRect::ZERO, AlignItems::Stretch).with_children(|grid| {
+        crate::chrome::wrapping_row(scroll, crate::chrome::GAP_GROUP_STEPS, crate::chrome::NO_MARGIN, AlignItems::Stretch).with_children(|grid| {
             for row in &launcher.rows {
                 if row.missing {
                     missing_card(grid, row);
@@ -858,7 +858,7 @@ fn welcome(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &Art) {
         }
         card.spawn(heading("Welcome to Cauldron"));
         card.spawn((label(WELCOME_PITCH), TextLayout::new(Justify::Left, LineBreak::WordBoundary)));
-        crate::chrome::gapped_row(card, crate::chrome::GAP_GROUP_STEPS, UiRect::ZERO, AlignItems::Stretch).with_children(|actions| {
+        crate::chrome::gapped_row(card, crate::chrome::GAP_GROUP_STEPS, crate::chrome::NO_MARGIN, AlignItems::Stretch).with_children(|actions| {
             let example = launcher.example.is_some();
             if example {
                 actions.spawn((submit_button("Open the example"), observe(open_the_example)));
@@ -1029,7 +1029,7 @@ fn missing_card(grid: &mut ChildSpawnerCommands, row: &Listed) {
         card.spawn(quiet(name_of(&path)));
         card.spawn(label("Folder not found"));
         card.spawn(quiet(shown_folder(&path)));
-        crate::chrome::gapped_row(card, crate::chrome::GAP_ROW_STEPS, UiRect::ZERO, AlignItems::Stretch).with_children(|actions| {
+        crate::chrome::gapped_row(card, crate::chrome::GAP_ROW_STEPS, crate::chrome::NO_MARGIN, AlignItems::Stretch).with_children(|actions| {
             let locate = path.clone();
             actions.spawn((button("Locate…"), observe(move |_: On<Activate>, mut out: MessageWriter<PickRequest>| { out.write(PickRequest(PickFor::Locate(locate.clone()))); })));
             let gone = path.clone();

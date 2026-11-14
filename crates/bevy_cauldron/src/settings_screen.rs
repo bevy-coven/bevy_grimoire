@@ -457,7 +457,8 @@ fn setting_row(setting: &'static Setting, own: Option<Value>, below: Value, over
     let shown = own.unwrap_or(below);
     let key = setting.key;
     (
-        Node { flex_direction: FlexDirection::Column, margin: UiRect::bottom(Val::Px(crate::chrome::GAP_GROUP)), ..default() },
+        bevy_gooey::column(0.0),
+        bevy_gooey::Spacing { margin: crate::chrome::margin_bottom(crate::chrome::STEP_GROUP), ..default() },
         Children::spawn(SpawnWith(move |row: &mut RelatedSpawner<ChildOf>| {
             match (setting.kind, shown) {
                 (Kind::Switch, Value::On(on)) => {
