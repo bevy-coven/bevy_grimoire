@@ -407,6 +407,29 @@ impl Tree {
         chain
     }
 
+    /// **The chain that ends at this place**: the game's, then its region's, its level's and (for an area) its own. The chain an agent
+    /// that asked for exactly this place is served (SG-05, #404): [`Self::chain_to`] reads a point, and a place is named by its folder.
+    /// `None` when `place` is no place of the tree.
+    pub fn chain_of(&self, place: &str) -> Option<Vec<&Place>> {
+        let at = self.place(place)?;
+        Some(match at.kind {
+            PlaceKind::Game => self.chain_to(None, None),
+            PlaceKind::Region => {
+                let mut chain = self.chain_to(None, None);
+                chain.push(at);
+                chain
+            }
+            PlaceKind::Level => self.chain_to(at.map.as_deref(), None),
+            // **The area itself is the last place**, whatever area a point inside its rectangle would reach: two areas that overlap are a
+            // problem the tree reports, and the page of one of them is still its own.
+            PlaceKind::Area => {
+                let mut chain = self.chain_to(at.map.as_deref(), None);
+                chain.push(at);
+                chain
+            }
+        })
+    }
+
     /// Whether `region` holds a level named after `map`.
     fn holds_level(&self, region: &Place, map: &str) -> bool {
         let prefix = format!("{}/{}/{}", region.path, LEVELS_DIR, map);

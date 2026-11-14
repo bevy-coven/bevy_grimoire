@@ -58,6 +58,8 @@ crate::keys::enumerated! {
         Files,
         /// **The project's page** (NV-08, #385): its maps, its kits and the agent guide, inside the workbench.
         Project,
+        /// **The game's style** (SG-05, #404): the design tree, the page and the board.
+        Design,
     }
     /// **Every panel there is**, in strip order — for the ratchets that have to visit all of them.
     ///
@@ -102,6 +104,7 @@ impl Mode {
             Mode::Agent => "AGENT",
             Mode::Files => "FILES",
             Mode::Project => "PROJECT",
+            Mode::Design => "DESIGN",
         }
     }
 
@@ -120,7 +123,8 @@ impl Mode {
             Mode::Game => crate::keys::Context::Game,
             Mode::Agent => crate::keys::Context::Agent,
             Mode::Files => crate::keys::Context::Files,
-            Mode::Project => crate::keys::Context::Project,
+            // **The Design panel has no key of its own**, like the Project page (SG-05, #404): its actions are buttons and the commands they already are.
+            Mode::Project | Mode::Design => crate::keys::Context::Project,
         }
     }
 }
@@ -486,7 +490,7 @@ fn stage_camera(
                 crate::compose::carousel_height(&carousel.0).min(crate::view::MAX_ZOOM);
             rig.elevation = crate::view::ISO_ELEVATION;
         }
-        Mode::Map | Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files | Mode::Project => {
+        Mode::Map | Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files | Mode::Project | Mode::Design => {
             if let Some(was) = saved.0.take() {
                 rig.focus = was.focus;
                 rig.height = was.height;
@@ -2996,9 +3000,10 @@ fn refresh_cells(
     for (button_entity, button, layer, lit) in &cells {
         let selected = cell_edit.at == Some((button.0, layer.0, button.1));
         if selected && !lit {
-            commands.entity(button_entity).insert(bevy_gooey::PrimaryButton);
+            // `try_`: the cell may be despawned by a rebuild in this same frame, which the default error handler would turn into a panic.
+            commands.entity(button_entity).try_insert(bevy_gooey::PrimaryButton);
         } else if !selected && lit {
-            commands.entity(button_entity).remove::<bevy_gooey::PrimaryButton>();
+            commands.entity(button_entity).try_remove::<bevy_gooey::PrimaryButton>();
         }
     }
     for (g, layer, mut text) in &mut glyphs {
@@ -4347,11 +4352,11 @@ fn focus_filter(
             Mode::Compose => crate::filter::Pane::Candidates,
             // **No list of their own** (NV-08, #385; NV-09, #386): the World, Sound and Game panels are fields, so the
             // key has no box to take; the Map's is the nearest honest answer and focusing it is harmless.
-            Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files | Mode::Project => crate::filter::Pane::Palette,
+            Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files | Mode::Project | Mode::Design => crate::filter::Pane::Palette,
         };
         // **The Files and Project workspaces have no filter box at all** (GD-11, #373; NV-08, #385): the key takes nothing there, rather than
         // focusing a box of the Map's that is not on screen.
-        if !matches!(*mode, Mode::Files | Mode::Project) {
+        if !matches!(*mode, Mode::Files | Mode::Project | Mode::Design) {
             focus_through_operation(project.as_deref(), &mut filters, pane);
         }
     }
@@ -7743,7 +7748,7 @@ fn apply_mode(
             Mode::Meshes | Mode::Tiles => is_tiles,
             Mode::Anim => is_anim,
             Mode::Compose => is_compose,
-            Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files | Mode::Project => false,
+            Mode::World | Mode::Sound | Mode::Game | Mode::Agent | Mode::Files | Mode::Project | Mode::Design => false,
         };
         // A panel belonging to no tab is not ours to touch — the tab strip and the cost readout are
         // both unmarked and must stay visible in every mode.
@@ -9253,9 +9258,9 @@ fn arm_list_rows(
             _ => false,
         };
         if armed && !lit {
-            commands.entity(band).insert(bevy_gooey::PrimaryButton);
+            commands.entity(band).try_insert(bevy_gooey::PrimaryButton);
         } else if !armed && lit {
-            commands.entity(band).remove::<bevy_gooey::PrimaryButton>();
+            commands.entity(band).try_remove::<bevy_gooey::PrimaryButton>();
         }
     }
 }

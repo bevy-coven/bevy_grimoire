@@ -598,6 +598,11 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // not move the mouse, and the first pointer event after one sets it again.
     ("bevy_cauldron::files::PointerAt", Ownership::Session),
     ("bevy_cauldron::files::Files", Ownership::Project),
+    // **The Design workspace's selection and what it last read** (SG-05, #404): the page the person is on, whether Edit is open and the toggle, read off
+    // the project's `design/` folder, so a switch to another workspace and back finds the same page and another project starts with none.
+    ("bevy_cauldron::design_view::DesignView", Ownership::Project),
+    // **The decoded pictures of the page and the board**, keyed by file and its size and modification time: derived from the project's files.
+    ("bevy_cauldron::design_view::DesignPictures", Ownership::Project),
     // Derived from the kit's meshes: a different kit means different thumbnails.
     ("bevy_cauldron::thumbs::Thumbnails", Ownership::Project),
     (

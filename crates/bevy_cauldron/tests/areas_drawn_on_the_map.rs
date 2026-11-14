@@ -232,8 +232,9 @@ fn the_inspectors_style_link_opens_the_areas_page_and_the_levels_when_the_cursor
     let button = app.world_mut().query_filtered::<Entity, With<design_areas::StyleLink>>().single(app.world()).expect("one Style link");
     app.world_mut().commands().trigger(bevy::ui_widgets::Activate { entity: button });
     pump(&mut app, 0.5);
-    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Files, "a click reveals the page");
-    assert_eq!(bevy_cauldron::files::active_file(app.world().resource::<bevy_cauldron::session::Session>()).as_deref(), Some("design/levels/m/areas/docks/style.md"));
+    // Owner exception (2026-11-13): areas_drawn_on_the_map.rs::the_inspectors_style_link_opens_the_areas_page_and_the_levels_when_the_cursor_was_in_none: the link opens the page in the Design workspace now (SG-05, #404), so the two literals that named the Files workspace and its tab name Design and its selection; the click and the page are unchanged.
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Design, "a click reveals the page");
+    assert_eq!(app.world().resource::<bevy_cauldron::design_view::DesignView>().selected(), Some("design/levels/m/areas/docks/style.md"));
 }
 
 #[test]

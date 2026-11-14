@@ -167,6 +167,9 @@ pub const FILE_STOP: &str = "file:";
 /// **How a cue stop is written**: `cue:<name>`, the cue the Sound workspace's list marks.
 pub const CUE_STOP: &str = "cue:";
 
+/// **How a Design page stop is written**: `design:<page path relative to the project>` (SG-05, #404), the page the Design workspace shows.
+pub const DESIGN_STOP: &str = "design:";
+
 /// **What a place holds in the two workspaces whose selection is not a placement**: the open file and its line, the marked cue. Read
 /// where a place is recorded ([`Stops::stamp`]) and where one is walked to ([`Stops::gone`]), so the two cannot disagree about what a
 /// stop is.
@@ -177,6 +180,7 @@ pub struct Stops<'w, 's> {
     project: Option<Res<'w, crate::project::Project>>,
     workspace: Option<Res<'w, Workspace>>,
     editors: Query<'w, 's, &'static bevy_gooey::CodeEditor, With<crate::files::FileEditor>>,
+    design: Option<Res<'w, crate::design_view::DesignView>>,
 }
 
 impl Stops<'_, '_> {
@@ -186,7 +190,7 @@ impl Stops<'_, '_> {
     /// read for it names nothing there, so it is dropped rather than kept as a selection of the wrong page.
     pub fn stamp(&self, place: &mut Place) {
         if self.workspace.as_deref().is_some_and(|w| *w != place.workspace) {
-            if matches!(place.workspace, Workspace::Files | Workspace::Sound) {
+            if matches!(place.workspace, Workspace::Files | Workspace::Sound | Workspace::Design) {
                 place.selection = None;
             }
             return;
@@ -201,6 +205,9 @@ impl Stops<'_, '_> {
             Workspace::Sound => {
                 place.selection = self.cue.as_deref().and_then(|c| c.0.as_ref()).map(|name| format!("{CUE_STOP}{name}"));
             }
+            Workspace::Design => {
+                place.selection = self.design.as_deref().and_then(|d| d.selected()).map(|rel| format!("{DESIGN_STOP}{rel}"));
+            }
             _ => {}
         }
     }
@@ -213,6 +220,11 @@ impl Stops<'_, '_> {
             let rel = rest.rsplit_once(':').map_or(rest, |(rel, _)| rel);
             if !project.root.join(rel).is_file() {
                 return Err(format!("`{rel}` is no longer in the project"));
+            }
+        } else if let Some(rel) = stop.strip_prefix(DESIGN_STOP) {
+            // **A page that is not written yet is still a place** (its place's `style.md` is what Create style makes): the place's folder is what must be there.
+            if !project.root.join(rel).parent().is_some_and(std::path::Path::is_dir) {
+                return Err(format!("the place of `{rel}` is no longer in the project"));
             }
         } else if let Some(name) = stop.strip_prefix(CUE_STOP)
             && !crate::world_lists::cue_names_of(project).is_ok_and(|names| names.iter().any(|n| n == name))
@@ -495,6 +507,11 @@ fn settle_the_place(
             && let Some(cue) = cue.as_mut()
         {
             cue.0 = Some(name.to_owned());
+        } else if place.workspace == Workspace::Design
+            && let Some(rel) = stop.strip_prefix(DESIGN_STOP)
+        {
+            let rel = rel.to_owned();
+            commands.queue(move |world: &mut World| crate::design_view::show_file(world, &rel, None));
         }
     }
     history.pending = None;
