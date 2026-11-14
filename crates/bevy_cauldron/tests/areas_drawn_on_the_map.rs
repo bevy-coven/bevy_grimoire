@@ -238,3 +238,81 @@ fn the_view_row_shows_the_outline_and_its_tick_follows_the_state() {
         assert_eq!(ticked(&mut app), want, "the tick is the overlay's state");
     }
 }
+
+/// **`grimoire/style` with `at` inside an area returns the area's files last** (SG-02, #401, and SG-06's acceptance): the files the chain adds up, in the
+/// order it adds them, and an `at` outside every area ends with the level's.
+#[test]
+fn grimoire_style_with_at_inside_an_area_returns_the_areas_files_last() {
+    use bevy_grimoire_core::trust::TrustStore;
+    let (mut app, mut ctx, root) = editor("area_style_at");
+    app.add_plugins((bevy_debugger_bevy::DebuggerPlugin::default(), bevy_cauldron::ops_brp::OpsBridgePlugin));
+    for (file, text) in [("design/style.md", "# Game\n"), ("design/levels/m/style.md", "# Yard\n")] {
+        std::fs::create_dir_all(root.join(file).parent().unwrap()).unwrap();
+        std::fs::write(root.join(file), text).unwrap();
+    }
+    set(&mut ctx, json!({"name": "docks", "rect": DOCKS}));
+    std::fs::write(root.join("design/levels/m/areas/docks/style.md"), "# Docks\n").unwrap();
+    // The person trusts the project, so every file is served.
+    let store = root.join("trusted.yaml");
+    let mut trusted = TrustStore::default();
+    trusted.trust_project(&root).unwrap();
+    trusted.save(&store).unwrap();
+    app.world_mut().resource_mut::<bevy_cauldron::editor::EditorState>().trust.file = Some(store);
+    for _ in 0..4 {
+        app.update();
+    }
+    let paths = |app: &mut App, params: Value| -> Vec<String> {
+        use bevy::remote::{RemoteMethodSystemId, RemoteMethods};
+        let Some(RemoteMethodSystemId::Instant(id)) = app.world().resource::<RemoteMethods>().get("grimoire/style").cloned() else { panic!("`grimoire/style` is not registered") };
+        let answer = app.world_mut().run_system_with(id, Some(params)).unwrap_or_else(|e| panic!("{e:?}")).unwrap_or_else(|e| panic!("{e:?}"));
+        answer["files"].as_array().expect("files").iter().map(|f| f["path"].as_str().unwrap().to_owned()).collect()
+    };
+    assert_eq!(paths(&mut app, json!({"map": "m", "at": [-4.0, -4.0]})), ["design/style.md", "design/levels/m/style.md", "design/levels/m/areas/docks/style.md"]);
+    assert_eq!(paths(&mut app, json!({"map": "m", "at": [4.0, 4.0]})), ["design/style.md", "design/levels/m/style.md"], "outside every area it ends with the level's");
+}
+
+/// **The cursor's reading, in its three cases** (`StyleAreas::observe_cursor`, which `sense_under_cursor` calls with the ground point): a point
+/// inside an area sets it, a point outside every area clears it, and a cursor that is not on the map names none and keeps the last.
+#[test]
+fn the_cursor_reading_sets_clears_and_keeps_the_area() {
+    let area = |name: &str, rect: [f32; 4]| design::AreaOnMap { name: name.to_owned(), path: format!("design/levels/m/areas/{name}"), rect, has_style: true };
+    let mut areas = StyleAreas { areas: vec![area("docks", DOCKS), area("quay", QUAY)], ..StyleAreas::default() };
+    assert_eq!(areas.observe_cursor(Some((-4.0, -4.0))).as_deref(), Some("docks"));
+    assert_eq!(areas.cursor_area.as_deref(), Some("docks"), "a point inside sets it");
+    assert_eq!(areas.observe_cursor(None), None, "a cursor on a panel names no area");
+    assert_eq!(areas.cursor_area.as_deref(), Some("docks"), "and keeps the last, for the Style link on that panel");
+    assert_eq!(areas.observe_cursor(Some((0.0, 0.0))), None);
+    assert_eq!(areas.cursor_area, None, "a point outside every area clears it");
+    assert_eq!(areas.observe_cursor(Some((4.0, 4.0))).as_deref(), Some("quay"));
+}
+
+/// **No undo loses a page.** Undoing the creation of an area that has since been given a page sets the folder aside, and the undo of that
+/// undo moves it back; undoing a removal and doing it again sets the page aside again, where it was the first time.
+#[test]
+fn an_undo_of_a_creation_or_a_removal_keeps_the_page_and_its_own_undo_brings_it_back() {
+    let (_app, mut ctx, root) = editor("area_undo_pages");
+    let folder = root.join("design/levels/m/areas/docks");
+    let id_of = |ctx: &mut Ctx, target: &str| -> String {
+        match ops::undo(ctx, Some(target)).unwrap_or_else(|e| panic!("undo refused: {}", e.0)).1 {
+            Applied::Done { operation_id, .. } => operation_id,
+            Applied::Refused(e) => panic!("undo refused: {}", e.0),
+        }
+    };
+
+    let created = set(&mut ctx, json!({"name": "docks", "rect": DOCKS}));
+    std::fs::write(folder.join("style.md"), "# Docks\n").unwrap();
+    let undone = id_of(&mut ctx, &created);
+    assert!(!folder.exists(), "the area is gone from the level");
+    assert_eq!(std::fs::read_to_string(root.join(".dark_factory/removed-areas/docks/style.md")).unwrap(), "# Docks\n", "its page is set aside, not deleted or left without a rectangle");
+    id_of(&mut ctx, &undone);
+    assert_eq!(rect_of(&root, "docks"), Some(DOCKS), "undoing the undo brings the area back");
+    assert_eq!(std::fs::read_to_string(folder.join("style.md")).unwrap(), "# Docks\n");
+    assert!(!root.join(".dark_factory/removed-areas/docks").exists());
+
+    let removal = set(&mut ctx, json!({"name": "docks"}));
+    let restored = id_of(&mut ctx, &removal);
+    assert_eq!(std::fs::read_to_string(folder.join("style.md")).unwrap(), "# Docks\n");
+    id_of(&mut ctx, &restored);
+    assert!(!folder.exists(), "doing the removal again leaves no folder behind");
+    assert_eq!(std::fs::read_to_string(root.join(".dark_factory/removed-areas/docks/style.md")).unwrap(), "# Docks\n");
+}

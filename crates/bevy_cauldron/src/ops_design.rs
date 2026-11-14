@@ -168,6 +168,24 @@ fn take_rect_away(folder: &Path) -> Result<(), Refusal> {
     Ok(())
 }
 
+/// **Take an area away without losing a file**: a folder that holds anything besides its `area.yaml` is moved to a free folder under
+/// `removed-areas/` and that folder is returned; one that is only its rectangle is taken away, and `None` is returned. The one rule a
+/// removal and an undo of a creation share, so a page written beside a new area is never left folder-less or deleted.
+fn set_aside(root: &Path, folder: &Path, folder_rel: &str, name: &str, write: bool) -> Result<Option<String>, Refusal> {
+    if has_more_than_its_rectangle(folder) {
+        let to = free_removed_folder(root, name)?;
+        if write {
+            bevy_grimoire_core::atomic_file::move_folder(folder, &root.join(&to))
+                .map_err(|e| Refusal::new(format!("{folder_rel} could not be moved to {to} ({e}), so nothing was changed.")))?;
+        }
+        return Ok(Some(to));
+    }
+    if write {
+        take_rect_away(folder)?;
+    }
+    Ok(None)
+}
+
 /// What changed.
 struct Change {
     summary: String,
@@ -189,23 +207,30 @@ fn apply(ctx: &mut Ctx, params: &serde_json::Value, write: bool) -> Result<Optio
         let folder_rel = design::area_folder(&level, &back.name);
         let folder = root.join(&folder_rel);
         let before = design::areas_of_level(&root, &level).into_iter().find(|a| a.name == back.name).map(|a| a.rect);
-        if write {
-            match (&back.rect, &back.moved_to) {
-                (Some(rect), Some(moved)) => {
-                    if folder.exists() {
-                        return Err(Refusal::new(format!("{folder_rel} is there again, so the removed area was not moved back over it. Nothing was changed.")));
-                    }
+        // **Putting back "no area" is a removal**, with a removal's care: a page written beside the area since is moved aside, not left
+        // without its rectangle or deleted. Its own inverse then moves that folder back, so an undo of an undo loses nothing.
+        let mut moved_aside = None;
+        match (&back.rect, &back.moved_to) {
+            (Some(rect), Some(moved)) => {
+                if folder.exists() {
+                    return Err(Refusal::new(format!("{folder_rel} is there again, so the removed area was not moved back over it. Nothing was changed.")));
+                }
+                if write {
                     bevy_grimoire_core::atomic_file::move_folder(&root.join(moved), &folder)
                         .map_err(|e| Refusal::new(format!("{moved} could not be moved back to {folder_rel} ({e}), so nothing was put back.")))?;
                     write_rect(&folder, *rect)?;
                 }
-                (Some(rect), None) => write_rect(&folder, *rect)?,
-                (None, _) => take_rect_away(&folder)?,
             }
+            (Some(rect), None) => {
+                if write {
+                    write_rect(&folder, *rect)?;
+                }
+            }
+            (None, _) => moved_aside = set_aside(&root, &folder, &folder_rel, &back.name, write)?,
         }
         Change {
             summary: format!("put back the area `{}` of {}", back.name, back.map),
-            inverse: PutBack { map: back.map.clone(), name: back.name.clone(), rect: before, moved_to: None },
+            inverse: PutBack { map: back.map.clone(), name: back.name.clone(), rect: before, moved_to: moved_aside },
         }
     } else {
         let name = p.name.clone().unwrap_or_default();
@@ -265,18 +290,10 @@ fn apply(ctx: &mut Ctx, params: &serde_json::Value, write: bool) -> Result<Optio
                 let Some(standing) = standing else {
                     return Err(Refusal::new(format!("the level of `{map}` has no area `{name}` to remove. Nothing was changed.")));
                 };
-                let (summary, moved_to) = if has_more_than_its_rectangle(&folder) {
-                    let to = free_removed_folder(&root, &name)?;
-                    if write {
-                        bevy_grimoire_core::atomic_file::move_folder(&folder, &root.join(&to))
-                            .map_err(|e| Refusal::new(format!("{folder_rel} could not be moved to {to} ({e}), so nothing was changed.")))?;
-                    }
-                    (format!("removed the area `{name}` from {map}; its page and board are kept in {to}"), Some(to))
-                } else {
-                    if write {
-                        take_rect_away(&folder)?;
-                    }
-                    (format!("removed the area `{name}` from {map}"), None)
+                let moved_to = set_aside(&root, &folder, &folder_rel, &name, write)?;
+                let summary = match &moved_to {
+                    Some(to) => format!("removed the area `{name}` from {map}; its page and board are kept in {to}"),
+                    None => format!("removed the area `{name}` from {map}"),
                 };
                 Change { summary, inverse: PutBack { map, name, rect: Some(standing.rect), moved_to } }
             }

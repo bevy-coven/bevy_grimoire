@@ -56,6 +56,18 @@ impl StyleAreas {
         design::area_at(&self.areas, at)
     }
 
+    /// **Take a reading of the cursor, and say which area it is in.** `ground` is the cursor's point on the map's ground in map metres, or
+    /// `None` when the cursor is not on the map (on a panel, or off the window): that names no area and **keeps** the one it was last in,
+    /// because the Style link is on a panel and a click on it asks which. A point inside an area sets it; a point outside every area clears it.
+    pub fn observe_cursor(&mut self, ground: Option<(f32, f32)>) -> Option<String> {
+        let at = ground?;
+        let found = self.area_at(at).map(|a| a.name.clone());
+        if self.cursor_area != found {
+            self.cursor_area = found.clone();
+        }
+        found
+    }
+
     /// **The page the Style link opens, and what to call it**: the area the cursor was last in when it has a `style.md`, else the
     /// level's own.
     pub fn link(&self, root: &std::path::Path) -> Option<(String, String)> {
@@ -143,15 +155,16 @@ fn follow_the_tick(areas: Option<Res<StyleAreas>>, items: Query<(Entity, Has<bev
 /// **Read the open map's level's areas** every [`REFRESH_S`], and write the resource only when they differ.
 fn refresh(mut areas: ResMut<StyleAreas>, project: Option<Res<Project>>, open: Option<Res<OpenMap>>, time: Res<Time>, mut since: Local<f32>) {
     *since += time.delta_secs();
+    // **Asked only when the interval is up or the map or project changed**: the level's folder is a stat and maybe a directory read.
+    let moved = open.as_ref().is_some_and(|o| o.is_changed()) || project.as_ref().is_some_and(|p| p.is_changed());
+    if *since < REFRESH_S && !moved {
+        return;
+    }
+    *since = 0.0;
     let level = match (project.as_deref(), open.as_deref()) {
         (Some(project), Some(open)) => Some((project.root.clone(), bevy_grimoire_core::board::level_place(&project.root, &open.map.name))),
         _ => None,
     };
-    let changed_level = areas.level.as_deref() != level.as_ref().map(|(_, l)| l.as_str());
-    if *since < REFRESH_S && !changed_level {
-        return;
-    }
-    *since = 0.0;
     let (want_level, want_areas) = match &level {
         Some((root, level)) => (Some(level.clone()), design::areas_of_level(root, level)),
         None => (None, Vec::new()),

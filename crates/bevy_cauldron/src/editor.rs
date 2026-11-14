@@ -16736,13 +16736,17 @@ fn sense_under_cursor(
         .then(|| camera.as_ref().and_then(|c| cursor_ground(pointer.0, c.0, c.1)))
         .flatten()
         .map(|hit| open.map.to_map_space((hit.x, hit.z)));
-    let in_area: Option<String> = areas.as_deref().zip(on_ground).and_then(|(a, at)| a.area_at(at).map(|area| area.name.clone()));
-    if let Some(mut areas) = areas
-        && on_ground.is_some()
-        && areas.cursor_area != in_area
-    {
-        areas.cursor_area = in_area.clone();
-    }
+    // The reading is `StyleAreas::observe_cursor`'s (a point in an area, a point outside, a cursor not on the map); the resource is marked
+    // changed only when the area the cursor was last in did.
+    let in_area: Option<String> = areas.and_then(|mut areas| {
+        let held = areas.bypass_change_detection();
+        let before = held.cursor_area.clone();
+        let found = held.observe_cursor(on_ground);
+        if held.cursor_area != before {
+            areas.set_changed();
+        }
+        found
+    });
     let picked = under_cursor_target(&mut lock, *pointer, camera, &project, &open)
         .and_then(|i| open.map.placements.get(i));
     // **The descriptor comes from the piece, through the same resolver every other question uses**,
