@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-14
+
+- **bm-08-first-real-agent-run-fixes** `c77a7842` The benchmark runner's nine defects from its first real-agent run are fixed: a trial carries one provider's credential and deletes its HOME, a dead provider is found by one pre-flight turn and stops a run after three refusals, the refusal task grades the refusal and not its wording, a tool-call budget is enforced, a report says why trials were harness errors and counts the cache tokens, a retried provider error no longer voids a trial, and the release command names --model and --jobs *No clip: a runner fix; proved by a_refusal_is_graded_on_meaning_not_wording, a_trials_credentials_do_not_outlive_it, a_dead_provider_stops_the_run, a_report_says_why_trials_were_harness_errors, a_tool_call_budget_stops_the_agent, a_reaped_agent_is_not_signalled_by_group, a_report_counts_the_cache_tokens, a_retried_provider_error_does_not_void_the_trial and tools/release/test_bench_gate.py*
+
 ## 2026-11-13
 
 - **bm-05-a-release-needs-a-benchmark-run** `c98f48b7a63c319bc0164ce4916b76ce7ee6370b` A release needs a benchmark run, and a regression stops it: tools/release/bench_gate.py refuses a release with no committed report for its code, or whose comparison with the previous release's report is worse *No clip: a release rule; proved by tools/release/test_bench_gate.py (no report, an unrelated commit, a worse comparison, and no measurable change)*
