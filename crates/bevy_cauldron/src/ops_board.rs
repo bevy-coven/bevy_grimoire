@@ -203,18 +203,31 @@ fn drop_target(root: &Path, place: &str, path: &str, source: Source) -> Result<O
         return Ok(None);
     }
     let shown = given.display();
+    let outside = || {
+        Refusal::new(format!(
+            "{shown} is outside the project, and only a person's drop copies a file in from there: name a picture inside the project, or ask the person to drop it. Nothing was changed."
+        ))
+    };
+    // **Only a person's drop pulls a file in from outside the project** (#419): an agent that could would let a prompt copy any
+    // readable image under the user's home into a repository. **And it is refused before the disk is asked about the path**,
+    // so the refusal is the same sentence whether the file is there or not and an agent cannot probe the host for files.
+    // A `..` is outside by this check (it could climb out); a link inside the project that leads out is refused below with the same words.
+    let human = source == Source::Human;
+    if !human {
+        let climbs = given.components().any(|c| matches!(c, std::path::Component::ParentDir));
+        let under_root = given.starts_with(root) || root.canonicalize().is_ok_and(|canon_root| given.starts_with(canon_root));
+        if climbs || !under_root {
+            return Err(outside());
+        }
+    }
     let canon = given.canonicalize().map_err(|e| Refusal::new(format!("{shown} cannot be read ({e}), so it is not on the board. Nothing was changed.")))?;
     let canon_root = root.canonicalize().map_err(|e| Refusal::new(format!("the project folder {} cannot be read ({e}), so {shown} is not on the board. Nothing was changed.", root.display())))?;
     let relative = |p: &Path| p.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect::<Vec<_>>().join("/");
     if let Ok(inside) = canon.strip_prefix(&canon_root) {
         return Ok(Some(Dropped { rel: relative(inside), from: canon, copy: false }));
     }
-    // **Only a person's drop pulls a file in from outside the project** (#419): an agent that could would let a prompt copy any
-    // readable image under the user's home into a repository.
-    if source != Source::Human {
-        return Err(Refusal::new(format!(
-            "{shown} is outside the project, and only a person's drop copies a file in from there: name a picture inside the project, or ask the person to drop it. Nothing was changed."
-        )));
+    if !human {
+        return Err(outside());
     }
     let name = canon.file_name().ok_or_else(|| Refusal::new(format!("{shown} has no file name, so it is not on the board. Nothing was changed.")))?;
     let into = Path::new(place).join(board::BOARD_DIR).join(name);
