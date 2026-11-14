@@ -42,6 +42,8 @@ const YAW_STEP: f32 = 15.0;
 /// Where a descriptor with no `kind` goes. Named rather than hidden: an untagged piece is work to do,
 /// and a palette that quietly omitted it would be a palette missing pieces.
 const UNSORTED: &str = "unsorted";
+/// A review thumbnail's box: a fixed 4:3 picture, in logical px.
+const REVIEW_THUMBNAIL_PX: Vec2 = Vec2::new(160.0, 120.0);
 // The bounds wireframe and the grid lines are `chrome::{BOUNDS_LINE, GRID_LINE}` — world ink two
 // tabs state, so the values live with the palette rather than drifting here and in `tiles`.
 
@@ -3977,7 +3979,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                         ..default()
                     },
                 ));
-                s.spawn((DataCellEditor, Node { flex_direction: FlexDirection::Column, ..default() }));
+                s.spawn((DataCellEditor, bevy_gooey::column(0.0)));
             });
 
             // **Scripts (#105).** Every trigger of the open map; a row opens the terrain line to edit it.
@@ -4015,7 +4017,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                         ..default()
                     },
                 ));
-                s.spawn((NotesEditor, Node { flex_direction: FlexDirection::Column, ..default() }));
+                s.spawn((NotesEditor, bevy_gooey::column(0.0)));
             });
 
             // **Reload (#203) has moved to the bottom dock** (UI-61, #247): the panel is
@@ -7182,7 +7184,7 @@ fn refresh_notes_list(
     for list in &lists {
         commands.entity(list).despawn_related::<Children>();
         commands.entity(list).with_children(|p| {
-            p.spawn(Node { column_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }).with_children(|h| {
+            p.spawn(bevy_gooey::row(crate::chrome::GAP_TIGHT_STEPS)).with_children(|h| {
                 crate::chrome::button(
                     h,
                     NotesFilterButton,
@@ -7254,15 +7256,14 @@ fn refresh_notes_list(
                     })
                     .collect();
                 if !loaded.is_empty() {
-                    p.spawn(Node { column_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }).with_children(|h| {
+                    p.spawn(bevy_gooey::row(crate::chrome::GAP_TIGHT_STEPS)).with_children(|h| {
                         for handle in loaded {
-                            // CHROME-OK: a fixed 4:3 review thumbnail, not spacing
-                            h.spawn((Node { width: Val::Px(160.0), height: Val::Px(120.0), ..default() }, ImageNode::new(handle)));
+                            h.spawn(bevy_gooey::image_box(handle, REVIEW_THUMBNAIL_PX));
                         }
                     });
                 }
                 if !review.ops.is_empty() {
-                    p.spawn(Node { column_gap: Val::Px(crate::chrome::GAP_TIGHT), flex_wrap: FlexWrap::Wrap, ..default() }).with_children(|h| {
+                    crate::chrome::wrapping_row(p, crate::chrome::GAP_TIGHT_STEPS, 0.0, UiRect::ZERO, AlignItems::Stretch).with_children(|h| {
                         for op in &review.ops {
                             crate::chrome::button(h, NoteOpButton { op: op.clone() }, op, crate::chrome::Severity::Plain);
                         }
@@ -7281,7 +7282,7 @@ fn refresh_notes_list(
                     _ => &[],
                 };
                 // **Edit is on every note**, whatever its status: the text is the person's to correct.
-                p.spawn(Node { column_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }).with_children(|h| {
+                p.spawn(bevy_gooey::row(crate::chrome::GAP_TIGHT_STEPS)).with_children(|h| {
                     crate::chrome::button(h, NoteEditButton { id: id.clone() }, "Edit", crate::chrome::Severity::Plain);
                     for (op, label, text) in ops {
                         crate::chrome::button(h, NoteLeaseButton { id: id.clone(), op, text }, label, crate::chrome::Severity::Plain);
