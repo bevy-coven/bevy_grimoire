@@ -54,7 +54,7 @@
 //! **Only the binary adds it** (`main.rs`): a test editor writes [`AppExit`] and goes on, and a watchdog
 //! there would end the test run.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -83,6 +83,11 @@ pub const FROZEN_AFTER_MS: u64 = 500;
 /// Seconds a quit request that was not followed by an exit, with the app drawing, stands before it is forgotten (the person
 /// answered *Stay*), so a later freeze is not read as a stuck quit.
 pub const REQUEST_FORGET_S: u64 = 10;
+
+/// Seconds an app that was asked to quit may stop drawing while a question that blocks the quit (the unsaved-edits dialog) is open,
+/// before it is ended all the same: a title-bar drag, a live resize, App Nap or an occluded window stop frames for a while, and the
+/// process must not be killed under a question about unsaved edits; a minute is long enough for those and not for ever.
+pub const QUESTION_GRACE_S: u64 = 60;
 
 /// Milliseconds `sample` may take to write its record, on a Mac, before it is given up on and the process is ended: a
 /// second of sampling and the file's write, and no more of the person's wait than that.
@@ -153,6 +158,8 @@ struct StateTimes {
     beat: AtomicU64,
     requested: AtomicU64,
     exiting: AtomicU64,
+    question: AtomicBool,
+    active: AtomicBool,
 }
 
 impl Default for ExitState {
@@ -163,7 +170,14 @@ impl Default for ExitState {
 
 impl ExitState {
     pub fn new() -> Self {
-        Self(Arc::new(StateTimes { born: Instant::now(), beat: AtomicU64::new(0), requested: AtomicU64::new(0), exiting: AtomicU64::new(0) }))
+        Self(Arc::new(StateTimes {
+            born: Instant::now(),
+            beat: AtomicU64::new(0),
+            requested: AtomicU64::new(0),
+            exiting: AtomicU64::new(0),
+            question: AtomicBool::new(false),
+            active: AtomicBool::new(true),
+        }))
     }
 
     fn now(&self) -> u64 {
@@ -197,6 +211,24 @@ impl ExitState {
     fn times(&self) -> (u64, Option<u64>, Option<u64>) {
         let at = |cell: &AtomicU64| cell.load(Ordering::Relaxed).checked_sub(1);
         (at(&self.0.beat).unwrap_or(0), at(&self.0.requested), at(&self.0.exiting))
+    }
+
+    /// A question that blocks the quit is open, or was answered.
+    pub fn set_question_open(&self, open: bool) {
+        self.0.question.store(open, Ordering::Relaxed);
+    }
+
+    pub fn question_open(&self) -> bool {
+        self.0.question.load(Ordering::Relaxed)
+    }
+
+    /// This app is the one in front, or is not.
+    pub fn set_app_active(&self, active: bool) {
+        self.0.active.store(active, Ordering::Relaxed);
+    }
+
+    pub fn app_active(&self) -> bool {
+        self.0.active.load(Ordering::Relaxed)
     }
 }
 
@@ -318,7 +350,7 @@ impl Plugin for ExitWatchdogPlugin {
             .add_message::<WindowCloseRequested>()
             .add_systems(Startup, start_the_watch)
             .add_systems(First, beat)
-            .add_systems(Update, note_the_requests)
+            .add_systems(Update, (note_the_requests, note_the_question, note_the_focus))
             .add_systems(Last, arm.run_if(on_message::<AppExit>).run_if(not(resource_exists::<ExitWatchdogArmed>)));
     }
 }
@@ -338,6 +370,18 @@ pub fn note_the_requests(
     if asked > 0 {
         state.request();
     }
+}
+
+/// **Whether a question that blocks the quit is waiting for its answer** (the unsaved-edits dialog is a [`Confirm`](crate::confirm::Confirm)),
+/// kept where the watchdog thread can read it. An editor with no [`Confirm`](crate::confirm::Confirm) has none.
+pub fn note_the_question(state: Res<ExitState>, confirm: Option<Res<crate::confirm::Confirm>>) {
+    state.set_question_open(confirm.is_some_and(|confirm| confirm.is_open()));
+}
+
+/// **Whether this app is the one in front**, kept where the watchdog thread can read it: the primary window's focus. An app with no
+/// window (a test editor) counts as in front.
+pub fn note_the_focus(state: Res<ExitState>, windows: Query<&Window, With<bevy::window::PrimaryWindow>>) {
+    state.set_app_active(windows.iter().next().is_none_or(|window| window.focused));
 }
 
 /// With a [`SecondPress`], the thread runs for the life of the app: a press of the quit key while the app is frozen is a
@@ -403,18 +447,36 @@ pub fn spawn_watch(state: ExitState, second: Option<SecondPress>, grace: Duratio
     std::thread::Builder::new().name("exit-watchdog".to_owned()).spawn(move || watch(&state, second, grace, then))
 }
 
-/// What the watchdog decides on one look, given the times it has and whether the chord was just pressed.
-fn verdict(now: u64, beat: u64, requested: Option<u64>, exiting: Option<u64>, rising: bool, debounce_ms: u64, grace_ms: u64) -> Option<Cut> {
-    let age = now.saturating_sub(beat);
+/// What the watchdog sees on one look.
+struct Look {
+    now: u64,
+    /// When the last frame was drawn.
+    beat: u64,
+    requested: Option<u64>,
+    exiting: Option<u64>,
+    /// The chord was just pressed (it was up on the last look).
+    rising: bool,
+    /// A question that blocks the quit (the unsaved-edits dialog) is waiting for its answer.
+    question_open: bool,
+}
+
+/// What the watchdog decides on one look, given the debounce and the grace in milliseconds.
+fn verdict(look: &Look, debounce_ms: u64, grace_ms: u64) -> Option<Cut> {
+    let age = look.now.saturating_sub(look.beat);
     let frozen = age >= FROZEN_AFTER_MS;
+    // **A question waiting for its answer is not a hang** (#427): frames may stop for a title-bar drag, a live resize, App Nap or an
+    // occluded window with the unsaved-edits question open, and ending the process then would lose the very edits it asks about.
+    // While it is open the request alone has the much longer bound, and a press of a frozen app is not a second press.
+    let request_bound_ms = if look.question_open { QUESTION_GRACE_S * 1_000 } else { grace_ms };
     // The exit has had its time; or the app was asked to quit and then stopped drawing for as long.
-    match (exiting, requested) {
-        (Some(began), _) if now.saturating_sub(began) >= grace_ms => return Some(Cut::Deadline),
-        (None, Some(_)) if age >= grace_ms => return Some(Cut::Deadline),
+    match (look.exiting, look.requested) {
+        (Some(began), _) if look.now.saturating_sub(began) >= grace_ms => return Some(Cut::Deadline),
+        (None, Some(_)) if age >= request_bound_ms => return Some(Cut::Deadline),
         _ => {}
     }
     // A press after the debounce, while the quit is going on or the app is frozen, is the second one.
-    if rising && requested.is_some_and(|asked| now.saturating_sub(asked) > debounce_ms) && (exiting.is_some() || frozen) {
+    let stuck = look.exiting.is_some() || (frozen && !look.question_open);
+    if look.rising && look.requested.is_some_and(|asked| look.now.saturating_sub(asked) > debounce_ms) && stuck {
         return Some(Cut::SecondPress);
     }
     None
@@ -424,12 +486,15 @@ fn watch(state: &ExitState, second: Option<SecondPress>, grace: Duration, then: 
     let poll = second.map_or(Duration::from_millis(QUIT_POLL_MS), |s| s.poll);
     let debounce_ms = second.map_or(QUIT_DEBOUNCE_MS, |s| u64::try_from(s.debounce.as_millis()).unwrap_or(u64::MAX));
     let grace_ms = u64::try_from(grace.as_millis()).unwrap_or(u64::MAX);
+    // The chord counts only while this app is the one in front: the probe reads the whole session's keys, and a Cmd+Q meant for
+    // another app is not a quit of this one.
+    let pressed = |second: Option<SecondPress>| second.is_some_and(|s| (s.down)()) && state.app_active();
     // A chord still held from the first press is not a second one: only a press after it was let go is.
-    let mut was_down = second.is_some_and(|s| (s.down)());
+    let mut was_down = pressed(second);
     loop {
         std::thread::sleep(poll);
         say_the_overdue();
-        let down = second.is_some_and(|s| (s.down)());
+        let down = pressed(second);
         let rising = down && !was_down;
         was_down = down;
         let now = state.now();
@@ -447,7 +512,8 @@ fn watch(state: &ExitState, second: Option<SecondPress>, grace: Duration, then: 
             state.forget_the_request();
             continue;
         }
-        if let Some(why) = verdict(now, beat, requested, exiting, rising, debounce_ms, grace_ms) {
+        let look = Look { now, beat, requested, exiting, rising, question_open: state.question_open() };
+        if let Some(why) = verdict(&look, debounce_ms, grace_ms) {
             cut(why, grace, then);
             return;
         }
