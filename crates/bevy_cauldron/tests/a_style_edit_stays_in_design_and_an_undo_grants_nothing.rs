@@ -178,3 +178,48 @@ fn a_person_may_edit_a_game_page_through_the_operation_and_an_agent_may_not() {
     applied(&mut human, json!({"path": GAME_PAGE, "edits": [{"find": "Warm light.", "replace": "Cold light."}]}));
     assert_eq!(read(&root, GAME_PAGE), "# The game\n\nCold light.\n");
 }
+
+/// **A hostile line that asks an undo to take a page away is refused**: the game's page whoever undoes, and a page the person never allowed.
+#[test]
+fn a_hostile_put_back_of_nothing_does_not_delete_a_page() {
+    for (page, source) in [(GAME_PAGE, Source::Human), (GAME_PAGE, Source::Agent), (LEVEL_PAGE, Source::Human), (LEVEL_PAGE, Source::Agent)] {
+        let (root, store, project) = ready(&format!("style_undo_delete_{}_{source:?}", page.len()));
+        let mut c = ctx(&project, &store, Source::Human);
+        let (find, replace) = if page == GAME_PAGE { ("Warm light.", "Cold light.") } else { ("Moss on the stones.", "Moss and ivy.") };
+        let id = applied(&mut c, json!({"path": page, "edits": [{"find": find, "replace": replace}]}));
+        if page == LEVEL_PAGE {
+            // A cloned project's page: its present text is one the person never allowed.
+            let mut trusted = TrustStore::load(&store).expect("the store reads");
+            let present = read(&root, page);
+            assert!(trusted.revoke_text(&root, page, &present).expect("resolves"), "the edit had granted its text");
+            trusted.save(&store).expect("saved");
+        }
+        let log = ops::oplog_path(&project);
+        let text = std::fs::read_to_string(&log).expect("the log reads");
+        let mut lines: Vec<Value> = text.lines().map(|l| serde_json::from_str(l).expect("a line")).collect();
+        lines.last_mut().expect("logged")["inverse"]["put_back"]["text"] = Value::Null;
+        std::fs::write(&log, lines.iter().map(|l| format!("{l}\n")).collect::<String>()).expect("the log is rewritten");
+        let before = read(&root, page);
+
+        let mut undo_ctx = ctx(&project, &store, source);
+        let why = match ops::undo(&mut undo_ctx, Some(&id)) {
+            Ok((_, Applied::Done { .. })) => panic!("{page} {source:?}: a hostile line deleted the page"),
+            Ok((_, Applied::Refused(e))) | Err(e) => e.0,
+        };
+        assert!(why.contains(page), "{page} {source:?}: {why}");
+        assert_eq!(read(&root, page), before, "{page} {source:?}: the page is still there, unchanged");
+    }
+}
+
+/// **A grant the editor wrote can be withdrawn, which an undo does not do** (a redo puts the edited text back, and it was allowed for that).
+#[test]
+fn an_undo_keeps_the_grant_so_a_redo_can_put_the_edited_text_back() {
+    let (root, store, project) = ready("style_redo");
+    let mut c = ctx(&project, &store, Source::Human);
+    let id = applied(&mut c, json!({"path": LEVEL_PAGE, "edits": [{"find": "Moss on the stones.", "replace": "Moss and ivy."}]}));
+    let edited = read(&root, LEVEL_PAGE);
+    let (_, undo_applied) = ops::undo(&mut c, Some(&id)).unwrap_or_else(|e| panic!("{}", e.0));
+    let Applied::Done { operation_id: undo_id, .. } = undo_applied else { panic!("the undo was refused") };
+    ops::undo(&mut c, Some(&undo_id)).unwrap_or_else(|e| panic!("the redo: {}", e.0));
+    assert_eq!(read(&root, LEVEL_PAGE), edited, "the redo put the edited text back");
+}

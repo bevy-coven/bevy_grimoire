@@ -599,10 +599,24 @@ impl StyleEdit {
                     kind.word()
                 )));
             }
-            if let Some(text) = &back.text
-                && !allowed(ctx, &root, &p.path, text)?
-            {
-                return Err(Refusal::new(format!("the text that would be put back into `{}` is not text the person has allowed, so it was not written, and nothing is allowed by an undo. Nothing was changed.", p.path)));
+            match &back.text {
+                Some(text) => {
+                    if !allowed(ctx, &root, &p.path, text)? {
+                        return Err(Refusal::new(format!("the text that would be put back into `{}` is not text the person has allowed, so it was not written, and nothing is allowed by an undo. Nothing was changed.", p.path)));
+                    }
+                }
+                // **Taking a page away** is what an undo of a create does, and what a hostile log would ask for to delete a page. It is refused for the game's and a region's pages
+                // (whoever asks), and for any page whose present text the person has not allowed: a page they never saw is not one a log may remove.
+                None => {
+                    if matches!(kind, design::PlaceKind::Game | design::PlaceKind::Region) {
+                        return Err(Refusal::new(format!("`{}` is a {} page, and no undo takes it away. Nothing was changed.", p.path, kind.word())));
+                    }
+                    if let Some(current) = old.as_deref()
+                        && !allowed(ctx, &root, &p.path, current)?
+                    {
+                        return Err(Refusal::new(format!("`{}` has text the person has not allowed, so an undo does not take it away. Nothing was changed.", p.path)));
+                    }
+                }
             }
             return Ok(Edited { root, old, new: back.text.clone() });
         }

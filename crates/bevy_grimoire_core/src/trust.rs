@@ -288,6 +288,17 @@ impl TrustStore {
         Ok(())
     }
 
+    /// **Withdraw the allowance for this exact text of this project's file**: the one grant of that digest, and no other. `true` when there was one.
+    /// A project-wide trust is not a text grant and stays. A grant is only withdrawn by something that knows the text is not the one the person had before it
+    /// (the editor's undo of an edit does not call it, because a redo must put the edited text back and it was allowed for that).
+    pub fn revoke_text(&mut self, root: &Path, path: &str, text: &str) -> Result<bool, String> {
+        let project = resolve(root)?;
+        let digest = sha256_hex(text.as_bytes());
+        let before = self.texts.len();
+        self.texts.retain(|g| !(g.project == project && g.path == path && g.sha256 == digest));
+        Ok(self.texts.len() != before)
+    }
+
     /// **Has a person allowed this project's guide, as this text?** The guide is one text among the
     /// project's, at [`crate::agent_guide::PROJECT_PATH`].
     pub fn guide_decision(&self, root: &Path, text: &str) -> Result<Decision, String> {
