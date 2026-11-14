@@ -220,5 +220,35 @@ measures, and its raw output must not appear in the project's `git status`.
 
 An editor or server binary that is not there, an `--agent` this build does not have, a `--variant` the suite
 does not state, a suite with one task that will not load, and — for `--agent omp` — a model this host does
-not list (`omp models find`). Each of those would otherwise become a run of harness errors that says
-nothing about the editor.
+not list (`omp models find`), a model name with no provider in front (`sonnet`: write `provider/model`, for example
+`anthropic/claude-sonnet-5-5`), and a provider that refuses one real turn (`omp -p "reply ok"`, run once before the
+first trial; a spent quota or a refused key is found there, in the provider's own words). Each of those would
+otherwise become a run of harness errors that says nothing about the editor. A run also stops itself after three
+provider refusals in a row, and the report's "Harness errors" section says why.
+
+## What the agent inside a trial can read
+
+**A trial's agent can read its own provider credential.** The trial's isolated `HOME` holds the one credential its
+model needs (`~/.omp/agent/agent.db`, mode 600: an OAuth access token and, for a rotating provider, its refresh
+token), and the agent's shell and file tools can open it. What it prints lands in `transcript.jsonl`, which the run
+keeps. So:
+
+- only the model's provider's credential is imported, never the host's whole login;
+- the credential strings are scrubbed from the retained `transcript.jsonl` and `agent.err` (replaced by
+  `[redacted]`) before they are read or reported, and `home/` is deleted when the agent is done. **The scrub matches
+  the exact strings and their JSON-escaped form, and nothing else**: a secret the agent prints base64-, URL- or
+  hex-encoded, or only in part, is not found. **The pre-flight turn's output is not scrubbed** (it is read and
+  discarded, not kept), and a credential the agent copies into the *project* it works in is not scrubbed either;
+- **the agent's environment**: the omp agent (and the pre-flight turn) is started with the runner's credential-looking
+  variables removed (names ending `_KEY`, `_TOKEN`, `_SECRET`, `_PASSWORD`, `_AUTH`, containing `CREDENTIAL`, starting
+  `AWS_`, an ssh agent's socket), but it inherits the rest of the runner's environment: a secret in a variable with an
+  ordinary name is readable through `env` and is not scrubbed. The environment is not cleared (`env_clear`) because an
+  omp this runner has not been run against may need a variable the list does not name. Claude Code is the exception:
+  its `ANTHROPIC_API_KEY` is its credential, carried and scrubbed as such;
+- a run killed with `kill -KILL` leaves its `home/` behind (a `Drop` cannot run), and the next run deletes any such
+  directory older than an hour, but only inside a run directory the runner made (one carrying its `run.json`);
+- Ctrl-C and SIGTERM stop the run through its guards, and a second one kills it. **An interrupted run publishes
+  nothing**: `cauldron-bench run` exits non-zero and writes no report, under `--label` or not, because the trials it
+  never started are only harness errors and a report of them could still read as fit;
+- the agent can use the credential while it runs. A provider whose refresh token rotates signs the host out of that
+  login if the copy refreshes it, so do not run the benchmark on a login you cannot afford to refresh elsewhere.

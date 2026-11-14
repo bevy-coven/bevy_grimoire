@@ -111,6 +111,14 @@ pub fn run(
     // path out of this function, as `omp`'s are: a copy of the user's credential file does not outlive its use (#432, D6).
     let _secrets = crate::run::TrialSecrets::new([claude_config.clone(), dir.join("home")]);
     seed_credentials(&claude_config)?;
+    // **What the trial's agent can read of the credential**, to be scrubbed from the files the trial keeps (#433): the
+    // login file's strings and an `ANTHROPIC_API_KEY` in the environment it inherits.
+    let mut secrets: Vec<String> = std::fs::read_to_string(claude_config.join(CREDENTIALS_FILE))
+        .ok()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        .map(|login| crate::run::secret_strings(&login))
+        .unwrap_or_default();
+    secrets.extend(std::env::var("ANTHROPIC_API_KEY").ok().filter(|k| !k.is_empty()));
     let transcript = dir.join("transcript.jsonl");
     let stdout = std::fs::File::create(&transcript).map_err(|e| format!("{}: {e}", transcript.display()))?;
     let stderr = std::fs::File::create(dir.join("agent.err")).map_err(|e| format!("{e}"))?;
@@ -149,8 +157,12 @@ pub fn run(
         .spawn()
         .map_err(|e| format!("claude did not start: {e}"))?;
     let mut calls = crate::run::ToolBudget::new(transcript.clone(), crate::run::claude_calls, budget.tool_calls);
-    crate::run::wait_for_agent(child, editor, budget.wall_s, "claude", Some(&mut calls))?;
-    read_stream(&transcript, dir, &server)
+    let waited = crate::run::wait_for_agent(child, editor, budget.wall_s, "claude", Some(&mut calls));
+    crate::run::scrub_secrets(&[transcript.clone(), dir.join("agent.err")], &secrets);
+    let end = waited?;
+    let mut run = read_stream(&transcript, dir, &server)?;
+    run.call_budget_exhausted = end == crate::run::WaitEnd::CallBudget;
+    Ok(run)
 }
 
 /// **What a stream-json transcript says the agent did.**

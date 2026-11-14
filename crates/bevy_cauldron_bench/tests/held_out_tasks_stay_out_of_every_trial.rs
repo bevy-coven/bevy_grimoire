@@ -173,6 +173,7 @@ fn a_held_out_trial_is_one_line_that_names_no_task() {
         wishes: Vec::new(),
         dir: std::path::PathBuf::new(),
         held_out,
+        call_budget_exhausted: false,
     };
     for outcome in [Outcome::Pass, Outcome::Fail, Outcome::HarnessError] {
         let line = summary_line(&record(true, outcome));
@@ -253,6 +254,7 @@ fn a_held_out_record_says_how_many_checks_held_and_nothing_of_the_task() {
         wishes: vec![serde_json::json!({"tool": "ALPHA-WISH", "task": "ALPHA-WISH-TASK"})],
         dir: std::path::PathBuf::new(),
         held_out,
+        call_budget_exhausted: false,
     };
     let shown = bevy_cauldron_bench::run::record_json(&record(true), alpha, "ALPHA-SENTENCE").to_string();
     for secret in ["alpha-task", "ALPHA", "placement_at", "handback_contains", "title", "prompt", "tags", "sentence"] {
