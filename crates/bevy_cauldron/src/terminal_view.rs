@@ -837,6 +837,7 @@ fn type_keys(
         }
         if closes.just_pressed(&keys)
             || crate::terminal_pane::COLLAPSE_CHORD.just_pressed(&keys)
+            || crate::terminal_pane::maximise_chord().just_pressed(&keys)
             || FIND_CHORD.just_pressed(&keys)
             || crate::terminal_pane::CLEAR_CHORD.just_pressed(&keys)
         {

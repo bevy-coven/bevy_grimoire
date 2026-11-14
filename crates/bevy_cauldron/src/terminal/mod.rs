@@ -113,6 +113,9 @@ pub struct Terminal {
     /// **How wide the bar is drawn**, logical px, as the pane last measured it (#423): what [`crate::terminal_pane::bar_plan`] decides a
     /// narrow bar holds from. `None` until a bar has been laid out, which holds everything.
     bar_room: Option<f32>,
+    /// **The pane covers the whole window below the menu bar** (#426): `Shift+Primary+J` toggles it. A collapsed pane is never maximised, so
+    /// lowering a full pane and raising it again gives back its normal height.
+    maximised: bool,
 }
 
 /// One shell, its screen, and what is drawn about it.
@@ -459,6 +462,26 @@ impl Terminal {
     /// Collapse the pane, or restore it, for this screen and every one after it.
     pub fn set_collapsed(&mut self, collapsed: bool) {
         self.raised = !collapsed;
+        if collapsed {
+            self.maximised = false;
+        }
+    }
+
+    /// Does the pane cover the whole window below the menu bar?
+    pub fn is_maximised(&self) -> bool {
+        self.maximised && self.raised
+    }
+
+    /// **Toggle the pane between its normal height and the whole window below the menu bar** (#426). A collapsed pane is raised straight to
+    /// full; a full one goes back to the height it had. Returns the new state.
+    pub fn toggle_maximised(&mut self) -> bool {
+        if !self.raised {
+            self.raised = true;
+            self.maximised = true;
+        } else {
+            self.maximised = !self.maximised;
+        }
+        self.maximised
     }
 
     /// How wide the pane's bar was last drawn, when it has been laid out.

@@ -521,6 +521,8 @@ impl Plugin for TerminalPanePlugin {
                 (
                     toggle_on_the_chord,
                     collapse_on_the_chord,
+                    maximise_on_the_chord,
+                    apply_the_maximise,
                     close_the_tab_on_its_chord,
                     open_find_on_its_chord,
                     clear_on_its_chord,
@@ -664,6 +666,8 @@ fn build_the_pane(
             // it*, the trap `chrome::spawn_frame` records for the shell split's divider.
             Pickable::default(),
             TerminalPaneRoot,
+            // **Its layer among its siblings** (#426): the pane stands where the frame puts it, and above all of them while it covers the window.
+            ZIndex(0),
             Name::new("terminal"),
         ))
         .id();
@@ -1156,6 +1160,79 @@ fn toggle_on_the_chord(
 pub const COLLAPSE_CHORD: bevy_gooey::Shortcut =
     bevy_gooey::Shortcut::new(bevy_gooey::Modifiers::PRIMARY, KeyCode::KeyJ);
 
+
+/// **The chord that maximises the terminal** (#426): Shift+Command+J on a mac, Shift+Ctrl+J elsewhere, beside [`COLLAPSE_CHORD`]. The owner
+/// (2026-11-09): it makes the terminal cover the whole window below the menu bar, and again returns the pane to the height it had.
+pub fn maximise_chord() -> bevy_gooey::Shortcut {
+    bevy_gooey::Shortcut::new(bevy_gooey::Modifiers::PRIMARY | bevy_gooey::Modifiers::SHIFT, KeyCode::KeyJ)
+}
+
+/// **`Terminal.maximise`**: the chord's own system. It is read here, before the shell sees anything, as [`COLLAPSE_CHORD`] is, so a shell
+/// that holds the keys never hears it ([`crate::terminal_view`] swallows it).
+fn maximise_on_the_chord(keys: Res<ButtonInput<KeyCode>>, mut focus: ResMut<TerminalFocus>, mut terminal: ResMut<Terminal>) {
+    if maximise_chord().just_pressed(&keys) {
+        toggle_maximised(&mut terminal, &mut focus);
+    }
+}
+
+/// **Maximise the pane, or give it back its height**, and put the keys in the shell: a collapsed pane is raised straight to full. The one
+/// thing the chord and View ▸ Maximise terminal both do.
+pub fn toggle_maximised(terminal: &mut Terminal, focus: &mut TerminalFocus) {
+    terminal.toggle_maximised();
+    focus.take();
+}
+
+/// **View ▸ Maximise terminal**, from a world (the menu row has no system parameters).
+pub fn maximise_from_world(world: &mut World) {
+    world.resource_scope(|world: &mut World, mut terminal: Mut<Terminal>| {
+        if let Some(mut focus) = world.get_resource_mut::<TerminalFocus>() {
+            toggle_maximised(&mut terminal, &mut focus);
+        }
+    });
+}
+
+/// The layer the pane stands on while it covers the window: above its siblings (the status band, the body), below every dialog and menu,
+/// which are `GlobalZIndex`.
+const MAXIMISED_Z: i32 = 1;
+
+/// **The pane covers the window below the menu bar while it is maximised** (#426): it leaves the frame's column and stands over it, from
+/// the menu bar's foot to the window's edges, and the shell is told the new size as on any resize ([`crate::terminal_view`] measures the body each
+/// frame). Given back, it is in the frame's column again at the height it had ([`Terminal::height`], which `fit_the_pane_to_the_window`
+/// corrects when the person never chose one). Each write is compared first.
+fn apply_the_maximise(
+    terminal: Res<Terminal>,
+    menus: Query<&ComputedNode, With<crate::menu_bar::EditorMenuBar>>,
+    mut panes: Query<(&mut Node, &mut ZIndex), With<TerminalPaneRoot>>,
+) {
+    let maximised = terminal.is_maximised();
+    let top = menus.iter().next().map_or(0.0, |menu| menu.size().y * menu.inverse_scale_factor());
+    for (mut node, mut layer) in &mut panes {
+        let position = if maximised { PositionType::Absolute } else { PositionType::Relative };
+        if node.position_type != position {
+            node.position_type = position;
+        }
+        let (left, right, bottom, above) = if maximised {
+            (Val::Px(0.0), Val::Px(0.0), Val::Px(0.0), Val::Px(top))
+        } else {
+            (Val::Auto, Val::Auto, Val::Auto, Val::Auto)
+        };
+        if node.left != left || node.right != right || node.bottom != bottom || node.top != above {
+            node.left = left;
+            node.right = right;
+            node.bottom = bottom;
+            node.top = above;
+        }
+        if maximised && node.height != Val::Auto {
+            node.height = Val::Auto;
+        } else if !maximised && node.height == Val::Auto {
+            node.height = Val::Px(terminal.height());
+        }
+        let want = ZIndex(if maximised { MAXIMISED_Z } else { 0 });
+        if *layer != want {
+            *layer = want;
+        }
+    }
+}
 /// **Primary+J collapses the pane, or restores it**, on every screen (#315).
 ///
 /// Two cases, VS Code's: a raised pane collapses and gives the screen its keys back, wherever the keys
@@ -2198,7 +2275,7 @@ fn fit_the_pane_to_the_window(
     mut panes: Query<(&mut Node, &ChildOf), With<TerminalPaneRoot>>,
     screens: Query<&ComputedNode>,
 ) {
-    if terminal.chosen_height().is_some() {
+    if terminal.chosen_height().is_some() || terminal.is_maximised() {
         return;
     }
     for (mut node, parent) in &mut panes {
@@ -2247,7 +2324,7 @@ fn the_grip_resizes(
     mut panes: Query<(&mut Node, &ComputedNode), With<TerminalPaneRoot>>,
     mut terminal: ResMut<Terminal>,
 ) {
-    if !grip.contains(drag.entity) || drag.delta.y == 0.0 {
+    if !grip.contains(drag.entity) || drag.delta.y == 0.0 || terminal.is_maximised() {
         return;
     }
     // **From the height it is drawn at**, until the person has chosen one: a pane opens at a share of the

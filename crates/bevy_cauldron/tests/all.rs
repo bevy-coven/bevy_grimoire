@@ -34,6 +34,7 @@ mod back_and_forward_across_workspaces;
 mod back_and_forward_returns_to_a_cue_and_a_file;
 mod fixtures;
 mod new_topics_start_from_templates_in_the_design_workspace;
+mod shift_primary_j_maximises_the_terminal;
 mod the_agent_workspace_takes_a_change_back_from_its_row;
 mod the_finder_goes_to_cues_scripts_and_files;
 mod the_leds_word_is_the_size_of_the_text_beside_it;

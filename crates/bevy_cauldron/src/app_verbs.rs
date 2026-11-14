@@ -74,6 +74,9 @@ pub enum AppVerb {
     ResetLayout,
     /// **Bring the PROBLEMS list on screen** (NV-11, #397): View ▸ Show problems, the row of the `Cmd/Ctrl+Shift+X` chord.
     ShowProblems,
+    /// **Make the terminal cover the window below the menu bar, or give it back its height** (#426): View ▸ Maximise terminal, the row of the
+    /// `terminal.maximise` chord (Shift+Cmd+J, Shift+Ctrl+J off a mac).
+    MaximiseTerminal,
 }
 
 impl AppVerb {
@@ -95,6 +98,7 @@ impl AppVerb {
             AppVerb::About => "About Cauldron".to_owned(),
             AppVerb::ResetLayout => "Reset layout".to_owned(),
             AppVerb::ShowProblems => "Show problems".to_owned(),
+            AppVerb::MaximiseTerminal => "Maximise terminal".to_owned(),
         }
     }
 
@@ -103,6 +107,7 @@ impl AppVerb {
         match self {
             AppVerb::Quit => Some(QUIT),
             AppVerb::ShowProblems => Some(crate::problems_view::show_problems_chord()),
+            AppVerb::MaximiseTerminal => Some(crate::terminal_pane::maximise_chord()),
             _ => None,
         }
     }
@@ -185,6 +190,7 @@ pub fn run(world: &mut World, verb: AppVerb) {
         }
         AppVerb::ResetLayout => reset_the_layout(world),
         AppVerb::ShowProblems => crate::problems_view::ask_for_the_problems(world),
+        AppVerb::MaximiseTerminal => crate::terminal_pane::maximise_from_world(world),
     }
 }
 
