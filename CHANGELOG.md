@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-14
+
+- **ui-99-gooey-blocks** `fb6222ae` The World, Sound and Game panels, the outliner and the inspector's blocks are laid out with bevy_gooey's rows and columns instead of hand-built nodes (UI-99, #260 part) *No clip: nobody can see this change; proved by the_editor_keeps_its_raw_nodes_counted and the_small_files_are_built_from_gooey_widgets*
+
 ## 2026-11-13
 
 - **bm-05-a-release-needs-a-benchmark-run** `c98f48b7a63c319bc0164ce4916b76ce7ee6370b` A release needs a benchmark run, and a regression stops it: tools/release/bench_gate.py refuses a release with no committed report for its code, or whose comparison with the previous release's report is worse *No clip: a release rule; proved by tools/release/test_bench_gate.py (no report, an unrelated commit, a worse comparison, and no measurable change)*
