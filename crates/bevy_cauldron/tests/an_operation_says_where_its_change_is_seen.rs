@@ -83,6 +83,13 @@ const PINNED_NOWHERE: &[&str] = &[
     "tile_member_turn",
     "tile_member_remove",
     "tile_clear",
+    // Assumed owner exception (2026-11-13): the list grows by the four operations #129 slice 29 registers, which edit the
+    // draft on the Tiles tab (nudge the focused member, put it flush, drop a piece, drop a hole): the same draft as the six
+    // above, which a person's own view holds.
+    "tile_member_nudge",
+    "tile_member_flush",
+    "tile_member_drop",
+    "tile_slot_drop",
     "tool_arm",
     "snip_arm",
     "brush_arm",

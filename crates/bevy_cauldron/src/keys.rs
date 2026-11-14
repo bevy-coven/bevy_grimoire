@@ -1052,7 +1052,21 @@ impl Action {
             | Action::BuildRung
             | Action::BuildTurn
             | Action::BuildDropMember
-            | Action::ClearTile => Change::View,
+            | Action::ClearTile
+            // **The tile's arrows, flush, drop and hole keys** (E-002, #129 slice 29): they edit the draft on the Tiles
+            // tab, session state until `Cmd+S` saves it (`Cmd+Z` there takes each back); migrated to the `tile_*` operations.
+            | Action::BuildForward
+            | Action::BuildBack
+            | Action::BuildLeft
+            | Action::BuildRight
+            | Action::BuildUp
+            | Action::BuildDown
+            | Action::AlignForward
+            | Action::AlignBack
+            | Action::AlignLeft
+            | Action::AlignRight
+            | Action::BuildDrop
+            | Action::BuildSlot => Change::View,
 
             // **Held, not pressed.** The effect is the hold: things fade, a pick is live, the overlay is
             // up. An operation whose effect reverses when a key is released is not a value an agent can
@@ -1067,23 +1081,9 @@ impl Action {
             | Action::LookAtAgentChange
             | Action::ToggleGhost
             // **Read with `pressed`, every frame.** A key held down is not a one-shot `Outcome`:
-            // the arrows walk a tile, the four `Align*` keys slide a member, and `CellLeft`/`LayerDown`
-            // step the tile's editor — each changes for as long as the key stays down. Measured by
-            // scanning every handler for `pressed` vs `just_pressed`; the 33 verbs below are the ones
-            // that were on `UNMIGRATED` and are `pressed`-only.
-            | Action::AlignBack
-            | Action::AlignForward
-            | Action::AlignLeft
-            | Action::AlignRight
-            | Action::BuildBack
-            | Action::BuildDown
-            | Action::BuildDrop
-            | Action::BuildForward
-            | Action::BuildLeft
+            // `CloseTile`, `PageEnter` and `PageLeave` walk the Tiles tab's pages, and `BuildNew` raises a name prompt.
+            // Measured by scanning every handler for `pressed` vs `just_pressed`.
             | Action::BuildNew
-            | Action::BuildRight
-            | Action::BuildSlot
-            | Action::BuildUp
             | Action::CloseTile
             | Action::PageEnter
             | Action::PageLeave
@@ -1171,6 +1171,18 @@ impl Action {
             Action::BuildTurn => Some("tile_member_turn"),
             Action::BuildDropMember => Some("tile_member_remove"),
             Action::ClearTile => Some("tile_clear"),
+            // **The tile's arrows and what they do to a piece** (E-002, #129 slice 29): the four arrows and `[` and `]` nudge
+            // the focused member along its ladder, Shift with an arrow puts it flush, Enter drops the picked piece and the
+            // hole key drops a hole, through the operations an agent calls.
+            Action::BuildForward
+            | Action::BuildBack
+            | Action::BuildLeft
+            | Action::BuildRight
+            | Action::BuildUp
+            | Action::BuildDown => Some("tile_member_nudge"),
+            Action::AlignForward | Action::AlignBack | Action::AlignLeft | Action::AlignRight => Some("tile_member_flush"),
+            Action::BuildDrop => Some("tile_member_drop"),
+            Action::BuildSlot => Some("tile_slot_drop"),
             // **The tool keys** (E-002, #129): `B`, `Shift+B` and the run chord arm a tool through `tool_arm`.
             // **`Remove` and `NoteTool` arm a tool, so they name the arming operation** (E-002,
             // #129). They named `placement_remove` and `note_add`: a write neither key makes — its

@@ -618,6 +618,10 @@ pub const NO_TILE: &str = "no tile open — press N to start one";
 /// what the nudge, the flush, the turn and the removal each did not. Deleting a wall left the sconce
 /// on it naming a member that no longer existed, and `validate_shape` then refused the whole
 /// composition with no verb able to repair it.
+///
+/// **Kept for the unit tests that pin the door's rule**: the keys dispatch an operation, and the operation applies its
+/// change through [`edit_open`].
+#[cfg(test)]
 fn edit<T>(
     build: &mut Build,
     library: &bevy_grimoire_core::library::Library,
@@ -711,6 +715,17 @@ pub fn focused(build: &Build) -> bool {
         .open
         .as_ref()
         .is_some_and(|c| build.focus < c.members.len())
+}
+
+/// **How wide a member is on the tile's two axes**, as the span the flush and the ladder measure against: a piece the
+/// library carries, turned as it stands. `None` for a hole, which has no width, and for a descriptor the library lacks.
+pub(crate) fn member_span(member: &Member, library: &bevy_grimoire_core::library::Library) -> Option<(f32, f32)> {
+    match &member.body {
+        Body::Descriptor { id, .. } => library
+            .get(id)
+            .map(|d| crate::editor::brush_span(d, member.yaw, MEMBERS_STAND_UP)),
+        _ => None,
+    }
 }
 
 /// Bring a descriptor into the tile, returning the index it landed at.
@@ -1796,8 +1811,8 @@ pub fn build_keys(
     //
     // The chord is read from the census (`keys::chord`) rather than written out, so naming the
     // refused verb cannot become a lie the day a key moves.
-    let size = match build.open.as_ref().map(|c| c.envelope) {
-        Some(Envelope::Bounded { size }) => size,
+    match build.open.as_ref().map(|c| c.envelope) {
+        Some(Envelope::Bounded { .. }) => {}
         envelope => {
             // **Every verb the guard stands in front of, in one list**, so a verb added below
             // cannot quietly return to declining in silence. The `Stance::Holding` rows — the four
@@ -1841,7 +1856,7 @@ pub fn build_keys(
             }
             return;
         }
-    };
+    }
 
     // **Take the piece, or put it back.** The door between the arrows walking the library list and
     // the arrows walking the tile — the author's *"a key to start the placement so the arrows don't
@@ -1893,64 +1908,16 @@ pub fn build_keys(
                 .note("nothing to flush — Enter brings the picked mesh in".to_owned());
             return;
         }
-        let dir = step_in_view(align, rig.yaw);
-        let focus = build.focus;
-        // The span is read before the door, because "this is a hole" is the same kind of guidance:
-        // a hole has no width, so "flush" is its position *on* the boundary — which `validate`
-        // refuses. Nudging is how a hole is placed; there is nothing to align.
-        let span = build
-            .open
-            .as_ref()
-            .and_then(|c| c.members.get(focus))
-            .and_then(|m| match &m.body {
-                Body::Descriptor { id, .. } => project
-                    .library
-                    .get(id)
-                    .map(|d| crate::editor::brush_span(d, m.yaw, MEMBERS_STAND_UP)),
-                _ => None,
-            });
-        let Some(span) = span else {
-            state
-                .status
-                .problem("a hole has no width to put flush — nudge it instead".to_owned());
-            return;
-        };
-        let was = build
-            .open
-            .as_ref()
-            .and_then(|c| c.members.get(focus))
-            .map(|m| m.at);
-        let moved = edit(&mut build, &project.library, |comp| {
-            let Some(m) = comp.members.get_mut(focus) else {
-                return Err("the focused member went away".to_owned());
-            };
-            m.at = aligned(m.at, span, size, dir);
-            Ok(m.at)
-        });
-        match moved {
-            // **A flush that moves nothing says why.**
-            //
-            // Found by authoring: a 0.1 x 1.0 m wall flushed *along its length* is a genuine no-op —
-            // `aligned` returns `(size/2 - span/2) * dir`, and a piece already spanning the tile on
-            // that axis is already as flush as it can be. The arithmetic is right and the picture
-            // does not move, which is indistinguishable from a key that never arrived. I did it twice
-            // in a row with the source open, and only found out by reading the RON afterwards.
-            //
-            // This is the `refused`-versus-`did nothing` gap `docs/2026-08-11-editor-visual-inspection.md`
-            // names as D2, in a new place: *"The information exists; only the channel is missing."*
-            // A note rather than a problem, because nothing went wrong — it names the axis that would
-            // move instead, which is the thing the author actually wants to know.
-            Ok(to) if was == Some(to) => {
-                let across = if dir.0 != 0 { "up/down" } else { "left/right" };
-                state.status.note(format!(
-                    "already flush that way — this piece spans the tile on that axis. Shift+{across} \
-                     moves it across instead"
-                ));
+        // **Through `tile_member_flush`** (E-002, #129 slice 29), the operation an agent calls. The camera's yaw is
+        // the front end's: it turns the screen wish into one of the tile's four axes here, and what a flush means — a
+        // hole has no width to put flush, a flush that moves nothing says why — is the operation's, once. Two opposite
+        // keys down at once cancel out, as they always did.
+        let (x, z) = step_in_view(align, rig.yaw);
+        if (x, z) != (0, 0) {
+            match hand_through_operation(&project, &mut build, "tile_member_flush", serde_json::json!({ "x": x, "z": z })) {
+                Ok(said) => state.status.note(said),
+                Err(e) => state.status.problem(e),
             }
-            Ok(to) => state
-                .status
-                .note(format!("flush — ({:+.3}, {:+.3})", to.0, to.1)),
-            Err(e) => state.status.problem(e),
         }
         return;
     }
@@ -2039,71 +2006,15 @@ pub fn build_keys(
         } else {
             step_in_view(wish, rig.yaw)
         };
-        let focus = build.focus;
-        // **The ladder is the piece's own**: its stops divide the span between the tile's centre
-        // and the flush position [`aligned`] reaches, so both are exactly reachable at every depth
-        // — the two verbs land on the same outermost stop by construction. A hole has no width, so
-        // its ladder spans the whole tile; its boundary stop is the one place the door refuses, by
-        // name, which is the honest answer for a slot that must sit strictly inside.
-        let span = build
-            .open
-            .as_ref()
-            .and_then(|c| c.members.get(focus))
-            .map(|m| match &m.body {
-                Body::Descriptor { id, .. } => project
-                    .library
-                    .get(id)
-                    .map(|d| crate::editor::brush_span(d, m.yaw, MEMBERS_STAND_UP))
-                    .unwrap_or((0.0, 0.0)),
-                _ => (0.0, 0.0),
-            })
-            .unwrap_or((0.0, 0.0));
-        let f = (
-            flush_reach(size.0, span.0).max(0.0),
-            flush_reach(size.2, span.1).max(0.0),
-        );
-        // **A piece that fills the tile on the pressed axis has no travel there** — guidance, not a
-        // refusal, the same door-manners as the flush no-op. The floor is the usual case: a
-        // one-cell piece in a one-cell tile has nowhere to go that would not grow the tile.
-        let travel = (dx != 0 && f.0 > ON_STOP) || (dz != 0 && f.1 > ON_STOP);
-        if !travel && lift_by == 0 {
-            state.status.note(
-                "this piece fills the tile on that axis — [ and ] move layers instead".to_owned(),
-            );
-            return;
-        }
-        let divisor = project.lattice.snap_divisor;
-        let depth = build.depth;
-        let was = build
-            .open
-            .as_ref()
-            .and_then(|c| c.members.get(focus))
-            .map(|m| (m.at, m.lift));
-        let moved = edit(&mut build, &project.library, |comp| {
-            let Some(m) = comp.members.get_mut(focus) else {
-                return Err("the focused member went away".to_owned());
-            };
-            // **The next stop on the ladder, not a fixed pitch** — [`ladder_step`] carries the
-            // rationale and the keyboard report that asked for it.
-            m.at.0 = ladder_step(m.at.0, f.0, divisor, depth, dx);
-            m.at.1 = ladder_step(m.at.1, f.1, divisor, depth, dz);
-            // The floor is the floor: a member cannot be nudged under the tile it is in.
-            m.lift = (m.lift + lift_by as f32 * lift_pitch(divisor, depth)).max(0.0);
-            Ok((m.at, m.lift))
-        });
-        match moved {
-            // The terminal stop: the ladder ends where the piece meets the tile, so a press outward
-            // there moves nothing — said, because it is indistinguishable from a dead key otherwise.
-            Ok(now) if was == Some(now) => state.status.note(
-                "already at the flush stop — the ladder ends where the piece meets the tile"
-                    .to_owned(),
-            ),
-            Ok(((x, z), lift)) => {
-                state
-                    .status
-                    .note(format!("({:+.3}, {:+.3}) at {:.3} m", x, z, lift));
+        // **Through `tile_member_nudge`** (E-002, #129 slice 29), the operation an agent calls: the next stop on the
+        // piece's own ladder, whose rule lives there once. A piece that fills the tile on the pressed axis, and a press
+        // at the terminal stop, are answers the operation gives as notes rather than refusals, as they always were.
+        if (dx, dz, lift_by) != (0, 0, 0) {
+            let params = serde_json::json!({ "x": dx, "z": dz, "lift": lift_by });
+            match hand_through_operation(&project, &mut build, "tile_member_nudge", params) {
+                Ok(said) => state.status.note(said),
+                Err(e) => state.status.problem(e),
             }
-            Err(e) => state.status.problem(e),
         }
         return;
     }
@@ -2130,35 +2041,10 @@ pub fn build_keys(
                 .problem("nothing picked — choose a piece in the list first".to_owned());
             return;
         };
-        // **A member must name a library descriptor.** `ImportState::editing` falls back to the
-        // focused *candidate* when nothing in the library is selected, and a candidate is a mesh
-        // measured but not imported — so dropping one writes a tile naming an id `library.yaml` does
-        // not carry, which expands to nothing at stamp time. Refused at the door rather than
-        // written and discovered later, which is this crate's rule for staged edits.
-        if project.library.get(&d.id).is_none() {
-            state.status.problem(format!(
-                "`{}` is not in the library yet — accept it on the Meshes tab first",
-                d.id
-            ));
-            return;
-        }
-        match edit(&mut build, &project.library, |comp| place(comp, &d)) {
-            Ok(i) => {
-                // **Focus follows the drop.** `insert_sorted` answers where it landed, and the two
-                // verbs that act on "this member" — turn and remove — mean the one you just put
-                // down. Ignoring the index left them acting on whatever sorted first, which is a
-                // different piece as soon as a tile holds two.
-                build.focus = i;
-                // **A drop leaves you adjusting what you dropped**, whichever key brought it in.
-                // `Enter` alone used to leave `placing` false and the arrows dead over a focused
-                // member — the author's first report. `Esc` is the way back to the library list.
-                build.placing = true;
-                let n = build.open.as_ref().map_or(0, |c| c.members.len());
-                state.status.note(format!(
-                    "`{}` dropped — {n} in the tile. Arrows move it, Esc goes back to the list",
-                    d.id
-                ));
-            }
+        // **Through `tile_member_drop`** (E-002, #129 slice 29): the piece is the list's pick, and the operation holds the
+        // rules — a member must name a library descriptor, focus follows the drop, and a drop leaves the piece in hand.
+        match hand_through_operation(&project, &mut build, "tile_member_drop", serde_json::json!({ "descriptor": d.id })) {
+            Ok(said) => state.status.note(said),
             Err(e) => state.status.problem(e),
         }
         return;
@@ -2167,20 +2053,10 @@ pub fn build_keys(
     // A hole instead of a piece. `accepts` comes from the project's slot axis, first token — the
     // vocabulary is the closed list, so there is nothing here to invent.
     if pressed(Action::BuildSlot) {
-        let Some(accepts) = project.vocab.slot.names().next().map(str::to_owned) else {
-            state.status.problem(
-                "no `slot` tokens declared — add one to vocab.yaml before dropping a hole"
-                    .to_owned(),
-            );
-            return;
-        };
-        match edit(&mut build, &project.library, |comp| {
-            place_slot(comp, &accepts)
-        }) {
-            Ok(i) => {
-                build.focus = i;
-                state.status.note(format!("hole for `{accepts}` dropped"));
-            }
+        // **Through `tile_slot_drop`** (E-002, #129 slice 29): with no token named it takes the slot axis's first, as the
+        // key always did, and refuses when the project declares none.
+        match hand_through_operation(&project, &mut build, "tile_slot_drop", serde_json::json!({})) {
+            Ok(said) => state.status.note(said),
             Err(e) => state.status.problem(e),
         }
         return;

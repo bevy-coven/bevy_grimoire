@@ -4086,8 +4086,9 @@ pub mod lattice_cursor_step {
 
 /// **The tile in hand, shaped** (E-002, #129 slice 28): `Space` takes the piece or puts it back, `,` and `.` walk the focus
 /// through the members, `J` makes the arrow ladder finer, `R` turns the focused member a quarter, the remove key takes it
-/// out and Shift and the remove key empty the tile, on the Tiles tab. Six operations on the rules the keys always had, each
-/// on the tile the view carries.
+/// out and Shift and the remove key empty the tile, on the Tiles tab (slice 28), and the arrows nudge it, Shift and the arrows put it
+/// flush, Enter drops the picked piece and the hole key drops a hole (slice 29). Ten operations on the rules the keys always had,
+/// each on the tile the view carries.
 ///
 /// **The draft is session state, not the project**: the tile is written to `compositions.yaml` only when `Cmd+S` saves it
 /// (`composition_define`), so none of these writes a file or takes an undo step of its own — the tab keeps a tile history of
@@ -4373,6 +4374,289 @@ pub mod tile_hand {
         }
 
         hand_operation!(TileClear, "tile_clear", no_parameters(), landing);
+    }
+
+    /// **A step along one axis**: `-1`, `0` or `1`, refused for anything else so a wild number is never silently clamped.
+    fn step_of(value: i32, field: &str) -> Result<i32, Refusal> {
+        if (-1..=1).contains(&value) {
+            Ok(value)
+        } else {
+            Err(Refusal::new(format!("`{field}` is {value}, and a step is -1, 0 or 1")))
+        }
+    }
+
+    /// **The project the tile stands in**: its library to measure the members against, its lattice for the ladder's
+    /// divisor and its vocabulary for a hole's token.
+    fn project_of(ctx: &Ctx) -> Result<&crate::project::Project, Refusal> {
+        ctx.project
+            .as_ref()
+            .ok_or_else(|| Refusal::new("no project is open, so the tile has no library to stand its members on."))
+    }
+
+    /// **The focused member and the tile's size**, or the guidance that there is none: an empty tile is told what to press.
+    fn focused_member<'a>(hand: &'a TileHand, what: &str) -> Result<(&'a bevy_grimoire_core::composition::Member, (f32, f32, f32)), Refusal> {
+        let Envelope::Bounded { size } = hand.open.envelope else {
+            return Err(Refusal::new(crate::build::claims_no_tile(&hand.open.id)));
+        };
+        hand.open
+            .members
+            .get(hand.focus)
+            .map(|m| (m, size))
+            .ok_or_else(|| Refusal::new(format!("nothing to {what} yet — Enter brings the picked mesh in")))
+    }
+
+    /// **Move the focused member to the next stop on its ladder**, as the four arrows and `[` and `]` do: sideways along
+    /// the tile's two axes (`x` and `z`, `-1` or `1`) and up or down a layer (`lift`). The stops divide the span between the
+    /// tile's centre and the flush position, so both are exactly reachable at every depth. A move that goes nowhere is
+    /// answered, not refused: the piece fills the tile on that axis, or the ladder ends where the piece meets the tile.
+    pub mod tile_member_nudge {
+        use super::*;
+
+        #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// The step along the tile's X axis: `-1`, `0` or `1`.
+            #[serde(default)]
+            pub x: i32,
+            /// The step along the tile's Z axis: `-1`, `0` or `1`.
+            #[serde(default)]
+            pub z: i32,
+            /// The step in layers: `-1` down, `1` up. A layer is the ladder's pitch at the depth the tile is on.
+            #[serde(default)]
+            pub lift: i32,
+        }
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            let p: Params = serde_json::from_value(params.clone())
+                .map_err(|e| Refusal::new(format!("these are not a nudge: {e}. The fields are `x`, `z` and `lift`, each -1, 0 or 1.")))?;
+            let (dx, dz, lift_by) = (step_of(p.x, "x")?, step_of(p.z, "z")?, step_of(p.lift, "lift")?);
+            if (dx, dz, lift_by) == (0, 0, 0) {
+                return Err(Refusal::new("a nudge moves somewhere: give `x`, `z` or `lift` as -1 or 1"));
+            }
+            let hand = hand_of(ctx, "move")?;
+            let (member, size) = focused_member(hand, "move")?;
+            let project = project_of(ctx)?;
+            let library = &*project.library;
+            let span = crate::build::member_span(member, library).unwrap_or((0.0, 0.0));
+            // **A hole has no width, so its ladder spans the whole tile**; its boundary stop is the one place the door
+            // refuses, by name, which is the honest answer for a slot that must sit strictly inside.
+            let f = (crate::build::flush_reach(size.0, span.0).max(0.0), crate::build::flush_reach(size.2, span.1).max(0.0));
+            let was = (member.at, member.lift);
+            let unmoved = |said: &str| Ok((hand.clone(), said.to_owned(), json!({ "moved": false, "at": [was.0.0, was.0.1], "lift": was.1 })));
+            // **A piece that fills the tile on the pressed axis has no travel there**: guidance, not a refusal. The floor is
+            // the usual case, a one-cell piece in a one-cell tile has nowhere to go that would not grow the tile.
+            let travel = (dx != 0 && f.0 > crate::build::ON_STOP) || (dz != 0 && f.1 > crate::build::ON_STOP);
+            if !travel && lift_by == 0 {
+                return unmoved("this piece fills the tile on that axis — [ and ] move layers instead");
+            }
+            let (divisor, depth, focus) = (project.lattice.snap_divisor, hand.depth, hand.focus);
+            let mut open = Some(hand.open.clone());
+            let (at, lift) = crate::build::edit_open(&mut open, library, |comp| {
+                let Some(m) = comp.members.get_mut(focus) else {
+                    return Err("the focused member went away".to_owned());
+                };
+                // **The next stop on the ladder, not a fixed pitch**: `ladder_step` carries the rationale.
+                m.at.0 = crate::build::ladder_step(m.at.0, f.0, divisor, depth, dx);
+                m.at.1 = crate::build::ladder_step(m.at.1, f.1, divisor, depth, dz);
+                // The floor is the floor: a member cannot be nudged under the tile it is in.
+                m.lift = (m.lift + lift_by as f32 * crate::build::lift_pitch(divisor, depth)).max(0.0);
+                Ok((m.at, m.lift))
+            })
+            .map_err(Refusal::new)?;
+            if (at, lift) == was {
+                // The terminal stop: a press outward there moves nothing, said because it is a dead key otherwise.
+                return unmoved("already at the flush stop — the ladder ends where the piece meets the tile");
+            }
+            let open = open.ok_or_else(|| Refusal::new(crate::build::NO_TILE))?;
+            let said = format!("({:+.3}, {:+.3}) at {:.3} m", at.0, at.1, lift);
+            Ok((TileHand { open, ..hand.clone() }, said, json!({ "moved": true, "at": [at.0, at.1], "lift": lift })))
+        }
+
+        hand_operation!(
+            TileMemberNudge,
+            "tile_member_nudge",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "x": {"type": "integer", "minimum": -1, "maximum": 1, "description": "The step along the tile's X axis: -1 or 1; absent is none. The arrow keys' direction depends on the camera, so an agent names the tile's own axis."},
+                    "z": {"type": "integer", "minimum": -1, "maximum": 1, "description": "The step along the tile's Z axis: -1 or 1; absent is none."},
+                    "lift": {"type": "integer", "minimum": -1, "maximum": 1, "description": "The step in layers, as `]` (1) and `[` (-1) do; absent is none."},
+                },
+            }),
+            landing
+        );
+    }
+
+    /// **Put the focused member flush against one side of the tile**, as Shift and an arrow do: `x` or `z`, `-1` or `1`, one
+    /// of them. The position is a function of the piece's own width, which is why it is a verb the ladder's arithmetic
+    /// agrees with. A hole has no width, so it is refused; a flush that moves nothing says why.
+    pub mod tile_member_flush {
+        use super::*;
+
+        #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// The side along the tile's X axis: `-1` or `1`.
+            #[serde(default)]
+            pub x: i32,
+            /// The side along the tile's Z axis: `-1` or `1`.
+            #[serde(default)]
+            pub z: i32,
+        }
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            let p: Params = serde_json::from_value(params.clone())
+                .map_err(|e| Refusal::new(format!("these are not a flush: {e}. The fields are `x` and `z`, one of them -1 or 1.")))?;
+            let (x, z) = (step_of(p.x, "x")?, step_of(p.z, "z")?);
+            if (x != 0) == (z != 0) {
+                return Err(Refusal::new("a flush names one side: `x` or `z`, -1 or 1, and not both or neither"));
+            }
+            let hand = hand_of(ctx, "flush")?;
+            let (member, size) = focused_member(hand, "flush")?;
+            let library = library_of(ctx)?;
+            // The span is read before the door, because "this is a hole" is guidance too: a hole has no width, so "flush" is
+            // its position *on* the boundary, which `validate` refuses. Nudging is how a hole is placed.
+            let span = crate::build::member_span(member, library)
+                .ok_or_else(|| Refusal::new("a hole has no width to put flush — nudge it instead"))?;
+            let (was, focus) = (member.at, hand.focus);
+            let mut open = Some(hand.open.clone());
+            let to = crate::build::edit_open(&mut open, library, |comp| {
+                let Some(m) = comp.members.get_mut(focus) else {
+                    return Err("the focused member went away".to_owned());
+                };
+                m.at = crate::build::aligned(m.at, span, size, (x, z));
+                Ok(m.at)
+            })
+            .map_err(Refusal::new)?;
+            if was == to {
+                // **A flush that moves nothing says why**: a 0.1 x 1.0 m wall flushed along its length is a genuine no-op,
+                // which is indistinguishable from a key that never arrived. It names the axis that would move instead.
+                let across = if x != 0 { "up/down" } else { "left/right" };
+                let said = format!("already flush that way — this piece spans the tile on that axis. Shift+{across} moves it across instead");
+                return Ok((hand.clone(), said, json!({ "moved": false, "at": [to.0, to.1] })));
+            }
+            let open = open.ok_or_else(|| Refusal::new(crate::build::NO_TILE))?;
+            Ok((TileHand { open, ..hand.clone() }, format!("flush — ({:+.3}, {:+.3})", to.0, to.1), json!({ "moved": true, "at": [to.0, to.1] })))
+        }
+
+        hand_operation!(
+            TileMemberFlush,
+            "tile_member_flush",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "x": {"type": "integer", "minimum": -1, "maximum": 1, "description": "Flush against the tile's -X (-1) or +X (1) side. Give `x` or `z`, not both."},
+                    "z": {"type": "integer", "minimum": -1, "maximum": 1, "description": "Flush against the tile's -Z (-1) or +Z (1) side. Give `x` or `z`, not both."},
+                },
+            }),
+            landing
+        );
+    }
+
+    /// **Drop a library piece into the open tile**, as Enter on the Meshes page does: it lands in the middle, the focus
+    /// follows it and it is taken in hand, so the arrows adjust what was just dropped. A member must name a library
+    /// descriptor: one measured but not imported would write a tile naming an id the library does not carry.
+    pub mod tile_member_drop {
+        use super::*;
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// The library piece to drop, by its id.
+            pub descriptor: String,
+        }
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            let p: Params = serde_json::from_value(params.clone())
+                .map_err(|e| Refusal::new(format!("these are not a drop: {e}. The only field is `descriptor`, a library piece's id.")))?;
+            let hand = hand_of(ctx, "drop into")?;
+            let library = library_of(ctx)?;
+            let Some(guest) = library.get(&p.descriptor) else {
+                return Err(Refusal::new(format!("`{}` is not in the library yet — accept it on the Meshes tab first", p.descriptor)));
+            };
+            let mut open = Some(hand.open.clone());
+            let (focus, id) = crate::build::edit_open(&mut open, library, |comp| {
+                let i = crate::build::place(comp, guest)?;
+                Ok((i, comp.members[i].id.clone()))
+            })
+            .map_err(Refusal::new)?;
+            let open = open.ok_or_else(|| Refusal::new(crate::build::NO_TILE))?;
+            let n = open.members.len();
+            // **Focus follows the drop**, because turn and remove mean the one just put down; and **a drop leaves the piece
+            // in hand**, so the arrows adjust it rather than walking the library list.
+            let said = format!("`{}` dropped — {n} in the tile. Arrows move it, Esc goes back to the list", p.descriptor);
+            Ok((TileHand { open, focus, placing: true, ..hand.clone() }, said, json!({ "member": id, "members": n })))
+        }
+
+        hand_operation!(
+            TileMemberDrop,
+            "tile_member_drop",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["descriptor"],
+                "properties": {
+                    "descriptor": {"type": "string", "description": "The library piece to drop into the open tile, by its id. Refused unless the library carries it, and unless a bounded tile is open."},
+                },
+            }),
+            landing
+        );
+    }
+
+    /// **Drop a hole into the open tile**: a position that says what may go there without saying what does. `accepts` is a
+    /// token of the project's slot axis, and absent is the first one, as the key always took.
+    pub mod tile_slot_drop {
+        use super::*;
+
+        #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct Params {
+            /// The slot token the hole accepts; absent is the axis's first.
+            #[serde(default)]
+            pub accepts: Option<String>,
+        }
+
+        fn landing(ctx: &Ctx, params: &serde_json::Value) -> Result<(TileHand, String, serde_json::Value), Refusal> {
+            let p: Params = serde_json::from_value(params.clone())
+                .map_err(|e| Refusal::new(format!("these are not a hole: {e}. The only field is `accepts`, a slot token.")))?;
+            let hand = hand_of(ctx, "drop a hole into")?;
+            let project = project_of(ctx)?;
+            let Some(first) = project.vocab.slot.names().next() else {
+                return Err(Refusal::new("no `slot` tokens declared — add one to vocab.yaml before dropping a hole"));
+            };
+            let accepts = match p.accepts {
+                None => first.to_owned(),
+                Some(named) if project.vocab.slot.names().any(|n| n == named) => named,
+                Some(named) => {
+                    let known: Vec<&str> = project.vocab.slot.names().collect();
+                    return Err(Refusal::new(format!("`{named}` is not a slot token in vocab.yaml; the declared ones are {}", known.join(", "))));
+                }
+            };
+            let mut open = Some(hand.open.clone());
+            let (focus, id) = crate::build::edit_open(&mut open, &project.library, |comp| {
+                let i = crate::build::place_slot(comp, &accepts)?;
+                Ok((i, comp.members[i].id.clone()))
+            })
+            .map_err(Refusal::new)?;
+            let open = open.ok_or_else(|| Refusal::new(crate::build::NO_TILE))?;
+            let n = open.members.len();
+            Ok((TileHand { open, focus, ..hand.clone() }, format!("hole for `{accepts}` dropped"), json!({ "member": id, "accepts": accepts, "members": n })))
+        }
+
+        hand_operation!(
+            TileSlotDrop,
+            "tile_slot_drop",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "accepts": {"type": "string", "description": "The slot token the hole accepts, from vocab.yaml's slot axis; absent is the axis's first. Refused when the project declares none."},
+                },
+            }),
+            landing
+        );
     }
 }
 
@@ -6701,6 +6985,10 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(tile_hand::tile_member_turn::TileMemberTurn),
         Box::new(tile_hand::tile_member_remove::TileMemberRemove),
         Box::new(tile_hand::tile_clear::TileClear),
+        Box::new(tile_hand::tile_member_nudge::TileMemberNudge),
+        Box::new(tile_hand::tile_member_flush::TileMemberFlush),
+        Box::new(tile_hand::tile_member_drop::TileMemberDrop),
+        Box::new(tile_hand::tile_slot_drop::TileSlotDrop),
         Box::new(tool_arm::ToolArm),
         Box::new(snip_arm::SnipArm),
         Box::new(map_create::MapCreate),
@@ -6996,6 +7284,13 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     ("tile_member_turn", "\"tile_member_turn\""),
     ("tile_member_remove", "\"tile_member_remove\""),
     ("tile_clear", "\"tile_clear\""),
+    // **The tile's arrows, flush, drop and hole keys** (E-002, #129 slice 29): the arrows and `[` and `]` dispatch
+    // `tile_member_nudge`, Shift and the arrows `tile_member_flush`, Enter `tile_member_drop` and the hole key
+    // `tile_slot_drop`, through `build::build_keys`.
+    ("tile_member_nudge", "\"tile_member_nudge\""),
+    ("tile_member_flush", "\"tile_member_flush\""),
+    ("tile_member_drop", "\"tile_member_drop\""),
+    ("tile_slot_drop", "\"tile_slot_drop\""),
     // **The clone and run keys**, which dispatch `tool_arm` through `arm_tool` (E-002, #129). Two keys,
     // one rule: press to arm, press again to return to `Tool::Place`.
     ("tool_arm", "\"tool_arm\""),
