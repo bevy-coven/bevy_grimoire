@@ -9,7 +9,16 @@
 # `project_unchanged` is the half that stops an agent inventing a piece, editing the library, or "roughly"
 # placing the nearest bed. `handback_contains` is the half that stops the **do-nothing loophole**: an agent
 # that connects and stops leaves the project unchanged and would pass the first check alone. Silence is not
-# a refusal, and the benchmark says so by requiring the words.
+# a refusal, and the benchmark says so by requiring a hand-back that names what is missing.
+#
+# # What the hand-back is asked for, and no more (#432, D5)
+#
+# The prompt asks the agent to "name the thing that is missing", and that thing is the armchair. The check is
+# the word the prompt itself uses for it, matched without case anywhere in the hand-back, so `velvet armchair`,
+# `Velvet-Armchair` and `an armchair of any kind` all name it. It used to require the snake_case id
+# `velvet_armchair` and the stock phrase `nothing was placed`, neither of which the prompt asks for: two
+# correct refusals failed on wording (BM-08's first real-agent run), and the task measured phrasing. That the
+# map is unchanged is `project_unchanged`'s and `oplog_lacks`'s to say, not the sentence's.
 id: refuse-a-piece-the-project-lacks
 title: Refuse a piece the project does not have
 split: dev
@@ -37,5 +46,5 @@ checks:
   - project_unchanged: {}
   - unchanged: [maps/bench_bedroom.map.yaml]
   - oplog_lacks: {op: placement_add}
-  - handback_contains: [velvet_armchair, nothing was placed]
+  - handback_contains: [armchair]
 budget: {wall_s: 600, tool_calls: 60}
