@@ -8306,7 +8306,7 @@ fn shelf_strip(
     // the panel edge, which is the same class of defect as the kit row that wrapped into its own value column — a fixed
     // width and content that outgrew it. The hint drops to a second line rather than being cut, and on a wider panel it stays
     // where it was.
-    crate::chrome::wrapping_row(p, crate::chrome::GAP_ROW_STEPS, crate::chrome::GAP_TIGHT, UiRect::ZERO, AlignItems::Center)
+    crate::chrome::wrapping_row(p, crate::chrome::GAP_ROW_STEPS, UiRect::ZERO, AlignItems::Center)
     .with_children(|row| {
         // A tab shows the two shelves its own keys reach: `Meshes` imports (candidates <-> library),
         // `Tiles` composes (library <-> kit). Drawing all three everywhere would offer a chip whose
@@ -10280,7 +10280,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     // and "the filter matched nothing" is precisely the moment an author wants to add
                     // the word they just typed. So the row is spawned unconditionally and the dash
                     // moves inside it, where it can stand beside the `+` alone.
-                    crate::chrome::wrapping_row(p, crate::chrome::GAP_TIGHT_STEPS, crate::chrome::GAP_TIGHT, UiRect::ZERO, AlignItems::Center)
+                    crate::chrome::wrapping_row(p, crate::chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Center)
                     .with_children(|chips| {
                         if kept.is_empty() {
                             chips.spawn((
@@ -10527,7 +10527,6 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             crate::chrome::wrapping_row(
                 p,
                 crate::chrome::GAP_GROUP_STEPS,
-                crate::chrome::GAP_ROW,
                 UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
                 AlignItems::FlexStart,
             )
@@ -10638,7 +10637,6 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             crate::chrome::wrapping_row(
                 p,
                 crate::chrome::GAP_TIGHT_STEPS,
-                crate::chrome::GAP_TIGHT,
                 UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
                 AlignItems::Center,
             )

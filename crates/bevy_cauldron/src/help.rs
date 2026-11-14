@@ -142,10 +142,14 @@ fn mark_the_panel_headings(
         // **The heading and its "?" are one row**, so the button sits beside the words rather than
         // inside the text run. The row takes the heading's place in the panel, which keeps the title
         // at the top of it.
-        let mut line = commands.spawn((PanelHeading, bevy_gooey::row(crate::chrome::GAP_TIGHT_STEPS), bevy::picking::Pickable::IGNORE));
-        // The "?" stands level with the heading's words: a gooey row says nothing about where its cells align.
-        line.entry::<Node>().and_modify(|mut node| node.align_items = AlignItems::Center);
-        let row = line.id();
+        // The "?" stands level with the heading's words.
+        let row = commands
+            .spawn((
+                PanelHeading,
+                bevy_gooey::row_with(crate::chrome::GAP_TIGHT_STEPS, bevy_gooey::RowLayout { align: Some(AlignItems::Center), ..default() }),
+                bevy::picking::Pickable::IGNORE,
+            ))
+            .id();
         commands.entity(panel).insert_children(at, &[row]);
         commands.entity(row).add_child(heading);
         commands.entity(row).with_child((

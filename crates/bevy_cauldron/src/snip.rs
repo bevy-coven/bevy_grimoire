@@ -41,6 +41,8 @@ pub const SNIP_DIR: &str = "target/loop/captures/snips";
 
 /// The smallest drag that is a picture. Below this a release is a slip of the hand.
 const MIN_SIDE_PX: f32 = 8.0;
+/// How far above the drag rectangle's top edge its label rides, in logical px (negative is up).
+const SNIP_LABEL_RISE_PX: f32 = -22.0;
 
 /// The longest note the field keeps.
 const NOTE_CAP: usize = 200;
@@ -472,13 +474,8 @@ pub fn snip_overlay(
                 TextColor(chrome::ink().text),
                 // One line, so a narrow drag cannot wrap the label down across the box's top edge.
                 TextLayout::default().with_no_wrap(),
-                Node {
-                    // PLACES-ITSELF-OK: a label riding the drag rectangle's top edge, not a panel; it is positioned against the rectangle it names.
-                    position_type: PositionType::Absolute,
-                    top: Val::Px(-22.0),
-                    left: Val::Px(0.0),
-                    ..default()
-                },
+                // A label riding the drag rectangle's top edge, placed against the rectangle it names.
+                bevy_gooey::placed(UiRect { left: Val::Px(0.0), top: Val::Px(SNIP_LABEL_RISE_PX), ..UiRect::all(Val::Auto) }),
             ));
         });
 }

@@ -50,7 +50,7 @@ use bevy::ui::{ComputedNode, ScrollPosition, UiGlobalTransform};
 use bevy::ui_widgets::{Activate, ValueChange};
 use bevy_gooey::{
     Card, CardSelection, MarkdownBase, MarkdownLink, MarkdownOutline, MarkdownPicture, MarkdownView, MarkdownViewport, SelectMode, Table, TableSelection,
-    TreeNode, markdown_view, observe, scroll_to_heading, tree,
+    RowLayout, TreeNode, column_with, fill_region, markdown_view, observe, scroll_to_heading, tree,
 };
 use bevy_grimoire_core::board::{self, Board};
 use bevy_grimoire_core::design::{self, Place, PlaceKind};
@@ -427,7 +427,7 @@ fn spawn_the_design_workspace(mut commands: Commands, frame: Res<Frame>) {
     let panel = chrome::panel_root(&mut commands, &frame, Side::Left, TREE_PANEL_W, true, false, "DESIGN").insert(DesignPanel).id();
     commands.entity(panel).with_children(|p| {
         chrome::title(p, "DESIGN");
-        p.spawn(Node { flex_grow: 1.0, min_height: Val::Px(0.0), flex_direction: FlexDirection::Column, ..default() }).with_children(|column| {
+        p.spawn(fill_region()).with_children(|column| {
             column.spawn((tree(Vec::<TreeNode>::new()), DesignTree::default(), SelectMode::Single, observe(on_tree_pick)));
         });
     });
@@ -435,18 +435,7 @@ fn spawn_the_design_workspace(mut commands: Commands, frame: Res<Frame>) {
     let host = commands
         .spawn((
             DesignHost,
-            Node {
-                flex_grow: 1.0,
-                min_width: Val::Px(0.0),
-                min_height: Val::Px(0.0),
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(chrome::GAP_ROW),
-                padding: UiRect::all(Val::Px(chrome::PAD)),
-                margin: UiRect::all(Val::Px(chrome::MARGIN)),
-                border: UiRect::all(Val::Px(chrome::EDGE_W)),
-                border_radius: BorderRadius::all(Val::Px(chrome::RADIUS_PANEL)),
-                ..default()
-            },
+            files::page_host_node(),
             BackgroundColor(ink.panel_bg),
             chrome::Ground(ink.panel_bg),
             chrome::PanelGround,
@@ -456,10 +445,10 @@ fn spawn_the_design_workspace(mut commands: Commands, frame: Res<Frame>) {
             AccessibleLabel::new("Design page"),
         ))
         .with_children(|host| {
-            host.spawn((DesignTop, Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(chrome::GAP_TIGHT), flex_shrink: 0.0, ..default() }));
+            host.spawn((DesignTop, column_with(chrome::GAP_TIGHT_STEPS, RowLayout { shrink: Some(0.0), ..default() })));
             host.spawn((
                 DesignBody,
-                Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), min_width: Val::Px(0.0), ..default() },
+                fill_region(),
             ));
         })
         .id();

@@ -70,6 +70,11 @@ pub struct News {
 /// How wide the launcher's card is, in logical pixels: wide enough for a project's row, narrower than the window.
 pub const CARD_WIDTH: f32 = 840.0;
 
+/// **How wide a dialog's card is, in body text sizes**: the ceiling gooey's dialog skin gave a card under its scrim (36 text sizes, about 397 px at the editor's
+/// text), which every dialog here was effectively drawn at while its own `width` asked for 520 to 840 px. `CardWidth::Text` states it, so a card is the width a
+/// person saw before the card was built with `sized_panel` (which writes `width` and no ceiling): measured 396.7 px at the harness window both ways.
+pub const DIALOG_CARD_TEXT_SIZES: f32 = 36.0;
+
 /// The launcher's splash: pixel art by Retro Diffusion (`tools/ui/splash-jobs.json`), embedded like the icon sheet.
 pub const SPLASH_PNG: &[u8] = include_bytes!("../assets/ui/splash.png");
 
@@ -520,9 +525,11 @@ pub(crate) fn card_node() -> Node {
     Node { flex_direction: FlexDirection::Column, width: Val::Px(CARD_PX), padding: UiRect::all(Val::Px(crate::chrome::PAD)), row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }
 }
 
-/// The picture's box inside a card.
-pub(crate) fn thumb_node() -> Node {
-    Node { width: Val::Px(THUMB.x), height: Val::Px(THUMB.y), ..default() }
+/// **The picture's box inside a card**: gooey's `image_box`, so it holds its room while the picture loads. A cropped picture is `.insert(picture)`ed over it:
+/// `project_picture` chose the middle band that fits the box and put it on the `ImageNode`'s `rect`, and `image_box` alone would draw the whole image squeezed
+/// into the box.
+pub(crate) fn thumb_box(image: Handle<Image>) -> impl Bundle {
+    bevy_gooey::image_box(image, THUMB)
 }
 
 /// Decodes the splash once, into `splash`.
@@ -605,8 +612,7 @@ pub(crate) fn fill_sidebar(commands: &mut Commands, sidebar: Entity, launcher: &
             // **The box is the sidebar's content width**, not its outer width, and the height follows
             // the art's own 256 x 80 so the picture is never stretched (`feedback-1793905798698`).
             side.spawn((
-                ImageNode::new(handle.clone()),
-                Node { width: Val::Px(SIDEBAR_SPLASH.x), height: Val::Px(SIDEBAR_SPLASH.y), ..default() },
+                bevy_gooey::image_box(handle.clone(), SIDEBAR_SPLASH),
                 Name::new("sidebar splash"),
             ));
         }
@@ -754,7 +760,7 @@ fn fill_the_home(
 
     let mut art = Art { splash: splash.0.clone(), images: &mut images, pictures: &mut pictures, now: recent::now(), menu };
     commands.entity(content).with_children(|content| {
-        content.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), ..default() }).with_children(|pages| {
+        content.spawn(bevy_gooey::fill_region()).with_children(|pages| {
             pages
                 .spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, HomePage(HomeTab::Projects)))
                 .with_children(|page| {
@@ -810,7 +816,7 @@ fn projects_body(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut
     // scrolls a focused card into view, and the wheel scrolls the rest.
     // **Type-select (UI-R04, #334):** the cards are a group, so typing a project's first letters moves to it, as it does in a list.
     crate::chrome::scroll_list(body, (ProjectGrid, bevy_gooey::TypeSelectGroup)).with_children(|scroll| {
-        crate::chrome::wrapping_row(scroll, crate::chrome::GAP_GROUP_STEPS, crate::chrome::GAP_GROUP, UiRect::ZERO, AlignItems::Stretch).with_children(|grid| {
+        crate::chrome::wrapping_row(scroll, crate::chrome::GAP_GROUP_STEPS, UiRect::ZERO, AlignItems::Stretch).with_children(|grid| {
             for row in &launcher.rows {
                 if row.missing {
                     missing_card(grid, row);
@@ -846,8 +852,7 @@ fn welcome(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &Art) {
     body.spawn(Node { flex_direction: FlexDirection::Column, align_items: AlignItems::FlexStart, row_gap: Val::Px(crate::chrome::GAP_GROUP), max_width: Val::Px(WELCOME_COLUMN_PX), ..default() }).with_children(|card| {
         if let Some((handle, size)) = art.splash.as_ref() {
             card.spawn((
-                ImageNode::new(handle.clone()),
-                Node { width: Val::Px(size.x * WELCOME_SPLASH_SCALE), height: Val::Px(size.y * WELCOME_SPLASH_SCALE), max_width: Val::Percent(100.0), aspect_ratio: Some(size.x / size.y), ..default() },
+                bevy_gooey::aspect_image(handle.clone(), size.x * WELCOME_SPLASH_SCALE, size.x / size.y),
                 Name::new("welcome splash"),
             ));
         }
@@ -1004,7 +1009,7 @@ fn project_card(grid: &mut ChildSpawnerCommands, row: &Listed, art: &mut Art) {
     ))
     .with_children(|card| {
         if let Some(picture) = picture {
-            card.spawn((picture, thumb_node(), Pickable::IGNORE));
+            card.spawn(thumb_box(picture.image.clone())).insert(picture);
         }
         card.spawn((Text::new(name_of(&path)), Role::ButtonText, Pickable::IGNORE));
         card.spawn((quiet(shown_folder(&path)), Pickable::IGNORE));
@@ -1220,7 +1225,7 @@ fn news_page(page: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut Art
         ))
         .with_children(|entry| {
             if let Some(handle) = picture {
-                entry.spawn((ImageNode::new(handle), thumb_node(), Pickable::IGNORE));
+                entry.spawn(thumb_box(handle));
             }
             // **The prose keeps a measure, and it has the room to.** `flex_shrink` alone let the column
             // take whatever the window gave it — 118 characters a line at the capture's own width —

@@ -196,3 +196,41 @@ fn the_map_inspectors_lists_are_gooey_columns_in_gooey_blocks() {
     assert_column(&app, picker, "the composition picker's body");
     assert_column(&app, parent(&app, picker), "the compositions section's block");
 }
+
+/// **The Familiar block** is a gooey column that is never squeezed, and each readout value stands in gooey's fill column (it takes the
+/// room its row leaves and may narrow to nothing, so a long value wraps in its own column).
+#[test]
+fn the_familiar_block_is_a_rigid_gooey_column_and_its_values_stand_in_fill_columns() {
+    use bevy_cauldron::familiar::{Familiar, FamiliarLine};
+    let mut app = editor("familiar_block", Mode::Agent);
+    let block = the::<Familiar>(&mut app);
+    assert_eq!(app.world().get::<Role>(block), Some(&Role::Column), "the Familiar block is a gooey `column`, not a raw `Node`");
+    let node = app.world().get::<Node>(block).expect("the block has a Node");
+    assert_eq!(node.flex_shrink, 0.0, "the block keeps its height when the INSPECTOR's rows are taller than the panel");
+    let value = the::<FamiliarLine>(&mut app);
+    let column = parent(&app, value);
+    assert_eq!(app.world().get::<Role>(column), Some(&Role::FillColumn), "a readout value stands in gooey's fill column");
+    let node = app.world().get::<Node>(column).expect("the value's column has a Node");
+    assert_eq!(node.flex_grow, 1.0, "the value's column takes the room its row leaves");
+    assert_eq!(node.min_width, Val::Px(0.0), "and may narrow to nothing");
+}
+
+/// **An empty map's prompt covers its viewport** with gooey's `cover`: placed at zero on every side, letting the pointer through to the
+/// world, with its sentence and its action centred.
+#[test]
+fn the_empty_map_prompt_is_a_gooey_cover_that_lets_the_pointer_through() {
+    use bevy_cauldron::empty_state::EmptyMapPrompt;
+    let root = fixtures::Fixture::new(&format!("small_gooey_prompt_{}", std::process::id())).descriptor("site/wall", "alpha").build("m");
+    let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    for _ in 0..8 {
+        app.update();
+    }
+    let prompt = the::<EmptyMapPrompt>(&mut app);
+    assert_eq!(app.world().get::<Role>(prompt), Some(&Role::Placed), "the prompt is a gooey placed node, not a raw absolute `Node`");
+    assert_eq!(app.world().get::<bevy_gooey::PlacedAt>(prompt), Some(&bevy_gooey::PlacedAt(UiRect::all(Val::ZERO))), "it covers its host");
+    assert_eq!(app.world().get::<Pickable>(prompt), Some(&Pickable::IGNORE), "the world under it still takes the pointer");
+    let node = app.world().get::<Node>(prompt).expect("the prompt has a Node");
+    assert_eq!(node.position_type, PositionType::Absolute, "it takes no room in the viewport's flow");
+    assert_eq!(node.justify_content, JustifyContent::Center, "its content is centred down the viewport");
+    assert_eq!(node.align_items, AlignItems::Center, "and across it");
+}

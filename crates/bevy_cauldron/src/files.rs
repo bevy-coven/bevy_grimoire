@@ -674,12 +674,29 @@ impl Plugin for FilesPlugin {
 
 /// **Spawn the tree and the editor's column** when the Files workspace is entered. The code editor itself is
 /// spawned by [`keep_the_editor`] while a file is open, so a workspace with no file open holds no editor.
+/// **The node a workspace's central page stands in**: one card of the editor's panel look (padding, margin, edge, rounded corners) that fills what the
+/// docks leave. The Files workspace and the Design workspace both build their page host on it, so there is one such node and no second copy of it.
+pub(crate) fn page_host_node() -> Node {
+    Node {
+        flex_grow: 1.0,
+        min_width: Val::Px(0.0),
+        min_height: Val::Px(0.0),
+        flex_direction: FlexDirection::Column,
+        row_gap: Val::Px(chrome::GAP_ROW),
+        padding: UiRect::all(Val::Px(chrome::PAD)),
+        margin: UiRect::all(Val::Px(chrome::MARGIN)),
+        border: UiRect::all(Val::Px(chrome::EDGE_W)),
+        border_radius: BorderRadius::all(Val::Px(chrome::RADIUS_PANEL)),
+        ..default()
+    }
+}
+
 fn spawn_the_files_workspace(mut commands: Commands, frame: Res<Frame>) {
     let panel = chrome::panel_root(&mut commands, &frame, Side::Left, TREE_PANEL_W, true, false, "FILES").insert(FilesPanel).id();
     commands.entity(panel).with_children(|p| {
         chrome::title(p, "FILES");
         p.spawn((bevy_gooey::label(String::new()), TreeNotice));
-        p.spawn(Node { flex_grow: 1.0, min_height: Val::Px(0.0), flex_direction: FlexDirection::Column, ..default() })
+        p.spawn(bevy_gooey::fill_region())
             .with_children(|column| {
                 column.spawn((tree(Vec::<TreeNode>::new()), FilesTree, SelectMode::Single, observe(open_the_picked_file)));
             });
@@ -688,18 +705,7 @@ fn spawn_the_files_workspace(mut commands: Commands, frame: Res<Frame>) {
     let host = commands
         .spawn((
             FilesHost,
-            Node {
-                flex_grow: 1.0,
-                min_width: Val::Px(0.0),
-                min_height: Val::Px(0.0),
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(chrome::GAP_ROW),
-                padding: UiRect::all(Val::Px(chrome::PAD)),
-                margin: UiRect::all(Val::Px(chrome::MARGIN)),
-                border: UiRect::all(Val::Px(chrome::EDGE_W)),
-                border_radius: BorderRadius::all(Val::Px(chrome::RADIUS_PANEL)),
-                ..default()
-            },
+            page_host_node(),
             BackgroundColor(ink.panel_bg),
             chrome::Ground(ink.panel_bg),
             chrome::PanelGround,

@@ -108,7 +108,7 @@ impl Plugin for StyleAreasPlugin {
                     .run_if(on_the_map)
                     .run_if(resource_exists::<OpenMap>)
                     .run_if(resource_exists::<Project>),
-                name_the_areas.after(refresh),
+                name_the_areas.after(refresh).before(bevy_gooey::GooeySystems::Style),
             ),
         );
     }
@@ -213,7 +213,7 @@ fn name_the_areas(
     mode: Option<Res<crate::tiles::Mode>>,
     ui_scale: Res<UiScale>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<crate::view::MainCamera>>>,
-    mut labels: Query<(Entity, &AreaLabel, &mut Node)>,
+    mut labels: Query<(Entity, &AreaLabel, &mut bevy_gooey::PlacedAt)>,
     mut commands: Commands,
 ) {
     let shown = areas.on && on_the_map(mode);
@@ -235,12 +235,12 @@ fn name_the_areas(
         let at = cam.world_to_viewport(cam_tf, world).ok().map(|p| p / ui_scale.0);
         let existing = labels.iter_mut().find(|(_, AreaLabel(name), _)| name == &area.name);
         match (existing, at) {
-            (Some((_, _, mut node)), Some(at)) => {
-                if node.left != Val::Px(at.x) {
-                    node.left = Val::Px(at.x);
+            (Some((_, _, mut placed)), Some(at)) => {
+                if placed.0.left != Val::Px(at.x) {
+                    placed.0.left = Val::Px(at.x);
                 }
-                if node.top != Val::Px(at.y) {
-                    node.top = Val::Px(at.y);
+                if placed.0.top != Val::Px(at.y) {
+                    placed.0.top = Val::Px(at.y);
                 }
             }
             (Some((label, ..)), None) => {
@@ -253,13 +253,7 @@ fn name_the_areas(
                     Text::new(area.name.clone()),
                     TextColor(OUTLINE),
                     crate::chrome::typed(crate::chrome::text::LABEL),
-                    Node {
-                        // PLACES-ITSELF-OK: an area's name is anchored to the area's corner projected through the camera, not a panel.
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(at.x),
-                        top: Val::Px(at.y),
-                        ..default()
-                    },
+                    bevy_gooey::placed_at(at.x, at.y),
                     GlobalZIndex(crate::chrome::BALLOON_Z),
                 ));
             }

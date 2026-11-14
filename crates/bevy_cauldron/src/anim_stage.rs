@@ -862,17 +862,8 @@ pub(crate) fn spawn_chips(
     ink: crate::anim_tab::BenchInk,
 ) {
     crate::chrome::section(p, "STAGE");
-    p.spawn(Node {
-        flex_direction: FlexDirection::Row,
-        column_gap: Val::Px(crate::chrome::GAP_TIGHT),
-        flex_wrap: FlexWrap::Wrap,
-        // A wrapping row of chips has to be allowed to narrow, or its last member is clipped by
-        // the pane's right edge (the audit's F7).
-        // CHROME-OK: zero is not a spacing step.
-        min_width: Val::Px(0.0),
-        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-        ..default()
-    })
+    // A wrapping row of chips narrows with its pane (gooey's row may), so its last member is never clipped by the pane's right edge (the audit's F7).
+    crate::chrome::wrapping_row(p, crate::chrome::GAP_TIGHT_STEPS, UiRect::ZERO, AlignItems::Stretch)
     .with_children(|row| {
         for (i, slot) in rig.slots.iter().enumerate() {
             let label = slot
@@ -894,11 +885,7 @@ pub(crate) fn spawn_chips(
     // The ghost toggle, only where there is something to A/B — a gait-less rig has no measured
     // numbers to stage.
     if rig.has_gaits() {
-        p.spawn(Node {
-            flex_direction: FlexDirection::Row,
-            margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
-            ..default()
-        })
+        crate::chrome::spaced_row(p, UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)), AlignItems::Stretch)
         .with_children(|row| {
             crate::chrome::chip(
                 row,

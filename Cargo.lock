@@ -1243,7 +1243,7 @@ dependencies = [
 [[package]]
 name = "bevy_gooey"
 version = "0.52.1"
-source = "git+https://github.com/bevy-coven/bevy_gooey?rev=424d37b88bd32fd40ea230dfdd99f862717df2af#424d37b88bd32fd40ea230dfdd99f862717df2af"
+source = "git+https://github.com/bevy-coven/bevy_gooey?rev=b750eae6d995f936b514a28a2573f67136bbd36a#b750eae6d995f936b514a28a2573f67136bbd36a"
 dependencies = [
  "accesskit",
  "bevy",

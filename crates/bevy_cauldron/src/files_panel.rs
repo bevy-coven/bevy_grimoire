@@ -218,7 +218,7 @@ fn open_the_search(
             ));
             block.spawn((label(String::new()), SearchStatus));
             block
-                .spawn(Node { flex_grow: 1.0, min_height: Val::Px(0.0), flex_direction: FlexDirection::Column, ..default() })
+                .spawn(bevy_gooey::fill_region())
                 .with_children(|results| {
                     results.spawn((tree(Vec::<TreeNode>::new()), SearchResults, SelectMode::Single, observe(on_result)));
                 });

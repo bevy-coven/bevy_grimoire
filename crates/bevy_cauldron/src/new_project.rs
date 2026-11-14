@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use bevy::prelude::*;
 use bevy::ui::InteractionDisabled;
 use bevy::input_focus::AutoFocus;
-use bevy_gooey::{Cancel, FieldProblem, TextHint, TextInputValue, ValueChange, button, choice, dialog, heading, label, observe, panel, text_input};
+use bevy_gooey::{Cancel, FieldProblem, TextHint, TextInputValue, ValueChange, button, choice, dialog, heading, label, observe, text_input};
 
 use crate::launcher::{Launcher, OpenMapRequest};
 use crate::picker::{PickFor, PickRequest, Picked};
@@ -57,9 +57,6 @@ const PROTOTYPE_ROWS: &str = "assets/grimoire/library_kenney_from_manifests.yaml
 
 /// What a Starter kit's library says about itself, in place of the example's "generated" note.
 const PROTOTYPE_NOTE: &str = "Kenney's Prototype Kit (CC0, its licence is beside the meshes). Add your own meshes from the library; they land in this kit.";
-
-/// How wide the form is, in logical pixels: narrow enough that a field sits near its label.
-const FORM_WIDTH: f32 = 560.0;
 
 /// What the folder line says before a name is typed, so the form does not jump when the first letter makes it appear.
 const FOLDER_UNNAMED: &str = "Folder: named after the project";
@@ -339,8 +336,7 @@ fn spawn_the_card(
             observe(|_: On<Cancel>, mut launcher: ResMut<Launcher>| launcher.new_project_done = true),
         ))
         .with_children(|scrim| {
-        scrim.spawn(panel())
-            .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(FORM_WIDTH), max_width: Val::Percent(100.0), row_gap: Val::Px(crate::chrome::GAP_ROW), ..default() })
+        scrim.spawn(bevy_gooey::sized_panel(bevy_gooey::CardWidth::Text(crate::launcher::DIALOG_CARD_TEXT_SIZES)))
             .with_children(|card| {
                 card.spawn(heading("New project"));
                 card.spawn((
