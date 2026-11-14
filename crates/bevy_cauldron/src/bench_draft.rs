@@ -346,7 +346,8 @@ pub fn make(project: &Project, open: &OpenMap, handback: &HandBack) -> Result<Ma
         if let Some(parent) = copied_log.parent() {
             std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
         }
-        std::fs::copy(&log, &copied_log).map_err(|e| format!("{} -> {}: {e}", log.display(), copied_log.display()))?;
+        let held = std::fs::read(&log).map_err(|e| format!("{}: {e}", log.display()))?;
+        bevy_grimoire_core::atomic_file::write(&copied_log, held).map_err(|e| format!("{} -> {}: {e}", log.display(), copied_log.display()))?;
         let opened = OpenMap::open(&copy, &map)?;
         let mut ctx = Ctx {
             project: Some(copy),
